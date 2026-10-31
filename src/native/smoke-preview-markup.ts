@@ -44,6 +44,13 @@ const PAGE = `(() => {
  *  preview, and a chat or project change ends the session out loud. Saves foreground
  *  captures and the JSON state and route classification of each step. */
 export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifacts: string) {
+  const { TREZI_NATIVE_BACKGROUND_TEST: background } = process.env
+  if (background === '1') {
+    console.log(
+      'SKIP preview-markup posted AppKit routes: TREZI_NATIVE_BACKGROUND_TEST requires a foreground window'
+    )
+    return
+  }
   const folder = join(artifacts, 'preview-markup')
   mkdirSync(folder, { recursive: true })
   const inspect = (): Promise<State> => host.request('previewMarkupInspect')
@@ -54,7 +61,7 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   }
   const composer = (): Promise<State> => host.request('composerInspect')
   const steps: State = {}
-  const step = async (name: string, route = 'seam only', input?: State) => {
+  const step = async (name: string, route: string, input?: State) => {
     const state = await inspect()
     steps[name] = { ...state, route, ...(input ? { input } : {}) }
     writeFileSync(join(folder, 'steps.json'), JSON.stringify(steps, null, 2))
@@ -94,7 +101,7 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   await page(PAGE)
   await page('history.pushState({ markupSmoke: true }, "", "#markup-smoke-route")')
   await page(
-    'window.__markupSmokeKeys = 0; window.__markupSmokeKeyListener = event => { if (event.metaKey) window.__markupSmokeKeys++ }; window.addEventListener("keydown", window.__markupSmokeKeyListener)'
+    '(() => { window.__markupSmokeKeys = 0; window.__markupSmokeKeyListener = event => { if (event.metaKey) window.__markupSmokeKeys++ }; window.addEventListener("keydown", window.__markupSmokeKeyListener); return true })()'
   )
   const chat = nativeChat.active
   await host.request('composerPerform', { text: DRAFT })
@@ -107,7 +114,10 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
 
   // Open: frozen pixels, in focus, on top, with nothing claiming the page stopped.
   const opened = await open('first')
-  await step('opened', 'seam only')
+  await step(
+    'opened',
+    'seam only: shell-action opens the overlay without clicking the Actions menu'
+  )
   assert.equal(opened.addEnabled, false, 'nothing to add before a mark')
   assert.equal(opened.undoEnabled, false, 'nothing to undo before a mark')
   assert.equal(opened.focused, true, 'the overlay holds keyboard focus')
@@ -142,7 +152,7 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   await page('document.querySelector("#markup-card").style.background = "#16a34a"')
   await new Promise((resolve) => setTimeout(resolve, 200))
   assert.equal((await inspect()).frozen, opened.frozen, 'the snapshot does not follow the page')
-  await step('frozen', 'seam only')
+  await step('frozen', 'seam only: fixture page style mutation simulates live content changing')
 
   // Every tool, then undo and clear.
   const { width, height } = opened.image
@@ -186,6 +196,8 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   await event({ action: 'key', key: 'z', code: 6, command: true })
   assert.equal(await page('window.__markupSmokeKeys'), 0, 'Undo keyDown does not reach the page')
   assert.equal((await inspect()).marks.length, 3, '⌘Z takes the last mark')
+  await button('Undo')
+  assert.equal((await inspect()).marks.length, 2, 'Undo button takes another mark')
   await button('Clear')
   assert.equal((await inspect()).marks.length, 0, 'Clear takes every mark')
   await stroke('rectangle', box(0.1, 0.1, 0.3, 0.2))
@@ -205,7 +217,10 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
     ['resized', 760, 480]
   ] as const) {
     await test({ action: 'resize', width: w, height: h })
-    const state = await step(`resize-${label}`)
+    const state = await step(
+      `resize-${label}`,
+      'seam only: test-only overlay area setter checks mapping without resizing the whole window'
+    )
     assert.deepEqual(
       state.marks.map((mark: State) => mark.points),
       stored,
@@ -257,7 +272,10 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
       [image.width * 0.75, image.height * 0.75]
     ]
     await stroke('rectangle', at)
-    const marked = await step(label, 'real event route')
+    const marked = await step(
+      label,
+      'seam only: viewport; real event route: drawing (previewViewport sets deterministic width and zoom)'
+    )
     marked.marks[0].points.forEach(([x, y]: number[], index: number) => {
       assert.ok(Math.abs(x - at[index][0]) < 1, `${label}: captured x is where it was drawn`)
       assert.ok(Math.abs(y - at[index][1]) < 1, `${label}: captured y is where it was drawn`)
@@ -279,7 +297,7 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   host.emit('shell-action', { action: 'new-chat', project })
   await waitFor(() => nativeChat.active !== chat, 'a new chat opens')
   await closed('chat change')
-  await step('chat-isolation', 'seam only')
+  await step('chat-isolation', 'seam only: workspace command switches chats deterministically')
   const fresh = nativeChat.active
   assert.equal((await composer()).attachments.length, 0, 'the other chat receives nothing')
   await nativeWorkspace.command({ type: 'chat', key: project, session: chat })
@@ -292,7 +310,10 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   await stroke('circle', box(0.1, 0.1, 0.2, 0.2))
   await nativeWorkspace.command({ type: 'open', root: other })
   await closed('project change')
-  await step('project-isolation', 'seam only')
+  await step(
+    'project-isolation',
+    'seam only: workspace command switches generated fixture projects'
+  )
   assert.equal((await composer()).attachments.length, 0, 'the other project receives nothing')
   const opened2 = nativeWorkspace.active?.key
   assert.ok(opened2, 'the second project is active')
@@ -339,7 +360,12 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   writeFileSync(
     join(folder, 'composer.json'),
     JSON.stringify(
-      { route: 'real event route', text: state.text, attachments: state.attachments.length },
+      {
+        route:
+          'seam only: initial draft and attachment setup; real event route: Add and typed instruction',
+        text: state.text,
+        attachments: state.attachments.length
+      },
       null,
       2
     )
@@ -356,7 +382,9 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
     steps['before-add'].context,
     ['rectangle', 'arrow']
   )
-  await sendThroughComposer(host, folder, chat, retained, messages)
+  await sendThroughComposer(host, folder, chat, retained, messages, () =>
+    event({ action: 'sendButton' })
+  )
 }
 
 type Composite = { type: string; data: string; name: string; note?: string }
@@ -407,7 +435,8 @@ async function sendThroughComposer(
   folder: string,
   chat: string,
   composite: ReturnType<typeof retainComposite>,
-  messages: number
+  messages: number,
+  clickSend: () => Promise<State>
 ) {
   const invoke = nativeChat.services.invoke
   const sent: unknown[][] = []
@@ -421,7 +450,7 @@ async function sendThroughComposer(
   try {
     const live = nativeChat.get(chat)
     assert.equal(live.isRunning, false, 'no turn is running before Send')
-    await host.request('composerPerform', { action: 'send' })
+    await clickSend()
     await waitFor(() => sent.length === 1, 'Send reaches the provider route, not the queue')
     const [prompt, images] = sent[0] as [string, { mediaType: string; data: string }[]]
     const digests = images.map((image) => ({
@@ -454,8 +483,8 @@ async function sendThroughComposer(
       join(folder, 'send-payload.json'),
       JSON.stringify(
         {
-          via: 'composerPerform action=send, then agent:send intercepted before the provider',
-          route: 'seam only: normal composer Send action; outbound provider call intercepted',
+          via: 'posted, hit-tested Send button click, then agent:send intercepted before the provider',
+          route: 'real event route: Send button click; seam only: outbound agent:send interception',
           compositeSha256: composite.sha256,
           images: digests,
           prompt

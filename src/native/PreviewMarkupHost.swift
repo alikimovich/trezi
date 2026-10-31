@@ -97,7 +97,7 @@ extension Host {
         await settle()
         guard window.isKeyWindow, NSApp.isActive, window.attachedSheet == nil else { return ["error":"Markup window is not foreground"] }
         let action = c["action"] as? String ?? ""
-        if action != "typeInstruction", markup?.overlay?.ownsFocus != true { return ["error":"Overlay does not own focus"] }
+        if action != "typeInstruction", action != "sendButton", markup?.overlay?.ownsFocus != true { return ["error":"Overlay does not own focus"] }
         func post(_ event: NSEvent?) -> Bool {
             guard let event else { return false }
             NSApp.postEvent(event, atStart: false)
@@ -129,6 +129,14 @@ extension Host {
                   mouse(.leftMouseDown, point), mouse(.leftMouseUp, point) else { return ["error":"Button is not hit-testable"] }
             await settle()
             return ["route":"real event route", "hit":"\(type(of: hit))", "label":label]
+        case "sendButton":
+            let button = composer.sendButton
+            guard markup?.overlay == nil, !composer.isHidden, button.isEnabled else { return ["error":"Send button unavailable"] }
+            let point = button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
+            guard let hit = window.contentView?.superview?.hitTest(point), hit === button || hit.isDescendant(of: button),
+                  mouse(.leftMouseDown, point), mouse(.leftMouseUp, point) else { return ["error":"Send button is not hit-testable"] }
+            await settle()
+            return ["route":"real event route", "hit":"\(type(of: hit))", "label":"Send"]
         case "pointer":
             guard let overlay = markup?.overlay, let points = c["points"] as? [[Double]], points.count >= 2,
                   points.allSatisfy({ $0.count == 2 }) else { return ["error":"No pointer path"] }

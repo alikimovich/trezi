@@ -8,6 +8,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Red first: `test/preview-markup-routing.mjs` requires posted AppKit keys, pointer, buttons and text input; the initial check failed at the absent `NSApp.postEvent` route. Registered in `test/tiers.mjs`.
 - [x] Native smoke posts Escape, ⌘Z, ⌘←/⌘→ and ⌘[/⌘], hit-tested tool/drawing/action events, then types after Add; each event has a route-classified state and foreground screenshot receipt.
 - [x] Existing frozen, geometry, context isolation, attachment, composite and normal Send assertions use the posted event route; layout, open, preview width, chat and project commands are marked as seams.
+- [x] Review repair: parse page snippets under Host.evaluate's wrapper, click Undo and Send through posted hit-tested events, classify mixed viewport/drawing and provider interception receipts, and explicitly skip foreground routes in background mode.
 - [ ] Manager: run `preview-markup` in the `core` native group on merged main and retain the artifacts. The worker has zero native calls.
 
 ## Preview Mark up (LKM-391)

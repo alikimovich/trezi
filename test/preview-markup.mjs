@@ -135,7 +135,11 @@ if (process.platform !== 'darwin') {
   const smoke = source('smoke-preview-markup.ts')
   assert.match(smoke, /native-composite\.\$\{|native-composite\.json/, 'the composite is retained')
   assert.match(smoke, /sha256/, 'with its hash')
-  assert.match(smoke, /composerPerform', \{ action: 'send' \}/, 'and sent by the normal Send')
+  assert.match(
+    smoke,
+    /event\(\{ action: 'sendButton' \}\)/,
+    'and sent by a posted normal Send click'
+  )
   assert.match(smoke, /send-payload\.json/, 'with the payload kept')
   assert.match(smoke, /sha256 === composite\.sha256/, 'and the payload image is the composite')
   const live = readFileSync('test/provider-image-live.mjs', 'utf8')

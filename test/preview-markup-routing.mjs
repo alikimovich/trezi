@@ -7,6 +7,7 @@ const source = (name) => readFileSync(`src/native/${name}`, 'utf8')
 const host = source('PreviewMarkupHost.swift')
 const broker = source('HostInspect.swift')
 const smoke = source('smoke-preview-markup.ts')
+const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor
 
 assert.match(host, /NSApp\.postEvent\(event, atStart: false\)/, 'posted AppKit event')
 assert.doesNotMatch(
@@ -22,7 +23,24 @@ for (const action of ['key', 'pointer', 'button', 'typeInstruction']) {
 }
 assert.match(smoke, /history.*steps/, 'history is checked across posted keys')
 assert.match(smoke, /__markupSmokeKeys/, 'page keyDown delivery is checked')
+for (const [, literal] of smoke.matchAll(/\bpage\(\s*('(?:\\.|[^'\\])*')\s*\)/gs)) {
+  const snippet = new Function(`return ${literal}`)()
+  assert.doesNotThrow(
+    () => new AsyncFunction(`return JSON.stringify((await (${snippet})) ?? null) ?? 'null'`),
+    `page snippet must parse inside Host.evaluate: ${snippet}`
+  )
+}
+assert.match(smoke, /button\('Undo'\)/, 'Undo button click is posted')
+assert.match(host, /case "sendButton"/, 'Send button event implementation')
+assert.match(broker, /"sendButton"/, 'Send button event broker')
+assert.match(smoke, /action: 'sendButton'/, 'Send button event smoke route')
+assert.match(
+  smoke,
+  /seam only: viewport; real event route: drawing/,
+  'mixed viewport route is labelled'
+)
+assert.match(smoke, /SKIP.*TREZI_NATIVE_BACKGROUND_TEST/, 'background route skip is explicit')
 assert.match(smoke, /prompt\.endsWith\(DRAFT \+ INSTRUCTION\)/, 'text travels with the draft')
-assert.match(smoke, /route: 'real event route'/, 'receipts classify real events')
+assert.match(smoke, /steps\[name\] = \{ \.\.\.state, route/, 'receipts classify every step')
 assert.match(smoke, /seam only/, 'receipts classify seams')
 console.log('PREVIEW-MARKUP-ROUTING PASS')

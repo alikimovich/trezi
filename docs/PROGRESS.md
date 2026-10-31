@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-30 — LKM-393 review repair: parseable page probe and complete button routes
+
+- A new unit check parses every literal `page(...)` snippet inside Host.evaluate's `(await (CODE))` wrapper. It failed first on the key listener's semicolon-separated statements (`Unexpected token ';'`); the listener is now one IIFE expression, as the generated PAGE fixture already is.
+- The smoke clicks Undo and Send through posted, hit-tested mouse events and checks the Undo mark count. Send still intercepts `agent:send` before any provider call; `send-payload.json` labels the click a real event route and the provider interception a seam. The exact-byte retained-composite check remains.
+- Receipts distinguish mixed coverage: narrow/zoom viewport setup uses `previewViewport` (seam), then drawing uses posted pointer events. Open uses a shell action to set up a deterministic overlay; resize uses a test-only area setter to check mapping without changing the whole window; page mutation simulates live content; chat/project commands switch generated fixture contexts deterministically; the initial draft and attachment are fixture setup. These seams cannot establish UI pointer routing and are labelled accordingly. Background mode explicitly skips the foreground-only smoke and reports reduced coverage.
+- Native runtime proof still awaits the manager's merged-main `core` run; the worker has no native allowance.
+
 ## 2026-10-30 — LKM-393 foreground Mark up fixture wiring
 
 - Red proof: the route assertions first added to `test/preview-markup.mjs` failed in quick verification at the absent `NSApp.postEvent` call (worker-verify-1.log). They now live in the registered `test/preview-markup-routing.mjs`; the source fixture requires posted keys, pointer, buttons and text input.
