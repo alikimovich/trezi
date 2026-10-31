@@ -125,6 +125,45 @@ reopened.phase = 'thinking'
 assert.ok(await renders(() => chats.changed(reopened)), 'a reopened chat tells the shell')
 assert.equal(rowOf('b').thinking, true, 'a reopened chat at work shimmers')
 
+// LKM-392: the steps of the `native-chat` smoke's landing. A `done` the controller alone hears
+// holds the landing, the provider's own `done` keeps it, and only `landing-finished` ends it.
+const lands = chats.get('a')
+lands.stopping = false
+lands.turn = 't'
+await renders(() => chats.changed(lands))
+assert.equal(rowOf('a').thinking, true, 'a turn at work before it lands')
+const landingEvent = (type, fields) => chats.event({ type, projectKey: 'a', ...fields })
+assert.ok(
+  await renders(() => landingEvent('done', { landingPending: true })),
+  'a landing tells the shell'
+)
+const landing = (name) => {
+  assert.equal(rowOf('a').thinking, false, `${name}: no shimmer while it lands`)
+  assert.equal(rowOf('a').running, true, `${name}: still Running while it lands`)
+}
+landing('held')
+await renders(() => landingEvent('done', { landingPending: true, turn: 't' }))
+landing('the provider done')
+await renders(() => landingEvent('landing-finished', { turn: 't' }))
+assert.equal(rowOf('a').running, false, 'the landing finishing ends the turn')
+
+// The real landing ends by itself, so the smoke must check the landing row before it starts
+// that landing, and leaves ending it to the landing.
+const smokeChat = readFileSync(new URL('../src/native/smoke-chat.ts', import.meta.url), 'utf8')
+const landingSteps = [
+  "nativeChat.event({ type: 'done', projectKey: state.chat, landingPending: true })",
+  "await runningWithoutShimmer('while it lands')",
+  "send({ type: 'done', landingPending: true })"
+].map((step) => smokeChat.indexOf(step))
+assert.ok(
+  landingSteps.every((at, index) => at >= 0 && (index === 0 || at > landingSteps[index - 1])),
+  `the smoke holds the landing, checks the row, then lands: ${landingSteps}`
+)
+assert.ok(
+  !smokeChat.includes("send({ type: 'landing-finished' })"),
+  'the real landing, not the smoke, ends the turn'
+)
+
 // The app wires every chat effect to the shell through `chatEffect`.
 assert.match(
   readFileSync(new URL('../src/native/index.ts', import.meta.url), 'utf8'),

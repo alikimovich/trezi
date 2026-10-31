@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native chat smoke: landing row check raced the real landing (LKM-392)
+
+- [x] `src/native/smoke-chat.ts`: hold the landing on the controller for the beam and row checks, then let the provider's `done` run the real landing, which ends the turn itself.
+- [x] Unit `sidebar-thinking-render`: the three landing events through the real controllers, and the smoke's step order from its source.
+- [x] `src/native/smoke-sidebar-shimmer.ts`: compare the title's clip past the material's drift, four moving captures, one changed pair required; unit `sidebar-shimmer` covers the verdict and the crop.
+- [ ] Native acceptance: the `chat` group passes end to end on this tree (the worker's one call passed `native-chat`, then hit the capture check above before it was repaired).
+
 ## Codex: composer images as real image input (LKM-390)
 
 - [x] Red first: `test/codex-composer-images.mjs` failed with no `--image` on the CLI (`0 !== 1`), then implement `src/main/backends/codex-images.ts` and `codex.ts`.

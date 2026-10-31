@@ -227,12 +227,15 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       const row = await sidebarRow()
       return row?.thinking && shimmers(row)
     }, 'native sidebar row shimmers again after the approval')
-    send({ type: 'done', landingPending: true })
+    // The provider's `done` runs the real landing, which has nothing to land here and ends by
+    // itself, often before a poll sees the row (LKM-392). So the landing is held on the
+    // controller alone for these checks, and only the real `done` below can end it.
+    nativeChat.event({ type: 'done', projectKey: state.chat, landingPending: true })
     await wait((state) => state.activityKind === 'applying')
     if ((await host.request('composerInspect')).buttonBeam)
       throw new Error('Landing retained thinking beam')
     await runningWithoutShimmer('while it lands')
-    send({ type: 'landing-finished' })
+    send({ type: 'done', landingPending: true })
     let lastRow: any
     await waitFor(async () => {
       lastRow = await sidebarRow()

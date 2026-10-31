@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { decodePng } from './smoke-png'
 import { restoreSidebarFocus } from './smoke-sidebar'
+import type { Image, MarqueeBox } from './smoke-sidebar-marquee'
 import { waitFor } from './smoke-wait'
 
 // biome-ignore lint/suspicious/noExplicitAny: host inspection payloads are untyped JSON
@@ -11,28 +12,34 @@ type Row = any
 /** The row's title carries the shimmer, moving or (Reduce Motion) still. */
 export const shimmers = (row: Row) => ['sweep', 'still'].includes(row?.shimmer?.mode)
 
-/** Pixels that differ between two captures of the same size. Pure. */
-export function changedPixels(first: Buffer, second: Buffer) {
-  const a = decodePng(first)
-  const b = decodePng(second)
+/** Levels a channel may drift unseen: the sidebar's material moved a still sidebar by up to 7
+ *  (LKM-392), while the dimmest rest opacity (0.9, emphasized) moves a title by about 18. */
+const NOISE = 10
+
+/** Pixels of the title's clip that differ between two captures of the same size, past the
+ *  material's drift. Pure. */
+export function changedPixels(a: Image, b: Image, title: MarqueeBox) {
   if (a.width !== b.width || a.height !== b.height)
     throw new Error(`Captures differ in size: ${a.width}×${a.height}, ${b.width}×${b.height}`)
+  const scale = a.width / title.referenceWidth
+  const right = Math.min(a.width, Math.ceil((title.x + title.width) * scale))
+  const bottom = Math.min(a.height, Math.ceil((title.y + title.height) * scale))
   let changed = 0
-  for (let y = 0; y < a.height; y++)
-    for (let x = 0; x < a.width; x++) {
-      const [ar, ag, ab] = a.rgb(x, y)
-      const [br, bg, bb] = b.rgb(x, y)
-      if (ar !== br || ag !== bg || ab !== bb) changed++
+  for (let y = Math.max(0, Math.floor(title.y * scale)); y < bottom; y++)
+    for (let x = Math.max(0, Math.floor(title.x * scale)); x < right; x++) {
+      const other = b.rgb(x, y)
+      if (a.rgb(x, y).some((value, channel) => Math.abs(value - other[channel]) > NOISE)) changed++
     }
   return changed
 }
 
-/** Moving phases must differ from each other; Reduce Motion's must not. Pure. */
+/** Some moving phase must change the title (the band spends part of its cycle past the text, so
+ *  one pair may match); no Reduce Motion phase may. Pure. */
 export function shimmerCaptureProblem(changes: number[], moving: boolean) {
-  if (moving && changes.some((changed) => !changed))
-    return `Shimmer phases did not change the sidebar: ${changes.join(', ')} pixels`
+  if (moving && !changes.some(Boolean))
+    return `Shimmer phases did not change the title: ${changes.join(', ')} pixels`
   if (!moving && changes.some(Boolean))
-    return `Reduce Motion moved the sidebar: ${changes.join(', ')} pixels`
+    return `Reduce Motion moved the title: ${changes.join(', ')} pixels`
   return ''
 }
 
@@ -40,8 +47,9 @@ export function shimmerCaptureProblem(changes: number[], moving: boolean) {
  * LKM-389's evidence, while `chat`'s background turn runs and `other` is active: foreground
  * captures of the title's animation phases on an unselected and on the selected row, and of
  * Reduce Motion on both, with the inspected rows beside them in `sidebar-shimmer.json`. The
- * band takes 2 s to cross and is off the title for about 0.4 s, so captures 450 ms apart cannot
- * both fall in that gap. Ends with `other` active and Reduce Motion back to the system's.
+ * band takes 2 s to cross and can be off a short title for about 0.8 s, so two captures 450 ms
+ * apart can both fall in that gap, but four cannot. Ends with `other` active and Reduce Motion
+ * back to the system's.
  */
 export async function checkSidebarShimmer(
   host: NativeBridge,
@@ -69,15 +77,18 @@ export async function checkSidebarShimmer(
   const report: Record<string, unknown> = {}
   const phases = async (name: string, count: number, moving: boolean) => {
     await restoreSidebarFocus(host, `sidebar-shimmer ${name}`)
-    const captures: Buffer[] = []
+    const title = (await rowOf()).marqueeState
+    const captures: Image[] = []
     for (let phase = 1; phase <= count; phase++) {
       if (phase > 1) await new Promise((resolve) => setTimeout(resolve, 450))
       const image = await host.request('captureVisibleSidebar')
       const png = Buffer.from(image.png, 'base64')
       writeFileSync(join(artifacts, `sidebar-shimmer-${name}-${phase}.png`), png)
-      captures.push(png)
+      captures.push(decodePng(png))
     }
-    const changes = captures.slice(1).map((png, index) => changedPixels(captures[index], png))
+    const changes = captures
+      .slice(1)
+      .map((image, index) => changedPixels(captures[index], image, title))
     const problem = shimmerCaptureProblem(changes, moving)
     if (problem) throw new Error(`${name}: ${problem}`)
     report[name] = { changes, row: await rowOf() }
@@ -86,7 +97,7 @@ export async function checkSidebarShimmer(
     const swept = await mode('sweep', selected)
     if (!swept.shimmer.masked || !swept.shimmer.animated)
       throw new Error(`The title does not sweep: ${JSON.stringify(swept)}`)
-    await phases(name, 3, true)
+    await phases(name, 4, true)
     await reduce('on')
     const still = await mode('still', selected)
     if (still.shimmer.masked || still.shimmer.animated || still.shimmer.alpha >= 1)
