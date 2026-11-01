@@ -7,6 +7,7 @@ import { currentAgentGitAccess } from './agent-git-access'
 import { finalReply, turnMessage } from './chat-commit'
 import { chatGateScope, gatedTurn, holdTurn, landTurn } from './chat-landing'
 import { clearPark, gitOut, upsertParkRecord } from './chat-park'
+import { holdForDecision, landingPeers, noteResolution } from './chat-resolution'
 import { spareWorktreeIds, takeSpare } from './chat-spare'
 import {
   type ChatState,
@@ -32,6 +33,8 @@ import { isRepoRoot } from './git'
 import { dropGateEvidence, integrationGate, replayChecks } from './integration-gate'
 import { commitLiveTurn } from './live-commit'
 import { reconcileParkOnChain } from './park-reconcile'
+import { peerGateRefresh } from './peer-freshness'
+import { peerTurn } from './peer-work'
 import { previewEvidence } from './preview-evidence'
 import { liveHead } from './preview-identity'
 import { enqueueRepoWrite } from './repo-write-queue'
@@ -53,6 +56,7 @@ export {
   applyParkedBranch,
   discardParkedBranch,
   discardParkedChat,
+  parkedResolution,
   resolveParkedChat,
   showParkedChat
 } from './parked-chat'
@@ -185,6 +189,12 @@ export async function beforeTurn(
   return onChain(st, async () => {
     await recreateWorkspace(st)
     await settleReverted(st)
+    // LKM-403: this turn answers the question. `landingError` stays until it lands, so
+    // the send guard keeps letting the chat continue on top of its held work.
+    if (st.decision) {
+      st.decision = undefined
+      st.resolution = undefined
+    }
     // LKM-196: a park whose work is already live (or whose batch went missing) is
     // settled before the send guard reads it.
     await reconcileParkOnChain(sessionKey, st, 'turn-start', true)
@@ -348,11 +358,16 @@ async function landBatch(
 ): Promise<string[] | null> {
   await settleReverted(st)
   const turnNo = ++st.turnNo
+  // LKM-403: what landed since this work forked, read here so nothing lands in between.
+  const gate = await peerGateRefresh(st.liveRoot, peerTurn(sessionKey), st.wt.baseSha)
   // Describes the cumulative diff (parked turns included), never the prompt (LKM-189).
   const described = await turnMessage(sessionKey, st, turnNo, {
     prompt: message,
     reply: finalReply(turn)
   })
+  if (await holdForDecision(sessionKey, st, turn, described.text, terminal, gate)) return null
+  // A resolved tree is new source: the gate wants its checks passed on exactly that tree.
+  let combined = !!st.resolution && terminal === 'success'
   // LOCAL-WEBKIT-3: only the tree its checks passed on lands (`gatedTurn`).
   let { outcome, verdict } = await gatedTurn(sessionKey, st, described.text, terminal === 'success')
   let reconcileFiles: string[] | null = null
@@ -371,9 +386,11 @@ async function landBatch(
   ) {
     try {
       const prep = await stageResolve(st.liveRoot, st.wt)
+      await noteResolution(sessionKey, st, prep)
       if (prep.clean) {
         await replayChecks(chatGateScope(sessionKey, st))
         ;({ outcome, verdict } = await gatedTurn(sessionKey, st, described.text, true))
+        combined = true
       } else reconcileFiles = prep.conflicted
     } catch {
       /* preserve the recovery branch and surface the fallback */
@@ -383,7 +400,8 @@ async function landBatch(
   const at = Date.now()
   if (outcome.outcome === 'merged') {
     await landTurn(sessionKey, st, outcome, turnNo, described)
-    st.lastLanding = { outcome: 'merged', files: outcome.files, at }
+    const peers = landingPeers(gate, combined, verdict?.candidate ?? null)
+    st.lastLanding = { outcome: 'merged', files: outcome.files, at, ...peers }
   } else if (outcome.outcome === 'held' && outcome.hold?.reason !== 'live-changed') {
     holdTurn(sessionKey, st, outcome, verdict, turn)
   } else if (outcome.outcome === 'parked' || outcome.outcome === 'held') {
@@ -398,7 +416,13 @@ async function landBatch(
     const markers = await conflictMarkerFiles(st.wt, outcome.files)
     st.resolvingFiles = markers.length ? markers : null
     upsertParkRecord(st, outcome.files, turn)
-    if (terminal === 'success') st.lastLanding = { outcome: 'parked', files: outcome.files, at }
+    if (terminal === 'success')
+      st.lastLanding = {
+        outcome: 'parked',
+        files: outcome.files,
+        at,
+        ...landingPeers(gate, false, null)
+      }
     if (!reconcileFiles)
       emitIsolation(
         sessionKey,
@@ -476,12 +500,18 @@ export async function retryLanding(
     }
   if (!st.parked || st.reverted || (st.interrupted && !st.landingError))
     return { ok: true, state: st.parked && !st.reverted ? 'parked' : 'isolated' }
+  // LKM-403: only the user's answer moves this work on; retrying would pick a side.
+  if (st.decision) return { ok: false, state: 'parked', error: st.landingError }
   // LOCAL-WEBKIT-3: held because the project moved on. Bring the chat up to date with
   // the live tree first; overlapping edits become the usual conflict card (Resolve).
   if (st.landingHold === 'live-changed') {
-    const prep = await onChain(st, () => stageResolve(st.liveRoot, st.wt)).catch(
-      (error: unknown) => ({ error: error instanceof Error ? error.message : String(error) })
-    )
+    const prep = await onChain(st, async () => {
+      const staged = await stageResolve(st.liveRoot, st.wt)
+      await noteResolution(sessionKey, st, staged)
+      return staged
+    }).catch((error: unknown) => ({
+      error: error instanceof Error ? error.message : String(error)
+    }))
     if ('error' in prep) return { ok: false, state: 'parked', error: prep.error }
     if (!prep.clean) {
       st.landingError = undefined

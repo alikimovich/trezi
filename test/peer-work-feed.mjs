@@ -133,6 +133,29 @@ try {
     ),
     'incomplete observed lists produce an uncertain advisory'
   )
+  // LKM-403: a known target is known; shared words across different files never are.
+  await owner.peerUpsert({
+    ...task('signal-own', a, 'chat', ['own-signal.txt']),
+    targets: ['element:button.buy'],
+    terms: ['checkoutprice']
+  })
+  await owner.peerUpsert({
+    ...task('target-peer', a, 'chat', ['target-signal.txt']),
+    targets: ['element:button.buy']
+  })
+  await owner.peerUpsert({
+    ...task('term-peer', a, 'chat', ['term-signal.txt']),
+    terms: ['checkoutprice']
+  })
+  const signalled = (await owner.peers(a, 'signal-own')).advisories
+  const byTarget = signalled.find((row) => row.peer === 'target-peer')
+  assert.equal(byTarget?.kind, 'same-target')
+  assert.equal(byTarget?.certainty, 'known')
+  assert.deepEqual(byTarget?.targets, ['element:button.buy'])
+  const byTerm = signalled.find((row) => row.peer === 'term-peer')
+  assert.equal(byTerm?.kind, 'semantic-uncertain')
+  assert.equal(byTerm?.certainty, 'uncertain')
+  assert.doesNotMatch(JSON.stringify(signalled), /safe/i)
   const manyPaths = Array.from({ length: 65 }, (_, i) => `file-${i}.txt`)
   await startPeer(task('overflow-local', a, 'background', manyPaths), undefined, left)
   assert.ok(

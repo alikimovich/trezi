@@ -11,6 +11,17 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Stub lifecycle and owner tests for foreground/background peers, cancellation, expiry, crash recovery, alias isolation and prompt-injection text.
 - [x] Review repair: full-path overlap identities and uncertainty, base-revision observation, per-project caps, delayed Stop/finish cleanup, and helper/lifecycle regression fixtures.
 - [ ] Manager: run the relevant native suite on merged main; worker has zero native calls.
+
+## Coordinated parallel work: lookup, freshness and resolution (LKM-403)
+
+- [x] Red baseline, then green final source, in disposable Git repos with stub providers through the real lifecycle (`test/peer-coordination.mjs`).
+- [x] `peer_lookup` for foreground and background, Claude and Codex: same-project, bounded, exact provenance, untrusted data.
+- [x] Peer freshness at tool checkpoints, the landing gate and reconciliation.
+- [x] Known target and uncertain cross-file advisories, never a safety claim.
+- [x] Resolution prompts with both goals, base/current/own diffs and acceptance checks within 16 KiB.
+- [x] Incompatible goals stay unlanded with one user decision and a recovery branch; retry limits unchanged.
+- [ ] Manager: run the relevant native suite on merged main; worker has zero native calls.
+
 ## Single live writer admission (LKM-404)
 
 - [x] Reproduce concurrent live turns with scripted providers in disposable nested Git and non-Git projects (red quick verification).

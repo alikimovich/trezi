@@ -6,6 +6,7 @@ import { join } from 'node:path'
 /** The only actions the bridge accepts. */
 export const TREZI_AGENT_ACTIONS = [
   'workspace_state',
+  'peer_lookup',
   'prepare_conflict_resolution',
   'git_sync_base',
   'git_merge_continue',

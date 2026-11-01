@@ -1,9 +1,10 @@
 import { dirname } from 'node:path'
 import type { NativeView } from '../native/platform'
-import type { AgentEvent, SessionRecord } from '../shared/api'
+import type { AgentEvent, PeerGateNote, SessionRecord } from '../shared/api'
 import { createChatWorktree } from './chat-worktrees'
 import type { DescribeChange } from './commit-message'
 import { enqueueRepoWrite } from './repo-write-queue'
+import type { PendingResolution } from './resolution-evidence'
 import type { SessionStore } from './sessions-store'
 import { retireWorktreeBranch, type Worktree } from './worktrees'
 
@@ -52,6 +53,10 @@ export interface ChatState {
   landingHold?: string
   /** LKM-165: what the last landing attempt did, for the agent's `workspace_state`. */
   lastLanding?: LandingResult
+  /** LKM-403: the reconciliation staged for this work, until it lands or is replaced. */
+  resolution?: PendingResolution
+  /** LKM-403: the one product question this held work waits on, with `landingError`. */
+  decision?: string
 }
 
 export interface LandingResult {
@@ -59,6 +64,9 @@ export interface LandingResult {
   files: string[]
   at: number
   error?: string
+  /** LKM-403: what the gate saw of this project's peers. */
+  peers?: PeerGateNote
+  decision?: string
 }
 
 interface Deps {

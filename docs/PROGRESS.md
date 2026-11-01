@@ -2,6 +2,15 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-31 — LKM-403 peer lookup, freshness at landing and resolution with both goals
+
+- Red proof before the implementation: `bun test/peer-coordination.mjs` on unmodified source failed 12 of its then 13 scenarios; only "a resolution dropping a side fails on the exact combined tree" passed, because the gate already held that. Three of the failures were chat timeouts caused by the fixture adding a new `asserts/chat` file, which reconciliation refuses. The fixture now tracks those files empty, so the baselines of those three chat scenarios prove the fixture gap and not the product gap; the comment twins and the other failures named the missing behaviour.
+- `peer_lookup` is one contract for Claude and Codex, foreground and background: same name, arguments, description and auto-allow. It answers exactly `{found:false}` for an unknown, own or other-project id, refuses secret and outside paths, and labels everything untrusted. While a landed row is still in `landing`, the landed revision answers: a repeat run caught that race.
+- Freshness is pull only: `peerUpdate` on checkpoint tool results, the note at the landing gate (`lastLanding.peers`, `spawn-finished.gate`) and each reconciliation. Advisories add known `same-target` and uncertain `semantic-uncertain`; neither claims safety.
+- Reconciliation prompts carry both goals, revisions, own and current diffs and the passed checks as one escaped JSON block within 16 KiB. Retry limits did not change. `DECISION NEEDED:`, leftover markers or a conflicted file left exactly one side keeps the work unlanded with one question. A chat holds on the failed card, where Retry and Resolve refuse until the user answers; a comment ends as review with its branch. A dropped own side is written back before the commit so the branch keeps it.
+- Chat resolutions stay under the existing gate contract: an unchecked resolution holds (`test/auto-reconciliation.mjs`), so the agent's `run_checks` or Retry's replay rechecks the exact tree. Adding a host replay there was tried and removed because it changed that contract.
+- Measured on the final fixture (stub providers, disposable repos): lookup answer 4726 bytes and 51–82 ms on a 200 KB diff (limit 6144), gate note 394 bytes (limit 2048), resolution prompt 2019 bytes typically and 15545 on 400 KB of diffs, worst-case block 15708 bytes (limit 16384), scenarios 1.6–8.9 s each and 63.5 s for the fixture in the manager's parallel run. These are fixture numbers, not provider or native UI results; no model judgement is measured. Native acceptance remains pending on merged main.
+
 ## 2026-10-31 — LKM-402 review repair 2: Claude rules, refresh merge, spawn feed failure
 
 - Claude's foreground rules no longer tell it to call `prepare_conflict_resolution` (its MCP server registers only `workspace_state`) or forbid the terminal fallback: `treziRules` takes `workspaceStateOnly`, Claude passes it, and Codex's text is unchanged. `test/rules.mjs` asserts the Claude rules (foreground and background) name no missing tool.

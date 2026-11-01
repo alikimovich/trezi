@@ -265,6 +265,12 @@ export async function landingChecks(scope: GateScope) {
   }
 }
 
+/** The checks that passed for this work: what a reconciled tree must pass again. */
+export const passedCheckNames = (scope: GateScope): string[] =>
+  newest(items(evidenceOf(sessionOf(scope))).filter((item) => item.verified)).map(
+    (item) => item.key
+  )
+
 /** The owner's refusal, in the same words as the gate's. */
 export function holdMessage(hold: LandingHold | undefined, verdict: GateVerdict | null): string {
   if (verdict && !verdict.ok && verdict.message) return verdict.message

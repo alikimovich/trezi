@@ -6,6 +6,7 @@ import { completeTurn, type TurnOutcome } from './chat-worktrees'
 import { recordEdit } from './edit-history'
 import { type GateScope, type GateVerdict, holdMessage, integrationGate } from './integration-gate'
 import { commitLiveTurn } from './live-commit'
+import { notePeerLanded, peerTurn } from './peer-work'
 import { productLog } from './product-log'
 import { retireWorktreeBranch } from './worktrees'
 
@@ -30,12 +31,13 @@ export async function landTurn(
     recordEdit(st.liveRoot, e.file, e.before, e.after, undefined, group)
   }
   if (outcome.newBase) st.wt.baseSha = outcome.newBase
-  await commitLiveTurn(
+  const commit = await commitLiveTurn(
     st.liveRoot,
     outcome.files,
     { title: message.subject, body: message.body },
     outcome.newBase
   )
+  notePeerLanded(peerTurn(sessionKey), outcome.files, commit.sha)
   clearPark(st)
   await retireWorktreeBranch(st.wt)
   // Not revertable once this chat's work has been pushed & merged via a PR.

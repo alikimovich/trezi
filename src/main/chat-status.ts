@@ -58,6 +58,7 @@ export function agentWorkspaceState(sessionKey: string): {
   guidance: string
   lastLanding?: LandingResult
   error?: string
+  decision?: string
 } {
   const st = states.get(sessionKey)
   if (!st) {
@@ -76,8 +77,10 @@ export function agentWorkspaceState(sessionKey: string): {
       files: st.parkedFiles,
       error: st.landingError,
       ...last,
-      guidance:
-        'Trezi could not land this chat’s changes; they are held, not applied, and the project does not have them. Tell the user exactly that, with the error, and point them to Retry or Resolve on the chat card. Do not say the changes are pending or applied.'
+      ...(st.decision ? { decision: st.decision } : {}),
+      guidance: st.decision
+        ? 'A product decision is needed before this work can land; it is held on the chat’s branch and the project does not have it. Ask the user `decision` as one question and wait for the answer. Do not pick a side yourself.'
+        : 'Trezi could not land this chat’s changes; they are held, not applied, and the project does not have them. Tell the user exactly that, with the error, and point them to Retry or Resolve on the chat card. Do not say the changes are pending or applied.'
     }
   }
   if (st.resolvingFiles) {
