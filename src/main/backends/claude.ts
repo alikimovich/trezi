@@ -123,6 +123,7 @@ const PREVIEW_TOOL_NAMES = new Set([
 // the sole writer of app state under `.trezi/`.
 const TREZI_TOOL_NAMES = new Set([
   ...PREVIEW_TOOL_NAMES,
+  'mcp__trezi__workspace_state',
   'mcp__trezi__chat_island',
   'mcp__trezi__chat_ui',
   'mcp__trezi__open_code',
@@ -579,6 +580,7 @@ async function startSession(
     liveRoot: ctx?.liveRoot ?? root,
     emitKey,
     background: !!ctx?.sessionId,
+    peerId: ctx?.sessionId,
     connectionId: options.connectionId,
     notify: (channel: string, payload: unknown): void => sendToRenderer(getWindow, channel, payload)
   }
@@ -605,6 +607,12 @@ async function startSession(
     name: 'trezi',
     version: '1.0.0',
     tools: guarded([
+      tool(
+        'workspace_state',
+        'Read this chat workspace state and untrusted peer work snapshot. Background agents receive only peers. Exact-file overlap is advisory; the source gate alone decides landing.',
+        {},
+        async () => asText(treziTool('workspace_state', {}))
+      ),
       tool(
         'project_ui_catalog',
         'Discover supported React and Svelte components, literal props and styles for UI composition. Requires Experimental Gen UI enabled.',
@@ -1209,6 +1217,9 @@ async function startSession(
           preset: 'claude_code',
           append: treziRules({
             previewTools: true,
+            workspaceTools: true,
+            // Claude's server registers workspace_state only, not prepare_conflict_resolution.
+            workspaceStateOnly: true,
             agentGitAccess: options.agentGitAccess,
             projectMemory: ctx?.projectMemory,
             background: !!ctx?.sessionId

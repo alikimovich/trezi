@@ -58,7 +58,10 @@ export function createRecordCapture(root: string, projectKey: string): RecordCap
       if (EDIT_TOOLS.has(name)) {
         const i = input as Record<string, unknown>
         const path = i?.file_path ?? i?.path
-        if (typeof path === 'string' && path.trim()) touched.add(path.trim())
+        if (typeof path === 'string' && path.trim()) {
+          touched.add(path.trim())
+          record.filesTouched = [...touched]
+        }
       }
     },
     finalize: () => {

@@ -24,6 +24,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { swiftConversationOwner } from '../src/main/conversation-owner.ts'
 import { parseCodeLink } from '../src/shared/code-link.ts'
 import { compileProviderFixture, startProviderFixture } from './helpers/provider-fixture.mjs'
 
@@ -335,6 +336,19 @@ try {
     PROVIDER_READY: '60'
   })
   setProviderOwner(fixture.owner())
+  const peers = swiftConversationOwner()
+  const peerRow = (id, goal) => ({
+    id,
+    project: WT,
+    origin: 'background',
+    parent: CHAT,
+    goal,
+    intendedFiles: ['shadow.js'],
+    observedFiles: ['shadow.js'],
+    base: '',
+    phase: 'running'
+  })
+  await peers.peerUpsert(peerRow('other-peer', 'Adjust shared shadow'))
 
   async function chat(provider, ctx = {}) {
     const events = []
@@ -399,12 +413,17 @@ try {
   // --- Claude: every in-process tool --------------------------------------------------------
   const claude = await chat('claude')
   const all = await claude.turn('call every tool')
+  assert.match(
+    textOf(all.results.workspace_state),
+    /Adjust shared shadow/,
+    'Claude foreground receives peer work through its tool'
+  )
   everyTool(all, 'claude')
   assert.deepEqual(
     [...all.listed].sort(),
     Object.keys(CALLS)
       // Claude asks with its own AskUserQuestion, not ask_user (LKM-199).
-      .filter((n) => !['workspace_state', 'prepare_conflict_resolution', 'ask_user'].includes(n))
+      .filter((n) => !['prepare_conflict_resolution', 'ask_user'].includes(n))
       .sort()
   )
   // Main's real answers.
@@ -541,6 +560,17 @@ try {
   const before = islands.sessions.get(CHAT).records.length,
     shownBefore = navigations()
   const background = await chat('claude', { sessionId: 'spawn-1' })
+  await peers.peerUpsert(peerRow('spawn-1', 'Self must be excluded'))
+  const claudePeer = await background.turn('TOOL-CALL workspace_state {}')
+  assert.deepEqual(claudePeer.routed, ['workspace_state'])
+  const claudeState = JSON.parse(claudePeer.results.workspace_state.content[0].text)
+  assert.deepEqual(
+    Object.keys(claudeState),
+    ['peerWork'],
+    'background sees no parent landing state'
+  )
+  assert.ok(claudeState.peerWork.rows.some((row) => row.goal === 'Adjust shared shadow'))
+  assert.ok(!claudeState.peerWork.rows.some((row) => row.id === 'spawn-1'))
   const refused = await background.turn('only chat_island,open_code,open_preview')
   assert.match(textOf(refused.results.chat_island), /Background edits cannot create chat islands/)
   assert.equal(refused.results.chat_island.isError, true)
@@ -583,12 +613,12 @@ try {
   // the stand-in's calls both go to main.
   const opened = fixture.events.length
   const codex = await chat('codex')
-  assert.deepEqual(
-    routed(opened),
-    ['workspace_state'],
-    'Codex checked its bridge against main while opening'
-  )
   const bridged = await codex.turn('call every tool')
+  assert.deepEqual(
+    routed(opened)[0],
+    'workspace_state',
+    'Codex checked its bridge against main before the turn'
+  )
   everyTool(bridged, 'codex')
   await navigates(codex, 'codex')
   assert.deepEqual(
@@ -609,6 +639,23 @@ try {
   assert.equal(card?.payload.request.sessionKey, CHAT)
   assert.equal(card?.payload.request.questions[0].options[1].label, 'Cool')
   assert.match(textOf(bridged.results.workspace_state), /live folder/)
+  assert.match(
+    textOf(bridged.results.workspace_state),
+    /Adjust shared shadow/,
+    'Codex foreground receives peer work through its tool'
+  )
+  const codexBackground = await chat('codex', { sessionId: 'spawn-codex' })
+  await peers.peerUpsert(peerRow('spawn-codex', 'Codex self must be excluded'))
+  const codexPeer = await codexBackground.turn('TOOL-CALL workspace_state {}')
+  assert.ok(codexPeer.routed.includes('workspace_state'), 'Codex background tool reached main')
+  const codexState = JSON.parse(codexPeer.results.workspace_state.content[0].text)
+  assert.deepEqual(
+    Object.keys(codexState),
+    ['peerWork'],
+    'Codex background sees no parent landing state'
+  )
+  assert.ok(codexState.peerWork.rows.some((row) => row.goal === 'Adjust shared shadow'))
+  assert.ok(!codexState.peerWork.rows.some((row) => row.id === 'spawn-codex'))
   console.log(
     'PROVIDER-HELPER-TOOLS OK — Claude and Codex helper sessions reach every Trezi tool in main, under the owner’s grant'
   )

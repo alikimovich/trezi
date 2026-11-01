@@ -25,6 +25,7 @@ export const UNIT = [
   'repository-recovery',
   'source-owner',
   'conversation-owner',
+  'peer-work-feed',
   'provider-owner',
   'provider-data',
   'provider-login',

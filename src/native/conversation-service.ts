@@ -156,6 +156,13 @@ export function serviceConversation(
     spawn: async (id, project) => (await call('spawn', { id, project })).start,
     spawnDone: async (id) => (await call('spawnDone', { id })).start,
     spawnCancel: async (id) => (await call('spawnCancel', { id })).queued,
+    peerUpsert: async (row) => {
+      await call('peerUpsert', { row: plain(row) })
+    },
+    peerRemove: async (id) => {
+      await call('peerRemove', { id })
+    },
+    peers: (project, exclude) => call('peers', { project, exclude }, 'read'),
     snapshot: () => call('snapshot', {}, 'read'),
     status: () => call('status', {}, 'read')
   }

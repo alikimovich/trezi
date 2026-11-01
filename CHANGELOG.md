@@ -10,6 +10,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Added
+
+- Active chats and comment agents can inspect a bounded same-project peer work feed with observed file overlap advisories (LKM-402).
 ## [0.7.1] - 2026-10-31
 
 ### Fixed

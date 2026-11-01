@@ -7,6 +7,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRecordCapture } from '../src/main/backends/record.ts'
+import { setConversationOwner, swiftConversationOwner } from '../src/main/conversation-owner.ts'
 import { textEditMismatch } from '../src/main/text-edit-check.ts'
 import { projectKey } from '../src/shared/projectKey.ts'
 import { passCheck, replayFixtureChecks } from './helpers/gate-checks.mjs'
@@ -21,6 +22,7 @@ git('config', 'user.name', 'Fixture')
 git('config', 'user.email', 'fixture@example.test')
 writeFileSync(join(repo, 'color.txt'), 'red\n')
 writeFileSync(join(repo, 'border.txt'), 'solid\n')
+writeFileSync(join(repo, 'lines.txt'), 'one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\n')
 git('add', '.')
 git('commit', '-qm', 'Initial')
 const providers = [],
@@ -41,6 +43,10 @@ mock.module('../src/main/backends/index.ts', () => ({
         dispose() {},
         shutdown() {},
         send: (text) => sent.push(text),
+        tool: (name, input) => {
+          cap.noteTool(name, input)
+          context.onEvent?.({ type: 'status', text: name })
+        },
         interrupt: async () => context.onEvent({ type: 'done' })
       }
       providers.push({ root, context, session, options, sent })
@@ -50,6 +56,8 @@ mock.module('../src/main/backends/index.ts', () => ({
 }))
 const { registerAgentIpc, projectHasRunningAgents } = await import('../src/main/agent.ts')
 const { applyTextEdit } = await import('../src/main/props.ts')
+const { peerView } = await import('../src/main/peer-work.ts')
+const { runTreziTool } = await import('../src/main/session-tools.ts')
 registerAgentIpc(
   () => ({ webContents: { isDestroyed: () => false, send: (_, event) => events.push(event) } }),
   { handle: (name, fn) => handlers.set(name, fn) }
@@ -62,7 +70,7 @@ const start = () =>
   invoke('agent:spawn-comment', repo, 'Change color and border', 'parent', { provider: 'codex' })
 const wait = async (condition) => {
   for (let i = 0; i < 400; i++) {
-    if (condition()) return
+    if (await condition()) return
     await new Promise((r) => setTimeout(r, 20))
   }
   throw new Error('Timed out waiting for comment lifecycle')
@@ -80,6 +88,10 @@ try {
   assert.equal(projectHasRunningAgents(repo), true, 'Landing must remain busy')
   await wait(() => finished(first.spawnId))
   assert.equal(finished(first.spawnId).outcome, 'applied')
+  assert.ok(
+    !(await peerView(repo, '')).rows.some((row) => row.id === first.spawnId),
+    'normal landing removes the live peer'
+  )
   assert.equal(readFileSync(join(repo, 'color.txt'), 'utf8'), 'blue\n')
   assert.equal(
     events.filter((e) => e.type === 'spawn-finished' && e.sessionId === first.spawnId).length,
@@ -124,6 +136,9 @@ try {
   await invoke('agent:spawn-interrupt', cancelled.spawnId)
   await wait(() => finished(cancelled.spawnId))
   assert.equal(finished(cancelled.spawnId).outcome, 'cancelled')
+  await wait(
+    async () => !(await peerView(repo, '')).rows.some((row) => row.id === cancelled.spawnId)
+  )
   const parallel = await Promise.all([start(), start(), start(), start()])
   assert.equal(parallel.filter((r) => r.queued).length, 1, 'Fourth comment must queue')
   const queued = parallel.find((r) => r.queued)
@@ -132,6 +147,27 @@ try {
   const active = providers.slice(-3)
   writeFileSync(join(active[0].root, 'color.txt'), 'purple\n')
   writeFileSync(join(active[1].root, 'border.txt'), 'none\n')
+  writeFileSync(join(active[2].root, 'color.txt'), 'orange\n')
+  active[0].session.tool('Edit', { file_path: join(active[0].root, 'color.txt') })
+  active[1].session.tool('Edit', { file_path: join(active[1].root, 'border.txt') })
+  active[2].session.tool('Edit', { file_path: join(active[2].root, 'color.txt') })
+  const peerState = await runTreziTool(
+    'workspace_state',
+    {},
+    {
+      root: active[0].root,
+      liveRoot: repo,
+      emitKey: parent,
+      background: true,
+      peerId: active[0].context.sessionId,
+      notify() {}
+    }
+  )
+  assert.ok(peerState.peerWork.rows.some((row) => row.goal === 'Change color and border'))
+  assert.ok(peerState.peerWork.rows.some((row) => row.observedFiles.includes('border.txt')))
+  assert.ok(peerState.peerWork.advisories.some((row) => row.kind === 'exact-file'))
+  assert.ok(!peerState.peerWork.advisories.some((row) => row.files.includes('border.txt')))
+  assert.ok(active[1].sent[0].includes('Peer work snapshot'), 'background turn-start context')
   for (const p of active.slice(0, 2)) await passCheck(parent, p.root)
   for (const p of active) p.context.onEvent({ type: 'done' })
   await wait(() => parallel.every((r) => finished(r.spawnId)))
@@ -143,6 +179,68 @@ try {
   assert.equal(replays.length, 1, 'the reconciled tree was checked again')
   assert.equal(readFileSync(join(repo, 'color.txt'), 'utf8'), 'purple\n')
   assert.equal(readFileSync(join(repo, 'border.txt'), 'utf8'), 'none\n')
+  // Two real comment spawns change separate lines in the same file. The file
+  // intersection still requires an exact advisory before either lands.
+  const disjoint = await Promise.all([start(), start()])
+  const [lineOne, lineTwo] = providers.slice(-2)
+  writeFileSync(join(lineOne.root, 'lines.txt'), 'ONE\ntwo\nthree\nfour\nfive\nsix\nseven\neight\n')
+  writeFileSync(join(lineTwo.root, 'lines.txt'), 'one\ntwo\nthree\nfour\nfive\nsix\nSEVEN\neight\n')
+  lineOne.session.tool('Edit', { file_path: join(lineOne.root, 'lines.txt') })
+  lineTwo.session.tool('Edit', { file_path: join(lineTwo.root, 'lines.txt') })
+  const lineView = await peerView(repo, lineOne.context.sessionId)
+  assert.ok(
+    lineView.advisories.some(
+      (row) => row.peer === lineTwo.context.sessionId && row.kind === 'exact-file'
+    ),
+    'disjoint line edits have exact file overlap'
+  )
+  for (const spawn of disjoint) await invoke('agent:spawn-interrupt', spawn.spawnId)
+  await wait(() => disjoint.every((spawn) => finished(spawn.spawnId)))
+  // Hold the owner reply after a spawn is registered. Stop in this window must
+  // prevent the provider's first send and still finish the cancelled spawn.
+  const realOwner = swiftConversationOwner()
+  let releaseOwner
+  const heldReply = new Promise((resolve) => {
+    releaseOwner = resolve
+  })
+  let signalHeld
+  const held = new Promise((resolve) => {
+    signalHeld = resolve
+  })
+  let stoppedId = ''
+  setConversationOwner(
+    new Proxy(realOwner, {
+      get(target, key) {
+        if (key === 'peerUpsert')
+          return async (row) => {
+            if (row.goal === 'Stop during peer start') {
+              stoppedId = row.id
+              signalHeld()
+              await heldReply
+            }
+            return target.peerUpsert(row)
+          }
+        const value = target[key]
+        return typeof value === 'function' ? value.bind(target) : value
+      }
+    })
+  )
+  try {
+    const starting = invoke('agent:spawn-comment', repo, 'Stop during peer start', 'parent', {
+      provider: 'codex'
+    })
+    await held
+    const stoppedProvider = providers.at(-1)
+    await invoke('agent:spawn-interrupt', stoppedId)
+    releaseOwner()
+    await starting
+    await wait(() => finished(stoppedId))
+    assert.equal(stoppedProvider.sent.length, 0, 'Stop before send cannot restart a finished turn')
+    assert.equal(finished(stoppedId).outcome, 'cancelled')
+  } finally {
+    releaseOwner()
+    setConversationOwner(realOwner)
+  }
   // LKM-193: a background agent's question settles through the chat's answer path, and
   // Cancel dismisses one still waiting.
   const asking = await start(),
