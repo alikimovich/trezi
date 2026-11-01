@@ -2,6 +2,15 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-01 — LKM-406 repair: a comment's first peer state is not lost
+
+- Review finding: `peer-feedback.ts` sends a state once and records its digest, but `NativeContextController.spawn` only mapped `peer-state` onto an existing rail row. A directly started comment's row is added later, by the command result (`queued()`), and a dequeued spawn's `spawn-started` rebuilt the row as `{id, label, status}`; either order lost the lines for good, in the common case of a comment started on contended work. No test drove the controller with `peer-state`.
+- Fix: the controller keeps the latest lines per spawn id (`spawnPeerWork`) and builds every row from them: in `queued()`, in `spawn-started`, and on each `peer-state`. An empty state and `spawn-finished` drop them; a finished spawn takes no more.
+- Red proof: `test/native-context.mjs` gained a block for both orders. With `queued()` ignoring the kept lines it fails "lines that arrived before the row appear on it"; with `spawn-started` ignoring them it fails "the start keeps what the card shows" (each defect reintroduced by edit alone). Green with the fix.
+- `PeerFeedbackLine` moved above its own doc comment's place, so `PeerGateNote` has its comment again.
+- Not done (reviewer marked optional): `reconciling` for a reconciliation the user starts with Resolve. That turn is an ordinary renderer `agent:send` run in phase `running`; marking it needs the new turn's id before it starts, which the `agent:resolve-conflict` handler does not have, so it would be a new coupling I cannot exercise here. Docs say the phase is automatic-only.
+- Not run: the native suite (worker limit zero).
+
 ## 2026-10-31 — LKM-406 overlap, wait and reconciliation feedback, with a bounded named-peer wait
 
 - Red proof before the implementation: `bun test/peer-feedback.mjs` on unmodified source failed 16 of its 17 scenarios (for example "Timed out waiting for the overlap to show"); only "an incompatible comment keeps its branch and its question" passed, which is LKM-403 behaviour. Green on final source: all 17, with no provider calls.

@@ -1,4 +1,10 @@
-import type { AgentEvent, Annotation, SelectedElement, SourceSetupState } from '../shared/api'
+import type {
+  AgentEvent,
+  Annotation,
+  PeerFeedbackLine,
+  SelectedElement,
+  SourceSetupState
+} from '../shared/api'
 import type { NativeChatContext, NativeChatEffect } from '../shared/native-chat-controller'
 import { describeSelectionForPrompt, selectionForBubble } from '../shared/selection-context'
 import type { ProjectEntry } from '../shared/workspace'
@@ -32,6 +38,9 @@ export class NativeContextController {
   private readonly treziLog = new Map<string, string>()
   readonly spawns = new Map<string, NativeChatContext['spawns']>()
   private readonly finishedSpawns = new Set<string>()
+  /** LKM-406: the latest peer lines per spawn. The feed sends a state once, possibly before
+   *  the rail row exists or between its rebuilds, so rows are always built from this. */
+  private readonly spawnPeerWork = new Map<string, PeerFeedbackLine[]>()
   private readonly spawnPins = new Map<string, { root: string; selector: string }>()
   constructor(
     readonly workspace: NativeWorkspaceController,
@@ -332,8 +341,13 @@ export class NativeContextController {
   queued(key: string, id: string, label: string, queued: boolean) {
     if (this.finishedSpawns.has(id)) return
     const list = this.spawns.get(key) ?? []
-    if (!list.some((s) => s.id === id))
-      this.spawns.set(key, [...list, { id, label, status: queued ? 'queued' : 'running' }])
+    if (!list.some((s) => s.id === id)) {
+      const peerWork = this.spawnPeerWork.get(id)
+      this.spawns.set(key, [
+        ...list,
+        { id, label, status: queued ? 'queued' : 'running', ...(peerWork ? { peerWork } : {}) }
+      ])
+    }
     const root = this.chat.chats.get(key)?.context?.root
     if (root) this.changed(root)
   }
@@ -342,26 +356,33 @@ export class NativeContextController {
     if (event.type === 'spawn-finished') this.finishedSpawns.add(event.sessionId)
     else if (this.finishedSpawns.has(event.sessionId)) return
     let list = this.spawns.get(event.projectKey) ?? []
-    if (event.type === 'spawn-started')
+    if (event.type === 'spawn-started') {
+      const peerWork = this.spawnPeerWork.get(event.sessionId)
       list = [
         ...list.filter((s) => s.id !== event.sessionId),
         {
           id: event.sessionId,
           label: list.find((s) => s.id === event.sessionId)?.label ?? event.branch,
-          status: 'running'
+          status: 'running',
+          ...(peerWork ? { peerWork } : {})
         }
       ]
-    else if (event.type === 'spawn-finished') {
+    } else if (event.type === 'spawn-finished') {
       list = list.filter((s) => s.id !== event.sessionId)
       this.spawnPins.delete(event.sessionId)
+      this.spawnPeerWork.delete(event.sessionId)
     } else if (event.type === 'status' || event.type === 'error')
       list = list.map((s) =>
         s.id === event.sessionId
           ? { ...s, activity: event.type === 'status' ? event.text : event.message }
           : s
       )
-    else if (event.type === 'peer-state')
-      list = list.map((s) => (s.id === event.sessionId ? { ...s, peerWork: event.lines } : s))
+    else if (event.type === 'peer-state') {
+      const peerWork = event.lines.length ? event.lines : undefined
+      if (peerWork) this.spawnPeerWork.set(event.sessionId, peerWork)
+      else this.spawnPeerWork.delete(event.sessionId)
+      list = list.map((s) => (s.id === event.sessionId ? { ...s, peerWork } : s))
+    }
     // LKM-193: the question waits on the agent's card; the chat is flagged when hidden.
     else if (event.type === 'question-request') {
       list = list.map((s) => (s.id === event.sessionId ? { ...s, question: event.request } : s))

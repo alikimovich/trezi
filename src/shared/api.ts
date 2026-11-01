@@ -390,7 +390,6 @@ export interface SlashCommandItem {
  * shared, but the renderer uses the origin to choose the right completion UX. */
 export type BackgroundSpawnOrigin = 'comment' | 'text-edit'
 
-/** What a landing saw of its peers at the gate, with the exact revisions (LKM-403). */
 /** One line of a task's card (LKM-406). `uncertain` may be nothing; it never means safe. */
 export interface PeerFeedbackLine {
   kind: 'overlap' | 'waiting' | 'reconciling'
@@ -405,6 +404,7 @@ export interface PeerFeedbackLine {
   self?: boolean
 }
 
+/** What a landing saw of its peers at the gate, with the exact revisions (LKM-403). */
 export interface PeerGateNote {
   /** The fork point the work started from. */
   base: string
