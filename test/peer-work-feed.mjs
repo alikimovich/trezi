@@ -262,6 +262,35 @@ try {
   assert.equal(phasedRow?.phase, 'landing', 'refresh keeps a phase change made during its Git read')
   assert.ok(phasedRow?.observedFiles.includes('a.txt'), 'refresh still merges observed files')
   finishPeer(phased.id)
+  // The edit is synced into the worktree while refresh reads it against the old base.
+  git(right, 'add', 'a.txt')
+  git(right, 'commit', '-qm', 'synced live edit')
+  const rightHead = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: right,
+    encoding: 'utf8'
+  }).trim()
+  const rebased = task('phase-race-base', a, 'background', [])
+  await startPeer(rebased, undefined, right)
+  const rebasing = peerView(a, '')
+  await updatePeerBase(rebased.id, rightHead)
+  await rebasing
+  const rebasedRow = (await owner.peers(a, '')).rows.find((row) => row.id === rebased.id)
+  assert.equal(rebasedRow?.base, rightHead, 'refresh keeps a base sync made during its Git read')
+  assert.deepEqual(rebasedRow?.observedFiles, [], 'refresh drops paths read against the old base')
+  await owner.peerUpsert(task('phase-race-peer', a, 'chat', ['a.txt']))
+  assert.ok(
+    !(await owner.peers(a, rebased.id)).advisories.some(
+      (row) => row.peer === 'phase-race-peer' && row.kind === 'exact-file'
+    ),
+    'a synced-in live edit makes no false exact-file advisory'
+  )
+  await owner.peerRemove('phase-race-peer')
+  assert.deepEqual(
+    (await peerView(a, '')).rows.find((row) => row.id === rebased.id)?.observedFiles,
+    [],
+    'the next refresh reads the new base'
+  )
+  finishPeer(rebased.id)
   const startingRow = task('start-race', a, 'comment', [])
   let startEntered
   const startPending = new Promise((resolve) => {
