@@ -20,6 +20,10 @@ let view = ChatTextView.make()
 root.addSubview(view)
 window.orderFront(nil)
 window.makeFirstResponder(view)
+// With a window server the window is placed (a titled window is moved onto a screen) in the
+// first turns of the run loop. An event made before that and read after it would have moved
+// with the window, so nothing is made until the window has settled.
+spin(0.3)
 
 // A sandboxed run has no pasteboard server, so the write itself is recorded here. The real
 // pasteboard write is covered by the native chat-text check.
@@ -118,10 +122,20 @@ func click(_ at: NSPoint, flags: NSEvent.ModifierFlags = []) -> String? {
     return writes.first
 }
 require(window.contentView?.hitTest(view.convert(point("inline  code"), to: nil)) === view, "The click lands on the text view")
+// Queued events must keep their place in the window: a release that moved reads as a drag.
+do {
+    let spot = point("inline  code"), made = event(.leftMouseUp, spot)
+    NSApp.postEvent(made, atStart: false)
+    spin(0.1)
+    let queued = NSApp.nextEvent(matching: [.leftMouseUp], until: .distantPast, inMode: .default, dequeue: true)
+    let wanted = view.convert(spot, to: nil)
+    require(queued != nil && hypot(queued!.locationInWindow.x - wanted.x, queued!.locationInWindow.y - wanted.y) < 0.5,
+            "A queued event keeps its location: wanted \(wanted), made \(made.locationInWindow), queued \(String(describing: queued?.locationInWindow)), window \(window.frame)")
+}
 
 // Inline code: the whole payload from anywhere on it, whitespace and Unicode exact.
 let first = click(point("inline  code"))
-require(first == "inline  code", "Inline click: \(writes), timer \(view.clickTimer != nil), selection \(view.selectedRange()), snippet \(String(describing: view.snippet(at: point("inline  code")))), chips \(view.rich.snippets.map { view.inlineFrames($0) }.prefix(2)), at \(point("inline  code"))")
+require(first == "inline  code", "Inline click: \(writes), timer \(view.clickTimer != nil), selection \(view.selectedRange()), snippet \(String(describing: view.snippet(at: point("inline  code")))), chips \(view.rich.snippets.map { view.inlineFrames($0) }.prefix(2)), at \(point("inline  code")), window \(window.frame)")
 require(click(point("inline  code", fraction: 0.05)) == "inline  code", "Its first letter")
 require(click(point("inline  code", fraction: 0.97)) == "inline  code", "Its last letter")
 require(click(point("rm -rf ./nothing")) == "rm -rf ./nothing", "Code inside strong text copies, and runs nothing")
