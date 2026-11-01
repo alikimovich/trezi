@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native suite failure on main e120149f83ef (LKM-432)
+
+- [x] The `toolbar-actions` shortcut audit leaves out the Start Dictation… and Emoji & Symbols rows AppKit adds to any Edit menu.
+- [x] The branch spinner stays inside the title rect at the 850 pt window.
+- [x] `core` passes natively, 45 of 45, with `toolbar-actions` run end to end for the first time.
+- [ ] Decide whether the address and branch text should follow the page in a forced dark window: `toolbar-toolbar-actions-minimum-dark.png` shows near-black text on the dark toolbar.
+
 ## Send Feedback shortcut, Mark up button, device switch in the tools island (LKM-430)
 
 - [x] ⌥⌘F opens the existing Send Feedback form from any focus, through `MenuFirstShortcut`; one form per press, nothing submits.

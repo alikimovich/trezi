@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-01 — LKM-432 native suite: AppKit's Edit rows and the spinner at 850 pt
+
+- Nightly failure on e120149f, both from LKM-430, whose smoke and new width had not run natively.
+- `toolbar-actions` died in its first step, "+d is bound once: Start Dictation…". `menuShortcuts` listed two Start Dictation… rows on `d` with no named modifier. HostMenus builds no such row: AppKit adds Start Dictation… (`startDictation:`) and Emoji & Symbols (`orderFrontCharacterPalette:`) to any menu titled Edit. A headless probe printed a shown row, a hidden twin with the Globe mask on `d`, and three Emoji rows, two of them hidden. In that probe the shown Dictation row had no key and in the app it had `d`, so the key depends on the system. The audit is about Trezi's own bindings, so `menuShortcuts` (`src/native/ToggleUIVerification.swift`) leaves out those two selectors. The assertion stays as strict as it was for every other row.
+- `publish-progress` failed "Spinner fits at 850": the seventh island segment took the block to 87 pt and the branch pop-up to 92 pt, so its title rect ends at 76 in button coordinates while the spinner's slot ended at 77.85. A real overflow of 1.85 pt, past the title and toward the chevron, not a fixture error. LKM-430's decision keeps Mark up at every width, so the room stays gone. `BranchPopUpButton.layout` now clamps the spinner to the title's trailing edge. Measured at 850: spinner 405–417, title end 417, dot end 401.5, chevron start 420. A dot still shown ends before the clamped spinner, because `dot.isHidden` already keeps room for the ellipsis. With a branch name long enough to truncate before the dot, the spinner now sits over the end of the truncated text; before this it sat past the title.
+- `toolbar-actions` ran end to end natively for the first time: 45 of 45 `core` checks passed, not skipped, 5 feedback presses and 8 device flips recorded, gap 20 pt at both widths. No smoke step needed a change.
+- Seen in `toolbar-toolbar-actions-minimum-dark.png`, not changed here: with a forced dark window and a white page the address and branch text is near-black on the dark toolbar, because it follows the page (`previewTextColor`). The other captures were not reviewed for it.
+
 ## 2026-11-01 — LKM-430 Send Feedback shortcut, Mark up button, device switch in the tools island
 
 - ⌥⌘F is Send Feedback. It was free: the menus use ⌘F, ⌥⌘I and ⌥⌘C, AppKit's `StandardKeyBinding.dict` has no such entry, and ⌃⌘F differs by its exact modifiers. It sits in `MenuFirstShortcut.keys` because the fixture measured WebKit claiming it ahead of the menu, the same trap as ⌘. (LKM-380). `MenuFirstShortcut.feedback` is the one definition; the menu item reads it. There is no in-app shortcut list, so the menu entry is the discoverable place, as for every other shortcut.

@@ -62,7 +62,9 @@ final class BranchPopUpButton: NSPopUpButton {
     override func layout() {
         super.layout()
         let title = cell?.titleRect(forBounds: bounds) ?? bounds
-        progress.frame = NSRect(x: title.minX + width(progressPrefix), y: title.midY - 6, width: 12, height: 12)
+        // LKM-432: a narrow title ends before the spinner's slot: it stays inside the title, clear
+        // of the chevron. A dot still shown ends before this edge (the check below keeps "…" room).
+        progress.frame = NSRect(x: max(title.minX, min(title.minX + width(progressPrefix), title.maxX - 12)), y: title.midY - 6, width: 12, height: 12)
         let slot = dotSlot, size = BranchStatusDot.diameter
         dot.frame = backingAlignedRect(NSRect(x: slot.midX - size / 2, y: slot.midY - size / 2, width: size, height: size), options: .alignAllEdgesNearest)
         // Tail truncation keeps the slot only while it and the ellipsis still fit.
