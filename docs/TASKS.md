@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Coordinated parallel work: final native acceptance fixtures (LKM-407)
+
+- [x] Register compatible and incompatible mixed-origin checks in the canonical `chat` native smoke selection; the group-selection unit test pins both names.
+- [x] Add disposable Git project, deterministic stub provider, real chat/comment/text-edit IPC, real project checks, Swift card assertions and evidence writes to the native smoke artifacts path.
+- [ ] Manager: run both checks on merged main under the canonical native scheduler, inspect screenshots and state, and retain exact-SHA runtime and byte measurements. Worker native allowance is zero.
+- [ ] Negative native run against a broken coordination path and independent review remain with the manager; no desktop run was available to this worker.
+
 ## Native suite failure on main e117983ad8c9 (LKM-413)
 
 - [x] The marquee smoke waits for the scroll to stop at its end, not the frame before the last step.

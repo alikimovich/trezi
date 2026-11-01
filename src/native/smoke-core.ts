@@ -50,6 +50,7 @@ import { checkLandingChecks } from './smoke-landing-check'
 import { checkLayersIsland, type LayersSmoke, restoreLayersIsland } from './smoke-layers'
 import { checkLegacyProject } from './smoke-legacy-project'
 import { checkManagedAgentBrowser } from './smoke-managed-agent-browser'
+import { checkMixedOriginCompatible, checkMixedOriginIncompatible } from './smoke-mixed-origin'
 import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-islands'
 import { checkParallelStream, restoreParallelStream } from './smoke-parallel-stream'
 import { checkPreviewHistory, restorePreviewHistory } from './smoke-preview-history'
@@ -1528,6 +1529,16 @@ export async function runNativeCoreSmoke(
       dependsOn: ['chat-ready'],
       run: () => checkParallelStream(host, fixture, artifacts),
       cleanup: () => restoreParallelStream(host)
+    },
+    {
+      name: 'mixed-origin-compatible',
+      dependsOn: ['chat-ready'],
+      run: () => checkMixedOriginCompatible(host, fixture, artifacts, root)
+    },
+    {
+      name: 'mixed-origin-incompatible',
+      dependsOn: ['chat-ready'],
+      run: () => checkMixedOriginIncompatible(host, fixture, artifacts, root)
     },
     {
       name: 'quit-alert',
