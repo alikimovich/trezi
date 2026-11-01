@@ -41,9 +41,11 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     private var toolbarLayout: ToolbarLayout!
     weak var window: NSWindow?
     private(set) var toolbarItems: [String: NSToolbarItem] = [:]
-    private let items = [ "chat", "address", "interaction", "select-object", "device", "overlay", "speed", "tools", "code", "layers", "expand", "more", "publish"]
-    private let labels = ["select-object":"Select Object", "layers":"Show Layers", "home":"Back to Project", "address":"Preview Address", "device":"Switch to Mobile", "overlay":"Rulers and Grids", "branch":"Branch", "publish":"Publish", "code":"Show Code", "expand":"Expand Preview", "speed":"Slow Motion", "more":"More Preview Actions"]
-    private let symbols = ["select-object":"cursorarrow", "layers":"square.3.layers.3d", "home":"house", "device":"iphone", "overlay":"ruler", "branch":"arrow.triangle.branch", "publish":"arrow.up.circle", "code":"chevron.left.forwardslash.chevron.right", "expand":"arrow.up.left.and.arrow.down.right"]
+    private let items = [ "chat", "address", "interaction", "tools", "more", "publish"] + ToolbarIslands.interaction + ToolbarIslands.tools
+    private let labels = ["select-object":"Select Object", "layers":"Show Layers", "home":"Back to Project", "address":"Preview Address", "device":"Switch to Mobile", "overlay":"Rulers and Grids", "branch":"Branch", "publish":"Publish", "code":"Show Code", "expand":"Expand Preview", "speed":"Slow Motion", "markup":ToolbarIslands.markupLabel, "more":"More Preview Actions"]
+    private let symbols = ["select-object":"cursorarrow", "layers":"square.3.layers.3d", "home":"house", "device":"iphone", "overlay":"ruler", "markup":ToolbarIslands.markupSymbol, "branch":"arrow.triangle.branch", "publish":"arrow.up.circle", "code":"chevron.left.forwardslash.chevron.right", "expand":"arrow.up.left.and.arrow.down.right"]
+    /// A Mark up overlay is open: the segment shows it (`updateMarkup`).
+    var markupActive = false
     /// The rulers-and-grids button opens its native popover (LKM-205) instead of asking main.
     var overlayAction: (() -> Void)?
     /// Runs after every toolbar measure, for views that hang under a toolbar control (LKM-385).
@@ -222,7 +224,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             if abs(chatHeaderWidth.constant - width) > 0.5 { chatHeaderWidth.constant = width }
             chatTrailing = leading + width
             let formerChat = min(max(100, target - leading), max(100, windowWidth - leading - 500))
-            addressLayout.formerWidth = min(180, max(80, windowWidth - leading - formerChat - 400))
+            // 400 was the former layout's reserve for the right groups; they gained a 32 pt button (LKM-430).
+            addressLayout.formerWidth = min(180, max(80, windowWidth - leading - formerChat - 432))
         } else if let chatHeaderWidth, toolbar.items.contains(where: { $0.itemIdentifier.rawValue == "chat" }) {
             // Inserted but not laid out yet (restoring the preview): it takes the block's slot.
             chatTrailing = slot + chatHeaderWidth.constant
@@ -244,8 +247,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         guard items.contains(key) else { return nil }
         if key == "chat" || key == "address", let existing = toolbarItems[key] { return existing }
         if key == "tools" || key == "interaction" {
-            let actions = key == "tools" ? ["code", "layers", "expand"] : ["select-object", "device", "overlay", "speed"]
-            let children = actions.compactMap {
+            let children = (key == "tools" ? ToolbarIslands.tools : ToolbarIslands.interaction).compactMap {
                 self.toolbar(toolbar, itemForItemIdentifier: NSToolbarItem.Identifier($0), willBeInsertedIntoToolbar: willBeInsertedIntoToolbar)
             }
             let group = MomentaryToolbarGroup(identifier: identifier, items: children)
@@ -255,7 +257,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
         let item: NSToolbarItem = ["branch", "publish", "speed", "more"].contains(key) ? NSMenuToolbarItem(itemIdentifier: identifier) : NSToolbarItem(itemIdentifier: identifier)
         item.label = labels[key] ?? key; item.paletteLabel = item.label; item.toolTip = item.label
-        item.image = toolbarSymbol(symbols[key] ?? "circle", item.label)
+        item.image = key == "markup" ? ToolbarIslands.markupImage(active: markupActive) : toolbarSymbol(symbols[key] ?? "circle", item.label)
         // Menu-only items let AppKit open the menu from the entire control.
         if !["branch", "chat", "address", "speed", "more"].contains(key) { item.target = self; item.action = #selector(toolbarAction(_:)) }
         if key == "more", let menuItem = item as? NSMenuToolbarItem { configureMore(menuItem) }

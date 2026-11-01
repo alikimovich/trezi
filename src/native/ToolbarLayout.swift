@@ -39,6 +39,19 @@ func toolbarAccentSymbol(_ name: String, _ label: String? = nil) -> NSImage? {
     return image
 }
 
+/// The preview toolbar's two islands, in segment order. LKM-430: the device switch belongs with
+/// code, layers and expand, and Mark up has its own segment (the "…" and Actions entries stay).
+enum ToolbarIslands {
+    static let interaction = ["select-object", "overlay", "speed", "markup"]
+    static let tools = ["code", "layers", "device", "expand"]
+    static let markupLabel = "Mark up"
+    static let markupSymbol = "pencil.tip"
+    /// The accent glyph while an overlay is open, as slow motion shows its state.
+    static func markupImage(active: Bool) -> NSImage? {
+        active ? toolbarAccentSymbol(markupSymbol, markupLabel) : toolbarSymbol(markupSymbol, markupLabel)
+    }
+}
+
 /// LKM-213: laid-out toolbar item frames by identifier, in `target`'s coordinates (default: the
 /// window holding the toolbar; LKM-321: in full screen that is AppKit's toolbar window, so the
 /// frames go through the screen). NSToolbarItem has no public frame, so this reads AppKit's item

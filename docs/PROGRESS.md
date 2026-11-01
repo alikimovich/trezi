@@ -2,6 +2,17 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-01 — LKM-430 Send Feedback shortcut, Mark up button, device switch in the tools island
+
+- ⌥⌘F is Send Feedback. It was free: the menus use ⌘F, ⌥⌘I and ⌥⌘C, AppKit's `StandardKeyBinding.dict` has no such entry, and ⌃⌘F differs by its exact modifiers. It sits in `MenuFirstShortcut.keys` because the fixture measured WebKit claiming it ahead of the menu, the same trap as ⌘. (LKM-380). `MenuFirstShortcut.feedback` is the one definition; the menu item reads it. There is no in-app shortcut list, so the menu entry is the discoverable place, as for every other shortcut.
+- A held or repeated ⌥⌘F reaches the menu once per key event, and capture is async, so `support-sheets.ts` ignores a press while the flow is opening or while its own sheet is up. Another sheet is still replaced, as the menu always did. This guard covers Send Feedback only.
+- Mark up is a segment of the interaction island through the generic toolbar path: same `toolbarAction`, `shell-action` and `NativeMarkupController.begin()` as the "…" and Actions entries, which stay. `pencil.tip` through `toolbarSymbol`; the accent glyph shows while the overlay is open. A click then is a no-op in `begin()`. Disabled follows `ready`.
+- `ToolbarIslands` in `src/native/ToolbarLayout.swift` now holds both group lists, so the fixture builds the product's groups and a moved button is seen there. Order: `select | ruler | slow motion | mark up` and `code | layers | device | expand`.
+- Width: seven segments at the 850 pt minimum against six before, so the address block drops from 117 to about 85 pt (floor 80). Decision: Mark up stays visible at every width, because the ticket asks for it outside the overflow. `formerWidth`'s reserve and the `rightInset` start moved 400→432, exactly the new segment's 32 pt; the 85 pt is arithmetic from the last measured layout, not a run.
+- Red first, by reverting each behaviour in place: `test/menu-first-shortcuts.mjs` failed with route `menu` instead of `menu-first`, `test/toolbar-island-dividers.mjs` trapped on the missing `markup` segment, `test/native-support-sheets.mjs` failed "presses during the capture capture once". All restored.
+- `swiftc -typecheck` over the host's full source list from `scripts/build-native.mjs` exits 0. The quick tier does not compile the whole host, so that was run by hand.
+- Not run: the new `toolbar-actions` smoke and the updated `shell-layout`, `toolbar-address` and `preview-speed` expectations, because this worker has zero native calls. Feedback QA stays on the disposable profile's invite question and never submits.
+
 ## 2026-11-01 — LKM-429 mixed-origin fixture: asserts folder in the worktrees
 
 - Nightly failure on 170c393d: `chat/mixed-origin-compatible` died with ENOENT on `<worktree>/asserts/chat`, the first native run of LKM-407's cases. `setup` made an empty `asserts/` on the project, Git does not track an empty folder, so no worktree had one. A fixture defect only; product code is unchanged.

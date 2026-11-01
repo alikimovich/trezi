@@ -151,7 +151,7 @@ async function checkBadgeFollows(
     await placed('narrow', 'overlay')
     const narrow = await host.request('shellInspect')
     assert.equal(narrow.moreVisible, false, '"…" leaves a narrow window')
-    assert.deepEqual(narrow.interactionSegments, ['select-object', 'device', 'overlay'])
+    assert.deepEqual(narrow.interactionSegments, ['select-object', 'overlay', 'markup'])
     await capture(host, artifacts, 'preview-speed-narrow')
     assert.ok(await shell('window-width', String(Math.round(before.windowWidth))), 'resize back')
     await placed('widened')

@@ -198,7 +198,7 @@ extension NativeShell {
         alignChatHeader()
         DispatchQueue.main.async { [weak self] in self?.layoutToolbar(); self?.measureToolbar() }
     }
-    /// The first right action group (select/device).
+    /// The first right action group (the interaction island).
     var rightGroup: NSView? { toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" }?.view }
     /// LKM-296: where the first item after the sidebar starts in the last toolbar layout. While the
     /// sidebar closes (expanding the preview) it is still right of the measured `leading`; sizing the
@@ -246,7 +246,7 @@ extension NativeShell {
 }
 
 /// LKM-148: the address block fills the toolbar from its leading edge to `gap`
-/// before the first right action group (select/device). Its width is computed from
+/// before the first right action group (the interaction island). Its width is computed from
 /// the window width and offsets measured after a toolbar layout, so a window resize
 /// sets the final width synchronously, in the same layout pass, instead of a frame
 /// later. The right groups stay pinned to the window's trailing edge.
@@ -266,7 +266,7 @@ struct ToolbarAddressLayout {
     static let gap: CGFloat = 20
     /// Window width minus the first right group's leading edge. Starts high: an
     /// underestimate overflows the block, and an overflowed block cannot be measured.
-    var rightInset: CGFloat = 400
+    var rightInset: CGFloat = 432
     /// Whether `rightInset` comes from a pinned layout rather than a guess.
     var measured = false
     /// Block leading minus the chat header's trailing edge.

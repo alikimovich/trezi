@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Send Feedback shortcut, Mark up button, device switch in the tools island (LKM-430)
+
+- [x] ⌥⌘F opens the existing Send Feedback form from any focus, through `MenuFirstShortcut`; one form per press, nothing submits.
+- [x] Mark up has a `pencil.tip` button in the interaction island, with active and disabled states, on the same `markup` action.
+- [x] The device switch moved to the tools island: `code | layers | device | expand`. The lists live in `ToolbarIslands`.
+- [x] Native smoke `toolbar-actions` (core group), not yet run.
+- [ ] Manager: run the `core` and `settings` groups natively and inspect the `toolbar-toolbar-actions-*` captures, the 850 pt window above all.
+
 ## Native suite failure on main 170c393d1dd3 (LKM-429)
 
 - [x] `mixed-origin-*` track one empty `asserts/<side>` file per worker in the fixture base: a fresh worktree has no empty folder, and a chat only reconciles text files its base already has.

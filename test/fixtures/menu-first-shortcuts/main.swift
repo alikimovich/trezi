@@ -9,14 +9,22 @@ final class Window: NSWindow {
     var full = true
     var exits = 0, cancels: [String] = []
     override var styleMask: NSWindow.StyleMask { get { full ? super.styleMask.union(.fullScreen) : super.styleMask } set { super.styleMask = newValue } }
+    var attached: NSWindow?
+    override var attachedSheet: NSWindow? { attached }
     @objc func _fullScreenTileFillsScreen() -> Bool { full }
     @objc func exitFullScreenMode(_ sender: Any?) { exits += 1 }
     override func toggleFullScreen(_ sender: Any?) { exits += 1 }
     override func doCommand(by selector: Selector) { cancels.append(NSStringFromSelector(selector)); super.doCommand(by: selector) }
 }
 final class Target: NSObject {
-    var toggles = 0
-    @objc func menuAction(_ item: NSMenuItem) { if item.representedObject as? String == "toggle-chat" { toggles += 1 } }
+    var toggles = 0, feedback = 0, finds = 0
+    @objc func menuAction(_ item: NSMenuItem) {
+        switch item.representedObject as? String {
+        case "toggle-chat": toggles += 1
+        case "feedback": feedback += 1
+        default: finds += 1
+        }
+    }
 }
 let app = NSApplication.shared
 app.setActivationPolicy(.prohibited)
@@ -25,6 +33,12 @@ actionsItem.submenu = actions; menu.addItem(actionsItem)
 // The same item HostMenus builds: Actions → Toggle UI, ⌘., represented "toggle-chat".
 let toggle = NSMenuItem(title: "Toggle UI", action: #selector(Target.menuAction(_:)), keyEquivalent: ".")
 toggle.target = target; toggle.representedObject = "toggle-chat"; actions.addItem(toggle)
+// LKM-430: Actions → Send Feedback… on the shared binding, and Edit → Find… (⌘F) beside it.
+let feedbackItem = NSMenuItem(title: "Send Feedback…", action: #selector(Target.menuAction(_:)), keyEquivalent: MenuFirstShortcut.feedback.key)
+feedbackItem.keyEquivalentModifierMask = MenuFirstShortcut.feedback.modifiers
+feedbackItem.target = target; feedbackItem.representedObject = "feedback"; actions.addItem(feedbackItem)
+let findItem = NSMenuItem(title: "Find…", action: #selector(Target.menuAction(_:)), keyEquivalent: "f")
+findItem.target = target; findItem.representedObject = "find"; actions.addItem(findItem)
 app.mainMenu = menu
 
 let window = Window(contentRect: NSRect(x: -4000, y: -4000, width: 900, height: 600), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
@@ -36,9 +50,9 @@ let field = NSTextField(frame: NSRect(x: 0, y: 500, width: 300, height: 24)); co
 let preview = WKWebView(frame: NSRect(x: 0, y: 200, width: 600, height: 300)); content.addSubview(preview)
 let focuses: [(String, NSResponder?)] = [("composer", composer), ("source", source), ("address", field), ("preview", preview), ("none", nil)]
 
-func key(_ characters: String, _ code: UInt16, _ flags: NSEvent.ModifierFlags) -> NSEvent {
+func key(_ characters: String, _ code: UInt16, _ flags: NSEvent.ModifierFlags, plain: String? = nil, repeated: Bool = false) -> NSEvent {
     NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-                     context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)!
+                     context: nil, characters: characters, charactersIgnoringModifiers: plain ?? characters, isARepeat: repeated, keyCode: code)!
 }
 let period = { key(".", 47, .command) }, escape = { key("\u{1b}", 53, []) }
 let qwerty: KeyShortcut.Layout = { code, shift in KeyShortcut.ansi[code].map { shift ? $0.1 : $0.0 } }
@@ -67,6 +81,58 @@ for full in [true, false] {
         }
     }
 }
+// LKM-430: ⌥⌘F (the keyboard's event carries "ƒ" and "f") from each focus reaches Send
+// Feedback… once, leaves the focus where it was and neither Find nor full screen hear it.
+// Without the filter, the WKWebView's claim is what the filter is for.
+let feedbackKey = { key("ƒ", 3, [.command, .option], plain: "f") }
+for full in [true, false] {
+    window.full = full
+    for menuFirst in [false, true] {
+        for (name, responder) in focuses {
+            window.makeFirstResponder(responder); spin()
+            let feedback = target.feedback, finds = target.finds, exits = window.exits, cancels = window.cancels.count
+            let route = dispatch(feedbackKey(), menuFirst: menuFirst); spin()
+            report["\(full ? "full" : "windowed").feedback\(menuFirst ? "" : "Unfiltered").\(name)"] = [
+                "route": route, "opens": target.feedback - feedback, "finds": target.finds - finds, "exits": window.exits - exits,
+                "cancels": Array(window.cancels[cancels...]), "focus": window.firstResponder === (responder === field ? field.currentEditor() : responder ?? window)
+            ] as [String: Any]
+        }
+    }
+}
+window.full = false
+window.makeFirstResponder(composer); spin()
+/// Whether `event` went to the menu ahead of the views, and what each action heard in the full key order.
+func keyed(_ event: @autoclosure () -> NSEvent, focus: NSResponder? = composer) -> [String: Any] {
+    window.makeFirstResponder(focus); spin()
+    let feedback = target.feedback, finds = target.finds, exits = window.exits
+    let routed = MenuFirstShortcut.route(event(), window: window, menu: NSMenu(), layout: qwerty, latinLayout: true)
+    let route = dispatch(event(), menuFirst: true); spin()
+    return ["routed": routed, "route": route, "opens": target.feedback - feedback, "finds": target.finds - finds, "exits": window.exits - exits]
+}
+report["keys.find"] = keyed(key("f", 3, .command))
+report["keys.findPreview"] = keyed(key("f", 3, .command), focus: preview)
+report["keys.fullScreen"] = keyed(key("\u{06}", 3, [.command, .control], plain: "f"))
+report["keys.optionF"] = keyed(key("ƒ", 3, .option, plain: "f"))
+report["keys.shiftOptionCommandF"] = keyed(key("Ï", 3, [.command, .option, .shift], plain: "F"))
+report["keys.inspector"] = keyed(key("ˆ", 34, [.command, .option], plain: "i"))
+// A held key repeats: each repeat reaches the same menu item, and Bun's guard keeps one form
+// (`test/native-support-sheets.mjs`). Nothing here opens a second window or submits.
+report["keys.repeat"] = keyed(key("ƒ", 3, [.command, .option], plain: "f", repeated: true))
+report["keys.russian"] = {
+    let feedback = target.feedback
+    let routed = MenuFirstShortcut.route(key("а", 3, [.command, .option]), window: window, menu: menu, layout: qwerty, latinLayout: false)
+    return ["routed": routed, "opens": target.feedback - feedback]
+}()
+// A sheet keeps its keys: its own window is key, and the attached parent does not route.
+window.attached = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 100, height: 100), styleMask: [.titled], backing: .buffered, defer: false)
+report["keys.sheetRouted"] = MenuFirstShortcut.route(feedbackKey(), window: window, menu: menu, layout: qwerty, latinLayout: true)
+window.attached = nil
+let tracking = target.feedback
+report["keys.tracking"] = ["passed": MenuFirstShortcut.filter(feedbackKey(), windows: { (window, nil) }, enabled: { false }, menu: menu, layout: qwerty, latinLayout: true) != nil,
+                           "opens": target.feedback - tracking]
+// AppKit's own text commands: none bound to ⌥⌘F.
+let bindings = NSDictionary(contentsOfFile: "/System/Library/Frameworks/AppKit.framework/Resources/StandardKeyBinding.dict")
+report["keys.textBindings"] = ["read": bindings != nil, "bound": (bindings?.allKeys as? [String] ?? []).filter { ["@~f", "~@f"].contains($0) }] as [String: Any]
 // Escape is not routed to the menu, on its own or with ⌘, and is dispatched on to the responder
 // chain (its cancel is measured with the key-down step below, `keyDownEscape`).
 window.full = false

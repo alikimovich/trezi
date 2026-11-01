@@ -42,8 +42,9 @@ extension Host {
         view.addItem(.separator())
         for item in previewOverlay?.menuItems() ?? [] { view.addItem(item) }
         let actions = submenu("Actions")
-        for (label, key, action) in [("Reload Preview", "r", "reload"), ("Mark up", "", "markup"), ("Toggle UI", ".", "toggle-chat"),("Check for Updates…", "", "updates"), ("Diagnose Preview…", "", "diagnose"), ("Running Servers…", "", "servers"), ("Send Feedback…", "", "feedback")] {
-            let item = NSMenuItem(title: label, action: #selector(menuAction(_:)), keyEquivalent: key); item.target = self; item.representedObject = action; actions.addItem(item)
+        for (label, key, action) in [("Reload Preview", "r", "reload"), ("Mark up", "", "markup"), ("Toggle UI", ".", "toggle-chat"),("Check for Updates…", "", "updates"), ("Diagnose Preview…", "", "diagnose"), ("Running Servers…", "", "servers"), ("Send Feedback…", MenuFirstShortcut.feedback.key, "feedback")] {
+            let item = NSMenuItem(title: label, action: #selector(menuAction(_:)), keyEquivalent: key); item.target = self; item.representedObject = action
+            if action == "feedback" { item.keyEquivalentModifierMask = MenuFirstShortcut.feedback.modifiers }; actions.addItem(item)
         }
         // LKM-206: Control-Shift-S switches between 1× and the last slow speed.
         actions.addItem(.separator())

@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Added
+
+- ⌥⌘F opens Send Feedback, Mark up has a pen button in the top bar, and the desktop/mobile switch moved to the island with Code, Layers and Expand.
+
 ## [0.11.0] - 2026-10-31
 
 ### Added

@@ -19,29 +19,44 @@ export class NativeSupportSheets {
     readonly sheets: NativeSheetController,
     readonly capture: () => Promise<FeedbackScreenshot | null>
   ) {}
+  /** LKM-430: a capture is under way for the form, and the feedback sheet now up. A second
+   *  press of the shortcut, or a held key, must not capture again or replace a draft. */
+  private opening = false
+  private feedbackSheet: string | undefined
+  private presentFeedback(...args: Parameters<NativeSheetController['present']>) {
+    this.sheets.present(...args)
+    this.feedbackSheet = this.sheets.current?.state.id
+  }
   async feedback() {
-    const generation = this.sheets.generation
-    // Captured before any sheet is up, so the screenshot shows the window as the user saw it.
-    const [screenshot, account] = await Promise.all([
-      this.capture().catch(() => null),
-      this.sheets
-        .invoke('feedback:account')
-        .catch((): FeedbackAccount => ({ hasCode: false })) as Promise<FeedbackAccount>
-    ])
-    if (generation !== this.sheets.generation) return
-    const valid = account.hasCode && !account.invalid
-    if (!valid)
-      return this.inviteCode(account.hasCode ? account.error : undefined, (name) =>
-        this.compose(screenshot, name)
-      )
-    this.compose(screenshot, account.name)
+    const open = this.feedbackSheet && this.sheets.current?.state.id === this.feedbackSheet
+    if (this.opening || open) return
+    this.opening = true
+    try {
+      const generation = this.sheets.generation
+      // Captured before any sheet is up, so the screenshot shows the window as the user saw it.
+      const [screenshot, account] = await Promise.all([
+        this.capture().catch(() => null),
+        this.sheets
+          .invoke('feedback:account')
+          .catch((): FeedbackAccount => ({ hasCode: false })) as Promise<FeedbackAccount>
+      ])
+      if (generation !== this.sheets.generation) return
+      const valid = account.hasCode && !account.invalid
+      if (!valid)
+        return this.inviteCode(account.hasCode ? account.error : undefined, (name) =>
+          this.compose(screenshot, name)
+        )
+      this.compose(screenshot, account.name)
+    } finally {
+      this.opening = false
+    }
   }
   /** Asks for the invite code once; the code is checked and saved before `then` runs. */
   private inviteCode(
     message: string | undefined,
     then: (name: string | null, sheet: string) => void | Promise<void>
   ) {
-    this.sheets.present(
+    this.presentFeedback(
       {
         title: 'Enter your invite code',
         detail: `${INVITE_PROMPT} Trezi keeps it encrypted with your Keychain and sends it only to the Trezi feedback service. You can change or remove it in Settings → General.`,
@@ -77,7 +92,7 @@ export class NativeSupportSheets {
         .filter((m) => m.text.trim())
         .map((m) => `${m.role === 'user' ? 'You' : 'Trezi'}: ${m.text.trim()}`)
         .join('\n\n') ?? ''
-    this.sheets.present(
+    this.presentFeedback(
       {
         title: 'Send feedback',
         detail:
@@ -205,7 +220,7 @@ export class NativeSupportSheets {
       : failure.retry
         ? [{ id: 'retry', label: 'Retry', primary: true }]
         : []
-    this.sheets.present(
+    this.presentFeedback(
       {
         title: 'Couldn’t send feedback',
         detail: failure.error,
