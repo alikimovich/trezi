@@ -3,6 +3,10 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native suite failure on main e117983ad8c9 (LKM-413)
+
+- [x] The marquee smoke waits for the scroll to stop at its end, not the frame before the last step.
+
 ## Native suite failure on main d46cde775ea2 (LKM-412)
 
 - [x] `parallel-stream` streams its two chats in a disposable Git project, since LKM-404 admits one writer turn in the suite's non-Git project.

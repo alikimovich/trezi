@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { marqueeInkProblem } from '../src/native/smoke-sidebar-marquee.ts'
+import { marqueeAtEnd, marqueeInkProblem } from '../src/native/smoke-sidebar-marquee.ts'
 import { runFixture, swiftBuild } from './helpers/swift-build.mjs'
 
 // LKM-387: a hovered title showed a hard cut well before Archive and a blank stretch after it.
@@ -82,6 +82,15 @@ for (const phase of ['start', 'mid', 'end'])
 assert.match(marqueeInkProblem(row(0, 0), box, 'mid'), /no text at/, 'an empty clip fails')
 assert.match(marqueeInkProblem(row(0, 188), box, 'end'), /before the clip's edge/, 'end short')
 assert.equal(marqueeInkProblem(row(0, 188), box, 'mid'), null, 'mid ignores the faded edge')
+
+// LKM-413: the failed run read 276.5 of 277, the frame before the last step, and its one read of
+// the hold still saw it. The smoke must wait for the hold itself.
+const scrolled = (offset, travel) => marqueeAtEnd({ travel, marqueeState: { offset } })
+assert.equal(scrolled(276.5, 277), false, 'one 2x step short is still scrolling')
+assert.equal(scrolled(277, 277), true, 'at the end')
+assert.equal(scrolled(276, 276.25), true, 'a fractional travel snaps to the backing pixel')
+assert.equal(scrolled(276, 276.4), true, 'a 1x backing pixel snaps further')
+assert.equal(scrolled(276.5, 276.25), true, 'and may snap past it')
 
 // The smoke reads pixels on selected, narrow and resized rows: it must not drop to flags again.
 const smoke = readFileSync('src/native/smoke-sidebar-chats.ts', 'utf8')
