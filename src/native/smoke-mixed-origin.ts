@@ -112,6 +112,10 @@ const page = (line: string) =>
 function setup(project: string) {
   rmSync(project, { recursive: true, force: true })
   mkdirSync(join(project, 'asserts'), { recursive: true })
+  // Tracked and empty: worktrees get the folder (Git keeps no empty one), and a chat only
+  // reconciles text files its base already has (`canReconcileText`).
+  for (const side of ['chat', 'comment', 'background'])
+    writeFileSync(join(project, 'asserts', side), '')
   writeFileSync(join(project, 'index.html'), PAGE_HTML)
   writeFileSync(join(project, 'page.txt'), page('hero base'))
   writeFileSync(join(project, 'package.json'), '{"scripts":{"test":"bun check.mjs"}}\n')
@@ -144,12 +148,24 @@ async function checked(project: string, worker: Worker) {
     results?: { receipt?: { verified?: boolean } }[]
   }
   assert.equal(result.results?.[0]?.receipt?.verified, true, JSON.stringify(result).slice(0, 700))
-  const browser = (await runTreziTool(
-    'preview_verify',
-    { path: '/', checks: [{ kind: 'text', selector: 'h1', equals: HEADING, timeoutMs: 3000 }] },
-    scope
-  )) as { isError?: boolean; content?: { type: string; text?: string }[] }
-  assert.ok(!browser.isError, `preview_verify passed: ${JSON.stringify(browser).slice(0, 700)}`)
+  // The static server reloads a page already open here after each write to the worktree, and
+  // a receipt refuses a document replaced under it: check again, as an agent would, until the
+  // page holds still. Only a verified receipt ends this, and the gate reads the newest one.
+  let browser: { isError?: boolean; content?: { type: string; text?: string }[] } | undefined
+  await waitFor(
+    async () => {
+      browser = (await runTreziTool(
+        'preview_verify',
+        { path: '/', checks: [{ kind: 'text', selector: 'h1', equals: HEADING, timeoutMs: 3000 }] },
+        scope
+      )) as typeof browser
+      return !browser?.isError
+    },
+    `preview_verify passed on ${worker.cwd}`,
+    20_000,
+    () => JSON.stringify(browser).slice(0, 700),
+    250
+  )
   await gateOpen(project, worker)
 }
 

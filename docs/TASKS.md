@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native suite failure on main 170c393d1dd3 (LKM-429)
+
+- [x] `mixed-origin-*` track one empty `asserts/<side>` file per worker in the fixture base: a fresh worktree has no empty folder, and a chat only reconciles text files its base already has.
+- [x] `mixed-origin-*` `checked()` re-runs `preview_verify` until a receipt verifies: a static project's open page live-reloads under it after each worktree write.
+- [ ] Manager: confirm the `chat` group natively; this worker's single native call ran before the receipt retry.
+
 ## Coordinated parallel work: final native acceptance fixtures (LKM-407)
 
 - [x] Register compatible and incompatible mixed-origin checks in the canonical `chat` native smoke selection; the group-selection unit test pins both names.
