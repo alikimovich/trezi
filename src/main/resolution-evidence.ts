@@ -9,6 +9,7 @@
 export const RESOLUTION_LIMIT = 16 * 1024
 export const DECISION_LINE = 'DECISION NEEDED:'
 export const CHOICE_LINE = 'DECISION MADE:'
+export const LESSON_LINE = 'LESSON:'
 const MAX_DECISION = 300
 
 /** The exact revisions one `stageResolve` combined. */
@@ -40,9 +41,19 @@ export interface PendingResolution {
   revisions: ResolutionRevisions
   files: string[]
   context: ResolutionContext
+  /** The turn or background task that staged it; empty when none was running (Retry). */
+  task: string
   /** Content digests of `files` as last held for a decision: an answer turn that leaves
    *  them as they are neither edited nor chose anything. */
   held?: Record<string, string>
+}
+
+/** A reconciliation its agent finished, until it lands or new conflicts replace it. */
+export interface ResolvedWork {
+  task: string
+  files: string[]
+  /** The agent's `LESSON:` line, which counts only if this work lands (LKM-405). */
+  note: string | null
 }
 
 const cut = <T extends string | string[]>(value: T): T =>
@@ -99,6 +110,23 @@ export function decisionFrom(reply: string): string | null {
 export function choiceFrom(reply: string): string | null {
   return lineAfter(reply, CHOICE_LINE)
 }
+
+/** The reusable rule from the reply's last `LESSON:` line; untrusted, and unproven until
+ *  the work lands. */
+export function lessonFrom(reply: string): string | null {
+  return lineAfter(reply, LESSON_LINE)
+}
+
+/** The reply without its `LESSON:` lines: the general evaluator runs before landing, so a
+ *  line that only landing can prove never reaches it. */
+export const withoutLessonLine = (reply: string): string =>
+  reply
+    .split('\n')
+    .filter((line) => {
+      const at = line.indexOf(LESSON_LINE)
+      return at < 0 || /[A-Za-z0-9]/.test(line.slice(0, at))
+    })
+    .join('\n')
 
 /** The question when the agent gave none: both goals, verbatim and bounded. */
 export function fallbackDecision(context: ResolutionContext | undefined, files: string[]): string {

@@ -27,6 +27,7 @@ export const UNIT = [
   'conversation-owner',
   'peer-work-feed',
   'peer-coordination',
+  'resolved-lessons',
   'provider-owner',
   'provider-data',
   'provider-login',
@@ -348,6 +349,12 @@ export const UNIT_TIMEOUT_MS = {
   // in two full unit runs of 8 workers (13.5 s alone): its Swift fixtures queue behind the
   // swiftc lane like repository-owner's, now with the chat fixtures' compiles ahead of it.
   'conversation-owner': 240_000,
+  // LKM-405: real Git, checks and service owners per scenario, no hang: 45 s alone, 59 to
+  // 150 s in unit runs.
+  'peer-coordination': 240_000,
+  // LKM-405: the same lifecycle: 73 s alone, 97 to 178 s in unit runs; a run stopped at 120 s
+  // had finished ten of 20 scenarios and failed none.
+  'resolved-lessons': 300_000,
   // Same: 17 s warm, but over 120 s in a cold 8-worker run while the swiftc lane is saturated.
   'runtime-owner': 240_000,
   // Same (LKM-209): the checks take ~10 s, but the workflow fixture is a cold compile of

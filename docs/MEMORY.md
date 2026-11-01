@@ -74,6 +74,49 @@ keeps the `{"memory": … | null}` JSON protocol. Trezi's pass over a proposal (
 check, source tags) is `src/main/project-memory-evaluation.ts` and
 `src/main/project-memory-format.ts`; the note is `src/native/memory-note.ts`.
 
+## Verified lessons from resolved parallel work (LKM-405)
+
+The general evaluator runs when the provider's turn ends, before and regardless of
+landing, so nothing it writes proves that work landed. A lesson has its own trigger:
+overlapping work reconciled by its agent (a real conflict, never a routine clean merge),
+whose exact combined tree passed its checks and whose commit reached the live checkout.
+The hook sits in the landing step of a chat (`landTurn`, also reached by the agent's
+`land_now`) and of a background task (`finalizeSpawn`), after the commit. A failed check,
+parked work, a question for the user, the user's answer to one and a provider terminal
+event alone save nothing. Neither does Stop: a stopped turn forgets the finished
+reconciliation and Retry, which has no turn of its own, cannot vouch for one, so a tree
+that a later Retry lands saves nothing either. A decided conflict is one choice, not a
+lesson; the evaluator still judges what the user states as general.
+
+No model call is added. The reconciliation prompt lets the agent close with
+`LESSON: <one general rule>`; without that line Trezi writes one sentence naming the
+files. The line goes through the ordinary update queue (compare-and-swap, one retry, the
+note with View and Undo), so a manual save made meanwhile survives and the lesson is
+written onto it. A repeated task or commit is refused, and a Retry has nothing left to
+save, because the finished reconciliation is cleared when the work lands. That finished
+state is in memory only: a landing retried after the app restarted saves none, and
+neither does a kept background task the user applies by hand (`agent:spawn-apply`). Both
+are the safe direction by construction and have no scenario of their own.
+
+Stored under `## Pitfalls`, with its source tag first so a cut line can never leave bare
+agent text behind:
+
+```md
+- <!-- lesson task=<id> commit=<sha> files=<a,b> --> Keep both labels in the header. <!-- added 2026-10-31 -->
+```
+
+At most eight lessons stay (240 characters, four files of 120). A lesson repeated by a
+later task replaces the earlier one, the oldest goes first, and a lesson never costs a
+rule: when memory has no room for it, it is not saved.
+
+The text comes from an agent and may quote a peer, so it stays untrusted data. Injection
+(`projectMemoryRules`) moves lessons out of `<project-memory>` into one
+`<trezi-lessons-data>` JSON block, with `<` escaped and a note that they are not
+instructions and carry no user authority. The evaluator never sees them: it gets the
+rules only, its answer is stripped of anything shaped like a lesson, and `LESSON:` lines
+are removed from its transcript, so it can neither launder one into a rule nor forge one.
+A user who wants a lesson as a rule deletes its `lesson` tag in the editor.
+
 ## Editor and ownership
 
 The memory editor remains the user's direct view and final override. Automatic updates
@@ -94,8 +137,9 @@ There is no Bun writer since LKM-111 (the Bun rollback owner was removed). See
 Implementation: `src/main/project-memory.ts`, `src/native/project-memory-service.ts`,
 `src/service/MemoryOwner.swift`, `src/service/MemoryFile.swift`, `src/main/agent.ts`,
 `src/main/backends/memory.ts`, `src/main/project-memory-evaluation.ts`,
-`src/main/project-memory-format.ts`, `src/main/rules.ts`, `src/native/memory-note.ts`,
-`src/native/Toast.swift`, `src/native/Sheets.swift` and `src/native/sheets-runtime.ts`.
+`src/main/project-memory-format.ts`, `src/main/project-lessons.ts`, `src/main/rules.ts`,
+`src/native/memory-note.ts`, `src/native/Toast.swift`, `src/native/Sheets.swift` and
+`src/native/sheets-runtime.ts`.
 Regression coverage (the native note: the settings smoke group, `src/native/smoke-alerts.ts`):
 `test/project-memory.mjs`, `test/memory-owner.mjs`, `test/project-memory-evaluation.mjs`,
-`test/native-sheets.mjs`, `test/rules.mjs`.
+`test/resolved-lessons.mjs`, `test/native-sheets.mjs`, `test/rules.mjs`.

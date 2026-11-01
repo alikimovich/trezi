@@ -1,5 +1,6 @@
 import type { SessionTranscriptEntry } from '../../shared/api'
 import { MAX_PROJECT_MEMORY_CHARS } from '../project-memory'
+import { withoutLessonLine } from '../resolution-evidence'
 
 /** Keep the evaluator request useful without replaying an unbounded chat. */
 const TRANSCRIPT_MAX_CHARS = 12_000
@@ -13,7 +14,8 @@ export function memoryTranscriptDigest(transcript: SessionTranscriptEntry[]): st
   const entries = transcript
     .filter((entry) => entry.role === 'user' || entry.role === 'assistant')
     .map((entry) => {
-      const body = entry.text.replace(/\s+/g, ' ').trim()
+      const said = entry.role === 'assistant' ? withoutLessonLine(entry.text) : entry.text
+      const body = said.replace(/\s+/g, ' ').trim()
       return body ? `${entry.role === 'user' ? 'User' : 'Assistant'}: ${body}` : ''
     })
     .filter(Boolean)

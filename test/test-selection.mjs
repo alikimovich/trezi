@@ -408,6 +408,7 @@ const TEMP_WALKERS = [
   'source-owner',
   'provider-owner',
   'peer-coordination',
+  'helpers/resolved-lessons-fixture',
   'codex-composer-images',
   'provider-image-live',
   'provider-login',
