@@ -72,7 +72,7 @@ export interface PeerWorkRow {
   /** Words of the goal and paths, for uncertain overlap; read by the owner only. */
   terms?: string[]
   base: string
-  phase: 'preparing' | 'running' | 'landing'
+  phase: 'preparing' | 'running' | 'reconciling' | 'landing'
   heartbeat?: number
   version?: number
 }
@@ -101,7 +101,11 @@ export interface PeerWorkView {
   rows: PeerWorkRow[]
   advisories: PeerAdvisory[]
   landed?: PeerLanded[]
+  /** The named peer this task waits on, with the owner's backstop deadline (LKM-406). */
+  wait?: { peer: string; ms: number; deadline: number }
 }
+
+export type PeerWaitRefusal = 'unknown' | 'busy' | 'cycle'
 
 export class ConversationError extends Error {
   constructor(
@@ -177,6 +181,13 @@ export interface ConversationOwner {
   peerUpsert(row: PeerWorkRow): Promise<void>
   peerRemove(id: string): Promise<void>
   peers(project: string, exclude: string): Promise<PeerWorkView>
+  peerWaitBegin(
+    waiter: string,
+    peer: string,
+    project: string,
+    ms: number
+  ): Promise<{ started: boolean; reason?: PeerWaitRefusal }>
+  peerWaitEnd(waiter: string): Promise<void>
   snapshot(): Promise<{ chats: OwnedChat[]; spawns: { running: string[]; queued: string[] } }>
   status(): Promise<{ recovered: ConversationRecovery[] }>
 }

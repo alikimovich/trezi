@@ -109,6 +109,7 @@ export function clearPark(st: ChatState): void {
   st.landingHold = undefined
   st.resolution = undefined
   st.decision = undefined
+  st.decisionShown = false
   st.resolved = undefined
   dropParkRecord(st)
 }

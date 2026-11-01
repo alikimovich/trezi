@@ -1083,6 +1083,7 @@ Codex checks its bridge (`workspace_state`) while its helper is still opening.
 | `project_ui_catalog`, `compose_project_ui` | routed | routed | the chat's Experimental Gen UI state |
 | `workspace_state` | routed | routed | chat-isolation state (worktree, parked batch) and the peer feed |
 | `peer_lookup` | routed | routed | the peer feed and that peer's worktree, read-only (`src/main/peer-lookup.ts`) |
+| `peer_wait` | routed | routed | the owner's wait edge and the feed; a bounded wait on one named peer (`src/main/peer-wait.ts`) |
 | `prepare_conflict_resolution` | — | routed | chat-isolation state (worktree, parked batch) |
 | `install_skills` | routed | — | nothing: retired, it answers with the Settings → Skills redirect (LKM-286) |
 | `spring_to_css`, `check_contrast`, `fluid_clamp`, `color_scale`, `layered_shadow`, `line_height`, `list_recommended_skills` | in the helper | — | nothing (pure) |
@@ -1117,6 +1118,19 @@ mid-generation push is assumed. A reconciliation that cannot keep both goals end
 `DECISION NEEDED: <question>`, and that question goes to the user; when the user
 answers, the agent applies the choice and ends with `DECISION MADE: <choice>`. See
 [`docs/WORKTREES.md`](WORKTREES.md#peer-lookup-freshness-and-resolution-with-both-goals-lkm-403).
+
+`peer_wait` (LKM-406) has the same one contract: name, arguments, description and
+auto-allowed policy match across Claude and Codex, foreground and background. It takes
+`peer` and optional `seconds` (default 60, at most 100) and answers `{ "waited": true,
+"outcome": … }` or, at once, `{ "waited": false, "refused": … }`, each with guidance to
+carry on. Disjoint work and wait cycles are refused, and only high-contention work ever
+waits. Provider tool bridges allow 300 s (`SYNC_TOOL_TIMEOUT_SEC`), but a helper-hosted
+Claude or Codex call also has the service's own 120 s tool deadline (`toolTimeout`,
+`src/service/ProviderOwner.swift`), which starts before Bun reads the peer and begins the
+wait. The 100 s limit leaves that deadline 20 s, so the agent always gets Bun's `timeout`
+outcome with its "do not wait again" guidance and never the transport's bare "did not
+answer in time" (`test/peer-wait-deadline.mjs`). See
+[`docs/WORKTREES.md`](WORKTREES.md#overlap-wait-and-reconciliation-feedback-and-the-named-peer-wait-lkm-406).
 
 ## Claude resume recovery (LKM-165)
 

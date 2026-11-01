@@ -375,6 +375,7 @@ async function landBatch(
   // The answer passed the turn-end check above: the question is settled.
   if (st.decision) {
     st.decision = undefined
+    st.decisionShown = false
     st.resolution = undefined
   } else if (terminal !== 'success') st.resolved = undefined
   // Retry has no turn of its own: it may land a stopped resolution, but never vouches for it.

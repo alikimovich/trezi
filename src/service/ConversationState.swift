@@ -298,3 +298,48 @@ struct ConversationState {
         record = .object(fields)
     }
 }
+
+/// Bounded named-peer waits (LKM-406): at most one edge per waiter, in memory only, so a
+/// service restart drops them all. An edge that would close a loop is refused, which is
+/// what keeps a cycle impossible; the deadline covers a Bun process that died holding one.
+/// A waiter holds no lock, lease or admission here: this is a record of who is waiting.
+struct PeerWaits {
+    struct Edge {
+        let waiter: String
+        let peer: String
+        let project: String
+        let ms: Double
+        let deadline: Double
+    }
+    enum Refusal: String { case busy, cycle }
+
+    /// Bun's own longest bound (100 s) plus its grace: Bun's timer always ends a live wait first.
+    static let maxMs = 105_000.0
+    private(set) var edges: [String: Edge] = [:]
+
+    mutating func begin(waiter: String, peer: String, project: String, ms: Double, at: Double) -> Refusal? {
+        guard edges[waiter] == nil else { return .busy }
+        var next: String? = peer
+        var seen = Set<String>()
+        while let id = next, seen.insert(id).inserted {
+            if id == waiter { return .cycle }
+            next = edges[id]?.peer
+        }
+        let bound = min(ms, Self.maxMs)
+        edges[waiter] = Edge(waiter: waiter, peer: peer, project: project, ms: bound, deadline: at + bound)
+        return nil
+    }
+
+    mutating func end(waiter: String) { edges.removeValue(forKey: waiter) }
+
+    /// The task is gone: its own wait ends and nobody waits on it any longer.
+    mutating func remove(task: String) { edges = edges.filter { $0.key != task && $0.value.peer != task } }
+
+    mutating func prune(at: Double, alive: (String) -> Bool) {
+        edges = edges.filter { $0.value.deadline > at && alive($0.key) && alive($0.value.peer) }
+    }
+
+    func wait(of waiter: String, project: String) -> Edge? {
+        edges[waiter].flatMap { $0.project == project ? $0 : nil }
+    }
+}

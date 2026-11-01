@@ -20,7 +20,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 47, 'version bumped to 47')
+assert(TREZI_RULES_VERSION === 48, 'version bumped to 48')
 // LKM-281: a merge waits for the user's card; no model-supplied flag approves it.
 assert(!/confirmed: true/.test(r), 'no model-supplied merge confirmation')
 assert(/publish_merge first shows the user a card/.test(r), 'merge waits for the host card')
@@ -453,6 +453,10 @@ for (const background of [false, true]) {
   assert(
     /peer_lookup/.test(claudeRules) && /semantic-uncertain/.test(claudeRules),
     `Claude rules (background=${background}): teach lookup and uncertain overlap`
+  )
+  assert(
+    /peer_wait/.test(claudeRules) && /never retry|do not retry/i.test(claudeRules),
+    `Claude rules (background=${background}): the wait is bounded and not retried`
   )
   assert(
     /DECISION NEEDED: </.test(claudeRules),

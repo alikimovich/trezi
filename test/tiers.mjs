@@ -27,6 +27,9 @@ export const UNIT = [
   'conversation-owner',
   'peer-work-feed',
   'peer-coordination',
+  'peer-feedback',
+  'peer-wait-deadline',
+  'chat-peer-card',
   'resolved-lessons',
   'provider-owner',
   'provider-data',
@@ -423,7 +426,13 @@ export const UNIT_TIMEOUT_MS = {
   'swift-preview-generate': 300_000,
   // Real Vite install, Swift runtime fixture and a WebKit load.
   'dependency-refresh-vite': 300_000,
-  'setup-vite-real': 300_000
+  'setup-vite-real': 300_000,
+  // LKM-406: real chat and comment lifecycles over generated Git repos, a stub provider per
+  // turn. peer-feedback took 102 s in a full 8-worker unit run (peer-coordination, above,
+  // hit the 120 s limit there with every scenario passing).
+  'peer-feedback': 300_000,
+  // A real 100 s `peer_wait` at its longest bound, through the helper and the Swift owner.
+  'peer-wait-deadline': 300_000
 }
 // `--typecheck` runs these next to the tests (quick verification in one command).
 // `typecheck-native` is dropped while it would check the same program as `typecheck`

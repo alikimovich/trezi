@@ -134,7 +134,11 @@ export async function reconcileParkOnChain(
       undefined,
       undefined,
       st.landingError ? 'failed' : st.interrupted ? 'interrupted' : undefined,
-      st.landingError
+      st.landingError,
+      // LKM-406: the event replaces the card's state; without the question a rebuild during
+      // a held decision swaps the decision card for the generic one, whose Retry and Resolve
+      // both refuse while a decision is held.
+      st.decision
     )
     return 'rebuilt'
   } catch (error) {

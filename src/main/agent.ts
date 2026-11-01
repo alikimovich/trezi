@@ -89,7 +89,9 @@ import {
 } from './live-change-watch'
 import { commitLiveTurn } from './live-commit'
 import { answerMergeApproval, revokeMergeApprovals } from './merge-approval'
+import { setPeerFeedbackSink } from './peer-feedback'
 import { peerTargets } from './peer-signals'
+import { stopPeerWait } from './peer-wait'
 import {
   finishPeer,
   notePeerLanded,
@@ -100,6 +102,7 @@ import {
   peerObservedFiles,
   peerTarget,
   peerTurn,
+  setPeerPhase,
   startPeer,
   updatePeerBase
 } from './peer-work'
@@ -907,7 +910,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
           id,
           await peerObservedFiles(wt.path, session.record.filesTouched, id),
           wt.path,
-          'running'
+          'reconciling'
         )
         void beginLiveWatch(spawnWatchKey(id), session)
         session.send(conflictResolutionPrompt(landing.conflicted, landing.resolution?.context))
@@ -1267,6 +1270,7 @@ export function registerAgentIpc(
 ): void {
   ipcMain = router
   getWindow_ = getWindow // share with finalizeSpawn (runs outside this closure)
+  setPeerFeedbackSink((event) => safeSend(getWindow, 'agent:event', event))
   const planning = new ProjectPlanning({
     owner: {
       save: (record, current) => conversation().save(record, current),
@@ -2445,6 +2449,7 @@ export function registerAgentIpc(
       return
     }
     spawn.cancelled = true
+    stopPeerWait(id)
     // A question still waiting for the user is dismissed, so the turn can stop (LKM-193).
     for (const qid of [...(spawn.session.pendingQuestions?.keys() ?? [])])
       resolveQuestion(spawn.session, qid, null)
@@ -2779,6 +2784,7 @@ export function registerAgentIpc(
   const interruptChat = async (requestedKey?: string): Promise<void> => {
     const sessionKey = requestedKey === undefined ? activeKey : requestedKey
     if (sessionKey) writerWaits.get(sessionKey)?.abort()
+    if (sessionKey) stopPeerWait(peerTurn(sessionKey))
     const stoppedTurn = sessionKey ? turnIds.get(sessionKey) : undefined
     const deadline = Date.now() + INTERRUPT_IPC_CAP_MS
     const remaining = () => Math.max(0, deadline - Date.now())

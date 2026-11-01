@@ -7,6 +7,7 @@ import { join } from 'node:path'
 export const TREZI_AGENT_ACTIONS = [
   'workspace_state',
   'peer_lookup',
+  'peer_wait',
   'prepare_conflict_resolution',
   'git_sync_base',
   'git_merge_continue',

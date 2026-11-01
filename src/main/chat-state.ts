@@ -58,6 +58,10 @@ export interface ChatState {
   resolution?: PendingResolution
   /** LKM-403: the one product question this held work waits on, with `landingError`. */
   decision?: string
+  /** LKM-406: `holdForDecision` just announced the decision, so the one `showParkedChat`
+   *  that ends this reconciliation must not announce it again. Consumed by that call and
+   *  cleared wherever `decision` is. */
+  decisionShown?: boolean
   /** LKM-405: the reconciliation its agent finished. Outlives `resolution`, which a clean
    *  re-stage on Retry clears, and saves a lesson only when this work lands. */
   resolved?: ResolvedWork
@@ -110,23 +114,25 @@ export function emitIsolation(
   group?: string,
   revertable?: boolean,
   reason?: 'interrupted' | 'reverted' | 'failed',
-  error?: string
+  error?: string,
+  decision?: string
 ): void {
   // Guard a destroyed webContents: this fires from async turn lifecycle hooks,
   // which can land after the renderer process is killed (OS display sleep).
   const wc = deps?.getWindow()?.webContents
-  if (wc && !wc.isDestroyed())
-    wc.send('agent:event', {
-      type: 'isolation',
-      state,
-      ...(branch ? { branch } : {}),
-      ...(files && files.length ? { files } : {}),
-      ...(group ? { group } : {}),
-      ...(revertable !== undefined ? { revertable } : {}),
-      ...(reason ? { reason } : {}),
-      ...(error ? { error } : {}),
-      projectKey: sessionKey
-    } satisfies AgentEvent)
+  if (!wc || wc.isDestroyed()) return
+  wc.send('agent:event', {
+    type: 'isolation',
+    state,
+    ...(branch ? { branch } : {}),
+    ...(files && files.length ? { files } : {}),
+    ...(group ? { group } : {}),
+    ...(revertable !== undefined ? { revertable } : {}),
+    ...(reason ? { reason } : {}),
+    ...(error ? { error } : {}),
+    ...(decision ? { decision } : {}),
+    projectKey: sessionKey
+  } satisfies AgentEvent)
 }
 
 /** Run `operation` after the chat's in-flight work, inside the repository lease. The

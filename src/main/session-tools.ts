@@ -27,6 +27,7 @@ import { landingChecks, setCheckReplayer } from './integration-gate'
 import { noteServedRevision } from './landing-context'
 import { treziLiveEffect } from './live-change-watch'
 import { peerLookup } from './peer-lookup'
+import { peerWait } from './peer-wait'
 import { peerCheckpoint, peerTurn, peerView } from './peer-work'
 import { type PreviewToolResult, runPreviewAgentTool } from './preview-agent-tools'
 import { identityText, isPreviewObserver, observeAgentPreview } from './preview-observation-tools'
@@ -65,6 +66,7 @@ export type SessionTool = TreziAgentToolAction | 'install_skills'
 export const SESSION_TOOLS: readonly SessionTool[] = [
   'workspace_state',
   'peer_lookup',
+  'peer_wait',
   'prepare_conflict_resolution',
   'git_sync_base',
   'git_merge_continue',
@@ -359,6 +361,7 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
   if (action === 'workspace_state' && s.background)
     return { peerWork: await peerView(s.liveRoot, s.peerId ?? '') }
   if (action === 'peer_lookup') return peerLookup(args, s)
+  if (action === 'peer_wait') return peerWait(args, s)
   if (s.background)
     return {
       ok: false,

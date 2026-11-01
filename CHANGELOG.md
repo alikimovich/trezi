@@ -10,6 +10,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Added
+
+- Chats and comment cards show overlap, waiting and reconciliation with other work as it changes, an uncertain overlap reads as uncertain, a held decision shows its question and where the work is kept, and agents can wait a bounded time on one named peer editing the same scope (LKM-406).
 ## [0.10.0] - 2026-10-31
 
 ### Added

@@ -152,6 +152,8 @@ src/main/
                   refusal, the agent's workspace_state) and chat-helpers (setup helper sync).
   peer-work.ts, peer-signals.ts, peer-lookup.ts, peer-freshness.ts  the peer feed, its overlap
                   signals, the bounded `peer_lookup` read and the note at the landing gate
+  peer-feedback.ts, peer-wait.ts  deduplicated `peer-state` events for the native cards and
+                  the bounded `peer_wait` on one named peer (LKM-406)
   resolution-evidence.ts, resolution-context.ts, chat-resolution.ts  bounded evidence in
                   conflict prompts and the one user decision when goals cannot both hold (LKM-403)
   chat-watchdog.ts  LandingGuard (bounded landing wait, Stop ends it) and TurnWatchdog (silent

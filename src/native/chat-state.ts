@@ -2,6 +2,7 @@ import { classifyError, incidentDetail } from '../main/self-heal/catalog'
 import type {
   AgentEvent,
   DependencyIssue,
+  PeerFeedbackLine,
   PermissionRequest,
   QuestionRequest,
   SessionTranscriptEntry,
@@ -100,6 +101,10 @@ export interface Chat extends NativeChatMirror {
   autoResolved?: 'tried' | 'failed'
   /** LKM-165: why the last landing failed; its work is held until Retry or Resolve. */
   landingError?: string
+  /** LKM-406: the product decision holding this chat's work, and the branch that keeps it. */
+  decision?: { question: string; branch?: string }
+  /** LKM-406: what the service-owned peer feed says of this chat's turn now. */
+  peerWork?: PeerFeedbackLine[]
   /** LKM-151: the files and undo group of the last turn that landed on the live tree. */
   landed?: { files: string[]; group?: string }
   /** LKM-151: a dev-server compile/parse error in a file the last turn touched. */
@@ -441,6 +446,9 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
       chat.operation = 'resolving'
       append(chat, 'Combining this chat’s changes with recent project edits…', true)
       break
+    case 'peer-state':
+      chat.peerWork = event.lines.length ? event.lines : undefined
+      break
     case 'isolation': {
       chat.isolation = event.state === 'parked' ? 'parked' : 'isolated'
       chat.isolationFiles = event.files
@@ -454,6 +462,10 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
             : undefined
       chat.landingError =
         event.reason === 'failed' ? (event.error ?? 'The landing failed.') : undefined
+      chat.decision =
+        event.state === 'parked' && event.decision
+          ? { question: event.decision, branch: event.branch }
+          : undefined
       if (event.state === 'merged' && event.group && event.revertable !== false && last)
         last.revertGroup = event.group
       if (event.state === 'merged')
