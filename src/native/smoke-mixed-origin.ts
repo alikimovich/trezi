@@ -221,6 +221,7 @@ async function caseRun(
   const project = join(fixture, `../Mixed Origin ${mode}`)
   const started = performance.now()
   const activeSpawns: string[] = []
+  const notes: Record<string, unknown> = {}
   events.length = 0
   workers.clear()
   const observe = (channel: string, event: AgentEvent) => {
@@ -258,7 +259,9 @@ async function caseRun(
     const background = await spawn(
       project,
       chatId,
-      mode === 'compatible' ? 'Show delivery note in the hero' : 'Make the theme light only',
+      mode === 'compatible'
+        ? 'Show delivery note in the hero'
+        : 'Make the theme high contrast only',
       'text-edit'
     )
     activeSpawns.push(comment.id, background.id)
@@ -270,22 +273,24 @@ async function caseRun(
     } else {
       edit(chat, 'chat', 'hero theme=dark', 'theme=dark')
       edit(comment.worker, 'comment', 'hero theme=light', 'theme=light')
-      edit(background.worker, 'background', 'hero theme=light', 'theme=light')
+      edit(background.worker, 'background', 'hero theme=contrast', 'theme=contrast')
     }
     for (const worker of [chat, comment.worker, background.worker]) await checked(project, worker)
-    const overlap = await waitFor(
+    // Exact-file coordination only: the semantic "Possible overlap" advisory must not satisfy it.
+    const exactOverlap = (card: { id: string; title: string; detail: string }) =>
+      card.id === 'peer-work' &&
+      card.title === 'Overlaps with other work' &&
+      /page\.txt/.test(card.detail) &&
+      card.detail.includes('A comment agent') &&
+      card.detail.includes('A text edit')
+    await waitFor(
       async () => {
         const ui = await host.request('chatInspect')
-        return (
-          ui.cardStates?.find(
-            (card: any) => card.id === 'peer-work' && /overlap/i.test(card.title)
-          ) && ui
-        )
+        return ui.cardStates?.some(exactOverlap)
       },
-      'real overlap shown in Swift chat',
+      'real exact-file overlap with both peers shown in Swift chat',
       20_000
     )
-    assert.ok(overlap.cardStates.some((card: any) => card.id === 'peer-work'))
     await snapshot(host, artifacts, `mixed-${mode}-overlap`, project, chatId)
     assert.equal(git(project, 'rev-parse', 'HEAD'), originalHead, 'all three began from one base')
     if (mode === 'compatible') {
@@ -295,6 +300,18 @@ async function caseRun(
           events.some((event) => event.type === 'landing-finished' && event.projectKey === chatId),
         'foreground landing',
         60_000
+      )
+      // landing-finished is also emitted for a failed landing: the merge itself must show.
+      assert.ok(
+        events.some(
+          (event) =>
+            event.type === 'isolation' && event.state === 'merged' && event.projectKey === chatId
+        ),
+        'the foreground chat landed through the gate'
+      )
+      assert.ok(
+        readFileSync(join(project, 'page.txt'), 'utf8').includes('price=10'),
+        'the foreground behavior is on the live tree'
       )
       const first = await finishSpawn(comment.id, comment.worker)
       assert.equal(first, undefined, 'comment must reconcile the overlapping source')
@@ -313,10 +330,50 @@ async function caseRun(
       for (const behavior of ['price=10', 'badge=sale', 'delivery=free'])
         assert.ok(live.includes(behavior), `${behavior} exists on the exact landed tree`)
       assert.notEqual(git(project, 'rev-parse', 'HEAD'), originalHead)
+      // The last landing is the exact combined tree: re-checked after combining, and it is HEAD's.
+      assert.ok(final)
+      assert.equal(
+        final.gate?.combinedRechecked,
+        true,
+        'the last landing re-ran checks on the combination'
+      )
+      assert.equal(
+        final.gate?.tree,
+        git(project, 'rev-parse', 'HEAD^{tree}'),
+        'the gate verified the tree that is now HEAD'
+      )
+      assert.equal(git(project, 'status', '--porcelain'), '', 'the fixture project is clean')
+      notes.landedGateTree = final.gate?.tree
     } else {
+      // The comment finishes first and lands through the existing first-lands gate, so
+      // theme=light IS on live before any decision. That is not a silent selection of a
+      // side: the held chat and the background peer are the unlanded work.
       const first = await finishSpawn(comment.id, comment.worker)
-      assert.equal(first?.outcome, 'applied')
-      const before = git(project, 'rev-parse', 'HEAD')
+      assert.equal(first?.outcome, 'applied', 'the comment landed first through the gate')
+      const afterComment = git(project, 'rev-parse', 'HEAD')
+      assert.notEqual(afterComment, originalHead)
+      notes.firstLanded = 'comment (theme=light) via the existing first-lands gate'
+
+      // The background peer's goal cannot hold beside the landed light theme: it
+      // reconciles, cannot combine, and ends on a decision with its work kept on a branch.
+      const settling = await finishSpawn(background.id, background.worker)
+      assert.equal(settling, undefined, 'background task must reconcile against the landed theme')
+      background.worker.say(
+        'DECISION NEEDED: Should the theme be light only or high contrast only?'
+      )
+      const peer = await finishSpawn(background.id, background.worker)
+      assert.equal(peer?.outcome, 'review', 'background task is kept for review, not landed')
+      assert.ok(peer?.branch, 'background task keeps its work on a branch')
+      assert.match(peer.decision ?? '', /light only or high contrast only/)
+      assert.equal(git(project, 'rev-parse', 'HEAD'), afterComment, 'background did not move live')
+      assert.match(
+        git(project, 'show', `${peer.branch}:page.txt`),
+        /theme=contrast/,
+        'background work is recoverable on its branch'
+      )
+      notes.backgroundBranch = peer.branch
+      notes.backgroundDecision = peer.decision
+
       chat.done()
       await waitFor(() => chat.sent.length > 1, 'incompatible chat reconciliation prompt', 60_000)
       chat.say('DECISION NEEDED: Should the theme be dark only or light only?')
@@ -332,13 +389,31 @@ async function caseRun(
       const card = held.cardStates.find((value: any) => value.title === 'Decision needed')
       assert.match(card.detail, /dark only or light only/)
       assert.deepEqual(card.actions, ['Discard'])
-      assert.equal(git(project, 'rev-parse', 'HEAD'), before, 'neither side silently selected')
-      assert.match(readFileSync(join(project, 'page.txt'), 'utf8'), /theme=light/)
-      assert.ok(git(project, 'branch', '--list', 'trezi/chat-*'), 'held chat branch is recoverable')
-      assert.ok(
-        background.worker.cwd !== project,
-        'background task remains separate and recoverable'
+      assert.equal(
+        git(project, 'rev-parse', 'HEAD'),
+        afterComment,
+        'neither side silently selected'
       )
+      const live = readFileSync(join(project, 'page.txt'), 'utf8')
+      assert.match(live, /theme=light/, 'only the comment, which landed first, is on live')
+      assert.doesNotMatch(live, /theme=dark|theme=contrast/, 'held work is not on live')
+      // "Nothing landed" in the card refers to the held chat only. Read that work itself.
+      const parked = events.find(
+        (event) =>
+          event.type === 'isolation' &&
+          event.state === 'parked' &&
+          event.projectKey === chatId &&
+          !!event.decision
+      ) as Extract<AgentEvent, { type: 'isolation' }> | undefined
+      assert.ok(parked?.branch, 'the chat parked on a branch with a decision')
+      assert.ok(card.detail.includes(parked.branch), 'the card names the branch holding the work')
+      assert.match(
+        git(project, 'show', `${parked.branch}:page.txt`),
+        /theme=dark/,
+        'the chat’s work is recoverable on its held branch'
+      )
+      notes.chatBranch = parked.branch
+      notes.chatDecision = parked.decision
     }
     const final = await snapshot(host, artifacts, `mixed-${mode}-final`, project, chatId)
     const runtimeMs = Math.round(performance.now() - started)
@@ -353,7 +428,8 @@ async function caseRun(
           runtimeMs,
           stateBytes: bytes,
           provider: 'deterministic stub',
-          skipped: false
+          skipped: false,
+          ...notes
         },
         null,
         2
