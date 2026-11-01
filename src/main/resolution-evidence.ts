@@ -40,6 +40,9 @@ export interface PendingResolution {
   revisions: ResolutionRevisions
   files: string[]
   context: ResolutionContext
+  /** Content digests of `files` as last held for a decision: an answer turn that leaves
+   *  them as they are neither edited nor chose anything. */
+  held?: Record<string, string>
 }
 
 const cut = <T extends string | string[]>(value: T): T =>

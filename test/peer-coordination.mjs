@@ -470,6 +470,63 @@ try {
     assert.equal((await tool(p, chat, 'workspace_state')).decision, undefined)
   })
 
+  await scenario('a quiet answer turn does not release a mixed checked tree', async (p) => {
+    const chat = await openChat(p)
+    const turn = await send(chat, 'Make the theme dark only')
+    edit(chat, 'chat', { 7: 'theme=dark' }, 'theme=dark')
+    await check(p, chat)
+    // The peer also changes a line the chat never touched, so the held tree is neither side.
+    const b = await comment(p, 'Add the sale banner and make the theme light only')
+    put(b, 'page.txt', page({ 2: 'banner=sale', 7: 'theme=light' }))
+    put(b, 'asserts/b', 'banner=sale\n')
+    await check(p, b)
+    applied(await finish(b))
+    const before = p.live()
+    const sent = chat.sent.length
+    chat.done()
+    await wait(() => chat.sent.length > sent, 'the reconciliation turn')
+    const reconciled = page({ 2: 'banner=sale', 7: 'theme=dark' })
+    put(chat, 'page.txt', reconciled)
+    await check(p, chat)
+    const question = 'Should the site be dark or light?'
+    chat.say(`Kept dark.\nDECISION NEEDED: ${question}`)
+    chat.done()
+    await wait(() => landed(turn), 'the held turn')
+    assert.notEqual(reconciled, before)
+    assert.equal(p.live(), before, 'nothing landed')
+    const stillHeld = async (what) => {
+      assert.equal(p.live(), before, `${what}: live is unchanged`)
+      const state = await tool(p, chat, 'workspace_state')
+      assert.equal(state.state, 'failed', `${what}: still held`)
+      assert.equal(state.decision, question, `${what}: the decision is still raised`)
+      assert.equal(parkEvent(p.parent).state, 'parked')
+    }
+    await stillHeld('the first hold')
+    // A quiet turn: no edit, no choice, no new question.
+    const quiet = await send(chat, 'Hm, let me think.')
+    chat.say('Understood.')
+    chat.done()
+    await wait(() => landed(quiet), 'the quiet turn')
+    await stillHeld('a quiet turn that edits nothing')
+    // Landing from inside an answer turn is no answer either.
+    const early = await send(chat, 'Still thinking.')
+    await tool(p, chat, 'land_now', { message: 'Land it' })
+    await stillHeld('land_now without an edit')
+    chat.say('Waiting.')
+    chat.done()
+    await wait(() => landed(early), 'the early landing turn')
+    await stillHeld('the turn that called land_now')
+    // An edit is an answer: the user's mix lands.
+    const answer = await send(chat, 'Dark for the header, light for the footer.')
+    put(chat, 'page.txt', page({ 2: 'banner=sale', 7: 'theme=dark header, theme=light footer' }))
+    await check(p, chat)
+    chat.done()
+    await wait(() => landed(answer), 'the decided landing')
+    assert.match(p.live(), /banner=sale/)
+    assert.match(p.live(), /theme=dark header, theme=light footer/)
+    assert.equal((await tool(p, chat, 'workspace_state')).decision, undefined)
+  })
+
   await scenario('a chat silently taking the peer side keeps its own work', async (p) => {
     const chat = await openChat(p)
     const turn = await send(chat, 'Make the theme dark only')

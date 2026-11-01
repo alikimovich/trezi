@@ -6,7 +6,7 @@ import { type ChatState, emitIsolation } from './chat-state'
 import { completeTurn, conflictMarkerFiles, type ResolvePrep } from './chat-worktrees'
 import { peerGateMatters } from './peer-freshness'
 import { peerTurn } from './peer-work'
-import { heldResolution, resolutionFor, restoreOwnFiles } from './resolution-context'
+import { digestFiles, heldResolution, resolutionFor, restoreOwnFiles } from './resolution-context'
 import type { TurnTerminalOutcome } from './turn-terminal'
 
 /**
@@ -69,6 +69,8 @@ export async function holdForDecision(
       : { question: st.decision ?? '', files: st.parkedFiles, restore: [] }
   if (!held) return false
   await restoreOwnFiles(st.wt, pending, held.restore)
+  // What is held, so an answer turn that changes none of it and chooses nothing holds again.
+  pending.held = await digestFiles(st.wt.path, pending.files)
   const { files } = await completeTurn(st.liveRoot, st.wt, message, {
     land: false,
     keepHistory: st.gitAccess === 'full'

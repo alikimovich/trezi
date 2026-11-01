@@ -799,7 +799,8 @@ question and a recovery branch; Retry and Resolve refuse until the user answers,
 that answer continues on the held work. The question and the staged resolution stay
 through that answer turn, whose end runs the same check: a closing `DECISION NEEDED:`,
 markers, or a conflicted file still exactly one side hold the work again (a stopped
-turn too), and a one-sided file lands only when the reply states `DECISION MADE:
-<the user's choice>`. They clear when the turn passes the check, the work lands, or
+turn too), and a held tree lands only when the turn changed its conflicted files or the
+reply states `DECISION MADE: <the user's choice>` (a one-sided file needs the line,
+and `land_now` with no edit holds). They clear when the turn passes the check, the work lands, or
 Discard. A chat's gate note reads peers since the resolution's recorded fork point. A
 comment ends as review with the question and its branch. A dropped own side is written back before the commit, so the branch keeps it.

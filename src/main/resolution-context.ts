@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { lstat, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -112,12 +113,37 @@ async function selected(
   return sides
 }
 
+/** What `files` hold now, as digests; a missing or non-regular file digests as `absent`. */
+export async function digestFiles(root: string, files: string[]): Promise<Record<string, string>> {
+  const digests: Record<string, string> = {}
+  for (const file of files) {
+    const path = join(root, file)
+    const regular = (await lstat(path).catch(() => null))?.isFile()
+    digests[file] = regular
+      ? createHash('sha256')
+          .update(await readFile(path).catch(() => ''))
+          .digest('hex')
+      : 'absent'
+  }
+  return digests
+}
+
+/** The conflicted files are exactly as they were when the work was last held. */
+async function unchangedSinceHeld(wt: Worktree, r: PendingResolution): Promise<boolean> {
+  if (!r.held) return false
+  const now = await digestFiles(wt.path, r.files)
+  return r.files.every((file) => now[file] === r.held?.[file])
+}
+
 /**
  * Why this resolution must not land, or null. `reply` is the agent's closing text, null
  * while its turn still runs (`land_now`): markers then only mean it is not done.
  * `asked` is the held question when this turn answers it. A held tree is already one
  * side, so a file still exactly one side lands only when the reply says (`DECISION
  * MADE:`) that the user chose it; a closing `DECISION NEEDED:` or markers hold again.
+ * A tree matching neither side is held the same way: unless the reply states the choice,
+ * the turn must have changed the conflicted files from what was held, which also covers
+ * a landing without a reply (`land_now`).
  */
 export async function heldResolution(
   wt: Worktree,
@@ -129,14 +155,16 @@ export async function heldResolution(
   const sides = chosen ? new Map<string, 'ours' | 'theirs'>() : await selected(wt.path, r)
   const markers = reply === null ? [] : await conflictMarkerFiles(wt, r.files)
   const stated = reply ? decisionFrom(reply) : null
-  if (!sides.size && !markers.length && !stated) return null
+  const idle = !!asked && !chosen && (await unchangedSinceHeld(wt, r))
+  if (!sides.size && !markers.length && !stated && !idle) return null
   const files = [...new Set([...markers, ...sides.keys()])]
   productLog.info('resolve', 'Resolution held for a decision', {
     worktree: wt.id,
     markers: markers.length,
     selected: sides.size,
     stated: !!stated,
-    answered: !!asked
+    answered: !!asked,
+    idle
   })
   return {
     question: stated ?? asked ?? fallbackDecision(r.context, files.length ? files : r.files),

@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-31 — LKM-403 repair 2: a held mixed tree needs an edit or a stated choice
+
+- Review finding: the answer-turn check only saw markers, a `DECISION NEEDED:` line or a conflicted file exactly one side. A real conflicted file also carries clean peer lines, so the held tree matched neither side, and a quiet answer turn (or `land_now`, which has no reply) released it over the peer's change.
+- Fix: `holdForDecision` records content digests of the conflicted files it held (`PendingResolution.held`, after the own side is restored). On an answer turn without a `DECISION MADE:` line, `heldResolution` holds again while those files are unchanged (`unchangedSinceHeld` in `src/main/resolution-context.ts`), so the turn must change the held tree or state the choice; this covers `land_now` too. The existing answer scenario still lands because its turn edits the file.
+- Red proof: with the unchanged check disabled, `bun test/peer-coordination.mjs` fails only the new "a quiet answer turn does not release a mixed checked tree" (live changed after the quiet turn). Green with it: 16 scenarios. The scenario covers a mixed checked tree held by `DECISION NEEDED:`, a quiet turn, `land_now` with no edit, and an edit that lands.
+
 ## 2026-10-31 — LKM-403 repair: a held decision survives its answer turn
 
 - Review findings. (a) `beforeTurn` cleared a chat's held decision and staged resolution on any next user message, so a clarifying turn that edited nothing and asked again was not inspected and the checked one-sided tree landed over the peer's change. (b) `landBatch` read the gate from `wt.baseSha`, which `stageResolve` had already moved to the live snapshot, so a reconciled chat's `lastLanding.peers` said `combinedRechecked: true` with `landed: []`.
