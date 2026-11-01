@@ -9,6 +9,14 @@ const codexWithSkills = withSkillMenu(codexProvider)
 
 export type { ModelProvider, PendingPrompt, ProviderSession } from './types'
 
+let nativeSmokeProvider: ModelProvider | undefined
+
+/** Installed only by the native smoke runner, before it opens its disposable project. */
+export function setNativeSmokeProvider(provider?: ModelProvider) {
+  if (!process.argv.includes('--test')) throw new Error('Native smoke provider requires --test')
+  nativeSmokeProvider = provider
+}
+
 /**
  * Pick the backend for a session from `options.provider` (the renderer sets it;
  * default = Claude).
@@ -44,6 +52,7 @@ export type { ModelProvider, PendingPrompt, ProviderSession } from './types'
  * provider, and no Gemini helper starts. Claude and Codex are unaffected.
  */
 export function pickProvider(options: AgentOptions): ModelProvider {
+  if (nativeSmokeProvider) return nativeSmokeProvider
   if (options.connectionId) return codexWithSkills
   // A helper never routes again: its own sessions are the adapters themselves (`provider-helper-entry.ts`).
   if (process.env.TREZI_PROVIDER_HELPER === '1')

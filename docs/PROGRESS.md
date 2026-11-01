@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-31 — LKM-407 mixed-origin native acceptance fixtures
+
+- Added `mixed-origin-compatible` and `mixed-origin-incompatible` to the canonical `chat` smoke list. Both open a generated Git project in the disposable suite fixture, use a deterministic test-only provider, start a foreground chat plus comment and text-edit background spawns from one base, and read real Swift cards, live Git source and service events. The compatible case checks a reconciled exact tree with all three behaviors; the incompatible case checks the concrete decision, unchanged live head and recoverable work. Captures, final state, fixture tree, source SHA, measured runtime and measured state bytes go to the native artifacts path when the suite runs.
+- First manager quick run reached 298 PASS, 3 SKIP, 2 FAIL: lint on formatting and retirement census on the new side-effecting smoke module. Added its test row to the census and formatted the new module. The native tool reports zero calls for this worker; no native case or negative native mutation ran. Deterministic stubs cannot establish live-model behavior. Post-merge manager verification and independent review remain pending.
+- Final manager quick verification passed: both typechecks, lint, and 300 unit checks passed with 3 existing skips (422.3 s unit wall time). `native-smoke-groups` selects 20 chat checks out of 75, including both mixed-origin checks. No measured native runtime or byte results exist yet because neither new native case executed.
+
 ## 2026-11-01 — LKM-406 repair 5: advisories independent of the owner's row byte cap
 
 - Review finding (engineering defect; decision 8a52b522: advisories must not depend on the recency byte cap; rows and the 6144-byte answer stay bounded, advisories preferred over rows, no locks or serialization). The owner's `peers` listed candidates by version, newest first, stopped at 4096 row bytes and built advisories only from the rows that fitted. Rows are up to about 1.5 KB (project path, parent, goal, eight 96-byte file names), so three or four peers exceed the cap. Whichever peer published last was listed, so a heartbeat or an unrelated observed file moved a peer in or out: its overlap line vanished (an empty card reads as safe), the digest changed without a state change, a waiting line for a peer outside the rows lost its goal and origin, and `peer_wait` answered `different-scope` for the peer.
