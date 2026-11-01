@@ -53,6 +53,12 @@ export function marqueeColumns(image: Image, box: MarqueeBox) {
   return ink
 }
 
+/**
+ * LKM-413: the scroll has stopped at the end. `offset` snaps to the backing pixel, so at the end it
+ * is under half a point from `travel`. A full 0.5 pt short is the frame before the last step.
+ */
+export const marqueeAtEnd = (state: Item) => state.travel - state.marqueeState.offset < 0.5
+
 /** Why the capture is not text across the whole clip, or null. The faded edges are not read. */
 export function marqueeInkProblem(image: Image, box: MarqueeBox, phase: MarqueePhase) {
   const ink = marqueeColumns(image, box)
@@ -125,11 +131,7 @@ export async function checkMarqueeScroll(
   )
   await shot('mid', middle)
   assert.ok(middle.marqueeState.fadeLeading > 0, `${stage}: the left edge is soft`)
-  const end = await settle(
-    'scrolled to the end',
-    (state) => state.marqueeState.offset >= state.travel - 0.5,
-    budget
-  )
+  const end = await settle('scrolled to the end', marqueeAtEnd, budget)
   await shot('end', end)
 
   // Still there after the captures: it holds at the end while hovered.
