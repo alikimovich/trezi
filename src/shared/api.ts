@@ -390,6 +390,20 @@ export interface SlashCommandItem {
  * shared, but the renderer uses the origin to choose the right completion UX. */
 export type BackgroundSpawnOrigin = 'comment' | 'text-edit'
 
+/** One line of a task's card (LKM-406). `uncertain` may be nothing; it never means safe. */
+export interface PeerFeedbackLine {
+  kind: 'overlap' | 'waiting' | 'reconciling'
+  peer: string
+  origin: 'chat' | 'comment' | 'background' | 'text-edit'
+  goal: string
+  certainty?: 'known' | 'uncertain'
+  files?: string[]
+  /** `waiting`: the bound it asked for. */
+  seconds?: number
+  /** `reconciling`: this task is the one combining. */
+  self?: boolean
+}
+
 /** What a landing saw of its peers at the gate, with the exact revisions (LKM-403). */
 export interface PeerGateNote {
   /** The fork point the work started from. */
@@ -513,6 +527,9 @@ export type AgentEvent = (
   /** Main starts one bounded reconciliation turn in the originating chat. */
   | { type: 'reconciliation-started' }
   | { type: 'landing-finished' }
+  /** LKM-406: what this task's card shows of its peers now, replacing what it showed.
+   *  Sent once per state change; empty clears. With `sessionId` it is a comment's. */
+  | { type: 'peer-state'; lines: PeerFeedbackLine[] }
   /** LKM-194: at turn start, why the chat's dependencies are not installed (conflict
    *  markers, a failed install), or null once nothing stands in the way. The turn
    *  starts either way; the chat shows a card. */
@@ -530,6 +547,8 @@ export type AgentEvent = (
       state: 'isolated' | 'merged' | 'parked'
       branch?: string
       files?: string[]
+      /** On 'parked': the product decision only the user can make (LKM-403/406). */
+      decision?: string
       /** On 'merged': the edit-history group id (`chat:<wtId>:<turnNo>`) that reverts
        *  this turn's file changes — the renderer tags the merged assistant message with
        *  it to render a per-turn Revert button. */
@@ -811,6 +830,9 @@ export interface LiveChatSnapshot {
     branch?: string
     reason?: 'interrupted' | 'failed'
     error?: string
+    /** The one product question the held work waits on, and its files (LKM-403, LKM-406). */
+    decision?: string
+    files?: string[]
   }
   /** The options this session is ACTUALLY running with (main's live copy — the
    *  authority). The renderer reconciles its per-chat pickers against these on

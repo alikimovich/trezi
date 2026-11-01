@@ -1,6 +1,7 @@
 import type { AgentEvent } from '../shared/api'
 import type { NativeAgentCard, NativeChatCard } from '../shared/native-chat'
 import type { NativeSpawn } from '../shared/native-chat-controller'
+import { peerLine } from './chat-peer-card'
 
 /** Collapsed request length; longer requests end at the last whole word before it. */
 const PREVIEW_CHARS = 140
@@ -52,11 +53,14 @@ export function agentCard(spawn: NativeSpawn): NativeChatCard {
       ? 'queued'
       : 'running'
   const target = requestTarget(spawn.label)
+  const detail = [...(spawn.peerWork ?? []).map(peerLine), spawn.activity]
+    .filter(Boolean)
+    .join('\n')
   return {
     id: spawn.id,
     title: status === 'waiting' ? 'Background agent needs your answer' : 'Background agent',
-    // What the agent is doing now; a pending question replaces it.
-    ...(spawn.activity && !spawn.question ? { detail: spawn.activity } : {}),
+    // Its peers and what it is doing now; a pending question replaces them.
+    ...(detail && !spawn.question ? { detail } : {}),
     actions: [{ label: 'Cancel', action: 'spawn-stop' }],
     agent: {
       status,

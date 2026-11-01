@@ -112,6 +112,18 @@ export async function holdForDecision(
     ...landingPeers(gate, false, null)
   }
   upsertParkRecord(st, kept, turn)
-  emitIsolation(sessionKey, 'parked', st.wt.branch, kept, undefined, undefined, 'failed', error)
+  emitIsolation(
+    sessionKey,
+    'parked',
+    st.wt.branch,
+    kept,
+    undefined,
+    undefined,
+    'failed',
+    error,
+    held.question
+  )
+  // Always announced: a re-hold must pause the queue again. Only the repeat is skipped.
+  st.decisionShown = true
   return true
 }

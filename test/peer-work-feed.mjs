@@ -384,6 +384,121 @@ try {
   assert.ok((await recovered.status()).recovered.some((row) => row.id === 'crash-record'))
   setConversationOwner(recovered)
   finishPeer('crash')
+
+  // LKM-406: the owner's wait edges. One per waiter, no cycle, gone with either end.
+  const waiting = started.owner()
+  const peerWait = (waiter, peer, ms = 10_000) => waiting.peerWaitBegin(waiter, peer, a, ms)
+  for (const id of ['w1', 'w2', 'w3', 'w4'])
+    await waiting.peerUpsert(task(id, a, 'comment', ['a.txt']))
+  await waiting.peerUpsert(task('elsewhere', b, 'comment', ['a.txt']))
+  assert.equal((await peerWait('w1', 'nobody')).reason, 'unknown', 'a peer must be in the feed')
+  assert.equal((await peerWait('w1', 'w1')).reason, 'unknown', 'no waiting on oneself')
+  assert.equal((await peerWait('w1', 'elsewhere')).reason, 'unknown', 'same project only')
+  assert.equal((await peerWait('ghost', 'w1')).reason, 'unknown', 'a waiter must be in the feed')
+  assert.equal((await peerWait('w1', 'w2')).started, true)
+  const edge = (await waiting.peers(a, 'w1')).wait
+  assert.equal(edge.peer, 'w2')
+  assert.equal(edge.ms, 10_000)
+  assert.equal((await waiting.peers(a, 'w2')).wait, undefined, 'only the waiter sees the wait')
+  assert.equal((await waiting.peers(a, '')).wait, undefined)
+  assert.equal((await peerWait('w1', 'w3')).reason, 'busy', 'one named peer at a time')
+  assert.equal((await peerWait('w2', 'w1')).reason, 'cycle', 'two agents cannot deadlock')
+  assert.equal((await peerWait('w2', 'w3')).started, true)
+  assert.equal((await peerWait('w3', 'w1')).reason, 'cycle', 'nor can a longer ring')
+  assert.equal((await peerWait('w4', 'w1')).started, true, 'a chain into a wait is no cycle')
+
+  await waiting.peerRemove('w2')
+  assert.equal((await waiting.peers(a, 'w1')).wait, undefined, 'the peer ending frees its waiter')
+  assert.equal((await peerWait('w2', 'w1')).reason, 'unknown', 'the ended task cannot wait')
+  await waiting.peerUpsert(task('w2', a, 'comment', ['a.txt']))
+  assert.equal((await peerWait('w1', 'w2')).started, true)
+  await waiting.peerWaitEnd('w1')
+  assert.equal((await waiting.peers(a, 'w1')).wait, undefined, 'the waiter can end it')
+  assert.equal((await peerWait('w2', 'w1')).started, true, 'an ended wait blocks nothing')
+  await waiting.peerWaitEnd('w2')
+
+  // The owner's deadline frees an edge whose Bun side is gone; the row stays.
+  assert.equal((await peerWait('w1', 'w2', 1_000)).started, true)
+  await started.cmd({ cmd: 'advance', ms: 1_001 })
+  assert.equal((await waiting.peers(a, 'w1')).wait, undefined, 'a wait cannot outlive its bound')
+  assert.ok((await waiting.peers(a, 'w1')).rows.some((row) => row.id === 'w2'))
+  assert.equal((await peerWait('w2', 'w1')).started, true, 'nor block a later wait')
+
+  // A wait never outlives its bound, whatever is asked.
+  await waiting.peerWaitEnd('w2')
+  assert.equal((await peerWait('w1', 'w2', 3_600_000)).started, true)
+  await started.cmd({ cmd: 'advance', ms: 105_001 })
+  assert.equal((await waiting.peers(a, 'w1')).wait, undefined, 'the owner caps every wait')
+
+  // LKM-406: advisories do not depend on which rows fit the 4096-byte row cap, nor on the
+  // order the peers last published in (every upsert bumps a version).
+  const wide = repo('wide')
+  const fat = (id) => {
+    const files = ['shared.txt', ...[0, 1, 2].map((i) => `${'w'.repeat(70)}-${id}-${i}.txt`)]
+    return {
+      ...task(id, wide, 'comment', files),
+      goal: `${id} `.padEnd(160, 'g'),
+      target: 't'.repeat(100),
+      parent: 'p'.repeat(128)
+    }
+  }
+  const crowd = ['wide-1', 'wide-2', 'wide-3', 'wide-4']
+  for (const id of ['wide-own', ...crowd]) await waiting.peerUpsert(fat(id))
+  const crowded = async () => waiting.peers(wide, 'wide-own')
+  const first = await crowded()
+  assert.ok(first.rows.length < crowd.length, 'the peers together exceed the rows byte cap')
+  assert.deepEqual(
+    first.advisories.map((item) => [item.peer, item.kind, item.certainty]),
+    crowd.map((id) => [id, 'exact-file', 'known']),
+    'every overlapping peer is advised, in the order of its id, whatever fitted'
+  )
+  for (let round = 0; round < 4; round++) {
+    for (const id of round % 2 ? crowd : [...crowd].reverse()) await waiting.peerUpsert(fat(id))
+    const again = await crowded()
+    assert.deepEqual(again.advisories, first.advisories, 'republishing changes no advisory')
+    assert.deepEqual(
+      again.rows.map((row) => row.id),
+      first.rows.map((row) => row.id),
+      'nor which rows are listed'
+    )
+  }
+  const outside = crowd.find((id) => !first.rows.some((row) => row.id === id))
+  assert.ok(outside, 'a contended peer outside the rows')
+  assert.equal((await waiting.peerWaitBegin('wide-own', outside, wide, 10_000)).started, true)
+  const awaited = await crowded()
+  assert.equal(awaited.wait.peer, outside)
+  assert.ok(
+    awaited.rows.some((row) => row.id === outside),
+    'the peer waited on keeps its row'
+  )
+  assert.deepEqual(awaited.advisories, first.advisories)
+  const wideBytes = Buffer.byteLength(JSON.stringify(awaited))
+  assert.ok(wideBytes <= 6144, 'the response stays under its cap')
+  await waiting.peerWaitEnd('wide-own')
+  console.log(
+    `PEER-WORK-FEED wide crowd rows=${first.rows.length} of ${crowd.length} advisories=${first.advisories.length} bytes=${wideBytes}`
+  )
+
+  await waiting.peerUpsert({ ...task('w1', a, 'comment', ['a.txt']), phase: 'reconciling' })
+  assert.equal(
+    (await waiting.peers(a, 'w2')).rows.find((row) => row.id === 'w1').phase,
+    'reconciling'
+  )
+
+  // A service crash takes every edge with it: nothing can hold a task across a restart.
+  assert.equal((await peerWait('w3', 'w4')).started, true)
+  started.child.kill('SIGKILL')
+  await started.exited
+  started = await startConversationFixture(binary, profile)
+  const restarted = started.owner()
+  await restarted.peerUpsert(task('w3', a, 'comment', ['a.txt']))
+  await restarted.peerUpsert(task('w4', a, 'comment', ['a.txt']))
+  assert.equal((await restarted.peers(a, 'w3')).wait, undefined, 'a restart ends the wait')
+  assert.equal(
+    (await restarted.peerWaitBegin('w4', 'w3', a, 1_000)).started,
+    true,
+    'and leaves no cycle behind'
+  )
   console.log('PEER-WORK-FEED code-gap reproductions PASS')
 } finally {
   setConversationOwner(null)

@@ -111,6 +111,58 @@ await controller.effect({
 })
 assert.equal(chat.get('a').context.spawns[0].activity, 'Editing border styles')
 
+// LKM-406: the feed sends a state once. A comment's first `peer-state` can arrive before its
+// rail row exists, or between a queued row and its start; neither may lose the lines.
+{
+  const one = [{ kind: 'overlap', peer: 'p', origin: 'chat', goal: 'g', certainty: 'uncertain' }]
+  const two = [{ kind: 'waiting', peer: 'p', origin: 'chat', goal: 'g', seconds: 60 }, ...one]
+  const peer = (id, lines) =>
+    controller.effect({
+      type: 'spawn',
+      event: { type: 'peer-state', projectKey: 'a', sessionId: id, lines }
+    })
+  const start = (id) =>
+    controller.effect({
+      type: 'spawn',
+      event: { type: 'spawn-started', projectKey: 'a', sessionId: id, branch: id }
+    })
+  const row = (id) => chat.get('a').context.spawns.find((s) => s.id === id)
+  // Before the row exists: kept, and applied when the command result adds the row.
+  await peer('early', one)
+  assert.equal(row('early'), undefined)
+  controller.queued('a', 'early', 'Early', false)
+  assert.deepEqual(row('early').peerWork, one, 'lines that arrived before the row appear on it')
+  await peer('early', two)
+  assert.deepEqual(row('early').peerWork, two, 'a change replaces the lines')
+  await peer('early', [])
+  assert.equal(row('early').peerWork, undefined, 'an empty state clears them')
+  // A row that is queued, then started: the rebuilt row keeps the lines.
+  controller.queued('a', 'later', 'Later', true)
+  await peer('later', one)
+  assert.deepEqual(row('later').peerWork, one)
+  await start('later')
+  assert.equal(row('later').status, 'running')
+  assert.deepEqual(row('later').peerWork, one, 'the start keeps what the card shows')
+  await peer('later', [])
+  assert.equal(row('later').peerWork, undefined)
+  // Cleared before the row existed: nothing stale comes back.
+  await peer('gone', one)
+  await peer('gone', [])
+  controller.queued('a', 'gone', 'Gone', false)
+  assert.equal(row('gone').peerWork, undefined)
+  // A start with no row yet (a dequeued spawn) and kept lines, then finish drops them.
+  await peer('direct', two)
+  await start('direct')
+  assert.deepEqual(row('direct').peerWork, two)
+  await controller.effect({
+    type: 'spawn',
+    event: { type: 'spawn-finished', projectKey: 'a', sessionId: 'direct', branch: null }
+  })
+  assert.equal(row('direct'), undefined)
+  await peer('direct', one)
+  assert.equal(row('direct'), undefined, 'a finished spawn takes no more lines')
+}
+
 // Note reads after add/remove can finish out of order: a stale list never replaces a newer one.
 {
   const lists = []

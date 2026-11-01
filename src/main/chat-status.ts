@@ -18,6 +18,8 @@ export function isolationSnapshot(sessionKey: string):
       branch?: string
       reason?: 'interrupted' | 'failed'
       error?: string
+      decision?: string
+      files?: string[]
     }
   | undefined {
   const st = states.get(sessionKey)
@@ -26,6 +28,10 @@ export function isolationSnapshot(sessionKey: string):
   return {
     state: parked ? 'parked' : 'isolated',
     ...(st.wt.branch ? { branch: st.wt.branch } : {}),
+    // LKM-406: a rebuilt chat shows the decision card, not the generic failed-landing one.
+    ...(parked && st.decision
+      ? { decision: st.decision, ...(st.parkedFiles.length ? { files: st.parkedFiles } : {}) }
+      : {}),
     ...(parked && st.landingError
       ? { reason: 'failed' as const, error: st.landingError }
       : parked && st.interrupted
