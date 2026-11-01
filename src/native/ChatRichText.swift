@@ -9,9 +9,26 @@ struct ChatRichBlock {
     /// What copying the whole block gives: the shown text, a fenced block for code,
     /// the Markdown source for a table.
     let copy: String
+    /// Code: exactly what was written between the fences. An empty block shows a filler
+    /// space to hold its background; that space is not here.
+    var raw = ""
     /// Code: the padded block behind its paragraphs. Table: one cell block per cell, by row.
     let code: NSTextBlock?
     let cells: [[NSTextTableBlock]]
+}
+
+/// A piece of real code one click copies (LKM-431): a fenced block or an inline span,
+/// from Markdown's own code identity, never from how the text looks.
+struct ChatCodeSnippet: Equatable {
+    let range: NSRange
+    /// What the click copies: the code alone, without fences, language or Markdown.
+    let text: String
+    let block: Bool
+}
+
+extension NSAttributedString.Key {
+    /// Marks one inline code span; the value is unique, so neighbouring spans stay apart.
+    static let chatInlineCode = NSAttributedString.Key("TreziChatInlineCode")
 }
 
 /// An assistant text segment as one attributed string for one TextKit 1 text view, so
@@ -20,7 +37,16 @@ struct ChatRichBlock {
 struct ChatRichText {
     let string: NSAttributedString
     let blocks: [ChatRichBlock]
+    /// Every copyable code snippet, without the ones that hold only whitespace.
+    let snippets: [ChatCodeSnippet]
 
+    /// Behind fenced and inline code: a little darker than the chat, in either appearance.
+    static let codeFill = NSColor(name: nil) { appearance in
+        NSColor.black.withAlphaComponent(appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? 0.28 : 0.08)
+    }
+    /// Inline code's padding: its neighbours are kerned aside by this, so the chip never reaches them.
+    static let inlinePadding: CGFloat = 3
+    static let inlineRadius: CGFloat = 4
     static let fontSize: CGFloat = 13
     static let lineSpacing: CGFloat = 4
     static let blockSpacing: CGFloat = 12
@@ -56,12 +82,15 @@ struct ChatRichText {
                 if !last, paragraph.location >= start { output.addAttribute(.paragraphStyle, value: Self.prose(after: Self.blockSpacing - Self.lineSpacing), range: paragraph) }
             }
             let range = NSRange(location: start, length: output.length - start)
-            blocks.append(ChatRichBlock(kind: block.kind, range: range, copy: copy ?? (output.string as NSString).substring(with: range), code: code, cells: cells))
-            if !last, output.length > start {
-                output.append(NSAttributedString(string: "\n", attributes: output.attributes(at: output.length - 1, effectiveRange: nil)))
-            }
+            blocks.append(ChatRichBlock(kind: block.kind, range: range, copy: copy ?? (output.string as NSString).substring(with: range), raw: block.kind == .code ? block.text : "", code: code, cells: cells))
+            if !last, output.length > start { output.append(Self.separator(after: output)) }
+        }
+        var snippets = blocks.filter { $0.kind == .code }.map { ChatCodeSnippet(range: $0.range, text: $0.raw, block: true) }
+        output.enumerateAttribute(.chatInlineCode, in: NSRange(location: 0, length: output.length)) { value, range, _ in
+            if value != nil { snippets.append(ChatCodeSnippet(range: range, text: (output.string as NSString).substring(with: range), block: false)) }
         }
         string = output; self.blocks = blocks
+        self.snippets = snippets.filter { $0.text.contains { !$0.isWhitespace } }.sorted { $0.range.location < $1.range.location }
     }
 
     /// Plain text for the selected ranges, keeping paragraph breaks: a block that is
@@ -147,7 +176,7 @@ struct ChatRichText {
                 let style = NSMutableParagraphStyle(); style.textBlocks = [cell]
                 let text = column < values.count ? values[column] : ""
                 let font = NSFont.systemFont(ofSize: fontSize, weight: row == 0 ? .semibold : .regular)
-                if output.length > 0 { output.append(NSAttributedString(string: "\n", attributes: output.attributes(at: output.length - 1, effectiveRange: nil))) }
+                if output.length > 0 { output.append(separator(after: output)) }
                 let content = inline(text, font: font, paragraph: style)
                 // An empty cell still needs a character to hold its block.
                 output.append(content.length > 0 ? content : NSAttributedString(string: " ", attributes: [.font: font, .paragraphStyle: style]))
@@ -157,7 +186,19 @@ struct ChatRichText {
         }
         return (output, blocks)
     }
+    /// A newline with the attributes of what it follows, but not as part of its inline code.
+    private static func separator(after output: NSAttributedString) -> NSAttributedString {
+        var attributes = output.attributes(at: output.length - 1, effectiveRange: nil)
+        attributes[.chatInlineCode] = nil; attributes[.kern] = nil
+        return NSAttributedString(string: "\n", attributes: attributes)
+    }
+    /// Room for the chip after the last character of `output`.
+    private static func kernLast(_ output: NSMutableAttributedString) {
+        guard output.length > 0 else { return }
+        output.addAttribute(.kern, value: inlinePadding, range: (output.string as NSString).rangeOfComposedCharacterSequence(at: output.length - 1))
+    }
     /// Inline Markdown (strong, emphasis, code, strikethrough, links), whitespace kept.
+    /// Code inside a link stays the link: it is neither a snippet nor a chip.
     static func inline(_ source: String, font: NSFont, paragraph: NSParagraphStyle) -> NSAttributedString {
         let parsed = (try? AttributedString(markdown: source, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(source)
         let output = NSMutableAttributedString()
@@ -174,13 +215,16 @@ struct ChatRichText {
             }
             if let link = run.link { attributes[.link] = link }
             attributes[.font] = runFont
+            let snippet = run.inlinePresentationIntent?.contains(.code) == true && run.link == nil
+            if snippet { attributes[.chatInlineCode] = UUID().uuidString; kernLast(output) }
             output.append(NSAttributedString(string: String(parsed[run.range].characters), attributes: attributes))
+            if snippet { kernLast(output) }
         }
         return output
     }
 }
 
-func copyChatText(_ text: String, to pasteboard: NSPasteboard = .general) { pasteboard.clearContents(); pasteboard.setString(text, forType: .string) }
+@discardableResult func copyChatText(_ text: String, to pasteboard: NSPasteboard = .general) -> Bool { pasteboard.clearContents(); return pasteboard.setString(text, forType: .string) }
 
 private func tableCells(_ row: String) -> [String] {
     var cells: [String] = [], current = "", escaped = false, code = false

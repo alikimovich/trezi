@@ -255,6 +255,7 @@ const host = compile(
     join(root, 'src/native/ChatRichText.swift'),
     join(root, 'src/native/ChatTextView.swift'),
     join(root, 'src/native/ChatTextVerification.swift'),
+    join(root, 'src/native/ChatClickVerification.swift'),
     join(root, 'src/native/ChatQuestion.swift'),
     join(root, 'src/native/SnappedSlider.swift'),
     join(root, 'src/native/KeyShortcuts.swift'),

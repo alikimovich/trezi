@@ -2,6 +2,16 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-01 — LKM-431 click code in chat to copy
+
+- A single primary click on an inline snippet or anywhere on a fenced block's background copies its raw text (`ChatCodeSnippet`), and a small Copied shows up and to the right of the release point (`ChatCopiedToast`). The Copy button takes the same route.
+- NSTextView tracks a press in its own loop and consumes the mouse-up, so `ChatTextView.mouseDown` judges the click after `super` returns, from `NSApp.currentEvent`: released within 4 pt, on the same snippet, and nothing was selected at any point in the press. That last part is `selectedInPress`, because a drag back to its start ends with an empty selection. Any drag past a line's end selects its newline, so a slight movement there does not copy. A click on a selection only clears it, so it cannot replace what that selection just copied.
+- The copy waits one double-click interval on a timer and the next press cancels it. That is the only way to tell a single click from a double click's first, so a copy lands up to 0.5 s after release at the default speed. `NSEvent.doubleClickInterval` reads 0 in a process cut off from the input services, which takes the system default.
+- A snippet is the run itself, not a nearby character: an inline one has a unique `.chatInlineCode` value, so stream reparses cannot match it to a different run. Code inside a link stays the link. Whitespace-only snippets are not copyable. A block that grew while the timer waited drops the click.
+- Inline chips and fenced blocks share `ChatRichText.codeFill` (black 8% in light, 28% in dark). Inline code gets 3 pt of kern on each side so a chip clears its neighbours; separators do not inherit that kern or the snippet attribute. Tables and links paint no chip.
+- The toast is a subview above the chat, not a child window: `captureVisibleRegion` filters to one window, so a child would be missing from captures. `window.contentView` is a split view here, so the host is the highest ancestor below it. `hitTest` is nil and timers run in `.common`.
+- Verification: `test/native-chat-code-click.mjs` drives a real text view in a real offscreen window through `mouseDown` and NSTextView's tracking loop, recording writes through `ChatTextView.write` because a sandboxed test has no pasteboard server. The `chat-text` native check (`checkCodeClick`, `src/native/ChatClickVerification.swift`) queues window-targeted events on the app at glyph geometry, into a private pasteboard, in light, dark, wide and narrow chats. It has not run yet: this worker had no native calls, so acceptance waits on the post-merge native suite.
+
 ## 2026-11-01 — LKM-429 mixed-origin fixture: asserts folder in the worktrees
 
 - Nightly failure on 170c393d: `chat/mixed-origin-compatible` died with ENOENT on `<worktree>/asserts/chat`, the first native run of LKM-407's cases. `setup` made an empty `asserts/` on the project, Git does not track an empty folder, so no worktree had one. A fixture defect only; product code is unchanged.

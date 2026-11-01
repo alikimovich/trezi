@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Added
+
+- Clicking inline code or a code block in chat copies its exact text and shows a brief Copied beside the pointer, and inline code now has a subtle grey background like code blocks.
+
 ## [0.11.0] - 2026-10-31
 
 ### Added
