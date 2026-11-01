@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-31 — LKM-402 review repair 2: Claude rules, refresh merge, spawn feed failure
+
+- Claude's foreground rules no longer tell it to call `prepare_conflict_resolution` (its MCP server registers only `workspace_state`) or forbid the terminal fallback: `treziRules` takes `workspaceStateOnly`, Claude passes it, and Codex's text is unchanged. `test/rules.mjs` asserts the Claude rules (foreground and background) name no missing tool.
+- `refreshPeers` re-reads the current row after its Git await and merges only the observed fields, so a concurrent phase change or base sync is not overwritten (`test/peer-work-feed.mjs`, `phase-race`).
+- `startSpawn` treats a peer-feed owner failure as non-fatal (the agent starts with an empty snapshot) and its failure path stops an already-started provider session before removing the worktree.
+
 ## 2026-10-31 — LKM-402 review repair: complete overlap identity and lifecycle cleanup
 
 - Swift now caps eight rows per canonical project (64 globally), compares SHA-256 identities of up to 64 full observed paths separately from four short display names, and labels incomplete observations as possible overlap. The fixture catches a shared fifth file, long paths with the same display prefix, and activity in a second project evicting the first.

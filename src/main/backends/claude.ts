@@ -1218,6 +1218,8 @@ async function startSession(
           append: treziRules({
             previewTools: true,
             workspaceTools: true,
+            // Claude's server registers workspace_state only, not prepare_conflict_resolution.
+            workspaceStateOnly: true,
             agentGitAccess: options.agentGitAccess,
             projectMemory: ctx?.projectMemory,
             background: !!ctx?.sessionId

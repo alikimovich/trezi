@@ -1084,23 +1084,30 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
     releaseSlot()
     // LKM-163/LKM-215: a Full access Codex spawn can write the live tree too.
     void beginLiveWatch(spawnWatchKey(wt.id), s)
-    await startPeer(
-      {
-        id: wt.id,
-        project: q.root,
-        origin: q.origin,
-        parent: q.parentSessionKey,
-        goal: oneLine(q.text, 160),
-        intendedFiles: peerIntendedFiles(q.text),
-        observedFiles: [],
-        target: q.label ?? peerTarget(q.text),
-        base: peerBase(wt.path),
-        phase: 'running'
-      },
-      undefined,
-      wt.path
-    )
-    const context = await peerContext(q.root, wt.id)
+    // The peer feed is advisory: an owner failure must not fail the spawn, so the agent
+    // starts with an empty snapshot instead of leaving a live session in a removed worktree.
+    let context = ''
+    try {
+      await startPeer(
+        {
+          id: wt.id,
+          project: q.root,
+          origin: q.origin,
+          parent: q.parentSessionKey,
+          goal: oneLine(q.text, 160),
+          intendedFiles: peerIntendedFiles(q.text),
+          observedFiles: [],
+          target: q.label ?? peerTarget(q.text),
+          base: peerBase(wt.path),
+          phase: 'running'
+        },
+        undefined,
+        wt.path
+      )
+      context = await peerContext(q.root, wt.id)
+    } catch {
+      context = ''
+    }
     const spawn = spawns.get(wt.id)
     if (!spawn || spawn.finalizing) return null
     if (cancelOnStart.delete(q.id)) spawn.cancelled = true
@@ -1114,6 +1121,9 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
     return wt.branch
   } catch {
     finishPeer(wt.id)
+    // A session started before the failure must not outlive its removed worktree.
+    const started = spawns.get(wt.id)
+    if (started) stopProvider(started.session)
     spawns.delete(wt.id)
     forgetLiveWatch(spawnWatchKey(wt.id))
     releaseSlot()

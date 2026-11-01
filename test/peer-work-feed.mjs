@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { setConversationOwner } from '../src/main/conversation-owner.ts'
 import {
   finishPeer,
+  observePeer,
   peerContext,
   peerView,
   startPeer,
@@ -251,6 +252,16 @@ try {
     'finish during refresh cannot resurrect the peer'
   )
   setConversationOwner(owner)
+  // A phase change and a base sync that land while refresh awaits Git must survive it.
+  const phased = task('phase-race', a, 'background', [])
+  await startPeer(phased, undefined, right)
+  const refreshing = peerView(a, '')
+  observePeer(phased.id, [], right, 'landing')
+  await refreshing
+  const phasedRow = (await peerView(a, '')).rows.find((row) => row.id === phased.id)
+  assert.equal(phasedRow?.phase, 'landing', 'refresh keeps a phase change made during its Git read')
+  assert.ok(phasedRow?.observedFiles.includes('a.txt'), 'refresh still merges observed files')
+  finishPeer(phased.id)
   const startingRow = task('start-race', a, 'comment', [])
   let startEntered
   const startPending = new Promise((resolve) => {

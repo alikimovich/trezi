@@ -214,7 +214,11 @@ async function refreshPeers(project: string): Promise<void> {
       observedTruncated === row.observedTruncated
     )
       continue
-    const updated = { ...row, observedFiles: observed.paths, observedTruncated }
+    // A phase change or base sync may have landed during the Git await: merge only the
+    // observed fields into the current row, never the row read before it.
+    const latest = rows.get(row.id)
+    if (!latest) continue
+    const updated = { ...latest, observedFiles: observed.paths, observedTruncated }
     rows.set(row.id, updated)
     await owner.peerUpsert(updated)
     if (generations.get(row.id) !== generation || !rows.has(row.id)) await owner.peerRemove(row.id)

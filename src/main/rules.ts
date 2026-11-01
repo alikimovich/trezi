@@ -26,6 +26,8 @@ export function treziRules(opts?: {
   previewTools?: boolean
   previewObservationTools?: boolean
   workspaceTools?: boolean
+  /** With `workspaceTools`: the provider has `workspace_state` but not `prepare_conflict_resolution` (Claude). */
+  workspaceStateOnly?: boolean
   agentGitAccess?: 'managed' | 'full'
   controlTools?: boolean
   projectMemory?: string
@@ -162,7 +164,7 @@ export function treziRules(opts?: {
   ]
 
   if (opts?.workspaceTools) {
-    if (opts.background) {
+    if (opts.background || opts.workspaceStateOnly) {
       lines.push(
         '',
         '## Peer work',
