@@ -1,13 +1,14 @@
 import type { SessionTranscriptEntry } from '../shared/api'
 import type { TurnMessage } from './chat-commit'
 import { clearPark, upsertParkRecord } from './chat-park'
-import { type ChatState, emitIsolation } from './chat-state'
+import { type ChatState, chatDeps, emitIsolation } from './chat-state'
 import { completeTurn, type TurnOutcome } from './chat-worktrees'
 import { recordEdit } from './edit-history'
 import { type GateScope, type GateVerdict, holdMessage, integrationGate } from './integration-gate'
 import { commitLiveTurn } from './live-commit'
 import { notePeerLanded, peerTurn } from './peer-work'
 import { productLog } from './product-log'
+import { landedLesson } from './resolution-context'
 import { retireWorktreeBranch } from './worktrees'
 
 /**
@@ -17,6 +18,9 @@ import { retireWorktreeBranch } from './worktrees'
  * landing step for a finished turn (`afterTurn`), a kept stopped turn (`keepStoppedTurn`)
  * and a clean "Resolve it". Call inside the chat's chain and the repository lease.
  * `message` describes the change (`turnMessage`, LKM-189), never the prompt.
+ * `checked` says the gate passed this exact tree, which a kept stopped turn never has:
+ * with a commit it makes a finished reconciliation a lesson (LKM-405), saved before
+ * anything below can fail and before `clearPark` forgets it, so a Retry cannot repeat it.
  * Answers the undo group `chat:<id>:<turn>`.
  */
 export async function landTurn(
@@ -24,7 +28,8 @@ export async function landTurn(
   st: ChatState,
   outcome: TurnOutcome,
   turn: number | 'resolve',
-  message: TurnMessage
+  message: TurnMessage,
+  checked = false
 ): Promise<string> {
   const group = `chat:${st.wt.id}:${turn}`
   for (const e of outcome.edits) {
@@ -38,6 +43,11 @@ export async function landTurn(
     outcome.newBase
   )
   notePeerLanded(peerTurn(sessionKey), outcome.files, commit.sha)
+  const lesson =
+    checked && commit.sha && st.resolved
+      ? landedLesson(st.resolved, commit.sha, outcome.files)
+      : null
+  if (lesson) chatDeps()?.saveLesson?.(st.liveRoot, lesson)
   clearPark(st)
   await retireWorktreeBranch(st.wt)
   // Not revertable once this chat's work has been pushed & merged via a PR.

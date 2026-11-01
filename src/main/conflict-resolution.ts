@@ -2,6 +2,7 @@ import type { SessionTranscriptEntry } from '../shared/api'
 import type { ProviderSession } from './backends/types'
 import {
   DECISION_LINE,
+  LESSON_LINE,
   type ResolutionContext,
   renderResolutionContext
 } from './resolution-evidence'
@@ -116,6 +117,9 @@ export function conflictResolutionPrompt(files: string[], context?: ResolutionCo
     `checks, then briefly say what you reconciled. If the intent is genuinely incompatible, ` +
     `leave the unresolved markers and explain the decision needed, ending your reply with one ` +
     `line \`${DECISION_LINE} <one concrete product question for the user>\`; do not choose ours ` +
-    `or theirs for them. Do not edit the live checkout or bypass Trezi's landing mechanism.`
+    `or theirs for them. If you combined both and this overlap teaches something a future ` +
+    `task could reuse, you may close with one line \`${LESSON_LINE} <one general rule>\`; ` +
+    `Trezi saves it only if the combined work passes its checks and lands. ` +
+    `Do not edit the live checkout or bypass Trezi's landing mechanism.`
   return context ? `${prompt}\n\n${renderResolutionContext(context)}` : prompt
 }

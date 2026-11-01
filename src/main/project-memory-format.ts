@@ -5,6 +5,9 @@
  * new or reworded rule gets today's.
  */
 
+/** Project memory is intentionally small: it is injected into model context. */
+export const MAX_PROJECT_MEMORY_CHARS = 16_000
+
 /** The fixed section headings, in order. */
 export const MEMORY_HEADINGS = [
   'Preferences',
