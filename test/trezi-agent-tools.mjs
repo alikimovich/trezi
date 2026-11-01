@@ -6,6 +6,7 @@
  */
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { request as httpRequest } from 'node:http'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -130,6 +131,7 @@ try {
     'land_now',
     'open_code',
     'open_preview',
+    'peer_lookup',
     'pr_status',
     'prepare_conflict_resolution',
     'preview_console',
@@ -149,6 +151,15 @@ try {
     'run_checks',
     'workspace_state'
   ])
+
+  // LKM-403: Claude's in-process server promises exactly what this one does.
+  const lookup = listed.result.tools.find((tool) => tool.name === 'peer_lookup')
+  assert.deepEqual(Object.keys(lookup.inputSchema.properties).sort(), ['file', 'peer'])
+  assert.deepEqual(lookup.inputSchema.required, ['peer'])
+  assert.ok(
+    readFileSync(join(root, 'src/main/backends/claude.ts'), 'utf8').includes(lookup.description),
+    'Claude and Codex describe peer_lookup identically'
+  )
 
   assert.equal(
     listed.result.tools.find((tool) => tool.name === 'chat_island').description,

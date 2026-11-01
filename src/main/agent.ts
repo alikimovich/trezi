@@ -47,6 +47,7 @@ import {
   isolationSnapshot,
   landingInFlight,
   liveChatWorktreeIds,
+  parkedResolution,
   reconcileIdleParks,
   releaseChat,
   resolveParkedChat,
@@ -88,8 +89,10 @@ import {
 } from './live-change-watch'
 import { commitLiveTurn } from './live-commit'
 import { answerMergeApproval, revokeMergeApprovals } from './merge-approval'
+import { peerTargets } from './peer-signals'
 import {
   finishPeer,
+  notePeerLanded,
   observePeer,
   peerBase,
   peerContext,
@@ -120,6 +123,7 @@ import { registerProviderIpc } from './providers'
 import { generatePublishDescription } from './publish-description'
 import { answerAsked } from './question-tool'
 import { enqueueRepoWrite } from './repo-write-queue'
+import type { PendingResolution } from './resolution-evidence'
 import type { RpcHandlerRegistry } from './rpc-router'
 import { createProject } from './scaffold'
 import { incidents } from './self-heal/incidents'
@@ -391,6 +395,7 @@ const reconciliation = new ReconciliationCoordinator({
   currentSession: (key) => sessions.get(key),
   begin: () => {},
   land: afterTurn,
+  resolutionContext: parkedResolution,
   showParked: showParkedChat,
   continued: (key, turn, run) => conversation().continueTurn(key, turn, run),
   landed: async (key, turn) => {
@@ -638,6 +643,8 @@ interface Spawn {
   error?: string
   /** Times its agent was asked to combine edits that overlap a landing (LKM-382). */
   continuations?: number
+  /** What its current reconciliation combined (LKM-403), for its next finish. */
+  resolution?: PendingResolution
 }
 const spawns = new Map<string, Spawn>()
 /** Removes a saved record, then its skills pins once nothing else names them (LKM-287).
@@ -865,7 +872,11 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
         {
           land: status === 'done' && !spawn.cancelled,
           reconciled: !!spawn.continuations,
-          mayContinue: (spawn.continuations ?? 0) < MAX_SPAWN_CONTINUATIONS
+          mayContinue: (spawn.continuations ?? 0) < MAX_SPAWN_CONTINUATIONS,
+          peerId: id,
+          goal: text,
+          resolution: spawn.resolution,
+          reply: [...session.record.transcript].reverse().find((t) => t.role === 'assistant')?.text
         }
       )
       // Stopped meanwhile: the kept branch holds the combined work, markers and all.
@@ -874,6 +885,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
         // Overlapping lines: the spawn's own agent combines both sides on the new base,
         // and its next finish lands here again. The rail row keeps running.
         spawn.continuations = (spawn.continuations ?? 0) + 1
+        spawn.resolution = landing.resolution
         spawn.finalizing = false
         observePeer(
           id,
@@ -882,7 +894,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
           'running'
         )
         void beginLiveWatch(spawnWatchKey(id), session)
-        session.send(conflictResolutionPrompt(landing.conflicted))
+        session.send(conflictResolutionPrompt(landing.conflicted, landing.resolution?.context))
         continued = true
         return
       }
@@ -902,10 +914,11 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
           recordEdit(parentRoot, e.file, e.before, e.after, undefined, group)
         // …and as one commit on the live checkout, like an interactive chat's turn, so
         // the spawn shows up in `git log` and can be reverted on its own.
-        await commitLiveTurn(parentRoot, files, {
+        const commit = await commitLiveTurn(parentRoot, files, {
           title: firstLine(text),
           body: origin === 'text-edit' ? 'Trezi background text edit.' : 'Trezi comment spawn.'
         })
+        notePeerLanded(id, files, commit.sha)
         await removeWorktree(parentRoot, wt, { keepBranch: false, intent: 'landed' })
         try {
           removeRecord(session.record.id, session)
@@ -930,6 +943,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
           ...(summary ? { summary } : {}),
           ...label,
           ...(mismatch ? { mismatch } : {}),
+          ...(landing.gate ? { gate: landing.gate } : {}),
           outcome: 'applied',
           files: landing.edits.map((e) => basename(e.file))
         } satisfies AgentEvent)
@@ -952,6 +966,8 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
           origin,
           ...(summary ? { summary } : {}),
           ...label,
+          ...(landing.gate ? { gate: landing.gate } : {}),
+          ...(landing.decision ? { decision: landing.decision } : {}),
           outcome: spawn.cancelled
             ? 'cancelled'
             : status === 'error'
@@ -1099,6 +1115,7 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
           intendedFiles: peerIntendedFiles(q.text),
           observedFiles: [],
           target: q.label ?? peerTarget(q.text),
+          targets: peerTargets(q.text, q.label),
           base: peerBase(wt.path),
           phase: 'running'
         },
@@ -2152,6 +2169,7 @@ export function registerAgentIpc(
             intendedFiles: peerIntendedFiles(text),
             observedFiles: [],
             target: peerTarget(text),
+            targets: peerTargets(text),
             base: peerBase(session.root),
             phase: 'preparing'
           },
@@ -2470,7 +2488,7 @@ export function registerAgentIpc(
     if (!sessionKey) return { ok: false, conflicted: [] as string[], error: 'no-session' }
     const res = await resolveParkedChat(sessionKey)
     if (!res.ok || res.conflicted.length === 0) return { ...res, conflicted: res.conflicted }
-    const prompt = conflictResolutionPrompt(res.conflicted)
+    const prompt = conflictResolutionPrompt(res.conflicted, parkedResolution(sessionKey))
     return { ok: true, conflicted: res.conflicted, prompt }
   })
 

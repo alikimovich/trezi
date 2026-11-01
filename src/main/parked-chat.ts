@@ -2,10 +2,12 @@ import { projectKey } from '../shared/projectKey'
 import { turnMessage } from './chat-commit'
 import { chatGateScope, gatedTurn, holdTurn, landTurn } from './chat-landing'
 import { clearPark, dropParkRecord, upsertParkRecord } from './chat-park'
+import { noteResolution } from './chat-resolution'
 import { type ChatState, emitIsolation, onChain, states } from './chat-state'
 import { applyParked, discardParked, type ResolvePrep, stageResolve } from './chat-worktrees'
 import { holdMessage, integrationGate, replayChecks } from './integration-gate'
 import { commitLiveTurn } from './live-commit'
+import type { ResolutionContext } from './resolution-evidence'
 import { retireWorktreeBranch } from './worktrees'
 
 /**
@@ -26,9 +28,14 @@ export function showParkedChat(sessionKey: string): void {
       st.parkedFiles,
       undefined,
       undefined,
-      st.interrupted ? 'interrupted' : undefined
+      st.landingError ? 'failed' : st.interrupted ? 'interrupted' : undefined,
+      st.landingError
     )
 }
+
+/** What a staged reconciliation of this chat combined, for its agent (LKM-403). */
+export const parkedResolution = (sessionKey: string): ResolutionContext | undefined =>
+  states.get(sessionKey)?.resolution?.context
 
 /** The LIVE chat (if any) whose worktree is on `branch` in `root` — the seam that lets
  *  `agent:spawn-apply`/`agent:spawn-discard` route a parked LIVE chat's branch through
@@ -135,10 +142,16 @@ export async function resolveParkedChat(
   const st = states.get(sessionKey)
   if (!st) return { ok: false, conflicted: [], error: 'no-chat' }
   if (!st.parked) return { ok: false, conflicted: [], error: 'not-parked' }
+  // LKM-403: staging again would land one side of what the user is being asked about.
+  if (st.decision) return { ok: false, conflicted: [], error: st.landingError }
   if (st.resolvingFiles) return { ok: true, conflicted: st.resolvingFiles }
   let prep: ResolvePrep
   try {
-    prep = await onChain(st, () => stageResolve(st.liveRoot, st.wt))
+    prep = await onChain(st, async () => {
+      const staged = await stageResolve(st.liveRoot, st.wt)
+      await noteResolution(sessionKey, st, staged)
+      return staged
+    })
   } catch (e) {
     return { ok: false, conflicted: [], error: e instanceof Error ? e.message : String(e) }
   }

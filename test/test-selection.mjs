@@ -407,6 +407,7 @@ const TEMP_WALKERS = [
   'skills-projection',
   'source-owner',
   'provider-owner',
+  'peer-coordination',
   'codex-composer-images',
   'provider-image-live',
   'provider-login',

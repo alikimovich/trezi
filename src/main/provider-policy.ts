@@ -67,6 +67,7 @@ export const TREZI_TOOLS = [
   'list_recommended_skills',
   'install_skills',
   'workspace_state',
+  'peer_lookup',
   'prepare_conflict_resolution',
   'git_sync_base',
   'git_merge_continue',

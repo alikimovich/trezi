@@ -1,5 +1,10 @@
 import type { SessionTranscriptEntry } from '../shared/api'
 import type { ProviderSession } from './backends/types'
+import {
+  DECISION_LINE,
+  type ResolutionContext,
+  renderResolutionContext
+} from './resolution-evidence'
 import type { TurnTerminalOutcome } from './turn-terminal'
 import { turnTimings } from './turn-timing'
 
@@ -24,6 +29,8 @@ interface ReconciliationDeps {
   landed?: (key: string, turn: string) => Promise<number | undefined>
   /** Hands the continuation prompt to the provider as run `run` of the turn. */
   dispatch?: (session: ProviderSession, prompt: string, turn: string, run: number) => void
+  /** Both goals and diffs for the prompt (LKM-403), once the landing staged them. */
+  resolutionContext?: (key: string) => ResolutionContext | undefined
 }
 
 /** Owns one automatic continuation per user turn, independent of active UI chat. */
@@ -86,7 +93,7 @@ export class ReconciliationCoordinator {
         this.resolving.add(key)
         d.begin(key)
         session.emit({ type: 'reconciliation-started', ...(turn ? { turn } : {}) })
-        const prompt = conflictResolutionPrompt(files)
+        const prompt = conflictResolutionPrompt(files, d.resolutionContext?.(key))
         if (turn && d.dispatch) d.dispatch(session, prompt, turn, next)
         else session.send(prompt)
       } else await finish()
@@ -97,8 +104,8 @@ export class ReconciliationCoordinator {
 }
 
 /** Shared by automatic reconciliation and the explicit retry action. */
-export function conflictResolutionPrompt(files: string[]): string {
-  return (
+export function conflictResolutionPrompt(files: string[], context?: ResolutionContext): string {
+  const prompt =
     `The changes from this chat overlapped with recent project edits. Trezi combined ` +
     `both versions in your private worktree and marked overlapping spots with conflict markers ` +
     `(\`<<<<<<<\`, \`=======\`, \`>>>>>>>\`) in: ${files.join(', ')}. ` +
@@ -107,7 +114,8 @@ export function conflictResolutionPrompt(files: string[]): string {
     `removed the file: keep the combined content, or delete the file if that is the intent. Use the conversation to infer ` +
     `intent. Do not discard either side wholesale. Verify the combined result with relevant ` +
     `checks, then briefly say what you reconciled. If the intent is genuinely incompatible, ` +
-    `leave the unresolved markers and explain the decision needed. Do not edit the live ` +
-    `checkout or bypass Trezi's landing mechanism.`
-  )
+    `leave the unresolved markers and explain the decision needed, ending your reply with one ` +
+    `line \`${DECISION_LINE} <one concrete product question for the user>\`; do not choose ours ` +
+    `or theirs for them. Do not edit the live checkout or bypass Trezi's landing mechanism.`
+  return context ? `${prompt}\n\n${renderResolutionContext(context)}` : prompt
 }

@@ -98,7 +98,8 @@ text files. Non-overlapping edits land without another model turn or a warning c
 Overlapping edits start one reconciliation turn in the same chat/provider, including
 background chats. Markers remain private; the live checkout changes only after the
 normal marker check and landing validation pass. The prompt asks the model to preserve
-both intents, verify the result, and leave genuinely incompatible choices unresolved.
+both intents, verify the result, and ask the user about genuinely incompatible choices
+([LKM-403](#peer-lookup-freshness-and-resolution-with-both-goals-lkm-403)).
 The provider retains its configured permissions. The busy gate stays held through
 landing, so queued messages cannot race reconciliation; Stop cancels the continuation.
 A failed/stopped reconciliation or further drift falls back to the existing card with
@@ -772,3 +773,34 @@ each active worktree's diff against the base revision recorded when that work be
 so commits in an unlanded worktree remain visible. Stop, landing and finalization
 remove live rows; a service restart drops the feed but retains parked work and
 conversation recovery checkpoints. The source gate still decides whether edits land.
+
+## Peer lookup, freshness and resolution with both goals (LKM-403)
+
+Advisories also compare known component/element targets (`same-target`, known) and
+words of goals and paths across different files (`semantic-uncertain`, uncertain,
+never safe). `peer_lookup` (`src/main/peer-lookup.ts`) reads one same-project peer and
+one file of its reported change: 4096 diff bytes, 6144 answer bytes, exact task, file
+and revision provenance, secret paths refused, nothing across projects. Peers that
+landed stay readable by revision for five minutes.
+
+Peer state is refreshed at supported points only: `peerUpdate` on the results of
+`run_checks`, `land_now` and the other checkpoint tools (`src/main/peer-work.ts`), at
+the landing gate (`src/main/peer-freshness.ts`, 3 s, at most 1536 bytes, reported as
+`lastLanding.peers` and on `spawn-finished`), and in each reconciliation.
+
+Reconciliation prompts carry `<trezi-resolution-data>`
+(`src/main/resolution-evidence.ts`, 16 KiB): both goals, base and current revisions,
+own and current diffs, and the checks that passed. All of it is untrusted data. The
+retry limits are unchanged. A resolution lands like any other edit, on a receipt for
+its exact tree. It does not land when the agent answers `DECISION NEEDED: <question>`,
+leaves markers, or leaves a conflicted file exactly one side
+(`src/main/resolution-context.ts`). A chat parks on the failed-landing card with the
+question and a recovery branch; Retry and Resolve refuse until the user answers, and
+that answer continues on the held work. The question and the staged resolution stay
+through that answer turn, whose end runs the same check: a closing `DECISION NEEDED:`,
+markers, or a conflicted file still exactly one side hold the work again (a stopped
+turn too), and a held tree lands only when the turn changed its conflicted files or the
+reply states `DECISION MADE: <the user's choice>` (a one-sided file needs the line,
+and `land_now` with no edit holds). They clear when the turn passes the check, the work lands, or
+Discard. A chat's gate note reads peers since the resolution's recorded fork point. A
+comment ends as review with the question and its branch. A dropped own side is written back before the commit, so the branch keeps it.

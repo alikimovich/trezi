@@ -150,6 +150,10 @@ src/main/
                   crash recovery), chat-landing (landTurn), parked-chat (Apply/Discard/Resolve,
                   the stopped-turn hold), chat-status (read-only views: snapshot, send
                   refusal, the agent's workspace_state) and chat-helpers (setup helper sync).
+  peer-work.ts, peer-signals.ts, peer-lookup.ts, peer-freshness.ts  the peer feed, its overlap
+                  signals, the bounded `peer_lookup` read and the note at the landing gate
+  resolution-evidence.ts, resolution-context.ts, chat-resolution.ts  bounded evidence in
+                  conflict prompts and the one user decision when goals cannot both hold (LKM-403)
   chat-watchdog.ts  LandingGuard (bounded landing wait, Stop ends it) and TurnWatchdog (silent
                   turn detector) behind "already running is never a dead end" (LKM-165)
   backends/claude-resume.ts  canonical cwd, resume-failure detection and the chat summary that

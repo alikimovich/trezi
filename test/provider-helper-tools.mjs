@@ -94,6 +94,7 @@ const CALLS = {
   chat_island: island,
   chat_ui: { action: 'catalog' },
   workspace_state: {},
+  peer_lookup: { peer: 'no-such-peer' },
   prepare_conflict_resolution: {},
   git_sync_base: {},
   git_merge_continue: {},
@@ -571,6 +572,10 @@ try {
   )
   assert.ok(claudeState.peerWork.rows.some((row) => row.goal === 'Adjust shared shadow'))
   assert.ok(!claudeState.peerWork.rows.some((row) => row.id === 'spawn-1'))
+  // LKM-403: the same read in the background; a peer nobody here holds is simply not found.
+  const claudeLookup = await background.turn('TOOL-CALL peer_lookup {"peer":"no-such-peer"}')
+  assert.deepEqual(claudeLookup.routed, ['peer_lookup'])
+  assert.deepEqual(JSON.parse(claudeLookup.results.peer_lookup.content[0].text), { found: false })
   const refused = await background.turn('only chat_island,open_code,open_preview')
   assert.match(textOf(refused.results.chat_island), /Background edits cannot create chat islands/)
   assert.equal(refused.results.chat_island.isError, true)
@@ -656,6 +661,8 @@ try {
   )
   assert.ok(codexState.peerWork.rows.some((row) => row.goal === 'Adjust shared shadow'))
   assert.ok(!codexState.peerWork.rows.some((row) => row.id === 'spawn-codex'))
+  const codexLookup = await codexBackground.turn('TOOL-CALL peer_lookup {"peer":"no-such-peer"}')
+  assert.deepEqual(JSON.parse(codexLookup.results.peer_lookup.content[0].text), { found: false })
   console.log(
     'PROVIDER-HELPER-TOOLS OK — Claude and Codex helper sessions reach every Trezi tool in main, under the owner’s grant'
   )

@@ -67,15 +67,40 @@ export interface PeerWorkRow {
   intendedTruncated?: boolean
   observedTruncated?: boolean
   target?: string
+  /** Known component and element targets (`peer-signals.ts`); read by the owner only. */
+  targets?: string[]
+  /** Words of the goal and paths, for uncertain overlap; read by the owner only. */
+  terms?: string[]
   base: string
   phase: 'preparing' | 'running' | 'landing'
   heartbeat?: number
   version?: number
 }
 
+/** `known` overlap is a shared file or target; `uncertain` may be nothing, never safe. */
+export interface PeerAdvisory {
+  peer: string
+  kind: 'exact-file' | 'same-target' | 'possible-overlap' | 'semantic-uncertain'
+  certainty: 'known' | 'uncertain'
+  files: string[]
+  targets?: string[]
+  terms?: string[]
+}
+
+/** A peer that landed recently. Bun's ring, never the owner's: it outlives the row. */
+export interface PeerLanded {
+  id: string
+  origin: PeerWorkRow['origin']
+  goal: string
+  files: string[]
+  revision: string
+  at: number
+}
+
 export interface PeerWorkView {
   rows: PeerWorkRow[]
-  advisories: { peer: string; kind: 'exact-file' | 'possible-overlap'; files: string[] }[]
+  advisories: PeerAdvisory[]
+  landed?: PeerLanded[]
 }
 
 export class ConversationError extends Error {
