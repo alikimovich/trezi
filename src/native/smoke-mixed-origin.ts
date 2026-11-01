@@ -4,10 +4,12 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { releaseAgentBrowsersFor } from '../main/agent-browser'
 import { setNativeSmokeProvider } from '../main/backends'
 import { createRecordCapture } from '../main/backends/record'
 import type { ModelProvider, ProviderSession, SpawnContext } from '../main/backends/types'
 import { swiftConversationOwner } from '../main/conversation-owner'
+import { integrationGate } from '../main/integration-gate'
 import { runTreziTool } from '../main/session-tools'
 import type { AgentEvent, AgentOptions } from '../shared/api'
 import { projectKey } from '../shared/projectKey'
@@ -100,13 +102,17 @@ const provider: ModelProvider = {
   }
 }
 
+const HEADING = 'Mixed origin fixture'
+/** The project is a static web project, so its landing gate needs a browser check. */
+const PAGE_HTML = `<!doctype html><html><head><title>${HEADING}</title><link rel="icon" href="data:,"></head><body><h1>${HEADING}</h1></body></html>\n`
+
 const page = (line: string) =>
   `${Array.from({ length: 20 }, (_, i) => (i === 5 ? line : `line ${i}`)).join('\n')}\n`
 
 function setup(project: string) {
   rmSync(project, { recursive: true, force: true })
   mkdirSync(join(project, 'asserts'), { recursive: true })
-  writeFileSync(join(project, 'index.html'), '<h1>Mixed origin fixture</h1>\n')
+  writeFileSync(join(project, 'index.html'), PAGE_HTML)
   writeFileSync(join(project, 'page.txt'), page('hero base'))
   writeFileSync(join(project, 'package.json'), '{"scripts":{"test":"bun check.mjs"}}\n')
   writeFileSync(join(project, 'check.mjs'), checks)
@@ -119,20 +125,43 @@ function edit(worker: Worker, side: string, line: string, behavior: string) {
   writeFileSync(join(worker.cwd, 'asserts', side), `${behavior}\n`)
 }
 
+const gateScope = (project: string, worker: Worker) => ({
+  emitKey: worker.ctx.emitKey,
+  root: worker.cwd,
+  liveRoot: project
+})
+
+/** The two real checks the gate needs for this static web project, on the worker's exact tree:
+ *  the project's own test command and a browser check in its private WebKit page. */
 async function checked(project: string, worker: Worker) {
-  const result = (await runTreziTool(
-    'run_checks',
-    { checks: ['test'] },
-    {
-      root: worker.cwd,
-      liveRoot: project,
-      emitKey: worker.ctx.emitKey,
-      background: !!worker.ctx.sessionId,
-      ...(worker.ctx.sessionId ? { peerId: worker.ctx.sessionId } : {}),
-      notify() {}
-    }
-  )) as { results?: { receipt?: { verified?: boolean } }[] }
+  const scope = {
+    ...gateScope(project, worker),
+    background: !!worker.ctx.sessionId,
+    ...(worker.ctx.sessionId ? { peerId: worker.ctx.sessionId } : {}),
+    notify() {}
+  }
+  const result = (await runTreziTool('run_checks', { checks: ['test'] }, scope)) as {
+    results?: { receipt?: { verified?: boolean } }[]
+  }
   assert.equal(result.results?.[0]?.receipt?.verified, true, JSON.stringify(result).slice(0, 700))
+  const browser = (await runTreziTool(
+    'preview_verify',
+    { path: '/', checks: [{ kind: 'text', selector: 'h1', equals: HEADING, timeoutMs: 3000 }] },
+    scope
+  )) as { isError?: boolean; content?: { type: string; text?: string }[] }
+  assert.ok(!browser.isError, `preview_verify passed: ${JSON.stringify(browser).slice(0, 700)}`)
+  await gateOpen(project, worker)
+}
+
+/** Names a gate hold as one, instead of a later missing `merged` event. */
+async function gateOpen(project: string, worker: Worker) {
+  const verdict = await integrationGate(gateScope(project, worker))
+  assert.equal(verdict.ok, true, `landing gate open for ${worker.cwd}: ${JSON.stringify(verdict)}`)
+  assert.equal(verdict.need, 'browser', 'a static web project needs a browser check')
+  assert.ok(
+    verdict.evidence.some((item) => item.verified),
+    'the gate has a passing receipt on this exact tree'
+  )
 }
 
 async function snapshot(
@@ -442,6 +471,8 @@ async function caseRun(
     for (const id of activeSpawns)
       if (!events.some((event) => event.type === 'spawn-finished' && event.sessionId === id))
         await nativeChat.services.invoke('agent:spawn-interrupt', id).catch(() => {})
+    // Held and interrupted work keeps its private WebKit page and server until released.
+    for (const worker of workers.values()) await releaseAgentBrowsersFor(worker.cwd).catch(() => {})
     setNativeSmokeProvider(undefined)
     if (nativeWorkspace.active?.root === project) {
       await nativeWorkspace.command({ type: 'close', key: nativeWorkspace.active.key })
