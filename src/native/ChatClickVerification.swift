@@ -21,11 +21,18 @@ extension Host {
             return ["dismissed": toasts().isEmpty]
         }
         guard let manager = view.layoutManager, let container = view.textContainer else { throw fail("No layout") }
-        func lines(_ range: NSRange) -> [NSRect] {
-            var rects: [NSRect] = []
-            let glyphs = manager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-            manager.enumerateLineFragments(forGlyphRange: glyphs) { _, _, _, line, _ in
-                rects.append(manager.boundingRect(forGlyphRange: NSIntersectionRange(glyphs, line), in: container).offsetBy(dx: view.textContainerOrigin.x, dy: view.textContainerOrigin.y))
+        /// Per line the glyphs' box and, for a click, the band of their x-height on the
+        /// baseline: where a pointer lands on visible letters, whatever the line spacing.
+        func lines(_ range: NSRange) -> [(box: NSRect, body: NSRect)] {
+            var rects: [(NSRect, NSRect)] = []
+            let glyphs = manager.glyphRange(forCharacterRange: range, actualCharacterRange: nil), origin = view.textContainerOrigin
+            manager.enumerateLineFragments(forGlyphRange: glyphs) { line, _, _, lineGlyphs, _ in
+                let part = NSIntersectionRange(glyphs, lineGlyphs)
+                let box = manager.boundingRect(forGlyphRange: part, in: container).offsetBy(dx: origin.x, dy: origin.y)
+                let font = view.textStorage?.attribute(.font, at: manager.characterIndexForGlyph(at: part.location), effectiveRange: nil) as? NSFont
+                let baseline = line.minY + manager.location(forGlyphAt: part.location).y + origin.y
+                let height = font?.xHeight ?? box.height / 2
+                rects.append((box, NSRect(x: box.minX, y: baseline - height, width: box.width, height: height)))
             }
             return rects
         }
@@ -35,11 +42,11 @@ extension Host {
             guard range.location != NSNotFound else { throw fail("No \(find) in the message") }
             let all = lines(range)
             guard all.indices.contains(line) else { throw fail("\(find) has \(all.count) lines, not \(line + 1)") }
-            let rect = all[line]
+            let (box, body) = all[line]
             switch kind {
-            case "end": return NSPoint(x: view.bounds.maxX - 6, y: rect.midY)
-            case "gap": return NSPoint(x: view.bounds.midX, y: rect.minY - 5)
-            default: return NSPoint(x: rect.midX, y: rect.midY)
+            case "end": return NSPoint(x: view.bounds.maxX - 6, y: body.midY)
+            case "gap": return NSPoint(x: view.bounds.midX, y: box.minY - 5)
+            default: return NSPoint(x: body.midX, y: body.midY)
             }
         }
         let at = view.convert(try spot(c["find"] as? String ?? "", line: c["line"] as? Int ?? 0, kind: c["spot"] as? String ?? ""), to: nil)

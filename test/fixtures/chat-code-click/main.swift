@@ -67,8 +67,22 @@ func lines(_ range: NSRange) -> [NSRect] {
     }
     return result
 }
+/// Per line, the band of the glyphs' x-height on their baseline: where a pointer lands on
+/// visible letters, whatever the line spacing or the font's own metrics.
+func body(_ range: NSRange) -> [NSRect] {
+    var result: [NSRect] = []
+    let glyphs = manager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+    manager.enumerateLineFragments(forGlyphRange: glyphs) { line, _, container, lineGlyphs, _ in
+        let part = NSIntersectionRange(glyphs, lineGlyphs)
+        let box = manager.boundingRect(forGlyphRange: part, in: container)
+        let font = view.textStorage!.attribute(.font, at: manager.characterIndexForGlyph(at: part.location), effectiveRange: nil) as! NSFont
+        let baseline = line.minY + manager.location(forGlyphAt: part.location).y
+        result.append(NSRect(x: box.minX + view.textContainerOrigin.x, y: baseline - font.xHeight + view.textContainerOrigin.y, width: box.width, height: font.xHeight))
+    }
+    return result
+}
 func point(_ string: String, fraction: CGFloat = 0.5) -> NSPoint {
-    let box = lines(text.range(of: string))[0]
+    let box = body(text.range(of: string))[0]
     return NSPoint(x: box.minX + box.width * fraction, y: box.midY)
 }
 func event(_ type: NSEvent.EventType, _ at: NSPoint, clicks: Int = 1, flags: NSEvent.ModifierFlags = []) -> NSEvent {
@@ -106,14 +120,15 @@ func click(_ at: NSPoint, flags: NSEvent.ModifierFlags = []) -> String? {
 require(window.contentView?.hitTest(view.convert(point("inline  code"), to: nil)) === view, "The click lands on the text view")
 
 // Inline code: the whole payload from anywhere on it, whitespace and Unicode exact.
-require(click(point("inline  code")) == "inline  code", "Inline click: \(writes)")
+let first = click(point("inline  code"))
+require(first == "inline  code", "Inline click: \(writes), timer \(view.clickTimer != nil), selection \(view.selectedRange()), snippet \(String(describing: view.snippet(at: point("inline  code")))), chips \(view.rich.snippets.map { view.inlineFrames($0) }.prefix(2)), at \(point("inline  code"))")
 require(click(point("inline  code", fraction: 0.05)) == "inline  code", "Its first letter")
 require(click(point("inline  code", fraction: 0.97)) == "inline  code", "Its last letter")
 require(click(point("rm -rf ./nothing")) == "rm -rf ./nothing", "Code inside strong text copies, and runs nothing")
 require(click(point("caf\u{E9} \u{1F680}")) == "caf\u{E9} \u{1F680}", "Unicode stays exact")
 require(click(point("https://example.com/x")) == "https://example.com/x", "A URL in code copies and opens nothing")
 require(click(point("in table")) == "in table", "Inline code in a table cell")
-let wrapped = lines(text.range(of: longCode))
+let wrapped = body(text.range(of: longCode))
 require(wrapped.count >= 2, "The long snippet wraps: \(wrapped)")
 for line in wrapped {
     require(click(NSPoint(x: line.midX, y: line.midY)) == longCode, "Every wrapped line copies the whole snippet: \(line)")

@@ -32,8 +32,6 @@ final class ChatTextView: NSTextView {
     private var revealTimer: Timer?
     /// A released click on a snippet, waiting out the double-click interval.
     private(set) var clickTimer: Timer?
-    /// A drag that returns to its start ends with nothing selected: this remembers it.
-    private var selectedInPress = false
     private var measured: (width: CGFloat, size: CGSize)?
     private var observer: NSObjectProtocol?
 
@@ -205,21 +203,21 @@ final class ChatTextView: NSTextView {
         }
         return rich.snippets.first { snippet in inlineFrames(snippet).contains { $0.contains(point) } }
     }
-    /// A single primary click copies the snippet under it. NSTextView tracks the press in
-    /// its own loop and takes the mouse-up, so the click is judged after it returns. Only a
-    /// release where it began, that selected nothing on the way, counts; a press that clears
-    /// a selection only clears it, so it cannot replace what that selection just copied.
-    /// Links are not snippets and go on to `clicked(onLink:at:)`.
+    /// A single primary click copies the snippet under it. A press that begins on a snippet
+    /// waits here for what follows, reading the mouse events without taking them: a release
+    /// within `clickSlop` on the same snippet is the click, taken here and not by NSTextView.
+    /// Anything else (a drag, a release elsewhere) goes to NSTextView untouched, which then
+    /// tracks it as always, so selection, partial copy and every other press are its own.
+    /// Nothing depends on how NSTextView tracks a press or what `NSApp.currentEvent` is after
+    /// it. A press that clears a selection only clears it, so it cannot replace what that
+    /// selection just copied. Links are not snippets and go on to `clicked(onLink:at:)`.
     override func mouseDown(with event: NSEvent) {
         clickTimer?.invalidate(); clickTimer = nil
         let start = event.locationInWindow
         let single = event.clickCount == 1 && event.modifierFlags.isDisjoint(with: [.shift, .command, .control, .option])
-        let target = single && selectedRange().length == 0 ? snippet(at: convert(start, from: nil)) : nil
-        selectedInPress = false
-        super.mouseDown(with: event)
-        guard let target, let up = NSApp.currentEvent, up.type == .leftMouseUp,
-              hypot(up.locationInWindow.x - start.x, up.locationInWindow.y - start.y) <= Self.clickSlop,
-              !selectedInPress, snippet(at: convert(up.locationInWindow, from: nil)) == target else { return }
+        guard single, selectedRange().length == 0, let target = snippet(at: convert(start, from: nil)),
+              let up = release(of: start, on: target) else { return super.mouseDown(with: event) }
+        window?.makeFirstResponder(self)
         // The next press may be a double click's second: it cancels this, and only then
         // has the click proved to be single.
         let point = up.locationInWindow
@@ -231,6 +229,21 @@ final class ChatTextView: NSTextView {
         }
         RunLoop.main.add(timer, forMode: .common)
         clickTimer = timer
+    }
+    /// The mouse-up that ends a click begun at `start` on `target`, taken from the queue; nil
+    /// at the first drag past the slop or a release elsewhere, both left queued. Movement
+    /// within the slop is a steady hand's and is dropped.
+    private func release(of start: NSPoint, on target: ChatCodeSnippet) -> NSEvent? {
+        func far(_ event: NSEvent) -> Bool { hypot(event.locationInWindow.x - start.x, event.locationInWindow.y - start.y) > Self.clickSlop }
+        while let next = NSApp.nextEvent(matching: [.leftMouseUp, .leftMouseDragged], until: .distantFuture, inMode: .eventTracking, dequeue: false) {
+            if far(next) { return nil }
+            if next.type == .leftMouseUp {
+                guard snippet(at: convert(next.locationInWindow, from: nil)) == target else { return nil }
+                return NSApp.nextEvent(matching: [.leftMouseUp], until: .distantPast, inMode: .eventTracking, dequeue: true) ?? next
+            }
+            _ = NSApp.nextEvent(matching: [.leftMouseDragged], until: .distantPast, inMode: .eventTracking, dequeue: true)
+        }
+        return nil
     }
     private static let clickSlop: CGFloat = 4
     /// The user's double-click speed. A process cut off from the input services reads 0,
@@ -274,10 +287,7 @@ final class ChatTextView: NSTextView {
     }
     override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
-        if ranges.contains(where: { $0.rangeValue.length > 0 }) {
-            selectedInPress = true
-            NotificationCenter.default.post(name: Self.selected, object: self)
-        }
+        if ranges.contains(where: { $0.rangeValue.length > 0 }) { NotificationCenter.default.post(name: Self.selected, object: self) }
     }
 
     // MARK: Streaming reveal
