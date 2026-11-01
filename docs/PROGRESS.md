@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-31 — LKM-411 LKM-402 review follow-up: rules version, late landing, refresh base race
+
+- `TREZI_RULES_VERSION` is 47 (`test/rules.mjs` pin updated); the LKM-402 rule text had changed under version 46. The text itself is unchanged here.
+- `landing-finished` ends the peer row of the event's own turn and falls back to the chat's current turn only when the event has none. Red proof on the old line: `CONVERSATION_ONLY=agent bun test/conversation-owner.mjs` failed at the new assertion, `a late landing-finished keeps the newer turn in the peer feed`.
+- `refreshPeers` drops its result when the row's base changed during the Git await, so synced-in live edits never appear under the new base. The next refresh reads the new base. Red proof: `bun test/peer-work-feed.mjs` failed at `refresh drops paths read against the old base` (`['a.txt']`, expected `[]`). The case commits the edit in the worktree and calls `updatePeerBase` while the read is in flight, then checks that no exact-file advisory appears.
+- Native acceptance remains pending the manager's merged-main run.
+
 ## 2026-10-31 — LKM-402 review repair 2: Claude rules, refresh merge, spawn feed failure
 
 - Claude's foreground rules no longer tell it to call `prepare_conflict_resolution` (its MCP server registers only `workspace_state`) or forbid the terminal fallback: `treziRules` takes `workspaceStateOnly`, Claude passes it, and Codex's text is unchanged. `test/rules.mjs` asserts the Claude rules (foreground and background) name no missing tool.

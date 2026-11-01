@@ -20,7 +20,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 46, 'version bumped to 46')
+assert(TREZI_RULES_VERSION === 47, 'version bumped to 47')
 // LKM-281: a merge waits for the user's card; no model-supplied flag approves it.
 assert(!/confirmed: true/.test(r), 'no model-supplied merge confirmation')
 assert(/publish_merge first shows the user a card/.test(r), 'merge waits for the host card')
