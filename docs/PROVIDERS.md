@@ -1081,7 +1081,9 @@ Codex checks its bridge (`workspace_state`) while its helper is still opening.
 | `open_preview`, `open_code` | routed | routed | the window that navigates the preview or reveals code |
 | `reload_preview`, `restart_dev_server` | routed | routed | the window that reloads the preview or restarts its dev server |
 | `project_ui_catalog`, `compose_project_ui` | routed | routed | the chat's Experimental Gen UI state |
-| `workspace_state`, `prepare_conflict_resolution` | — | routed | chat-isolation state (worktree, parked batch) |
+| `workspace_state` | routed | routed | chat-isolation state (worktree, parked batch) and the peer feed |
+| `peer_lookup` | routed | routed | the peer feed and that peer's worktree, read-only (`src/main/peer-lookup.ts`) |
+| `prepare_conflict_resolution` | — | routed | chat-isolation state (worktree, parked batch) |
 | `install_skills` | routed | — | nothing: retired, it answers with the Settings → Skills redirect (LKM-286) |
 | `spring_to_css`, `check_contrast`, `fluid_clamp`, `color_scale`, `layered_shadow`, `line_height`, `list_recommended_skills` | in the helper | — | nothing (pure) |
 
@@ -1105,6 +1107,16 @@ unlanded changes against the turn's base revision. `possible-overlap` covers int
 file intersections and incomplete file observations. Neither a missing advisory nor
 different observed files claims that simultaneous work is safe; the source gate
 alone controls landing.
+
+`peer_lookup` (LKM-403) has one contract for Claude and Codex, foreground and
+background: the same name, arguments, description, auto-allowed policy and bounded
+answer. An unknown, own or other-project id answers exactly `{ "found": false }`.
+`same-target` advisories are known; `semantic-uncertain` ones are not, and neither
+is a safety claim. Tool results may carry an untrusted `peerUpdate`, as no
+mid-generation push is assumed. A reconciliation that cannot keep both goals ends with
+`DECISION NEEDED: <question>`, and that question goes to the user; when the user
+answers, the agent applies the choice and ends with `DECISION MADE: <choice>`. See
+[`docs/WORKTREES.md`](WORKTREES.md#peer-lookup-freshness-and-resolution-with-both-goals-lkm-403).
 
 ## Claude resume recovery (LKM-165)
 

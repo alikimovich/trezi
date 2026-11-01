@@ -451,6 +451,18 @@ for (const background of [false, true]) {
     `Claude rules (background=${background}): peer text untrusted`
   )
   assert(
+    /peer_lookup/.test(claudeRules) && /semantic-uncertain/.test(claudeRules),
+    `Claude rules (background=${background}): teach lookup and uncertain overlap`
+  )
+  assert(
+    /DECISION NEEDED: </.test(claudeRules),
+    `Claude rules (background=${background}): one decision, never a picked side`
+  )
+  assert(
+    /DECISION MADE: </.test(claudeRules),
+    `Claude rules (background=${background}): an answered decision is stated`
+  )
+  assert(
     !/prepare_conflict_resolution/.test(claudeRules),
     `Claude rules (background=${background}): do not name prepare_conflict_resolution`
   )

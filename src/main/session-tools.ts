@@ -16,6 +16,7 @@ import {
   agentWorkspaceEvidence,
   agentWorkspaceState,
   landNow,
+  parkedResolution,
   reconcilePark,
   resolveParkedChat
 } from './chat-isolation'
@@ -25,7 +26,8 @@ import { runChecksTool, runCommandCheck } from './command-checks'
 import { landingChecks, setCheckReplayer } from './integration-gate'
 import { noteServedRevision } from './landing-context'
 import { treziLiveEffect } from './live-change-watch'
-import { peerTurn, peerView } from './peer-work'
+import { peerLookup } from './peer-lookup'
+import { peerCheckpoint, peerTurn, peerView } from './peer-work'
 import { type PreviewToolResult, runPreviewAgentTool } from './preview-agent-tools'
 import { identityText, isPreviewObserver, observeAgentPreview } from './preview-observation-tools'
 import { agentPreviewOverlay } from './preview-overlay'
@@ -62,6 +64,7 @@ export interface ToolScope {
 export type SessionTool = TreziAgentToolAction | 'install_skills'
 export const SESSION_TOOLS: readonly SessionTool[] = [
   'workspace_state',
+  'peer_lookup',
   'prepare_conflict_resolution',
   'git_sync_base',
   'git_merge_continue',
@@ -118,9 +121,35 @@ export const LIVE_EFFECT_TOOLS: ReadonlySet<SessionTool> = new Set<SessionTool>(
   'install_skills'
 ])
 
+/** The tool returns where peers are worth another look (LKM-403). A provider cannot be
+ *  pushed to mid-generation, so these answers carry what changed since it last looked. */
+const PEER_CHECKPOINTS: ReadonlySet<SessionTool> = new Set<SessionTool>([
+  'run_checks',
+  'preview_verify',
+  'land_now',
+  'prepare_conflict_resolution'
+])
+
+async function withPeerUpdate(result: unknown, s: ToolScope): Promise<unknown> {
+  const peerUpdate = await peerCheckpoint(s.liveRoot, s.peerId ?? peerTurn(s.emitKey)).catch(
+    () => null
+  )
+  if (!peerUpdate || !result || typeof result !== 'object') return result
+  const answer = result as { content?: unknown }
+  return Array.isArray(answer.content)
+    ? {
+        ...result,
+        content: [...answer.content, { type: 'text', text: JSON.stringify({ peerUpdate }) }]
+      }
+    : { ...result, peerUpdate }
+}
+
 /** Runs one session tool; every call is timed and logged with its phases (LKM-200). */
 export function runTreziTool(action: SessionTool, args: unknown, s: ToolScope): Promise<unknown> {
-  const run = () => runTool(action, args, s)
+  const run = async () => {
+    const result = await runTool(action, args, s)
+    return PEER_CHECKPOINTS.has(action) ? withPeerUpdate(result, s) : result
+  }
   return timedToolCall(s.emitKey, String(action), () =>
     LIVE_EFFECT_TOOLS.has(action) ? treziLiveEffect(s.liveRoot, run) : run()
   )
@@ -329,6 +358,7 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
   // A background agent may inspect only peers, never its parent chat's park or gate.
   if (action === 'workspace_state' && s.background)
     return { peerWork: await peerView(s.liveRoot, s.peerId ?? '') }
+  if (action === 'peer_lookup') return peerLookup(args, s)
   if (s.background)
     return {
       ok: false,
@@ -388,9 +418,11 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
   }
   const prepared = await resolveParkedChat(s.emitKey)
   const state = agentWorkspaceState(s.emitKey)
+  const context = parkedResolution(s.emitKey)
   return {
     ...prepared,
     ...state,
+    ...(prepared.conflicted.length && context ? { resolutionContext: context } : {}),
     guidance: prepared.ok
       ? prepared.conflicted.length
         ? 'Resolve every conflict marker in the listed files, then finish the turn normally.'

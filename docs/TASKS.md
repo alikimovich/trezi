@@ -20,6 +20,19 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: full-path overlap identities and uncertainty, base-revision observation, per-project caps, delayed Stop/finish cleanup, and helper/lifecycle regression fixtures.
 - [x] LKM-411 follow-up: rules version 47, a late `landing-finished` keeps the newer turn's row, and a base sync during refresh drops paths read against the old base.
 - [ ] Manager: run the relevant native suite on merged main; worker has zero native calls.
+
+## Coordinated parallel work: lookup, freshness and resolution (LKM-403)
+
+- [x] Red baseline, then green final source, in disposable Git repos with stub providers through the real lifecycle (`test/peer-coordination.mjs`).
+- [x] Repair after review: a held decision survives its answer turn (a clarifying message re-holds a checked one-sided tree; `DECISION MADE:` is the explicit choice), and the gate note of a reconciled chat names the peers it combined with.
+- [x] Repair 2: a held tree that matches neither side (clean peer lines elsewhere) is released only by an edit of the conflicted files or `DECISION MADE:`, also for `land_now`.
+- [x] `peer_lookup` for foreground and background, Claude and Codex: same-project, bounded, exact provenance, untrusted data.
+- [x] Peer freshness at tool checkpoints, the landing gate and reconciliation.
+- [x] Known target and uncertain cross-file advisories, never a safety claim.
+- [x] Resolution prompts with both goals, base/current/own diffs and acceptance checks within 16 KiB.
+- [x] Incompatible goals stay unlanded with one user decision and a recovery branch; retry limits unchanged.
+- [ ] Manager: run the relevant native suite on merged main; worker has zero native calls.
+
 ## Single live writer admission (LKM-404)
 
 - [x] Reproduce concurrent live turns with scripted providers in disposable nested Git and non-Git projects (red quick verification).

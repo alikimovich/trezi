@@ -307,15 +307,28 @@ final class ConversationOwner: @unchecked Sendable {
                 let possible = Set(own.intendedKeys).intersection(peer.intendedKeys)
                 let uncertain = own.observedTruncated || peer.observedTruncated ||
                     own.intendedTruncated || peer.intendedTruncated
-                guard !exact.isEmpty || !possible.isEmpty || uncertain else { return nil }
+                let targets = Set(own.targets).intersection(peer.targets).sorted()
+                let terms = Set(own.terms).intersection(peer.terms).sorted()
+                guard !exact.isEmpty || !possible.isEmpty || uncertain || !targets.isEmpty || !terms.isEmpty else {
+                    return nil
+                }
                 let named = exact.isEmpty ? Set(own.intendedFiles).intersection(peer.intendedFiles).sorted() :
                     own.observedFiles.enumerated().compactMap { index, path in
                         let key = own.observedDisplayKeys[index]
                         return exact.contains(key) && peer.observedDisplayKeys.contains(key) ? path : nil
                     }
-                return Self.object([("peer", .string(JSText(peer.id))),
-                                    ("kind", .string(JSText(exact.isEmpty ? "possible-overlap" : "exact-file"))),
-                                    ("files", RepositoryOwner.strings(Array(named.prefix(2))))])
+                // Known means the same file or target. Anything inferred stays uncertain: a shared
+                // word across different files is a reason to look, never a verdict either way.
+                let kind = !exact.isEmpty ? "exact-file" : !targets.isEmpty ? "same-target" :
+                    !possible.isEmpty || uncertain ? "possible-overlap" : "semantic-uncertain"
+                var fields: [(String, JSValue)] = [
+                    ("peer", .string(JSText(peer.id))), ("kind", .string(JSText(kind))),
+                    ("certainty", .string(JSText(exact.isEmpty && targets.isEmpty ? "uncertain" : "known"))),
+                    ("files", RepositoryOwner.strings(Array(named.prefix(2))))
+                ]
+                if !targets.isEmpty { fields.append(("targets", RepositoryOwner.strings(Array(targets.prefix(2))))) }
+                if !terms.isEmpty { fields.append(("terms", RepositoryOwner.strings(Array(terms.prefix(3))))) }
+                return Self.object(fields)
             }
             var response = Self.object([("rows", .array(rows.map(\.value))), ("advisories", .array(advisory))])
             while response.utf8().count > 6144 && !rows.isEmpty {
@@ -488,6 +501,9 @@ private struct PeerRow {
     let intendedTruncated: Bool
     let observedTruncated: Bool
     let target: String
+    /// Known component/element targets and goal terms: matched here, never returned on a row.
+    let targets: [String]
+    let terms: [String]
     let base: String
     let phase: String
     let heartbeat: Double
@@ -500,6 +516,12 @@ private struct PeerRow {
     private static func text(_ value: JSValue?, max: Int) throws -> String {
         guard let text = value?.text?.string else { throw ServiceContractFailure.invalidRequest }
         return String(text.prefix(max)).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    }
+
+    private static func signals(_ value: JSValue?, count: Int, max: Int) throws -> [String] {
+        guard let value else { return [] }
+        guard case .array(let values) = value, values.count <= count else { throw ServiceContractFailure.invalidRequest }
+        return try values.map { try text($0, max: max) }
     }
 
     private static func files(_ value: JSValue?) throws -> ([String], [String], [String], Bool) {
@@ -536,6 +558,8 @@ private struct PeerRow {
         if case .bool(let flag)? = value?["observedTruncated"] { observedTruncated = observed.3 || flag }
         else { observedTruncated = observed.3 }
         target = try Self.text(value?["target"] ?? .string(JSText("")), max: 100)
+        targets = try Self.signals(value?["targets"], count: 8, max: 100)
+        terms = try Self.signals(value?["terms"], count: 16, max: 32)
         base = try Self.text(value?["base"], max: 64)
         phase = try Self.text(value?["phase"], max: 24)
         heartbeat = at
@@ -550,7 +574,8 @@ private struct PeerRow {
         intendedKeys = old.intendedKeys; observedKeys = old.observedKeys
         observedDisplayKeys = old.observedDisplayKeys
         intendedTruncated = old.intendedTruncated; observedTruncated = old.observedTruncated
-        target = old.target; base = old.base; phase = old.phase
+        target = old.target; targets = old.targets; terms = old.terms
+        base = old.base; phase = old.phase
         heartbeat = old.heartbeat; self.version = version
     }
 

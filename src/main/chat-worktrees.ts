@@ -32,7 +32,7 @@ import { createWorktree, type Worktree } from './worktrees'
 const execFileP = promisify(execFile)
 
 /** Binary-safe `git show <ref>:<path>` — `null` when the path didn't exist at that ref. */
-const readBlobAt = async (cwd: string, ref: string, rel: string): Promise<Buffer | null> => {
+export const readBlobAt = async (cwd: string, ref: string, rel: string): Promise<Buffer | null> => {
   try {
     const res = (await execFileP('git', ['show', `${ref}:${rel}`], {
       cwd,
@@ -230,6 +230,14 @@ export interface ResolvePrep {
   /** Every file the chat's branch touched (the resolution turn's blast radius). */
   files: string[]
   clean: boolean
+  /** The revisions this stage combined, when the worktree's tip could be read. */
+  stage: ResolveStage | null
+}
+
+export interface ResolveStage {
+  base: string
+  own: string
+  current: string
 }
 
 /**
@@ -246,6 +254,12 @@ export async function stageResolve(liveRoot: string, wt: Worktree): Promise<Reso
   // Setup helpers live under excluded `.trezi/` paths, so syncing them first never
   // makes the worktree look changed to the service's parked-state check.
   await editingOwner().syncSetupHelpers(liveRoot, wt.path)
+  const base = wt.baseSha
+  // The owner keeps a recovery ref of this tip, so it stays readable after the reset.
+  const own = await execFileP('git', ['rev-parse', 'HEAD'], { cwd: wt.path, timeout: 5000 }).then(
+    ({ stdout }) => stdout.trim(),
+    () => ''
+  )
   const { conflicted, files, clean, baseSha } = await repositoryOwner().stageResolve({
     ...wt,
     repoRoot: liveRoot
@@ -257,7 +271,7 @@ export async function stageResolve(liveRoot: string, wt: Worktree): Promise<Reso
     conflicted: conflicted.length,
     files: files.length
   })
-  return { conflicted, files, clean }
+  return { conflicted, files, clean, stage: own ? { base, own, current: baseSha } : null }
 }
 
 /**

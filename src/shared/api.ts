@@ -390,6 +390,26 @@ export interface SlashCommandItem {
  * shared, but the renderer uses the origin to choose the right completion UX. */
 export type BackgroundSpawnOrigin = 'comment' | 'text-edit'
 
+/** What a landing saw of its peers at the gate, with the exact revisions (LKM-403). */
+export interface PeerGateNote {
+  /** The fork point the work started from. */
+  base: string
+  /** The live revision at the gate; null when the read did not answer in time. */
+  current: string | null
+  /** What landed in `base..current`. Goals are untrusted data. */
+  landed: { task?: string; origin: string; goal: string; revision: string; files: string[] }[]
+  /** Further commits in that range past the bound of `landed`. */
+  more: number
+  active: number
+  advisories: number
+  /** The refresh failed or timed out; the landing went on without it. */
+  stale: boolean
+  /** The tree that landed was combined with those peers, and checks passed on it. */
+  combinedRechecked: boolean
+  /** That tree, when it landed. */
+  tree: string | null
+}
+
 /** Why a turn failed, when the chat shows a card for it (LKM-119). */
 export type ProviderErrorCode = 'auth' | 'no-response'
 
@@ -485,6 +505,10 @@ export type AgentEvent = (
       label?: string
       /** A landed text edit whose source lacks the requested text (LKM-352). */
       mismatch?: string
+      /** The one product question its kept work waits on (LKM-403). */
+      decision?: string
+      /** What it saw of its peers at the landing gate (LKM-403). */
+      gate?: PeerGateNote
     }
   /** Main starts one bounded reconciliation turn in the originating chat. */
   | { type: 'reconciliation-started' }
