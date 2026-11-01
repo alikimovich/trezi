@@ -1523,11 +1523,10 @@ export async function runNativeCoreSmoke(
       run: () => checkCodeLinkClick(host, fixture, artifacts),
       cleanup: () => restoreCodeLinkClick(host, fixture)
     },
-    // After the checks that read message frames: its long replies stay in the shared chat.
     {
       name: 'parallel-stream',
       dependsOn: ['chat-ready'],
-      run: () => checkParallelStream(host, artifacts),
+      run: () => checkParallelStream(host, fixture, artifacts),
       cleanup: () => restoreParallelStream(host)
     },
     {

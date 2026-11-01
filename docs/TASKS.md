@@ -3,6 +3,10 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native suite failure on main d46cde775ea2 (LKM-412)
+
+- [x] `parallel-stream` streams its two chats in a disposable Git project, since LKM-404 admits one writer turn in the suite's non-Git project.
+
 ## Coordinated parallel work: peer feed (LKM-402)
 
 - [x] Red code-gap reproduction in disposable Git repos and the Swift conversation fixture; historical incident remains unverified.

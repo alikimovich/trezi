@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-31 — LKM-412 parallel-stream runs in a Git project
+
+- Cause, from the failed run's artifacts: `failure-parallel-stream.png` shows chat B on `Waiting: Another chat is editing this live project.` That is LKM-404's admission working as specified. The suite's `Folder Alpha` has no Git repository, so its chats share the live folder and B cannot start while A's turn is open; the check timed out at 10 s of a 120 s wait. It was the run's only failing check.
+- No product change. `parallel-stream` now creates a disposable Git project, runs both chats there with real per-chat worktrees (asserted before each send, so a non-isolated project fails by name instead of by timeout), and then returns to the suite's project and chat and closes the disposable one. Setup waits are 30 s for project open, worktree fork and first send; the stream steps keep their bounds.
+- The old comment about long replies staying in the shared chat is gone: the check no longer writes there. `test/native-chat-parallel-stream.mjs` pins the setup order, the worktree assertion and the restore order.
+
 ## 2026-10-31 — LKM-402 review repair 2: Claude rules, refresh merge, spawn feed failure
 
 - Claude's foreground rules no longer tell it to call `prepare_conflict_resolution` (its MCP server registers only `workspace_state`) or forbid the terminal fallback: `treziRules` takes `workspaceStateOnly`, Claude passes it, and Codex's text is unchanged. `test/rules.mjs` asserts the Claude rules (foreground and background) name no missing tool.
