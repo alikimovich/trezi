@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { createRecordCapture } from '../src/main/backends/record.ts'
 import { setConversationOwner, swiftConversationOwner } from '../src/main/conversation-owner.ts'
-import { peerChanged, peerRow } from '../src/main/peer-work.ts'
+import { peerChanged, peerRow, peerTurn } from '../src/main/peer-work.ts'
 import { newChat, reduce } from '../src/native/chat-state.ts'
 import { projectKey } from '../src/shared/projectKey.ts'
 
@@ -93,8 +93,9 @@ const LINES = Array.from({ length: 30 }, (_, i) => `line ${i}`)
 const page = (changes = {}) => `${LINES.map((line, i) => changes[i] ?? line).join('\n')}\n`
 
 let repos = 0
-function project() {
-  const repo = join(temp, `repo-${++repos}`)
+/** `pad` lengthens the project's path, and so every row the owner holds of it. */
+function project(pad = '') {
+  const repo = join(temp, `repo-${++repos}`, pad)
   mkdirSync(join(repo, 'src'), { recursive: true })
   const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim()
   git('init', '-q')
@@ -190,10 +191,10 @@ const measure = (name, value) => {
   measured[name] = Math.max(measured[name] ?? 0, value)
 }
 const failures = []
-async function scenario(name, run) {
+async function scenario(name, run, pad) {
   const started = performance.now()
   try {
-    await run(project())
+    await run(project(pad))
     measure(`${name} ms`, Math.round(performance.now() - started))
     console.log(`  ok: ${name}`)
   } catch (error) {
@@ -315,6 +316,43 @@ try {
       for (const row of ghosts) await owner.peerRemove(row.id)
     }
   })
+
+  // The owner trims the rows it lists to 4096 bytes. What the card shows, and whether a wait
+  // can start, must not depend on which peers' rows fitted.
+  await scenario(
+    'lines and waits do not depend on which rows fit the owner cap',
+    async (p) => {
+      const chat = await openChat(p)
+      await send(chat, 'Update src/Hero.tsx heading')
+      const peers = []
+      for (const part of ['subtitle', 'footer', 'caption'])
+        peers.push(await comment(p, `Update src/Hero.tsx ${part}`))
+      for (const peer of peers) {
+        for (let i = 0; i < 4; i++)
+          put(peer, `assets/${'w'.repeat(60)}-${peer.id.slice(0, 6)}-${i}.txt`, 'x\n')
+        peer.session.emit({ type: 'status', text: 'Edit' })
+      }
+      await wait(() => shown(chat).length === 3, 'all three overlaps to show')
+      await quiet()
+      const view = await swiftConversationOwner().peers(p.repo, peerTurn(chat.key))
+      assert.ok(view.rows.length < peers.length, 'the rows together exceed the owner cap')
+      measure('owner rows listed of 3', view.rows.length)
+      measure('owner response bytes', Buffer.byteLength(JSON.stringify(view)))
+      assert.equal(view.advisories.length, 3, 'and every overlap is still advised')
+      const first = peersOf(chat)
+      assert.deepEqual(first, peers.map((peer) => peer.id).sort())
+      const before = states(chat).length
+      // The oldest peer stays still; the others publish alternately.
+      await churn(p, peers.slice(1), 6)
+      assert.deepEqual(peersOf(chat), first, 'the same peers are shown')
+      assert.equal(states(chat).length, before, 'publishing alternately renders nothing')
+      const held = waitOn(p, chat, peers[0])
+      await waiting(chat)
+      await invoke('agent:spawn-interrupt', peers[0].id)
+      assert.equal((await held.answer).outcome, 'ended', 'the wait on the oldest peer started')
+    },
+    join(...Array(7).fill('p'.repeat(100)))
+  )
 
   await scenario('a shared word reads as uncertain, never as safe or known', async (p) => {
     await comment(p, 'Rework the checkout pricing copy in src/Hero.tsx')

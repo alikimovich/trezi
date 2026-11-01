@@ -430,6 +430,55 @@ try {
   await started.cmd({ cmd: 'advance', ms: 105_001 })
   assert.equal((await waiting.peers(a, 'w1')).wait, undefined, 'the owner caps every wait')
 
+  // LKM-406: advisories do not depend on which rows fit the 4096-byte row cap, nor on the
+  // order the peers last published in (every upsert bumps a version).
+  const wide = repo('wide')
+  const fat = (id) => {
+    const files = ['shared.txt', ...[0, 1, 2].map((i) => `${'w'.repeat(70)}-${id}-${i}.txt`)]
+    return {
+      ...task(id, wide, 'comment', files),
+      goal: `${id} `.padEnd(160, 'g'),
+      target: 't'.repeat(100),
+      parent: 'p'.repeat(128)
+    }
+  }
+  const crowd = ['wide-1', 'wide-2', 'wide-3', 'wide-4']
+  for (const id of ['wide-own', ...crowd]) await waiting.peerUpsert(fat(id))
+  const crowded = async () => waiting.peers(wide, 'wide-own')
+  const first = await crowded()
+  assert.ok(first.rows.length < crowd.length, 'the peers together exceed the rows byte cap')
+  assert.deepEqual(
+    first.advisories.map((item) => [item.peer, item.kind, item.certainty]),
+    crowd.map((id) => [id, 'exact-file', 'known']),
+    'every overlapping peer is advised, in the order of its id, whatever fitted'
+  )
+  for (let round = 0; round < 4; round++) {
+    for (const id of round % 2 ? crowd : [...crowd].reverse()) await waiting.peerUpsert(fat(id))
+    const again = await crowded()
+    assert.deepEqual(again.advisories, first.advisories, 'republishing changes no advisory')
+    assert.deepEqual(
+      again.rows.map((row) => row.id),
+      first.rows.map((row) => row.id),
+      'nor which rows are listed'
+    )
+  }
+  const outside = crowd.find((id) => !first.rows.some((row) => row.id === id))
+  assert.ok(outside, 'a contended peer outside the rows')
+  assert.equal((await waiting.peerWaitBegin('wide-own', outside, wide, 10_000)).started, true)
+  const awaited = await crowded()
+  assert.equal(awaited.wait.peer, outside)
+  assert.ok(
+    awaited.rows.some((row) => row.id === outside),
+    'the peer waited on keeps its row'
+  )
+  assert.deepEqual(awaited.advisories, first.advisories)
+  const wideBytes = Buffer.byteLength(JSON.stringify(awaited))
+  assert.ok(wideBytes <= 6144, 'the response stays under its cap')
+  await waiting.peerWaitEnd('wide-own')
+  console.log(
+    `PEER-WORK-FEED wide crowd rows=${first.rows.length} of ${crowd.length} advisories=${first.advisories.length} bytes=${wideBytes}`
+  )
+
   await waiting.peerUpsert({ ...task('w1', a, 'comment', ['a.txt']), phase: 'reconciling' })
   assert.equal(
     (await waiting.peers(a, 'w2')).rows.find((row) => row.id === 'w1').phase,

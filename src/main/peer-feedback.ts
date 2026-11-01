@@ -46,8 +46,10 @@ const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 const order = (a: PeerFeedbackLine, b: PeerFeedbackLine): number =>
   rank(a) - rank(b) || compare(a.peer, b.peer) || compare(a.kind, b.kind)
 
-function linesFor(row: PeerWorkRow, view: PeerWorkView): PeerFeedbackLine[] {
-  const peers = new Map(view.rows.map((peer) => [peer.id, peer]))
+/** `known` is Bun's own rows of the project: the owner trims its rows by bytes, and what a
+ *  line says of a peer (its origin, goal and phase) must not depend on what fitted. */
+function linesFor(row: PeerWorkRow, view: PeerWorkView, known: PeerWorkRow[]): PeerFeedbackLine[] {
+  const peers = new Map([...view.rows, ...known].map((peer) => [peer.id, peer]))
   const lines: PeerFeedbackLine[] = []
   if (view.wait) {
     const peer = peers.get(view.wait.peer)
@@ -94,13 +96,14 @@ async function flush(project: string): Promise<void> {
   const owner = swiftConversationOwner()
   if (!owner) return
   const next = new Map<string, Omit<Route, 'digest'> & { lines: PeerFeedbackLine[] }>()
-  for (const row of peerRows(project)) {
+  const known = peerRows(project)
+  for (const row of known) {
     if (row.origin === 'text-edit') continue
     const route = routeOf(row)
     const view = await owner.peers(row.project, row.id)
     next.set(`${route.projectKey}\0${route.sessionId ?? ''}`, {
       ...route,
-      lines: linesFor(row, view)
+      lines: linesFor(row, view, known)
     })
   }
   const before = shown.get(project) ?? new Map<string, Route>()

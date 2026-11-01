@@ -53,6 +53,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Native fixture assertion for the cards and the decision (`src/native/smoke-chat-peer.ts`, group `chat`).
 - [x] Review repair 2: a re-held decision always reaches the chat and pauses the queue; the snapshot restores the decision for a rebuilt chat.
 - [x] Review repair 4: lines ordered by content (peer, kind), so heartbeats and unrelated files never re-send a state or swap the shown peers; `peer_wait` bound 100 s under the service's 120 s helper tool deadline; a rebuilt park keeps its held decision.
+- [x] Review repair 5: the owner's advisories no longer depend on the 4096-byte row cap (rows trimmed, advisories kept); the card and `peer_wait` stay the same whichever rows fit.
 - [ ] Manager: run the native suite on merged main; worker has zero native calls.
 
 ## Single live writer admission (LKM-404)
