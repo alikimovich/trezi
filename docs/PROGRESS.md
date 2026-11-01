@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-31 — LKM-413 marquee smoke waits for the hold
+
+- Cause, from the failed run's artifacts: the smoke called the scroll finished at `offset >= travel - 0.5`, which is true one frame before the last step. `sidebar-marquee-selected-end.json` holds offset 276.5 of travel 277, and `fadeTrailing` 0.0357 is exactly 0.5 / 14. The other three stages landed on the exact end (`offset == travel`). The one-shot read of the hold then still saw that frame.
+- The product finished the scroll. Column profiles of the title's last glyph put `sidebar-marquee-selected-end.png` 1 px right of the true end (`narrow-selected-end`, same bold title), and `failure-sidebar-chats.png`, saved 214 ms after the end JSON, on it. So the title reached its end soon after the read; no product change and no CHANGELOG line.
+- Not established: why the final step came so late. It should have run during the asynchronous capture. The capture's synchronous OCR on the main actor is a suspect, but it replies before the next request, so that alone does not explain the read. The fix does not depend on the answer.
+- `marqueeAtEnd` (`src/native/smoke-sidebar-marquee.ts`) needs `travel - offset < 0.5`, which only the snapped end meets, so the end capture and every hold assertion read the stopped title. The fade assertion stays a separate check. `test/sidebar-marquee.mjs` pins 276.5 of 277 as still scrolling; the old predicate returns true for it.
+
 ## 2026-10-31 — LKM-412 parallel-stream runs in a Git project
 
 - Cause, from the failed run's artifacts: `failure-parallel-stream.png` shows chat B on `Waiting: Another chat is editing this live project.` That is LKM-404's admission working as specified. The suite's `Folder Alpha` has no Git repository, so its chats share the live folder and B cannot start while A's turn is open; the check timed out at 10 s of a 120 s wait. It was the run's only failing check.
