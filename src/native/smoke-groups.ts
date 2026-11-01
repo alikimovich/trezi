@@ -129,6 +129,8 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'chat-ui': ['chat'],
   'code-link-click': ['chat'],
   'parallel-stream': ['chat', 'sidebar'],
+  'mixed-origin-compatible': ['chat'],
+  'mixed-origin-incompatible': ['chat'],
   'quit-alert': ['chat'],
   composer: ['composer'],
   'chat-drafts': ['composer'],
