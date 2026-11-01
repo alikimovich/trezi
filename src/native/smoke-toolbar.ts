@@ -52,6 +52,7 @@ export const pick = (state: Toolbar) => ({
   branchChevronGap: state.branchChevronGap,
   moreVisible: state.moreVisible,
   interactionSegments: state.interactionSegments,
+  toolSegments: state.toolSegments,
   islandDividers: state.islandDividers,
   publishVisible: state.publishVisible,
   publishMeasured: state.publishMeasured,
@@ -229,11 +230,17 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
       width >= MORE_MINIMUM_WINDOW,
       `Toolbar ${name}: the "…" item shows only in windows of ${MORE_MINIMUM_WINDOW} pt or more (${width} pt)`
     )
-    // LKM-213: slow motion is the interaction group's last segment, in the same windows as "…".
+    // LKM-213: slow motion leaves the interaction group in the same windows as "…".
+    // LKM-430: Mark up stays at every width, and the device switch is in the tools group.
     assert.deepEqual(
       settled.interactionSegments,
-      ['select-object', 'device', 'overlay', ...(moreShown ? ['speed'] : [])],
-      `Toolbar ${name}: select | device | ruler${moreShown ? ' | slow motion' : ''}`
+      ['select-object', 'overlay', ...(moreShown ? ['speed'] : []), 'markup'],
+      `Toolbar ${name}: select | ruler${moreShown ? ' | slow motion' : ''} | mark up`
+    )
+    assert.deepEqual(
+      settled.toolSegments,
+      ['code', 'layers', 'device', 'expand'],
+      `Toolbar ${name}: code | layers | device | expand`
     )
     const pinnedInset = pinnedInsets.get(moreShown) ?? inset
     pinnedInsets.set(moreShown, pinnedInset)

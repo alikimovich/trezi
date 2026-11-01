@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { runFixture, swiftBuild } from './helpers/swift-build.mjs'
 
 // LKM-380: in full screen the first ⌘. (Actions → Toggle UI) left full screen. The fixture
@@ -107,6 +107,67 @@ if (process.platform !== 'darwin') {
   assert.equal(report['russian.routed'], true, dump)
   assert.equal(report['toolbarWindow.routed'], true, dump)
   if (report['otherWindow.distinct']) assert.equal(report['otherWindow.routed'], false, dump)
+
+  // LKM-430: ⌥⌘F with the focus in the preview, the composer, the code editor, the address
+  // field or nowhere reaches Send Feedback… once, ahead of the views, in both window modes.
+  for (const mode of ['full', 'windowed'])
+    for (const focus of focuses) {
+      const entry = report[`${mode}.feedback.${focus}`]
+      const label = `${mode} ⌥⌘F in ${focus}: ${JSON.stringify(entry)}`
+      assert.equal(entry.route, 'menu-first', label)
+      assert.equal(entry.opens, 1, label)
+      assert.equal(entry.finds, 0, label)
+      assert.equal(entry.exits, 0, label)
+      assert.deepEqual(entry.cancels, [], label)
+      assert.equal(entry.focus, true, label)
+    }
+  // Without the filter the focused preview takes it, the reason it is listed.
+  for (const mode of ['full', 'windowed']) {
+    const entry = report[`${mode}.feedbackUnfiltered.preview`]
+    assert.equal(entry.route, 'view', `${mode}: WebKit claims ⌥⌘F: ${dump}`)
+    assert.equal(entry.opens, 0, `${mode}: the menu never sees ⌥⌘F: ${dump}`)
+  }
+  // Find stays Find, from a text view and from the preview's own handling.
+  assert.equal(report['keys.find'].routed, false, dump)
+  assert.deepEqual(report['keys.find'].opens, 0, dump)
+  assert.equal(report['keys.find'].finds, 1, `⌘F is Find: ${dump}`)
+  assert.equal(report['keys.findPreview'].routed, false, dump)
+  assert.equal(report['keys.findPreview'].opens, 0, dump)
+  // ⌃⌘F, ⌥F (types ƒ), ⇧⌥⌘F and ⌥⌘I (Web Inspector) are none of Trezi's feedback, and full
+  // screen is never intercepted or exited.
+  for (const name of ['fullScreen', 'optionF', 'shiftOptionCommandF', 'inspector']) {
+    const entry = report[`keys.${name}`]
+    assert.equal(entry.routed, false, `${name} is not routed: ${dump}`)
+    assert.equal(entry.opens, 0, `${name} does not open the form: ${dump}`)
+    assert.equal(entry.finds, 0, `${name} is not Find: ${dump}`)
+    assert.equal(entry.exits, 0, `${name} leaves full screen alone: ${dump}`)
+  }
+  assert.deepEqual(report['keys.russian'], { routed: true, opens: 1 }, dump)
+  assert.equal(report['keys.sheetRouted'], false, `a sheet keeps its keys: ${dump}`)
+  assert.deepEqual(report['keys.tracking'], { passed: true, opens: 0 }, dump)
+  assert.equal(report['keys.repeat'].opens, 1, `one menu action per key event: ${dump}`)
+  assert.deepEqual(report['keys.textBindings'].bound, [], dump)
+
+  // The binding is shared, not copied: the menu item takes it from the routed list, and no
+  // other menu, key monitor or view in the app uses the F key with these modifiers.
+  const source = (name) => readFileSync(`src/native/${name}`, 'utf8')
+  const menus = source('HostMenus.swift')
+  assert.match(menus, /"Send Feedback…", MenuFirstShortcut\.feedback\.key, "feedback"/)
+  assert.match(menus, /keyEquivalentModifierMask = MenuFirstShortcut\.feedback\.modifiers/)
+  assert.match(source('MenuFirstShortcuts.swift'), /= \[\("\.", \.command\), feedback\]/)
+  for (const name of readdirSync('src/native').filter((file) => file.endsWith('.swift'))) {
+    const text = source(name)
+    const uses = text.match(/keyEquivalent: "[fF]"|KeyShortcut\.matches\([^\n]*"[fF]"/g) ?? []
+    assert.deepEqual(
+      uses,
+      name === 'HostMenus.swift' ? ['keyEquivalent: "f"'] : [],
+      `${name}: the F key has one menu use, Find`
+    )
+  }
+  // The action only opens the form: the menu routes to the sheet, and nothing submits there.
+  const actions = source('index.ts')
+  assert.match(actions, /\['new-project', 'settings', 'feedback', 'diagnose'\]/)
+  assert.ok(!/feedback:submit/.test(actions), 'the shortcut path has no submit')
 
   // The host installs the filter.
   const host = readFileSync('src/native/Host.swift', 'utf8')

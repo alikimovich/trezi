@@ -8,7 +8,7 @@ extension Host {
         markup = PreviewMarkup(parent: canvas, emit: { emit($0) }, refusal: { [weak self] in self?.markupRefusal },
                                capture: { [weak self] done in self?.captureForMarkup(done) },
                                restoreFocus: { [weak self] responder in if let responder { self?.window.makeFirstResponder(responder) } },
-                               changed: { [weak self] in self?.sendPreviewCover() })
+                               changed: { [weak self] in self?.sendPreviewCover(); self?.shell.updateMarkup(active: self?.markup?.overlay != nil) })
     }
     /// Keys are the overlay's only while this window is really taking them.
     var markupTakesKeys: Bool { NSApp.keyWindow === window && window.attachedSheet == nil && !menuTracking }
@@ -97,7 +97,7 @@ extension Host {
         await settle()
         guard window.isKeyWindow, NSApp.isActive, window.attachedSheet == nil else { return ["error":"Markup window is not foreground"] }
         let action = c["action"] as? String ?? ""
-        if action != "typeInstruction", action != "sendButton", markup?.overlay?.ownsFocus != true { return ["error":"Overlay does not own focus"] }
+        if !["typeInstruction", "sendButton", "toolbarSegment"].contains(action), markup?.overlay?.ownsFocus != true { return ["error":"Overlay does not own focus"] }
         func post(_ event: NSEvent?) -> Bool {
             guard let event else { return false }
             NSApp.postEvent(event, atStart: false)
@@ -137,6 +137,17 @@ extension Host {
                   mouse(.leftMouseDown, point), mouse(.leftMouseUp, point) else { return ["error":"Send button is not hit-testable"] }
             await settle()
             return ["route":"real event route", "hit":"\(type(of: hit))", "label":"Send"]
+        case "toolbarSegment":
+            // LKM-430: the real segment, in the toolbar's own window (another one in full screen).
+            guard let name = c["segment"] as? String, let anchor = shell.toolbarButtonAnchor(name), let owner = anchor.view.window else { return ["error":"No \(c["segment"] ?? "") segment"] }
+            let point = anchor.view.convert(NSPoint(x: anchor.rect.midX, y: anchor.rect.midY), to: nil)
+            guard let hit = owner.contentView?.superview?.hitTest(point), hit === anchor.view || hit.isDescendant(of: anchor.view) else { return ["error":"Segment is not hit-testable"] }
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                guard post(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: owner.windowNumber,
+                                              context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)) else { return ["error":"Cannot post click"] }
+            }
+            await settle()
+            return ["route":"real event route", "hit":"\(type(of: hit))", "segment":name]
         case "pointer":
             guard let overlay = markup?.overlay, let points = c["points"] as? [[Double]], points.count >= 2,
                   points.allSatisfy({ $0.count == 2 }) else { return ["error":"No pointer path"] }

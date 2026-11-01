@@ -101,6 +101,7 @@ import {
   checkToolbarAddress,
   restoreToolbarAddress
 } from './smoke-toolbar'
+import { checkToolbarActions, restoreToolbarActions } from './smoke-toolbar-actions'
 import { checkToolbarFullScreen } from './smoke-toolbar-fullscreen'
 import { checkToolbarMore } from './smoke-toolbar-more'
 import { checkToolbarOverflow, observeFirstExpansion } from './smoke-toolbar-overflow'
@@ -631,8 +632,8 @@ export async function runNativeCoreSmoke(
           shell.outlineRows,
           shell.rows.filter((r: any) => r.kind === 'project').length + shell.sidebarChats.length
         )
-        assert.deepEqual(shell.toolGroup, ['code', 'layers', 'expand'])
-        assert.deepEqual(shell.interactionGroup, ['select-object', 'device', 'overlay', 'speed'])
+        assert.deepEqual(shell.toolGroup, ['code', 'layers', 'device', 'expand'])
+        assert.deepEqual(shell.interactionGroup, ['select-object', 'overlay', 'speed', 'markup'])
         // LKM-319: no divider between the buttons of a toolbar island on macOS 27, at rest and
         // after island buttons were used (read in the live toolbar; the capture is evidence).
         await assertIslandDividers(host, 'shell-layout at rest', shell)
@@ -711,6 +712,12 @@ export async function runNativeCoreSmoke(
           await host.request('shellPerform', { action: 'expand' })
         await clearComposer()
       }
+    },
+    {
+      name: 'toolbar-actions',
+      dependsOn: ['chat-ready'],
+      run: () => checkToolbarActions(host, artifacts),
+      cleanup: () => restoreToolbarActions(host)
     },
     {
       name: 'device-frame',

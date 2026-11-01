@@ -51,6 +51,8 @@ export const READERS = {
     /^docs\/SWIFT-BACKEND-(ROADMAP|MODULES|ROUTES|EVENTS)\.md$/.test(path),
   versioning: (path) => path === 'CHANGELOG.md' || path === 'AGENTS.md',
   'native-slider-ticks': (path) => /^src\/native\/[^/]+\.swift$/.test(path),
+  // No Swift source but Edit → Find… may bind the F key next to ⌥⌘F (LKM-430).
+  'menu-first-shortcuts': (path) => /^src\/native\/[^/]+\.swift$/.test(path),
   'conversation-owner': (path) => path.startsWith('src/main/backends/')
 }
 

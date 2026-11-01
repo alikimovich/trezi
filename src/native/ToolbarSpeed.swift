@@ -1,7 +1,7 @@
 import AppKit
 
-/// LKM-206: the preview's slow-motion menu. LKM-213: the last segment of the interaction group
-/// (select | device | ruler | slow motion), whose click opens this menu (`MomentaryToolbarGroup`);
+/// LKM-206: the preview's slow-motion menu. LKM-213: a segment of the interaction group
+/// (select | ruler | slow motion | mark up), whose click opens this menu (`MomentaryToolbarGroup`);
 /// like "…", the segment leaves windows under 1000 pt (`fitMore`), and the View menu keeps it.
 /// Its entries go to Bun as `speed` shell actions (`src/native/preview-speed.ts`), which owns the
 /// session's speed; the glyph turns filled and accent-coloured while the preview is slowed or
@@ -34,7 +34,7 @@ extension NativeShell {
     }
     /// LKM-385: the toolbar control the speed badge hangs under, in the main window's coordinates:
     /// the slow-motion segment, else "…". Below 1000 pt `fitMore` removes both, so the badge takes
-    /// the group's last remaining segment, next to where the slow-motion one was.
+    /// the rulers segment, next to where the slow-motion one was.
     func speedBadgeAnchor() -> (name: String, frame: NSRect)? {
         if let frame = toolbarButtonFrame("speed") { return ("speed", frame) }
         var moreHidden = false
