@@ -2,6 +2,19 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-01 — LKM-406 repair 3: unit budgets for the two peer lifecycle tests
+
+- Manager's full unit run (8 workers, 484 s) ended with `peer-coordination` TIMEOUT at the 120 s default; its log showed every scenario passing up to the last, still running. Alone it takes 48 s (measured again here); `peer-feedback` took 101.6 s in the same run, close to the limit. Both run real chat and comment lifecycles with a stub provider per turn, so they slow down with the load, not with a hang.
+- Fix: `test/tiers.mjs` `UNIT_TIMEOUT_MS` gives both 300 s, as for the other multi-process lifecycle tests. No assertion changed.
+
+## 2026-11-01 — LKM-406 repair 2: a re-held decision still pauses the queue
+
+- Review finding: my `shownDecision` guard in `emitIsolation` dropped every identical decision event, not only the repeat from `ReconciliationCoordinator.finish`. A quiet answer turn that holds the same question again sent nothing, so the native reducer's `paused = true` (it runs on that event) never ran, `submit` had unpaused the queue, and a queued message drained onto held work. The same stale guard could hide an identical question asked by a later reconciliation.
+- Fix: `emitIsolation` always sends. `holdForDecision` sets `decisionShown`; `showParkedChat` skips only the one call that follows and consumes the flag; the flag is cleared where `st.decision` is (`chat-isolation.ts` answer passes, `clearPark`). The 'announced once' assertion still holds for the `finish` repeat.
+- Red proof: with the old emit-level guard back, `bun test/peer-feedback.mjs` fails "a re-hold with the same question is announced" (the new quiet-answer part of 'an incompatible chat reaches its card with the kept branch'), and `bun test/chat-peer-card.mjs` fails "emitting never drops a hold". Green with the fix, including the reducer asserting `paused` is true again and the queued message unsent.
+- Second finding: `isolationSnapshot` now carries `decision` and `files` for a parked chat holding a decision, and `NativeChatController.initialize` restores `chat.decision` and `isolationFiles`, so a rebuilt chat shows the decision card, not the generic failed-landing one (`test/native-chat-controller.mjs`). Not traced: whether close and reopen retains `st`; the snapshot covers it if it does. The app-restart limitation is unchanged.
+- Not run: the native suite (worker limit zero).
+
 ## 2026-11-01 — LKM-406 repair: a comment's first peer state is not lost
 
 - Review finding: `peer-feedback.ts` sends a state once and records its digest, but `NativeContextController.spawn` only mapped `peer-state` onto an existing rail row. A directly started comment's row is added later, by the command result (`queued()`), and a dequeued spawn's `spawn-started` rebuilt the row as `{id, label, status}`; either order lost the lines for good, in the common case of a comment started on contended work. No test drove the controller with `peer-state`.

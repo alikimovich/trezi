@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { createRecordCapture } from '../src/main/backends/record.ts'
 import { setConversationOwner, swiftConversationOwner } from '../src/main/conversation-owner.ts'
+import { newChat, reduce } from '../src/native/chat-state.ts'
 import { projectKey } from '../src/shared/projectKey.ts'
 
 const temp = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-peer-feedback-')))
@@ -516,6 +517,27 @@ try {
       'the kept branch holds the work'
     )
     await wait(() => !shown(chat).length, 'the feed lines to clear')
+
+    // The user's answer turn ends quietly and holds the same question again. That is a real
+    // new hold: it must reach the chat so the queue pauses again, not be taken for a repeat.
+    const native = newChat('decision-chat')
+    reduce(native, parks[0])
+    assert.equal(native.paused, true, 'the first hold pauses the queue')
+    native.paused = false
+    native.queue = [{ id: 'later', text: 'one more thing', attachments: [] }]
+    const answer = await send(chat, 'Can you say more about the options?')
+    chat.done()
+    await wait(() => landed(answer), 'the quiet answer turn')
+    const holds = events.filter(
+      (e) => e.type === 'isolation' && e.projectKey === chat.key && e.decision
+    )
+    assert.equal(holds.length, 2, 'a re-hold with the same question is announced')
+    assert.equal(holds[1].decision, question)
+    assert.equal(holds[1].reason, 'failed')
+    assert.equal(p.live(), before, 'the quiet answer released nothing')
+    reduce(native, holds[1])
+    assert.equal(native.paused, true, 'the queue is paused again')
+    assert.equal(native.queue.length, 1, 'and the queued message was not sent onto held work')
   })
 
   await scenario('an incompatible comment keeps its branch and its question', async (p) => {

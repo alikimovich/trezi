@@ -105,5 +105,7 @@ export async function holdForDecision(
     error,
     held.question
   )
+  // Always announced: a re-hold must pause the queue again. Only the repeat is skipped.
+  st.decisionShown = true
   return true
 }

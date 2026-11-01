@@ -865,3 +865,39 @@ try {
   nextController.event({ projectKey: 'stop', type: 'landing-finished', turn: 'first' })
   assert.equal(next.isRunning, true, 'old terminal cannot finish a replacement turn')
 }
+
+// LKM-406: a chat rebuilt while the service still holds its decision shows the decision.
+{
+  const held = new NativeChatController({
+    invoke: async (channel) =>
+      channel === 'agent:workspace-snapshot'
+        ? {
+            projects: [
+              {
+                root: '/fixture',
+                chats: [
+                  {
+                    ...live('held'),
+                    isolation: {
+                      state: 'parked',
+                      branch: 'trezi/chat-held',
+                      reason: 'failed',
+                      error: 'Decision needed: Dark or light?',
+                      decision: 'Dark or light?',
+                      files: ['page.txt']
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        : { ok: true },
+    render() {},
+    effect() {}
+  })
+  const chat = held.get('held')
+  await held.initialize(chat)
+  assert.deepEqual(chat.decision, { question: 'Dark or light?', branch: 'trezi/chat-held' })
+  assert.deepEqual(chat.isolationFiles, ['page.txt'])
+  assert.equal(chat.landingError, 'Decision needed: Dark or light?')
+}

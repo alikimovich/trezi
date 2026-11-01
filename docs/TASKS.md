@@ -41,6 +41,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] `peer_wait` for foreground and background, Claude and Codex: one named peer, bounded, ending on landing, Stop, crash, restart and timeout; cycles refused in the owner.
 - [x] Disjoint work never waits; owner edges, deadlines and a real SIGKILL restart in `test/peer-work-feed.mjs`.
 - [x] Native fixture assertion for the cards and the decision (`src/native/smoke-chat-peer.ts`, group `chat`).
+- [x] Review repair 2: a re-held decision always reaches the chat and pauses the queue; the snapshot restores the decision for a rebuilt chat.
 - [ ] Manager: run the native suite on merged main; worker has zero native calls.
 
 ## Single live writer admission (LKM-404)

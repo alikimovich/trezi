@@ -375,6 +375,7 @@ async function landBatch(
   // The answer passed the turn-end check above: the question is settled.
   if (st.decision) {
     st.decision = undefined
+    st.decisionShown = false
     st.resolution = undefined
   }
   // LOCAL-WEBKIT-3: only the tree its checks passed on lands (`gatedTurn`).

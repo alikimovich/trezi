@@ -2,6 +2,7 @@
 // come from the real lifecycle in test/peer-feedback.mjs; this pins their rendering.
 import assert from 'node:assert/strict'
 import { emitIsolation, initChatIsolation, states } from '../src/main/chat-state.ts'
+import { showParkedChat } from '../src/main/parked-chat.ts'
 import { agentCard } from '../src/native/chat-agent-card.ts'
 import { decisionCard, peerCard, peerLine } from '../src/native/chat-peer-card.ts'
 import { snapshot } from '../src/native/chat-snapshot.ts'
@@ -129,28 +130,66 @@ assert.equal(
   false
 )
 
-// The main side: a repeat of the shown decision is no change of state; anything else is.
+// The main side: a hold always reaches the chat. Only the one re-show that ends the same
+// reconciliation is skipped, and a held decision asked again must pause the queue again.
 const announced = []
 initChatIsolation({
   getWindow: () => ({
     webContents: { isDestroyed: () => false, send: (_, event) => announced.push(event) }
   })
 })
-states.set('chat-1', {})
+const hold = (extra = {}) => ({
+  parked: true,
+  wt: { branch: 'trezi/chat-1' },
+  parkedFiles: ['page.txt'],
+  landingError: `Decision needed: ${question}`,
+  decision: question,
+  ...extra
+})
 const park = (ask) =>
   emitIsolation('chat-1', 'parked', 'trezi/chat-1', ['page.txt'], null, null, 'failed', 'x', ask)
 park(question)
 park(question)
-assert.equal(announced.length, 1, 'the end of a reconciliation re-shows the park')
-park('A different question?')
-assert.equal(announced.length, 2, 'a new question is a new state')
-emitIsolation('chat-1', 'isolated', 'trezi/chat-1')
-park('A different question?')
-assert.equal(announced.length, 4, 'a decision held again after another state shows again')
-park(undefined)
-park(undefined)
-assert.equal(announced.length, 6, 'a park with no decision is not deduplicated')
+assert.equal(announced.length, 2, 'emitting never drops a hold: the same question asked again')
+announced.length = 0
+// The end of a reconciliation re-shows the park once; the hold just announced it.
+states.set('chat-1', hold({ decisionShown: true }))
+showParkedChat('chat-1')
+assert.equal(announced.length, 0, 'the repeat right after a hold is skipped')
+assert.equal(states.get('chat-1').decisionShown, false, 'and only that one')
+showParkedChat('chat-1')
+assert.equal(announced.length, 1, 'a later restore shows the decision again')
+assert.equal(announced[0].decision, question)
+announced.length = 0
+states.set('chat-1', hold({ decision: undefined, decisionShown: true }))
+showParkedChat('chat-1')
+assert.equal(announced.length, 1, 'a park with no decision is never skipped')
 states.clear()
+// The chat: the answer unpaused it and the user queued a message. The re-hold with the same
+// question must pause it again, the message stays unsent, and the note says why.
+{
+  const asked = newChat('chat-2')
+  const again = {
+    type: 'isolation',
+    state: 'parked',
+    branch: 'trezi/chat-2',
+    files: ['page.txt'],
+    reason: 'failed',
+    error: `Decision needed: ${question}`,
+    decision: question
+  }
+  reduce(asked, again)
+  assert.equal(asked.paused, true)
+  asked.paused = false
+  asked.queue = [{ id: 'q', text: 'one more thing', attachments: [] }]
+  reduce(asked, again)
+  assert.equal(asked.paused, true, 'a decision asked again pauses the queue again')
+  assert.equal(asked.queue.length, 1, 'the queued message is not sent onto held work')
+  assert.equal(
+    snapshot(asked, []).composer.queueNote,
+    'Waiting — answer the decision or discard the held changes to send these'
+  )
+}
 
 // The rail: the same words on the comment's card, under what it is doing now.
 const spawn = { id: 's', label: 'Update the hero', status: 'running', activity: 'Reading' }

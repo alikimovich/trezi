@@ -819,8 +819,12 @@ for the automatic reconciliation run (`src/main/conflict-resolution.ts`).
 A held decision (LKM-403) has its own card: the question, the branch that keeps the work
 and Discard, since Retry and Resolve refuse until the user answers. It clears on that
 answer or on Discard, not when the peer ends, because the peer has already landed.
-`emitIsolation` shows it once: the end of a reconciliation re-shows a park, and a repeat
-is not a change of state.
+Every hold reaches the chat, also a re-hold with the same question after a quiet answer
+turn: that event pauses the queue again, so a queued message never runs on held work. Only
+the `showParkedChat` that ends the same reconciliation is skipped (`decisionShown`, set by
+`holdForDecision`, consumed by that call, cleared where the decision is), so the decision
+renders once. A chat rebuilt while the service still holds the decision gets it back from
+the session snapshot (`isolation.decision`, `isolation.files`).
 
 `peer_wait` (`src/main/peer-wait.ts`) lets an agent wait on one named peer when both have
 a known or possible overlap on the same files or target. It is not a lock: landing still

@@ -374,6 +374,10 @@ export class NativeChatController {
           live.isolation?.reason === 'failed'
             ? (live.isolation.error ?? 'The landing failed.')
             : undefined
+        chat.decision = live.isolation?.decision
+          ? { question: live.isolation.decision, branch: live.isolation.branch }
+          : undefined
+        if (live.isolation?.decision) chat.isolationFiles = live.isolation.files
         const stoppedMessage =
           chat.stopped && [...chat.messages].reverse().find((m) => m.role === 'assistant')
         if (stoppedMessage) stoppedMessage.revertGroup = `${STOPPED_GROUP}${chat.chat}`

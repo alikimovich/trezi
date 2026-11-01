@@ -57,8 +57,10 @@ export interface ChatState {
   resolution?: PendingResolution
   /** LKM-403: the one product question this held work waits on, with `landingError`. */
   decision?: string
-  /** LKM-406: the held decision last shown; its repeats are not a change of state. */
-  shownDecision?: string
+  /** LKM-406: `holdForDecision` just announced the decision, so the one `showParkedChat`
+   *  that ends this reconciliation must not announce it again. Consumed by that call and
+   *  cleared wherever `decision` is. */
+  decisionShown?: boolean
 }
 
 export interface LandingResult {
@@ -113,11 +115,6 @@ export function emitIsolation(
   // which can land after the renderer process is killed (OS display sleep).
   const wc = deps?.getWindow()?.webContents
   if (!wc || wc.isDestroyed()) return
-  // LKM-406: the end of a reconciliation re-shows a park; a held decision renders once.
-  const st = states.get(sessionKey)
-  const held = decision ? JSON.stringify([decision, branch, files]) : undefined
-  if (st && held && st.shownDecision === held) return
-  if (st) st.shownDecision = held
   wc.send('agent:event', {
     type: 'isolation',
     state,

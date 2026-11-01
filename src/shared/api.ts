@@ -830,6 +830,9 @@ export interface LiveChatSnapshot {
     branch?: string
     reason?: 'interrupted' | 'failed'
     error?: string
+    /** The one product question the held work waits on, and its files (LKM-403, LKM-406). */
+    decision?: string
+    files?: string[]
   }
   /** The options this session is ACTUALLY running with (main's live copy — the
    *  authority). The renderer reconciles its per-chat pickers against these on
