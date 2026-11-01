@@ -12,8 +12,11 @@ import AppKit
 /// `test/menu-first-shortcuts.mjs` drives this with the real views. Escape is not one of
 /// these keys and keeps its own handling.
 enum MenuFirstShortcut {
+    /// LKM-430: Actions → Send Feedback… (⌥⌘F), which only opens the form. A focused preview
+    /// would otherwise hand it to the page. ⌘F stays Find and ⌃⌘F stays full screen.
+    static let feedback: (key: String, modifiers: NSEvent.ModifierFlags) = ("f", [.command, .option])
     /// The keys, as their menu items' key equivalents and modifiers.
-    static let keys: [(key: String, modifiers: NSEvent.ModifierFlags)] = [(".", .command)]
+    static let keys: [(key: String, modifiers: NSEvent.ModifierFlags)] = [(".", .command), feedback]
     /// Whether `event` is one of the keys sent to `window` (or `also`, the full-screen
     /// toolbar's window) with no sheet attached, and the main menu performed it. The
     /// event is read on any keyboard layout (LKM-219).

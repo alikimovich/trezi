@@ -125,7 +125,9 @@ retired Electron rail, `src/native/SidebarChats.swift`, `src/native/SidebarMarqu
 `src/native/sidebar-chats.ts`). The chat header shows only the chat title. Background runs appear as actionable chat cards. Project
 and chat state persists in the native profile. The toolbar keeps the sidebar toggle, chat
 and preview actions aligned with their columns. Preview controls include domain
-and branch, selection/device, code/layers/expand, and Publish.
+and branch, selection/rulers/slow motion/Mark up, code/layers/device/expand, and
+Publish. Actions → Send Feedback… is ⌥⌘F; it reaches the menu ahead of a focused
+preview through `MenuFirstShortcut` and only opens the form.
 
 AppKit owns all geometry; no DOM rectangle observer controls native layout.
 Repeated divider drags, collapse/restore and window resizing retain the native

@@ -263,6 +263,80 @@ assert.equal(seeded[0].type, 'seed')
 assert.equal(seeded[0].chat, 'chat')
 assert.ok(!seeded[0].text.includes('host-command'))
 assert.equal(sheets.current, null)
+
+// --- LKM-430: ⌥⌘F held or pressed again opens one form and never touches the one that is up. ---
+let release
+const captures = []
+const held = new NativeSupportSheets(sheets, () => {
+  captures.push(1)
+  return new Promise((resolve) => {
+    release = () => resolve(screenshot)
+  })
+})
+const before = submits().length
+const opened = () => sent.filter(([m, data]) => m === 'sheetState' && !data.state.busy).length
+const presses = [held.feedback(), held.feedback(), held.feedback()]
+assert.equal(captures.length, 1, 'presses during the capture capture once')
+const shown = opened()
+release()
+await Promise.all(presses)
+assert.equal(opened(), shown + 1, 'one form opens')
+const form = sheets.current.state.id
+assert.equal(sheets.current.state.title, 'Send feedback')
+const closes = sent.filter(([m]) => m === 'sheetClose').length
+await held.feedback()
+await held.feedback()
+assert.equal(captures.length, 1, 'a press with the form up captures nothing')
+assert.equal(sheets.current.state.id, form, 'a press with the form up keeps it, and its draft')
+assert.equal(sent.filter(([m]) => m === 'sheetClose').length, closes, 'no sheet closes')
+assert.equal(opened(), shown + 1, 'no second dialog')
+assert.equal(submits().length, before, 'the shortcut never submits')
+
+// The failure alert with the report is part of the flow too.
+results.push(down)
+await sheets.action({ id: form, action: 'send', values: { body: 'Kept' } })
+const failure = sheets.current.state.id
+await held.feedback()
+assert.equal(sheets.current.state.id, failure, 'a press keeps the failure alert')
+await sheets.action({ id: failure, action: 'cancel', values: {} })
+assert.equal(sheets.current, null)
+
+// Closed: opens again. A press over another sheet still replaces it, as the menu always has.
+const reopened = held.feedback()
+release()
+await reopened
+assert.equal(captures.length, 2, 'closing and pressing again captures again')
+assert.equal(sheets.current.state.title, 'Send feedback')
+await sheets.action({ id: sheets.current.state.id, action: 'cancel', values: {} })
+assert.equal(sheets.current, null)
+support.diagnose('a')
+const replaced = held.feedback()
+release()
+await replaced
+assert.equal(sheets.current.state.title, 'Send feedback', 'another sheet is not feedback')
+await sheets.action({ id: sheets.current.state.id, action: 'cancel', values: {} })
+
+// A sheet that took over during the capture wins, and the next press opens the form.
+const overtaken = held.feedback()
+support.diagnose('a')
+release()
+await overtaken
+assert.notEqual(sheets.current.state.title, 'Send feedback', 'the newer sheet stays')
+await sheets.action({ id: sheets.current.state.id, action: 'cancel', values: {} })
+const after = held.feedback()
+release()
+await after
+assert.equal(sheets.current.state.title, 'Send feedback', 'a superseded press does not stick')
+await sheets.action({ id: sheets.current.state.id, action: 'cancel', values: {} })
+// A capture that fails leaves the form openable (no screenshot) and frees the guard.
+const broken = new NativeSupportSheets(sheets, async () => {
+  throw new Error('no capture')
+})
+await broken.feedback()
+assert.equal(sheets.current.state.title, 'Send feedback', 'a failed capture still opens the form')
+await sheets.action({ id: sheets.current.state.id, action: 'cancel', values: {} })
+assert.equal(sheets.current, null)
+
 console.log(
-  'Native support sheets: private feedback (invite code, opt-outs, errors) and proposed repo-only diagnosis passed'
+  'Native support sheets: private feedback (invite code, opt-outs, errors), one form per press and proposed repo-only diagnosis passed'
 )
