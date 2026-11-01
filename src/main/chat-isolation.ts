@@ -189,12 +189,10 @@ export async function beforeTurn(
   return onChain(st, async () => {
     await recreateWorkspace(st)
     await settleReverted(st)
-    // LKM-403: this turn answers the question. `landingError` stays until it lands, so
-    // the send guard keeps letting the chat continue on top of its held work.
-    if (st.decision) {
-      st.decision = undefined
-      st.resolution = undefined
-    }
+    // LKM-403: a turn on held work answers its question, but the question and the staged
+    // resolution stay: the turn's end checks the answer (`holdForDecision`) and clears
+    // them only once the work passes it, lands or is discarded. `landingError` stays too,
+    // so the send guard keeps letting the chat continue on top of its held work.
     // LKM-196: a park whose work is already live (or whose batch went missing) is
     // settled before the send guard reads it.
     await reconcileParkOnChain(sessionKey, st, 'turn-start', true)
@@ -359,7 +357,13 @@ async function landBatch(
   await settleReverted(st)
   const turnNo = ++st.turnNo
   // LKM-403: what landed since this work forked, read here so nothing lands in between.
-  const gate = await peerGateRefresh(st.liveRoot, peerTurn(sessionKey), st.wt.baseSha)
+  // A staged reconciliation moved `baseSha` to the live snapshot it combined with, so the
+  // peers it combined with are those since the fork point it recorded.
+  const gate = await peerGateRefresh(
+    st.liveRoot,
+    peerTurn(sessionKey),
+    st.resolution?.revisions.base ?? st.wt.baseSha
+  )
   // Describes the cumulative diff (parked turns included), never the prompt (LKM-189).
   const described = await turnMessage(sessionKey, st, turnNo, {
     prompt: message,
@@ -368,6 +372,11 @@ async function landBatch(
   if (await holdForDecision(sessionKey, st, turn, described.text, terminal, gate)) return null
   // A resolved tree is new source: the gate wants its checks passed on exactly that tree.
   let combined = !!st.resolution && terminal === 'success'
+  // The answer passed the turn-end check above: the question is settled.
+  if (st.decision) {
+    st.decision = undefined
+    st.resolution = undefined
+  }
   // LOCAL-WEBKIT-3: only the tree its checks passed on lands (`gatedTurn`).
   let { outcome, verdict } = await gatedTurn(sessionKey, st, described.text, terminal === 'success')
   let reconcileFiles: string[] | null = null

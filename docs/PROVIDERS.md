@@ -1114,7 +1114,8 @@ answer. An unknown, own or other-project id answers exactly `{ "found": false }`
 `same-target` advisories are known; `semantic-uncertain` ones are not, and neither
 is a safety claim. Tool results may carry an untrusted `peerUpdate`, as no
 mid-generation push is assumed. A reconciliation that cannot keep both goals ends with
-`DECISION NEEDED: <question>`, and that question goes to the user. See
+`DECISION NEEDED: <question>`, and that question goes to the user; when the user
+answers, the agent applies the choice and ends with `DECISION MADE: <choice>`. See
 [`docs/WORKTREES.md`](WORKTREES.md#peer-lookup-freshness-and-resolution-with-both-goals-lkm-403).
 
 ## Claude resume recovery (LKM-165)

@@ -303,6 +303,7 @@ try {
     edit(b, 'b', { 5: 'header badge=sale' }, 'badge=sale')
     await check(p, b)
     applied(await finish(b))
+    const peerRevision = p.git('rev-parse', 'HEAD')
     const sent = chat.sent.length
     chat.done()
     await wait(() => chat.sent.length > sent, 'the reconciliation turn')
@@ -322,6 +323,12 @@ try {
       readFileSync(join(chat.cwd, '.runs'), 'utf8').length > runs,
       'the host ran the check again on the combined tree'
     )
+    // The note names the peer this chat combined with, though staging moved its fork point.
+    const { lastLanding } = await tool(p, chat, 'workspace_state')
+    assert.equal(lastLanding.outcome, 'merged')
+    assert.equal(lastLanding.peers.combinedRechecked, true)
+    assert.equal(lastLanding.peers.landed.length, 1, 'the peer it combined with, not none')
+    assert.equal(lastLanding.peers.landed[0].revision, peerRevision)
   })
 
   await scenario('incompatible goals stay unlanded and raise one decision (comment)', async (p) => {
@@ -406,6 +413,60 @@ try {
     chat.done()
     await wait(() => landed(answer), 'the decided landing')
     assert.match(p.live(), /theme=dark header, theme=light footer/)
+    assert.equal((await tool(p, chat, 'workspace_state')).decision, undefined)
+  })
+
+  await scenario('a clarifying message does not release a checked one-sided tree', async (p) => {
+    const chat = await openChat(p)
+    const turn = await send(chat, 'Make the theme dark only')
+    edit(chat, 'chat', { 7: 'theme=dark' }, 'theme=dark')
+    await check(p, chat)
+    const b = await comment(p, 'Make the theme light only')
+    put(b, 'page.txt', page({ 7: 'theme=light' }))
+    await check(p, b)
+    applied(await finish(b))
+    const before = p.live()
+    const sent = chat.sent.length
+    chat.done()
+    await wait(() => chat.sent.length > sent, 'the reconciliation turn')
+    // Its own side, whole: the project's checks pass on it, so only the decision holds it.
+    put(chat, 'page.txt', page({ 7: 'theme=dark' }))
+    await check(p, chat)
+    const question = 'Should the site be dark only or light only?'
+    chat.say(`Kept mine.\nDECISION NEEDED: ${question}`)
+    chat.done()
+    await wait(() => landed(turn), 'the held turn')
+    assert.equal(p.live(), before, 'nothing landed')
+    const stillHeld = async (what) => {
+      assert.equal(p.live(), before, `${what}: live is unchanged`)
+      const state = await tool(p, chat, 'workspace_state')
+      assert.equal(state.state, 'failed', `${what}: still held`)
+      assert.equal(state.decision, question, `${what}: the decision is still raised`)
+      assert.equal(parkEvent(p.parent).state, 'parked')
+      assert.equal((await invoke('agent:retry-landing', p.parent)).state, 'parked')
+      assert.equal(p.live(), before, `${what}: Retry cannot pick a side`)
+    }
+    await stillHeld('the first hold')
+    // A clarifying message: no edit, the agent still needs the answer.
+    const clarify = await send(chat, 'What would dark only do to the footer?')
+    chat.say(`It drops the light footer.\nDECISION NEEDED: ${question}`)
+    chat.done()
+    await wait(() => landed(clarify), 'the clarifying turn')
+    await stillHeld('a clarifying turn that asks again')
+    // No new question, but nothing says the user chose this side either.
+    const quiet = await send(chat, 'Hm, let me think.')
+    chat.say('Understood.')
+    chat.done()
+    await wait(() => landed(quiet), 'the quiet turn')
+    await stillHeld('an answer turn that leaves one side whole without saying it was chosen')
+    // The user chooses their own side: the agent says so, and the checked tree lands.
+    const chosen = await send(chat, 'Dark only.')
+    await check(p, chat)
+    chat.say('Kept dark only.\nDECISION MADE: dark only')
+    chat.done()
+    await wait(() => landed(chosen), 'the chosen landing')
+    assert.match(p.live(), /theme=dark/)
+    assert.doesNotMatch(p.live(), /theme=light/)
     assert.equal((await tool(p, chat, 'workspace_state')).decision, undefined)
   })
 

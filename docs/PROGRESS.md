@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-31 — LKM-403 repair: a held decision survives its answer turn
+
+- Review findings. (a) `beforeTurn` cleared a chat's held decision and staged resolution on any next user message, so a clarifying turn that edited nothing and asked again was not inspected and the checked one-sided tree landed over the peer's change. (b) `landBatch` read the gate from `wt.baseSha`, which `stageResolve` had already moved to the live snapshot, so a reconciled chat's `lastLanding.peers` said `combinedRechecked: true` with `landed: []`.
+- Red proof: with both defects reintroduced into the final source, `bun test/peer-coordination.mjs` failed exactly two scenarios, "a chat combines an overlap, and its combined tree is checked" (`landed.length` 0, expected 1) and the new "a clarifying message does not release a checked one-sided tree" (the clarifying turn put `theme=dark` over the peer's `theme=light` in live). Green again with the repair: all 15 scenarios, including the existing answer scenario, whose mixed tree still lands.
+- Rule: the question (`st.decision`) and the staged resolution stay through the answer turn and `holdForDecision` runs at its end with the held question. A closing `DECISION NEEDED:` or leftover markers hold again; a conflicted file still exactly one side holds again unless the reply states the user's choice on a `DECISION MADE: <choice>` line (taught by `workspace_state` guidance and the Claude and Codex rules); a stopped or failed answer turn was not checked, so it holds again with the same question. They clear only when the turn passes that check, the work lands (`clearPark`) or Discard. Without the line a user who chooses the held side is asked once more, which costs a message and never lands unchosen work.
+- Gate note: `landBatch` now reads the gate from `resolution.revisions.base` when a resolution is staged, as `landSpawn` does, and the scenario asserts `lastLanding.peers.landed[0].revision` is the peer's landed HEAD.
+- Not run: the native suite (worker limit zero). The pre-repair baseline was produced by reintroducing the two defects with edits, not from the previous commit, because `git checkout` of the source was refused.
+
 ## 2026-10-31 — LKM-403 peer lookup, freshness at landing and resolution with both goals
 
 - Red proof before the implementation: `bun test/peer-coordination.mjs` on unmodified source failed 12 of its then 13 scenarios; only "a resolution dropping a side fails on the exact combined tree" passed, because the gate already held that. Three of the failures were chat timeouts caused by the fixture adding a new `asserts/chat` file, which reconciliation refuses. The fixture now tracks those files empty, so the baselines of those three chat scenarios prove the fixture gap and not the product gap; the comment twins and the other failures named the missing behaviour.

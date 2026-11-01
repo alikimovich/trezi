@@ -8,6 +8,7 @@
 /** The hard limit of the rendered block, whatever the diffs escape to. */
 export const RESOLUTION_LIMIT = 16 * 1024
 export const DECISION_LINE = 'DECISION NEEDED:'
+export const CHOICE_LINE = 'DECISION MADE:'
 const MAX_DECISION = 300
 
 /** The exact revisions one `stageResolve` combined. */
@@ -70,19 +71,30 @@ export function renderResolutionContext(context: ResolutionContext): string {
   )
 }
 
-/** The agent's one concrete question, from its reply's last `DECISION NEEDED:` line. */
-export function decisionFrom(reply: string): string | null {
+/** The text after the last line that starts with `marker`, bounded; null when none. */
+function lineAfter(reply: string, marker: string): string | null {
   for (const line of reply.split('\n').reverse()) {
-    const at = line.indexOf(DECISION_LINE)
+    const at = line.indexOf(marker)
     if (at < 0 || /[A-Za-z0-9]/.test(line.slice(0, at))) continue
-    const question = line
-      .slice(at + DECISION_LINE.length)
+    const text = line
+      .slice(at + marker.length)
       .replace(/[*_`\s]+$/, '')
       .replace(/\s+/g, ' ')
       .trim()
-    if (question) return question.slice(0, MAX_DECISION)
+    if (text) return text.slice(0, MAX_DECISION)
   }
   return null
+}
+
+/** The agent's one concrete question, from its reply's last `DECISION NEEDED:` line. */
+export function decisionFrom(reply: string): string | null {
+  return lineAfter(reply, DECISION_LINE)
+}
+
+/** What the user chose, from the reply's last `DECISION MADE:` line: the agent's explicit
+ *  statement that the turn applies the user's answer to a held decision. */
+export function choiceFrom(reply: string): string | null {
+  return lineAfter(reply, CHOICE_LINE)
 }
 
 /** The question when the agent gave none: both goals, verbatim and bounded. */

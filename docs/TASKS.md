@@ -20,6 +20,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 ## Coordinated parallel work: lookup, freshness and resolution (LKM-403)
 
 - [x] Red baseline, then green final source, in disposable Git repos with stub providers through the real lifecycle (`test/peer-coordination.mjs`).
+- [x] Repair after review: a held decision survives its answer turn (a clarifying message re-holds a checked one-sided tree; `DECISION MADE:` is the explicit choice), and the gate note of a reconciled chat names the peers it combined with.
 - [x] `peer_lookup` for foreground and background, Claude and Codex: same-project, bounded, exact provenance, untrusted data.
 - [x] Peer freshness at tool checkpoints, the landing gate and reconciliation.
 - [x] Known target and uncertain cross-file advisories, never a safety claim.

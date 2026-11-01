@@ -13,7 +13,9 @@ import type { TurnTerminalOutcome } from './turn-terminal'
  * A chat's side of reconciliation with both goals (LKM-403): what staging leaves for its
  * agent, and the hold when both requests cannot be kept. The hold commits the work on
  * the chat's branch and lands nothing; the user's next message answers the question and
- * that turn lands like any other (Discard stays available). See `resolution-context.ts`.
+ * that turn ends with the same check, so a clarifying message that changes nothing holds
+ * the work again. The question and resolution stay until the work lands, is discarded or
+ * passes that check (Discard stays available). See `resolution-context.ts`.
  */
 
 const lastAsk = (st: ChatState): string =>
@@ -59,8 +61,12 @@ export async function holdForDecision(
   gate: PeerGateNote
 ): Promise<boolean> {
   const pending = st.resolution
-  if (!pending || terminal !== 'success') return false
-  const held = await heldResolution(st.wt, pending, turn.length ? finalReply(turn) : null)
+  if (!pending || (terminal !== 'success' && !st.decision)) return false
+  // A stopped or failed answer turn was not checked, so the question stays asked.
+  const held =
+    terminal === 'success'
+      ? await heldResolution(st.wt, pending, turn.length ? finalReply(turn) : null, st.decision)
+      : { question: st.decision ?? '', files: st.parkedFiles, restore: [] }
   if (!held) return false
   await restoreOwnFiles(st.wt, pending, held.restore)
   const { files } = await completeTurn(st.liveRoot, st.wt, message, {

@@ -9,6 +9,7 @@ import { secretPath } from './peer-signals'
 import { peerRow } from './peer-work'
 import { productLog, redact } from './product-log'
 import {
+  choiceFrom,
   decisionFrom,
   fallbackDecision,
   type PendingResolution,
@@ -114,13 +115,18 @@ async function selected(
 /**
  * Why this resolution must not land, or null. `reply` is the agent's closing text, null
  * while its turn still runs (`land_now`): markers then only mean it is not done.
+ * `asked` is the held question when this turn answers it. A held tree is already one
+ * side, so a file still exactly one side lands only when the reply says (`DECISION
+ * MADE:`) that the user chose it; a closing `DECISION NEEDED:` or markers hold again.
  */
 export async function heldResolution(
   wt: Worktree,
   r: PendingResolution,
-  reply: string | null
+  reply: string | null,
+  asked?: string
 ): Promise<HeldResolution | null> {
-  const sides = await selected(wt.path, r)
+  const chosen = asked && reply ? choiceFrom(reply) : null
+  const sides = chosen ? new Map<string, 'ours' | 'theirs'>() : await selected(wt.path, r)
   const markers = reply === null ? [] : await conflictMarkerFiles(wt, r.files)
   const stated = reply ? decisionFrom(reply) : null
   if (!sides.size && !markers.length && !stated) return null
@@ -129,10 +135,11 @@ export async function heldResolution(
     worktree: wt.id,
     markers: markers.length,
     selected: sides.size,
-    stated: !!stated
+    stated: !!stated,
+    answered: !!asked
   })
   return {
-    question: stated ?? fallbackDecision(r.context, files.length ? files : r.files),
+    question: stated ?? asked ?? fallbackDecision(r.context, files.length ? files : r.files),
     files: files.length ? files : r.files,
     restore: [...sides].filter(([, side]) => side === 'theirs').map(([file]) => file)
   }
