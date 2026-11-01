@@ -20,7 +20,7 @@ import { DOCTOR_SKILL, SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { chatUiRules } from './chat-ui-rules'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 46
+export const TREZI_RULES_VERSION = 47
 
 export function treziRules(opts?: {
   previewTools?: boolean

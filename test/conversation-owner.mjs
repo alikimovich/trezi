@@ -1111,6 +1111,13 @@ try {
     )
     await invoke('agent:send', 'replacement', undefined, raceKey, {}, 'race-second')
     await until(() => raceProvider.sent.length === 2, 'replacement race send')
+    // A late landing event names its own turn: the replacement keeps its live peer row.
+    assert.ok((await peerView(raceRepo, '')).rows.some((row) => row.id === 'race-second'))
+    raceProvider.session.emit({ type: 'landing-finished', turn: 'race-first' })
+    assert.ok(
+      (await peerView(raceRepo, '')).rows.some((row) => row.id === 'race-second'),
+      'a late landing-finished keeps the newer turn in the peer feed'
+    )
     releaseCancel()
     await oldStop
     assert.equal(

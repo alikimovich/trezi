@@ -214,10 +214,10 @@ async function refreshPeers(project: string): Promise<void> {
       observedTruncated === row.observedTruncated
     )
       continue
-    // A phase change or base sync may have landed during the Git await: merge only the
-    // observed fields into the current row, never the row read before it.
+    // A phase change may have landed during the Git await: merge only the observed fields
+    // into the current row. After a base sync, those paths answer for the old base: drop them.
     const latest = rows.get(row.id)
-    if (!latest) continue
+    if (!latest || latest.base !== row.base) continue
     const updated = { ...latest, observedFiles: observed.paths, observedTruncated }
     rows.set(row.id, updated)
     await owner.peerUpsert(updated)
