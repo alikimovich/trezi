@@ -95,6 +95,7 @@ const CALLS = {
   chat_ui: { action: 'catalog' },
   workspace_state: {},
   peer_lookup: { peer: 'no-such-peer' },
+  peer_wait: { peer: 'no-such-peer' },
   prepare_conflict_resolution: {},
   git_sync_base: {},
   git_merge_continue: {},
@@ -576,6 +577,12 @@ try {
   const claudeLookup = await background.turn('TOOL-CALL peer_lookup {"peer":"no-such-peer"}')
   assert.deepEqual(claudeLookup.routed, ['peer_lookup'])
   assert.deepEqual(JSON.parse(claudeLookup.results.peer_lookup.content[0].text), { found: false })
+  // LKM-406: a wait routes the same way, and a peer nobody here holds is refused at once.
+  const claudeWait = await background.turn('TOOL-CALL peer_wait {"peer":"no-such-peer"}')
+  assert.deepEqual(claudeWait.routed, ['peer_wait'])
+  const claudeRefusal = JSON.parse(claudeWait.results.peer_wait.content[0].text)
+  assert.equal(claudeRefusal.waited, false)
+  assert.equal(claudeRefusal.refused, 'unknown')
   const refused = await background.turn('only chat_island,open_code,open_preview')
   assert.match(textOf(refused.results.chat_island), /Background edits cannot create chat islands/)
   assert.equal(refused.results.chat_island.isError, true)
@@ -663,6 +670,8 @@ try {
   assert.ok(!codexState.peerWork.rows.some((row) => row.id === 'spawn-codex'))
   const codexLookup = await codexBackground.turn('TOOL-CALL peer_lookup {"peer":"no-such-peer"}')
   assert.deepEqual(JSON.parse(codexLookup.results.peer_lookup.content[0].text), { found: false })
+  const codexWait = await codexBackground.turn('TOOL-CALL peer_wait {"peer":"no-such-peer"}')
+  assert.equal(JSON.parse(codexWait.results.peer_wait.content[0].text).refused, 'unknown')
   console.log(
     'PROVIDER-HELPER-TOOLS OK — Claude and Codex helper sessions reach every Trezi tool in main, under the owner’s grant'
   )

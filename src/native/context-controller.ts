@@ -360,6 +360,8 @@ export class NativeContextController {
           ? { ...s, activity: event.type === 'status' ? event.text : event.message }
           : s
       )
+    else if (event.type === 'peer-state')
+      list = list.map((s) => (s.id === event.sessionId ? { ...s, peerWork: event.lines } : s))
     // LKM-193: the question waits on the agent's card; the chat is flagged when hidden.
     else if (event.type === 'question-request') {
       list = list.map((s) => (s.id === event.sessionId ? { ...s, question: event.request } : s))

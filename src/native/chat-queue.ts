@@ -57,7 +57,9 @@ export function queueNote(chat: Chat): { queueNote: string; queueCanSend: boolea
   }
   if (chat.isolation === 'parked' && chat.landingError)
     return {
-      queueNote: 'Waiting — retry, resolve or discard the held changes to send these',
+      queueNote: chat.decision
+        ? 'Waiting — answer the decision or discard the held changes to send these'
+        : 'Waiting — retry, resolve or discard the held changes to send these',
       queueCanSend: false
     }
   if (chat.stopped === 'held')

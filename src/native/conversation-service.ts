@@ -163,6 +163,11 @@ export function serviceConversation(
       await call('peerRemove', { id })
     },
     peers: (project, exclude) => call('peers', { project, exclude }, 'read'),
+    peerWaitBegin: (waiter, peer, project, ms) =>
+      call('peerWaitBegin', { waiter, peer, project, ms }),
+    peerWaitEnd: async (waiter) => {
+      await call('peerWaitEnd', { waiter })
+    },
     snapshot: () => call('snapshot', {}, 'read'),
     status: () => call('status', {}, 'read')
   }

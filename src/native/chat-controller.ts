@@ -449,8 +449,9 @@ export class NativeChatController {
         ) {
           const chat = this.get(event.projectKey)
           const outcome = event.outcome
-          const title =
-            outcome === 'applied'
+          const title = event.decision
+            ? 'Comment needs your decision'
+            : outcome === 'applied'
               ? 'Comment applied'
               : outcome === 'cancelled'
                 ? 'Comment cancelled'
@@ -462,9 +463,11 @@ export class NativeChatController {
                       ? 'Comment finished — changes are ready for review'
                       : 'Comment finished without a confirmed result'
           const partial =
-            event.branch && (outcome === 'failed' || outcome === 'cancelled')
-              ? 'Partial changes are saved for review.'
-              : ''
+            event.decision && event.branch
+              ? `Nothing landed. The work is kept on ${event.branch}.`
+              : event.branch && (outcome === 'failed' || outcome === 'cancelled')
+                ? 'Partial changes are saved for review.'
+                : ''
           const text =
             `${title}.` +
             (partial ? ` ${partial}` : '') +

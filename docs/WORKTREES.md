@@ -804,3 +804,33 @@ reply states `DECISION MADE: <the user's choice>` (a one-sided file needs the li
 and `land_now` with no edit holds). They clear when the turn passes the check, the work lands, or
 Discard. A chat's gate note reads peers since the resolution's recorded fork point. A
 comment ends as review with the question and its branch. A dropped own side is written back before the commit, so the branch keeps it.
+
+## Overlap, wait and reconciliation feedback, and the named-peer wait (LKM-406)
+
+`src/main/peer-feedback.ts` turns the service-owned feed into one `peer-state` event per
+task and per state change, at most 1536 bytes and four lines, most urgent first. Every
+feed movement arrives there; a digest per chat or comment lets only a different answer
+out, and a task that leaves the feed clears its card once. Chats show one `peer-work`
+card (`src/native/chat-peer-card.ts`), comments and background agents the same words on
+their rail card. Nothing enters the transcript. An uncertain overlap says it may overlap,
+"Not confirmed either way."; nothing here claims safety. The `reconciling` phase is set
+for the automatic reconciliation run (`src/main/conflict-resolution.ts`).
+
+A held decision (LKM-403) has its own card: the question, the branch that keeps the work
+and Discard, since Retry and Resolve refuse until the user answers. It clears on that
+answer or on Discard, not when the peer ends, because the peer has already landed.
+`emitIsolation` shows it once: the end of a reconciliation re-shows a park, and a repeat
+is not a change of state.
+
+`peer_wait` (`src/main/peer-wait.ts`) lets an agent wait on one named peer when both have
+a known or possible overlap on the same files or target. It is not a lock: landing still
+belongs to the source gate, and nothing else ever waits. The default is 60 s, the limit
+120 s, and the poll is 1 s. The wait edge lives in `ConversationOwner` (`PeerWaits`,
+`src/service/ConversationState.swift`), in memory only: one edge per waiter, refused at
+begin when it would close a cycle, removed with either task, and dropped at its deadline
+(asked bound plus 5 s, never over 125 s). Bun owns the bound; the owner's deadline only
+frees an edge whose Bun side is gone. A wait ends as `landed`, `ended`, `stopped`,
+`timeout` or `restart`; a refusal is `unknown`, `different-scope`, `busy`, `cycle`,
+`unavailable` or `stopped`, and takes no time. Stop on the chat or comment settles it at
+once, and an owner restart shows up as the edge missing on the next poll. Every outcome
+tells the agent to carry on and not to retry: a timeout says nothing about safety.

@@ -33,6 +33,16 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Incompatible goals stay unlanded with one user decision and a recovery branch; retry limits unchanged.
 - [ ] Manager: run the relevant native suite on merged main; worker has zero native calls.
 
+## Coordinated parallel work: overlap, wait and reconciliation feedback (LKM-406)
+
+- [x] Red baseline, then green final source, in disposable Git repos with stub providers through the real lifecycle (`test/peer-feedback.mjs`).
+- [x] One deduplicated `peer-state` event per state change from the service-owned feed, clearing when the peer ends; uncertain overlap reads as uncertain.
+- [x] The decision card with the question, the kept branch and Discard, shown once.
+- [x] `peer_wait` for foreground and background, Claude and Codex: one named peer, bounded, ending on landing, Stop, crash, restart and timeout; cycles refused in the owner.
+- [x] Disjoint work never waits; owner edges, deadlines and a real SIGKILL restart in `test/peer-work-feed.mjs`.
+- [x] Native fixture assertion for the cards and the decision (`src/native/smoke-chat-peer.ts`, group `chat`).
+- [ ] Manager: run the native suite on merged main; worker has zero native calls.
+
 ## Single live writer admission (LKM-404)
 
 - [x] Reproduce concurrent live turns with scripted providers in disposable nested Git and non-Git projects (red quick verification).

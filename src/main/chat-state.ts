@@ -57,6 +57,8 @@ export interface ChatState {
   resolution?: PendingResolution
   /** LKM-403: the one product question this held work waits on, with `landingError`. */
   decision?: string
+  /** LKM-406: the held decision last shown; its repeats are not a change of state. */
+  shownDecision?: string
 }
 
 export interface LandingResult {
@@ -104,23 +106,30 @@ export function emitIsolation(
   group?: string,
   revertable?: boolean,
   reason?: 'interrupted' | 'reverted' | 'failed',
-  error?: string
+  error?: string,
+  decision?: string
 ): void {
   // Guard a destroyed webContents: this fires from async turn lifecycle hooks,
   // which can land after the renderer process is killed (OS display sleep).
   const wc = deps?.getWindow()?.webContents
-  if (wc && !wc.isDestroyed())
-    wc.send('agent:event', {
-      type: 'isolation',
-      state,
-      ...(branch ? { branch } : {}),
-      ...(files && files.length ? { files } : {}),
-      ...(group ? { group } : {}),
-      ...(revertable !== undefined ? { revertable } : {}),
-      ...(reason ? { reason } : {}),
-      ...(error ? { error } : {}),
-      projectKey: sessionKey
-    } satisfies AgentEvent)
+  if (!wc || wc.isDestroyed()) return
+  // LKM-406: the end of a reconciliation re-shows a park; a held decision renders once.
+  const st = states.get(sessionKey)
+  const held = decision ? JSON.stringify([decision, branch, files]) : undefined
+  if (st && held && st.shownDecision === held) return
+  if (st) st.shownDecision = held
+  wc.send('agent:event', {
+    type: 'isolation',
+    state,
+    ...(branch ? { branch } : {}),
+    ...(files && files.length ? { files } : {}),
+    ...(group ? { group } : {}),
+    ...(revertable !== undefined ? { revertable } : {}),
+    ...(reason ? { reason } : {}),
+    ...(error ? { error } : {}),
+    ...(decision ? { decision } : {}),
+    projectKey: sessionKey
+  } satisfies AgentEvent)
 }
 
 /** Run `operation` after the chat's in-flight work, inside the repository lease. The

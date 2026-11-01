@@ -94,6 +94,17 @@ server.registerTool(
 )
 
 server.registerTool(
+  'peer_wait',
+  {
+    title: 'Trezi peer wait',
+    description:
+      'Wait for one named peer from workspace_state, up to `seconds` (default 60, at most 120), when you both edit the same file or target and finishing first would waste its work. Ends when the peer lands or ends, on Stop, a restart or the timeout. Disjoint work and wait cycles are refused at once: a refusal or timeout means carry on, never retry. The source gate alone decides landing.',
+    inputSchema: { peer: z.string(), seconds: z.number().optional() }
+  },
+  async (args) => result(await invoke('peer_wait', args))
+)
+
+server.registerTool(
   'prepare_conflict_resolution',
   {
     title: 'Prepare Trezi conflict resolution',
@@ -261,7 +272,12 @@ for (const name of [
       description: previewToolText[name],
       inputSchema: previewToolShapes[name],
       annotations: {
-        readOnlyHint: !['preview_viewport', 'preview_speed', 'preview_interact', 'preview_verify'].includes(name),
+        readOnlyHint: ![
+          'preview_viewport',
+          'preview_speed',
+          'preview_interact',
+          'preview_verify'
+        ].includes(name),
         destructiveHint: false,
         openWorldHint: false
       }

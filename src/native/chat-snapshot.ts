@@ -13,6 +13,7 @@ import { formatTokens, isEmptyUsage, type TokenUsage } from '../shared/run-stats
 import { agentCard } from './chat-agent-card'
 import { menuItems } from './chat-island-refs'
 import { loginCard, startLoginCard } from './chat-login'
+import { decisionCard, peerCard } from './chat-peer-card'
 import { queueNote, sendBlock } from './chat-queue'
 import { recoveryCards } from './chat-recovery'
 import type { StartFlow } from './chat-start'
@@ -68,6 +69,8 @@ function activity(chat: Chat): NativeChatActivity | null {
     return live({ kind: 'waiting', label: 'Waiting for approval', animated: false })
   if (chat.questions.length)
     return live({ kind: 'waiting', label: 'Waiting for your answer', animated: false })
+  if (chat.peerWork?.some((line) => line.kind === 'waiting'))
+    return live({ kind: 'waiting', label: 'Waiting for other work…', animated: false })
   // What runs after the model finished, by name (LKM-165): landing, holding for review,
   // or the automatic resolve turn's own reconciliation.
   if (chat.phase === 'applying')
@@ -192,7 +195,9 @@ export function snapshot(
     })
   cards.push(...recoveryCards(chat))
   // LKM-165: an unlandable turn says so, with why and a way out — never "pending".
-  if (chat.isolation === 'parked' && chat.stopped !== 'held')
+  if (chat.isolation === 'parked' && chat.stopped !== 'held' && chat.decision)
+    cards.push(decisionCard(chat, chat.decision))
+  else if (chat.isolation === 'parked' && chat.stopped !== 'held')
     cards.push({
       id: 'conflict',
       title: 'This turn’s changes didn’t land',
@@ -208,6 +213,8 @@ export function snapshot(
         { label: 'Resolve', action: 'resolve', disabled: chat.isRunning }
       ]
     })
+  const peers = peerCard(chat.peerWork)
+  if (peers) cards.push(peers)
   for (const p of chat.permissions)
     cards.push({
       id: p.id,

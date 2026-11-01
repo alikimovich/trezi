@@ -132,6 +132,7 @@ try {
     'open_code',
     'open_preview',
     'peer_lookup',
+    'peer_wait',
     'pr_status',
     'prepare_conflict_resolution',
     'preview_console',
@@ -159,6 +160,13 @@ try {
   assert.ok(
     readFileSync(join(root, 'src/main/backends/claude.ts'), 'utf8').includes(lookup.description),
     'Claude and Codex describe peer_lookup identically'
+  )
+  const peerWait = listed.result.tools.find((tool) => tool.name === 'peer_wait')
+  assert.deepEqual(Object.keys(peerWait.inputSchema.properties).sort(), ['peer', 'seconds'])
+  assert.deepEqual(peerWait.inputSchema.required, ['peer'])
+  assert.ok(
+    readFileSync(join(root, 'src/main/backends/claude.ts'), 'utf8').includes(peerWait.description),
+    'Claude and Codex describe peer_wait identically'
   )
 
   assert.equal(

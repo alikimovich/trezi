@@ -6,6 +6,7 @@ import type { AgentEvent } from '../shared/api'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
 import { serviceEvents } from './platform'
+import { checkPeerCards } from './smoke-chat-peer'
 import { preparePreviewInput } from './smoke-input'
 import { checkProductLog } from './smoke-logs'
 import { checkQueueGeometry, checkQueueInsertion, emptyQueueProblems } from './smoke-queue'
@@ -307,6 +308,7 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     await wait((state) => !state.cards.includes('other-chat-permission'))
     send({ type: 'permission-resolved', id: 'other-chat-permission' })
     await checkProductLog(state.chat, turn)
+    await checkPeerCards(send, wait)
     // LKM-169: a drift park is visible together with the waiting queue, at both
     // supported chat widths. The provider send is stubbed above.
     send({ type: 'isolation', state: 'parked', files: ['src/native/fixture.ts'] })

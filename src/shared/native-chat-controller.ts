@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentTurnOptions, QuestionRequest } from './api'
+import type { AgentEvent, AgentTurnOptions, PeerFeedbackLine, QuestionRequest } from './api'
 import type { ChatAgentSettings } from './chat-settings'
 import type { NativeChatMessage, NativeChatState } from './native-chat'
 
@@ -33,6 +33,7 @@ export interface NativeSpawn {
   status: string
   activity?: string
   question?: QuestionRequest
+  peerWork?: PeerFeedbackLine[]
 }
 export interface NativeChatLayout {
   visible: boolean

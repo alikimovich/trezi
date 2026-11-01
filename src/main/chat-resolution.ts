@@ -94,6 +94,16 @@ export async function holdForDecision(
     ...landingPeers(gate, false, null)
   }
   upsertParkRecord(st, kept, turn)
-  emitIsolation(sessionKey, 'parked', st.wt.branch, kept, undefined, undefined, 'failed', error)
+  emitIsolation(
+    sessionKey,
+    'parked',
+    st.wt.branch,
+    kept,
+    undefined,
+    undefined,
+    'failed',
+    error,
+    held.question
+  )
   return true
 }

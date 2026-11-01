@@ -69,6 +69,7 @@ const requiredTools = [
   'run_checks',
   'workspace_state',
   'peer_lookup',
+  'peer_wait',
   'prepare_conflict_resolution',
   'git_sync_base',
   'git_merge_continue',

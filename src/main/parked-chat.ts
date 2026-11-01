@@ -29,7 +29,8 @@ export function showParkedChat(sessionKey: string): void {
       undefined,
       undefined,
       st.landingError ? 'failed' : st.interrupted ? 'interrupted' : undefined,
-      st.landingError
+      st.landingError,
+      st.decision
     )
 }
 

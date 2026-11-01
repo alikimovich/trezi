@@ -1,5 +1,6 @@
 import type { SessionTranscriptEntry } from '../shared/api'
 import type { ProviderSession } from './backends/types'
+import { setPeerPhase } from './peer-work'
 import {
   DECISION_LINE,
   type ResolutionContext,
@@ -92,6 +93,7 @@ export class ReconciliationCoordinator {
         if (!current()) return
         this.resolving.add(key)
         d.begin(key)
+        if (turn) setPeerPhase(turn, 'reconciling')
         session.emit({ type: 'reconciliation-started', ...(turn ? { turn } : {}) })
         const prompt = conflictResolutionPrompt(files, d.resolutionContext?.(key))
         if (turn && d.dispatch) d.dispatch(session, prompt, turn, next)

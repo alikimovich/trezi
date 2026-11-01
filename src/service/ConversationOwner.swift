@@ -38,6 +38,7 @@ final class ConversationOwner: @unchecked Sendable {
     /// Ephemeral peer intent. A process restart drops it; checkpoints and parked work stay intact.
     private var peerRows: [String: PeerRow] = [:]
     private var peerVersion = 0
+    private var peerWaits = PeerWaits()
     private let recovered: [ConversationStore.Recovery]
 
     init(options: Options, send: @escaping @Sendable (Data) -> Void) {
@@ -86,6 +87,7 @@ final class ConversationOwner: @unchecked Sendable {
         "mode": (["chat", "mode"], []), "release": (["chat"], []),
         "spawn": (["id", "project"], []), "spawnDone": (["id"], []), "spawnCancel": (["id"], []),
         "peerUpsert": (["row"], []), "peerRemove": (["id"], []), "peers": (["project", "exclude"], []),
+        "peerWaitBegin": (["waiter", "peer", "project", "ms"], []), "peerWaitEnd": (["waiter"], []),
         "snapshot": ([], []), "status": ([], []),
     ]
 
@@ -286,7 +288,24 @@ final class ConversationOwner: @unchecked Sendable {
             prunePeers()
             return ok
         case "peerRemove":
-            peerRows.removeValue(forKey: try Self.key(body, "id"))
+            let id = try Self.key(body, "id")
+            peerRows.removeValue(forKey: id)
+            peerWaits.remove(task: id)
+            return ok
+        case "peerWaitBegin":
+            prunePeers()
+            let waiter = try Self.key(body, "waiter"), peer = try Self.key(body, "peer")
+            let project = PeerRow.canonical(try body.path("project"))
+            guard case .number(let ms)? = body.value("ms"), ms > 0, ms.isFinite else { throw ServiceContractFailure.invalidRequest }
+            guard waiter != peer, peerRows[waiter]?.project == project, peerRows[peer]?.project == project else {
+                return Self.object([("started", .bool(false)), ("reason", .string(JSText("unknown")))])
+            }
+            if let refusal = peerWaits.begin(waiter: waiter, peer: peer, project: project, ms: ms, at: now()) {
+                return Self.object([("started", .bool(false)), ("reason", .string(JSText(refusal.rawValue)))])
+            }
+            return Self.object([("started", .bool(true))])
+        case "peerWaitEnd":
+            peerWaits.end(waiter: try Self.key(body, "waiter"))
             return ok
         case "peers":
             prunePeers()
@@ -330,11 +349,16 @@ final class ConversationOwner: @unchecked Sendable {
                 if !terms.isEmpty { fields.append(("terms", RepositoryOwner.strings(Array(terms.prefix(3))))) }
                 return Self.object(fields)
             }
-            var response = Self.object([("rows", .array(rows.map(\.value))), ("advisories", .array(advisory))])
+            let wait: [(String, JSValue)] = peerWaits.wait(of: exclude, project: project).map {
+                [("wait", Self.object([("peer", .string(JSText($0.peer))), ("ms", .number($0.ms)),
+                                       ("deadline", .number($0.deadline))]))]
+            } ?? []
+            let view = { Self.object([("rows", .array(rows.map(\.value))), ("advisories", .array(advisory))] + wait) }
+            var response = view()
             while response.utf8().count > 6144 && !rows.isEmpty {
                 let removed = rows.removeLast()
                 advisory.removeAll { $0["peer"]?.text?.string == removed.id }
-                response = Self.object([("rows", .array(rows.map(\.value))), ("advisories", .array(advisory))])
+                response = view()
             }
             return response
 
@@ -377,6 +401,7 @@ final class ConversationOwner: @unchecked Sendable {
                 peerRows.removeValue(forKey: row.id)
             }
         }
+        peerWaits.prune(at: now()) { peerRows[$0] != nil }
     }
 
     private func checkpoint(_ key: String) throws {
@@ -565,7 +590,7 @@ private struct PeerRow {
         heartbeat = at
         version = 0
         guard !id.isEmpty, ["chat", "comment", "background", "text-edit"].contains(origin),
-              ["preparing", "running", "landing"].contains(phase) else { throw ServiceContractFailure.invalidRequest }
+              ["preparing", "running", "reconciling", "landing"].contains(phase) else { throw ServiceContractFailure.invalidRequest }
     }
 
     private init(_ old: Self, version: Int) {

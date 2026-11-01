@@ -2,6 +2,17 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-31 — LKM-406 overlap, wait and reconciliation feedback, with a bounded named-peer wait
+
+- Red proof before the implementation: `bun test/peer-feedback.mjs` on unmodified source failed 16 of its 17 scenarios (for example "Timed out waiting for the overlap to show"); only "an incompatible comment keeps its branch and its question" passed, which is LKM-403 behaviour. Green on final source: all 17, with no provider calls.
+- Feedback is pull on change: every feed movement schedules one read, and a per-route digest lets only a different answer out (`src/main/peer-feedback.ts`). `seconds` on a waiting line comes from the bound as asked, not time left, or the wait would render every poll.
+- The first green run still announced a decision twice: `ReconciliationCoordinator.finish` always re-shows a park after `holdForDecision` emitted it. `emitIsolation` now drops a repeat of the shown decision; any other state resets that.
+- `peer_wait`: edges live in `ConversationOwner` so a cycle is refused at begin in one serial place and a service restart loses them all. Bun owns the bound and polls a fresh owner each second, since a captured client outlives the restart and only timed out. The owner's deadline frees an edge whose Bun side crashed.
+- A decision clears on the user's answer or Discard rather than on peer end: by then the peer has landed. `st.decision` is memory only (LKM-403), so after an app restart the branch remains and the card returns as ordinary held changes.
+- Measured on the final quick verification (parallel unit tier): `peer-state` event 552 bytes (bound 1536), Stop release 59 ms, timeout 1024 ms for a 1 s bound, cycle refusal 24 ms, disjoint refusal 25 ms, disjoint landing 1923 ms; the same scenarios alone ran the disjoint landing in 1420 ms.
+- The smoke fixture's decision event carries no `reason`: a failed park pauses the queue, which would have changed the note the following drift-park check reads.
+- Not run: the native suite (worker limit zero), so `src/native/smoke-chat-peer.ts` has not executed. Acceptance stays pending the manager's run on merged main.
+
 ## 2026-10-31 — LKM-403 repair 2: a held mixed tree needs an edit or a stated choice
 
 - Review finding: the answer-turn check only saw markers, a `DECISION NEEDED:` line or a conflicted file exactly one side. A real conflicted file also carries clean peer lines, so the held tree matched neither side, and a quiet answer turn (or `land_now`, which has no reply) released it over the peer's change.

@@ -27,6 +27,8 @@ export const UNIT = [
   'conversation-owner',
   'peer-work-feed',
   'peer-coordination',
+  'peer-feedback',
+  'chat-peer-card',
   'provider-owner',
   'provider-data',
   'provider-login',
