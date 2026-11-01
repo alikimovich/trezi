@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { createRecordCapture } from '../src/main/backends/record.ts'
 import { setConversationOwner, swiftConversationOwner } from '../src/main/conversation-owner.ts'
+import { peerChanged, peerRow } from '../src/main/peer-work.ts'
 import { newChat, reduce } from '../src/native/chat-state.ts'
 import { projectKey } from '../src/shared/projectKey.ts'
 
@@ -244,6 +245,75 @@ try {
     await wait(() => !shown(b).length, 'the overlap to clear when the peer ends')
     await quiet()
     assert.equal(states(b).length, before + 2, 'the clear renders once')
+  })
+
+  // The owner lists advisories newest peer version first, and every upsert bumps a version.
+  // Two peers publishing alternately must not reorder, and so re-send, an unchanged state.
+  const churn = async (p, peers, rounds) => {
+    for (let round = 0; round < rounds; round++)
+      for (const peer of peers) {
+        if (round % 2) {
+          // An unrelated observed file: a real version bump, no change to the overlap.
+          put(peer, `notes/${round}-${peer.id.slice(0, 6)}.md`, `round ${round}\n`)
+          peer.session.emit({ type: 'status', text: 'Edit' })
+        } else {
+          // The 60 s heartbeat: the same row published again.
+          await swiftConversationOwner().peerUpsert(peerRow(p.repo, peer.id))
+          peerChanged(p.repo)
+        }
+        await pause(40)
+      }
+    await quiet()
+  }
+  const peersOf = (worker) => shown(worker).map((line) => line.peer)
+
+  await scenario('lines keep one order while peers publish alternately', async (p) => {
+    const peers = [
+      await comment(p, 'Update src/Hero.tsx heading'),
+      await comment(p, 'Update src/Hero.tsx subtitle')
+    ]
+    const waiter = await comment(p, 'Update src/Hero.tsx footer')
+    await wait(() => shown(waiter).length === 2, 'both overlaps to show')
+    await quiet()
+    const first = peersOf(waiter)
+    assert.deepEqual(first, peers.map((peer) => peer.id).sort(), 'ordered by peer, not by recency')
+    const before = states(waiter).length
+    await churn(p, peers, 6)
+    assert.deepEqual(peersOf(waiter), first, 'the same order')
+    assert.equal(states(waiter).length, before, 'publishing alternately renders nothing')
+  })
+
+  await scenario('more lines than fit keep showing the same peers', async (p) => {
+    // A project runs three comments at once, so the other peers are rows of the waiter's own
+    // kind published straight to the owner: five peers, one more than the card shows.
+    const waiter = await comment(p, 'Update src/Hero.tsx footer')
+    const template = peerRow(p.repo, waiter.id)
+    const owner = swiftConversationOwner()
+    const ghosts = ['peer-a', 'peer-b', 'peer-c', 'peer-d', 'peer-e'].map((id) => ({
+      ...template,
+      id,
+      goal: `Update src/Hero.tsx part ${id}`
+    }))
+    const publish = async (rows) => {
+      for (const row of rows) await owner.peerUpsert(row)
+      peerChanged(p.repo)
+      await quiet()
+    }
+    try {
+      await publish(ghosts)
+      await wait(() => shown(waiter).length === 4, 'the bounded lines to show')
+      await quiet()
+      const first = peersOf(waiter)
+      assert.deepEqual(first, ['peer-a', 'peer-b', 'peer-c', 'peer-d'], 'the first four by peer')
+      const before = states(waiter).length
+      // Each round makes the opposite peer the newest, ending with the one left out.
+      for (let round = 0; round < 4; round++)
+        await publish(round % 2 ? ghosts : [...ghosts].reverse())
+      assert.deepEqual(peersOf(waiter), first, 'the same four peers')
+      assert.equal(states(waiter).length, before, 'no re-render for a bound of lines')
+    } finally {
+      for (const row of ghosts) await owner.peerRemove(row.id)
+    }
   })
 
   await scenario('a shared word reads as uncertain, never as safe or known', async (p) => {

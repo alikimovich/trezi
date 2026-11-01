@@ -13,6 +13,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Added
 
 - Chats and comment cards show overlap, waiting and reconciliation with other work as it changes, an uncertain overlap reads as uncertain, a held decision shows its question and where the work is kept, and agents can wait a bounded time on one named peer editing the same scope (LKM-406).
+## [0.10.0] - 2026-10-31
+
+### Added
+
+- When parallel work overlapped and its combined result passed its checks and landed, project memory saves one lesson linked to its task, commit and files; later chats read it as untrusted notes, not as rules (LKM-405).
 
 ## [0.9.0] - 2026-10-31
 

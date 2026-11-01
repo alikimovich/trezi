@@ -427,7 +427,7 @@ try {
   // A wait never outlives its bound, whatever is asked.
   await waiting.peerWaitEnd('w2')
   assert.equal((await peerWait('w1', 'w2', 3_600_000)).started, true)
-  await started.cmd({ cmd: 'advance', ms: 125_001 })
+  await started.cmd({ cmd: 'advance', ms: 105_001 })
   assert.equal((await waiting.peers(a, 'w1')).wait, undefined, 'the owner caps every wait')
 
   await waiting.peerUpsert({ ...task('w1', a, 'comment', ['a.txt']), phase: 'reconciling' })

@@ -21,6 +21,16 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] LKM-411 follow-up: rules version 47, a late `landing-finished` keeps the newer turn's row, and a base sync during refresh drops paths read against the old base.
 - [ ] Manager: run the relevant native suite on merged main; worker has zero native calls.
 
+## Coordinated parallel work: verified lessons from resolved work that landed (LKM-405)
+
+- [x] Red baseline on an immutable checkout of f35741b3 (nine negative controls pass, eleven feature scenarios fail on the missing feature), then 20 of 20 on final source, in disposable Git repos with stub providers through the real lifecycle and the real Swift memory owner (`test/resolved-lessons.mjs`, `test/helpers/resolved-lessons-fixture.mjs`).
+- [x] Trigger in the landing step of a chat (`land_now` included) and a background task, after the commit of a checked combined tree; the general evaluator is not proof and stays separate.
+- [x] Existing project-memory queue and compare-and-swap only: no new store, no model call.
+- [x] One reusable lesson with task, commit and files; eight lessons at most; nothing from unfinished, failed, stopped, decided or routine clean work, for chats and background tasks.
+- [x] Stop forgets a finished reconciliation and Retry never vouches for one, so a stopped tree that Retry lands saves nothing (found by a surviving mutant).
+- [x] Lesson text stays untrusted data outside `<project-memory>`, and the evaluator can neither launder nor forge one.
+- [ ] Manager: run the relevant native suite on merged main; worker has zero native calls.
+
 ## Coordinated parallel work: lookup, freshness and resolution (LKM-403)
 
 - [x] Red baseline, then green final source, in disposable Git repos with stub providers through the real lifecycle (`test/peer-coordination.mjs`).
@@ -42,6 +52,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Disjoint work never waits; owner edges, deadlines and a real SIGKILL restart in `test/peer-work-feed.mjs`.
 - [x] Native fixture assertion for the cards and the decision (`src/native/smoke-chat-peer.ts`, group `chat`).
 - [x] Review repair 2: a re-held decision always reaches the chat and pauses the queue; the snapshot restores the decision for a rebuilt chat.
+- [x] Review repair 4: lines ordered by content (peer, kind), so heartbeats and unrelated files never re-send a state or swap the shown peers; `peer_wait` bound 100 s under the service's 120 s helper tool deadline; a rebuilt park keeps its held decision.
 - [ ] Manager: run the native suite on merged main; worker has zero native calls.
 
 ## Single live writer admission (LKM-404)

@@ -7,7 +7,7 @@ import { currentAgentGitAccess } from './agent-git-access'
 import { finalReply, turnMessage } from './chat-commit'
 import { chatGateScope, gatedTurn, holdTurn, landTurn } from './chat-landing'
 import { clearPark, gitOut, upsertParkRecord } from './chat-park'
-import { holdForDecision, landingPeers, noteResolution } from './chat-resolution'
+import { holdForDecision, landingPeers, noteResolution, noteResolved } from './chat-resolution'
 import { spareWorktreeIds, takeSpare } from './chat-spare'
 import {
   type ChatState,
@@ -377,7 +377,9 @@ async function landBatch(
     st.decision = undefined
     st.decisionShown = false
     st.resolution = undefined
-  }
+  } else if (terminal !== 'success') st.resolved = undefined
+  // Retry has no turn of its own: it may land a stopped resolution, but never vouches for it.
+  else if (turn.length || reconcile) noteResolved(st, finalReply(turn), turnNo)
   // LOCAL-WEBKIT-3: only the tree its checks passed on lands (`gatedTurn`).
   let { outcome, verdict } = await gatedTurn(sessionKey, st, described.text, terminal === 'success')
   let reconcileFiles: string[] | null = null
@@ -409,7 +411,7 @@ async function landBatch(
   logLanding(sessionKey, st.wt.branch, outcome, terminal, reconcileFiles)
   const at = Date.now()
   if (outcome.outcome === 'merged') {
-    await landTurn(sessionKey, st, outcome, turnNo, described)
+    await landTurn(sessionKey, st, outcome, turnNo, described, !!verdict?.ok)
     const peers = landingPeers(gate, combined, verdict?.candidate ?? null)
     st.lastLanding = { outcome: 'merged', files: outcome.files, at, ...peers }
   } else if (outcome.outcome === 'held' && outcome.hold?.reason !== 'live-changed') {

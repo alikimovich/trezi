@@ -808,7 +808,9 @@ comment ends as review with the question and its branch. A dropped own side is w
 ## Overlap, wait and reconciliation feedback, and the named-peer wait (LKM-406)
 
 `src/main/peer-feedback.ts` turns the service-owned feed into one `peer-state` event per
-task and per state change, at most 1536 bytes and four lines, most urgent first. Every
+task and per state change, at most 1536 bytes and four lines, most urgent first, then by
+peer and kind (the owner lists peers newest version first, and every heartbeat or unrelated
+file bumps a version, so that order never reaches the digest or picks the shown peers). Every
 feed movement arrives there; a digest per chat or comment lets only a different answer
 out, and a task that leaves the feed clears its card once. Chats show one `peer-work`
 card (`src/native/chat-peer-card.ts`), comments and background agents the same words on
@@ -829,10 +831,12 @@ the session snapshot (`isolation.decision`, `isolation.files`).
 `peer_wait` (`src/main/peer-wait.ts`) lets an agent wait on one named peer when both have
 a known or possible overlap on the same files or target. It is not a lock: landing still
 belongs to the source gate, and nothing else ever waits. The default is 60 s, the limit
-120 s, and the poll is 1 s. The wait edge lives in `ConversationOwner` (`PeerWaits`,
+100 s (under the service's 120 s deadline for a helper-hosted tool call, which starts
+before the wait does, so a wait at the limit still answers `timeout`), and the poll is
+1 s. The wait edge lives in `ConversationOwner` (`PeerWaits`,
 `src/service/ConversationState.swift`), in memory only: one edge per waiter, refused at
 begin when it would close a cycle, removed with either task, and dropped at its deadline
-(asked bound plus 5 s, never over 125 s). Bun owns the bound; the owner's deadline only
+(asked bound plus 5 s, never over 105 s). Bun owns the bound; the owner's deadline only
 frees an edge whose Bun side is gone. A wait ends as `landed`, `ended`, `stopped`,
 `timeout` or `restart`; a refusal is `unknown`, `different-scope`, `busy`, `cycle`,
 `unavailable` or `stopped`, and takes no time. Stop on the chat or comment settles it at

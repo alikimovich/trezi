@@ -196,6 +196,21 @@ try {
   assert.equal(read(bare.root, OTHER), 'export const baz = 4\n')
   await releaseChat(bare.key)
 
+  // LKM-406: a rebuild while the work holds a decision keeps the decision card. The event
+  // replaces the card's state, and Retry and Resolve both refuse while a decision is held.
+  const held = await fixture()
+  const hst = states.get(held.key)
+  hst.parked = true
+  hst.landingError = 'Decision needed: Dark or light?'
+  hst.decision = 'Dark or light?'
+  writeFileSync(join(held.cwd, OTHER), 'export const baz = 5\n')
+  assert.equal(await reconcilePark(held.key, 'chat-open'), 'rebuilt')
+  assert.equal(events.at(-1).state, 'parked')
+  assert.equal(events.at(-1).reason, 'failed')
+  assert.equal(events.at(-1).decision, 'Dark or light?', 'the rebuilt park still carries it')
+  assert.equal(hst.decision, 'Dark or light?', 'the rebuild does not clear the held decision')
+  await releaseChat(held.key)
+
   // A real conflict is kept as it is.
   const real = await driftPark()
   const before = events.length

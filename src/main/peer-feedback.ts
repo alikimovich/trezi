@@ -37,6 +37,14 @@ const brief = (row: { origin: PeerWorkRow['origin']; goal: string }) => ({
 const CERTAIN = { waiting: 0, reconciling: 1, overlap: 2 } as const
 const rank = (line: PeerFeedbackLine): number =>
   CERTAIN[line.kind] * 2 + (line.certainty === 'uncertain' ? 1 : 0)
+const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
+
+/** Urgency first, then the peer and the kind. The owner lists advisories newest peer
+ *  version first, and every heartbeat or unrelated file bumps a version: ordering by
+ *  anything but content would re-send an unchanged state (and could swap which peers fit
+ *  the bound). */
+const order = (a: PeerFeedbackLine, b: PeerFeedbackLine): number =>
+  rank(a) - rank(b) || compare(a.peer, b.peer) || compare(a.kind, b.kind)
 
 function linesFor(row: PeerWorkRow, view: PeerWorkView): PeerFeedbackLine[] {
   const peers = new Map(view.rows.map((peer) => [peer.id, peer]))
@@ -66,10 +74,10 @@ function linesFor(row: PeerWorkRow, view: PeerWorkView): PeerFeedbackLine[] {
       peer: peer.id,
       ...brief(peer),
       certainty: advisory.certainty,
-      files: advisory.files.slice(0, PEER_FEEDBACK_LIMITS.files)
+      files: [...advisory.files].sort(compare).slice(0, PEER_FEEDBACK_LIMITS.files)
     })
   }
-  return lines.sort((a, b) => rank(a) - rank(b)).slice(0, PEER_FEEDBACK_LIMITS.lines)
+  return lines.sort(order).slice(0, PEER_FEEDBACK_LIMITS.lines)
 }
 
 const routeOf = (row: PeerWorkRow): Omit<Route, 'digest'> =>

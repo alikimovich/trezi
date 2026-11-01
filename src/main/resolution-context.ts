@@ -9,12 +9,14 @@ import { peerGateRefresh } from './peer-freshness'
 import { secretPath } from './peer-signals'
 import { peerRow } from './peer-work'
 import { productLog, redact } from './product-log'
+import type { Lesson } from './project-lessons'
 import {
   choiceFrom,
   decisionFrom,
   fallbackDecision,
   type PendingResolution,
-  type ResolutionContext
+  type ResolutionContext,
+  type ResolvedWork
 } from './resolution-evidence'
 import type { Worktree } from './worktrees'
 
@@ -81,7 +83,25 @@ export async function resolutionFor(
     acceptance: passedCheckNames(input.scope).slice(0, MAX_ACCEPTANCE),
     truncated: ownDiff.cut || currentDiff.cut
   }
-  return { revisions: stage, files, context }
+  return { revisions: stage, files, context, task: input.self }
+}
+
+/**
+ * The lesson of a reconciliation that landed as `commit` (LKM-405): the agent's own line,
+ * or Trezi's sentence when it gave none. Files are those of the conflict that landed;
+ * none left, or only secret paths, saves nothing.
+ */
+export function landedLesson(work: ResolvedWork, commit: string, landed: string[]): Lesson | null {
+  const files = work.files.filter((file) => landed.includes(file) && !secretPath(file))
+  if (!files.length) return null
+  const shown = files.slice(0, 2).join(', ')
+  const fallback = `Parallel work overlapped in ${shown}: read peer work before changing it and keep both goals when combining.`
+  return {
+    text: work.note ? redact(work.note) : fallback,
+    task: work.task,
+    commit,
+    files
+  }
 }
 
 export interface HeldResolution {

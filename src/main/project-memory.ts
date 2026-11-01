@@ -1,9 +1,9 @@
 import { projectKey } from '../shared/projectKey'
 import type { Revision } from '../shared/service-contract/types'
-import { withoutProvenance } from './project-memory-format'
+import { lessonRules, splitLessons } from './project-lessons'
+import { MAX_PROJECT_MEMORY_CHARS, withoutProvenance } from './project-memory-format'
 
-/** Project memory is intentionally small: it is injected into model context. */
-export const MAX_PROJECT_MEMORY_CHARS = 16_000
+export { MAX_PROJECT_MEMORY_CHARS }
 
 export interface ProjectMemory {
   content: string
@@ -152,11 +152,14 @@ export function createProjectMemoryInjection(store: () => ProjectMemoryStore) {
 
 /**
  * A bounded, clearly-delimited rules section shared by every provider. Source tags
- * stay in the stored memory; a chat sees only the rules.
+ * stay in the stored memory; a chat sees only the rules. Verified lessons follow as
+ * untrusted data, never among the rules (LKM-405).
  */
 export function projectMemoryRules(content: string): string[] {
-  const memory = withoutProvenance(content.trim().slice(0, MAX_PROJECT_MEMORY_CHARS)).trim()
-  if (!memory) return []
+  const { rules, lessons } = splitLessons(content.trim().slice(0, MAX_PROJECT_MEMORY_CHARS))
+  const memory = withoutProvenance(rules).trim()
+  const data = lessonRules(lessons)
+  if (!memory) return data
   return [
     '',
     '## Project memory',
@@ -168,18 +171,20 @@ export function projectMemoryRules(content: string): string[] {
     '',
     '<project-memory>',
     memory,
-    '</project-memory>'
+    '</project-memory>',
+    ...data
   ]
 }
 
 /** One-time update injected when memory changed after a live session started. */
 export function projectMemoryUpdate(content: string, prompt: string): string {
   const lines = projectMemoryRules(content)
-  const update = lines.length
+  const update = lines.includes('<project-memory>')
     ? lines.join('\n')
     : [
         '## Project memory update',
-        'Trezi project memory is now empty. Do not treat earlier saved memory as standing context.'
+        'Trezi project memory is now empty. Do not treat earlier saved memory as standing context.',
+        ...lines
       ].join('\n')
   return `${update}\n\n---\n\n${prompt}`
 }

@@ -313,8 +313,8 @@ struct PeerWaits {
     }
     enum Refusal: String { case busy, cycle }
 
-    /// Bun's own bound (120 s) plus its grace: Bun's timer always ends a live wait first.
-    static let maxMs = 125_000.0
+    /// Bun's own longest bound (100 s) plus its grace: Bun's timer always ends a live wait first.
+    static let maxMs = 105_000.0
     private(set) var edges: [String: Edge] = [:]
 
     mutating func begin(waiter: String, peer: String, project: String, ms: Double, at: Double) -> Refusal? {

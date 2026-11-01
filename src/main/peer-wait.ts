@@ -22,7 +22,10 @@ import {
 export const PEER_WAIT_LIMITS = {
   defaultMs: 60_000,
   minMs: 1000,
-  maxMs: 120_000,
+  /** Under the service's 120 s deadline for a helper-hosted tool call (`toolTimeout`, which
+   *  starts before Bun reads the peer and begins the wait): the answer must be ours, not a
+   *  bare "did not answer in time". `test/peer-wait-deadline.mjs` holds the margin. */
+  maxMs: 100_000,
   /** The owner's backstop outlives this timer, so a live wait always ends here first. */
   graceMs: 5000,
   /** How soon a lost edge (a service restart) is noticed. */
@@ -88,7 +91,8 @@ onPeerChange((project, ended) => {
 const contended = (kind: string, files: string[]): boolean =>
   kind === 'exact-file' || kind === 'same-target' || (kind === 'possible-overlap' && !!files.length)
 
-const seconds = (raw: unknown): number => {
+/** The asked bound in whole seconds, held to the limits; no number asks for the default. */
+export const peerWaitBound = (raw: unknown): number => {
   const asked = typeof raw === 'number' && Number.isFinite(raw) ? raw * 1000 : NaN
   const ms = Number.isNaN(asked) ? PEER_WAIT_LIMITS.defaultMs : asked
   return Math.ceil(Math.min(PEER_WAIT_LIMITS.maxMs, Math.max(PEER_WAIT_LIMITS.minMs, ms)) / 1000)
@@ -119,7 +123,7 @@ export async function peerWait(
   if (held.has(self)) return refuse('busy')
   const advisory = view.advisories.find((item) => item.peer === id)
   if (!advisory || !contended(advisory.kind, advisory.files)) return refuse('different-scope')
-  const bound = seconds(args.seconds)
+  const bound = peerWaitBound(args.seconds)
   const begun = await owner.peerWaitBegin(
     self,
     id,

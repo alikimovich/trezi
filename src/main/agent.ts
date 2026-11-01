@@ -108,6 +108,7 @@ import {
 } from './peer-work'
 import { platformOwner } from './platform-owner'
 import { productLog } from './product-log'
+import { type Lesson, splitLessons, withLesson, withLessons } from './project-lessons'
 import {
   createProjectMemoryInjection,
   createProjectMemoryUpdateQueue,
@@ -126,7 +127,8 @@ import { registerProviderIpc } from './providers'
 import { generatePublishDescription } from './publish-description'
 import { answerAsked } from './question-tool'
 import { enqueueRepoWrite } from './repo-write-queue'
-import type { PendingResolution } from './resolution-evidence'
+import { landedLesson } from './resolution-context'
+import { lessonFrom, type PendingResolution } from './resolution-evidence'
 import type { RpcHandlerRegistry } from './rpc-router'
 import { createProject } from './scaffold'
 import { incidents } from './self-heal/incidents'
@@ -511,7 +513,9 @@ export function dreamerCompletion(): {
  * After each successful interactive turn, conservatively merge durable decisions
  * into the project's one shared memory. The queue re-reads memory between peer
  * chats and protects a concurrent manual editor save; provider/model failures are
- * intentionally invisible to the completed chat.
+ * intentionally invisible to the completed chat. This runs at the provider's terminal
+ * event, before landing, so it gets the rules only: it can neither judge a verified
+ * lesson (LKM-405) nor turn one into a rule, and its answer cannot forge one.
  */
 function evaluateProjectMemory(sessionKey: string): void {
   const session = sessions.get(sessionKey)
@@ -527,10 +531,22 @@ function evaluateProjectMemory(sessionKey: string): void {
   const options = { ...session.options }
   // The chat's worktree and the live checkout: a token the turn added is in one of them.
   const roots = [session.root, root]
+  void memoryUpdateQueue().enqueue(root, async (currentMemory) => {
+    const { rules, lessons } = splitLessons(currentMemory)
+    const next = await evaluate(rules, transcript, options)
+    const merged = next === null ? null : withLessons(splitLessons(next).rules, lessons)
+    return refineProjectMemory(currentMemory, merged, { roots })
+  })
+}
+
+/**
+ * Save the lesson of resolved work that just landed (LKM-405), through the same queue as
+ * every automatic update: a concurrent manual save survives the compare-and-swap and the
+ * lesson is written onto it. Called inside the repository lease, so never awaited there.
+ */
+function saveLesson(root: string, lesson: Lesson): void {
   void memoryUpdateQueue().enqueue(root, async (currentMemory) =>
-    refineProjectMemory(currentMemory, await evaluate(currentMemory, transcript, options), {
-      roots
-    })
+    refineProjectMemory(currentMemory, withLesson(currentMemory, lesson), { roots: [root] })
   )
 }
 
@@ -922,6 +938,20 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
           body: origin === 'text-edit' ? 'Trezi background text edit.' : 'Trezi comment spawn.'
         })
         notePeerLanded(id, files, commit.sha)
+        // LKM-405: combined overlapping work that passed its checks on this tree and landed.
+        const lesson =
+          spawn.resolution && landing.gate?.tree && commit.sha
+            ? landedLesson(
+                {
+                  task: id,
+                  files: spawn.resolution.files,
+                  note: lessonFrom(summary ?? '')
+                },
+                commit.sha,
+                files
+              )
+            : null
+        if (lesson) saveLesson(parentRoot, lesson)
         await removeWorktree(parentRoot, wt, { keepBranch: false, intent: 'landed' })
         try {
           removeRecord(session.record.id, session)
@@ -1276,7 +1306,7 @@ export function registerAgentIpc(
   ipcMain.handle('planning:cancel', (_e, id: string) => planning.cancel(id))
   ipcMain.handle('planning:stop', (_e, id: string) => planning.stop(id))
   // v9 per-chat worktree isolation — deps-injected so this module barely grows.
-  initChatIsolation({ worktreesDir, store, getWindow, describe: describeChangeWith })
+  initChatIsolation({ worktreesDir, store, getWindow, describe: describeChangeWith, saveLesson })
   // LKM-136: idle and old-name chat workspace cleanup; Settings shows the usage.
   initChatWorkspaces({
     worktreesDir,

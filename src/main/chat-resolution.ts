@@ -7,6 +7,7 @@ import { completeTurn, conflictMarkerFiles, type ResolvePrep } from './chat-work
 import { peerGateMatters } from './peer-freshness'
 import { peerTurn } from './peer-work'
 import { digestFiles, heldResolution, resolutionFor, restoreOwnFiles } from './resolution-context'
+import { lessonFrom } from './resolution-evidence'
 import type { TurnTerminalOutcome } from './turn-terminal'
 
 /**
@@ -35,6 +36,22 @@ export async function noteResolution(
           self: peerTurn(sessionKey),
           goal: lastAsk(st)
         })
+  // New conflicts: whatever was finished before no longer describes this tree.
+  if (st.resolution) st.resolved = undefined
+}
+
+/**
+ * A reconciling turn finished and no decision is open: remember it, so the landing that
+ * follows (now or on Retry, which has no reply of its own) can save its lesson.
+ */
+export function noteResolved(st: ChatState, reply: string, turn: number): void {
+  const pending = st.resolution
+  if (!pending) return
+  st.resolved = {
+    task: st.resolved?.task ?? (pending.task || `${st.wt.id}:${turn}`),
+    files: pending.files,
+    note: lessonFrom(reply) ?? st.resolved?.note ?? null
+  }
 }
 
 /** The gate's note as `lastLanding` keeps it: only when there was something to see. */
@@ -68,6 +85,7 @@ export async function holdForDecision(
       ? await heldResolution(st.wt, pending, turn.length ? finalReply(turn) : null, st.decision)
       : { question: st.decision ?? '', files: st.parkedFiles, restore: [] }
   if (!held) return false
+  st.resolved = undefined
   await restoreOwnFiles(st.wt, pending, held.restore)
   // What is held, so an answer turn that changes none of it and chooses nothing holds again.
   pending.held = await digestFiles(st.wt.path, pending.files)

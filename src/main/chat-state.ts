@@ -3,8 +3,9 @@ import type { NativeView } from '../native/platform'
 import type { AgentEvent, PeerGateNote, SessionRecord } from '../shared/api'
 import { createChatWorktree } from './chat-worktrees'
 import type { DescribeChange } from './commit-message'
+import type { Lesson } from './project-lessons'
 import { enqueueRepoWrite } from './repo-write-queue'
-import type { PendingResolution } from './resolution-evidence'
+import type { PendingResolution, ResolvedWork } from './resolution-evidence'
 import type { SessionStore } from './sessions-store'
 import { retireWorktreeBranch, type Worktree } from './worktrees'
 
@@ -61,6 +62,9 @@ export interface ChatState {
    *  that ends this reconciliation must not announce it again. Consumed by that call and
    *  cleared wherever `decision` is. */
   decisionShown?: boolean
+  /** LKM-405: the reconciliation its agent finished. Outlives `resolution`, which a clean
+   *  re-stage on Retry clears, and saves a lesson only when this work lands. */
+  resolved?: ResolvedWork
 }
 
 export interface LandingResult {
@@ -80,6 +84,8 @@ interface Deps {
   /** The chat's background model as a one-shot completion for its landing commit
    *  message (LKM-189); absent or null → the deterministic message. */
   describe?: (sessionKey: string) => DescribeChange | null
+  /** Queue a verified lesson on project memory (LKM-405). Never awaited in the lease. */
+  saveLesson?: (root: string, lesson: Lesson) => void
 }
 
 let deps: Deps | null = null

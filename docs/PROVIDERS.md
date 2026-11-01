@@ -1121,10 +1121,15 @@ answers, the agent applies the choice and ends with `DECISION MADE: <choice>`. S
 
 `peer_wait` (LKM-406) has the same one contract: name, arguments, description and
 auto-allowed policy match across Claude and Codex, foreground and background. It takes
-`peer` and optional `seconds` (default 60, at most 120) and answers `{ "waited": true,
+`peer` and optional `seconds` (default 60, at most 100) and answers `{ "waited": true,
 "outcome": … }` or, at once, `{ "waited": false, "refused": … }`, each with guidance to
 carry on. Disjoint work and wait cycles are refused, and only high-contention work ever
-waits. Provider tool bridges allow 300 s (`SYNC_TOOL_TIMEOUT_SEC`), above the bound. See
+waits. Provider tool bridges allow 300 s (`SYNC_TOOL_TIMEOUT_SEC`), but a helper-hosted
+Claude or Codex call also has the service's own 120 s tool deadline (`toolTimeout`,
+`src/service/ProviderOwner.swift`), which starts before Bun reads the peer and begins the
+wait. The 100 s limit leaves that deadline 20 s, so the agent always gets Bun's `timeout`
+outcome with its "do not wait again" guidance and never the transport's bare "did not
+answer in time" (`test/peer-wait-deadline.mjs`). See
 [`docs/WORKTREES.md`](WORKTREES.md#overlap-wait-and-reconciliation-feedback-and-the-named-peer-wait-lkm-406).
 
 ## Claude resume recovery (LKM-165)
