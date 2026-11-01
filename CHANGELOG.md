@@ -13,6 +13,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Added
 
 - Agents can read a same-project peer's goal and a bounded diff, see overlap on known components and uncertain overlap across files, and resolve conflicts with both goals in view; goals that cannot both hold stay unlanded and ask you one question (LKM-403).
+## [0.8.1] - 2026-10-31
+
+### Fixed
+
+- A late landing event no longer removes a running chat from the peer work feed, and a live sync during a feed refresh no longer causes a false exact-file advisory (LKM-411).
 
 ## [0.8.0] - 2026-10-31
 

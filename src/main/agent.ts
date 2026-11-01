@@ -543,7 +543,8 @@ function evaluateProjectMemory(sessionKey: string): void {
 const interactiveEvents =
   (sessionKey: string, tracker: TurnTracker) =>
   (e: AgentEvent): void => {
-    if (e.type === 'landing-finished') finishPeer(peerTurn(sessionKey), sessionKey)
+    // A late terminal event names an earlier turn; the current turn keeps its row.
+    if (e.type === 'landing-finished') finishPeer(e.turn ?? peerTurn(sessionKey), sessionKey)
     incidents.observe(sessionKey, e)
     watchdog.touch(sessionKey)
     if (e.type === 'permission-request')

@@ -132,11 +132,26 @@ assert.match(
   source('smoke-core.ts'),
   /name: 'parallel-stream',[\s\S]{0,120}cleanup: \(\) => restoreParallelStream\(host\)/
 )
-// Restored after the turns end, and the second chat closed last.
-const restore = check.slice(check.indexOf('export async function restoreParallelStream'))
-const order = ['endSharedTurn(', 'cleanSharedChat(', 'stub.restore()', "type: 'close-chat'"].map(
-  (step) => restore.indexOf(step)
+// LKM-412: two chats only stream at once with worktrees of their own. In the suite's non-Git
+// project LKM-404 admits one writer turn, so the second send waits and never reaches its stub.
+const setup = check.slice(check.indexOf('export async function checkParallelStream'))
+const opening = ['initRepo(project)', "type: 'open', root: project", 'const a = nativeChat.active']
+const opened = opening.map((step) => setup.indexOf(step))
+assert.ok(
+  opened.every((at, i) => at >= 0 && (i === 0 || at > opened[i - 1])),
+  `${opened}`
 )
+assert.match(setup, /assert\.notEqual\(await isolatedCwd\(root, chat\), root/)
+// Restored after the turns end, then the second chat and the disposable project closed last.
+const restore = check.slice(check.indexOf('export async function restoreParallelStream'))
+const order = [
+  'endSharedTurn(',
+  'cleanSharedChat(',
+  'stub.restore()',
+  "type: 'close-chat'",
+  "action: 'select-row'",
+  "type: 'close', key"
+].map((step) => restore.indexOf(step))
 assert.ok(
   order.every((at, i) => at >= 0 && (i === 0 || at > order[i - 1])),
   `${order}`
