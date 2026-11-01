@@ -69,6 +69,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'shell-layout': ['core'],
   'toolbar-address': ['core'],
   'toggle-ui': ['core'],
+  'toolbar-actions': ['core'],
   'device-frame': ['core'],
   'selection-input': ['core', 'selection'],
   inspector: ['core'],

@@ -4,8 +4,8 @@ import AppKit
 /// last item at the trailing edge. Its actions go to Bun as shell actions (`src/native/preview-refresh.ts`).
 extension NativeShell {
     /// LKM-276: a repo with a JS dev server and native roots switches which one it previews.
-    /// LKM-391: Mark up opens over the preview; here and in the Actions menu, so the small
-    /// window that loses this item keeps it.
+    /// LKM-391: Mark up opens over the preview; here, in the Actions menu and (LKM-430) on its
+    /// own interaction segment, which every window width keeps.
     static let moreActions = [("Mark up", "markup"), ("Reload Without Cache", "reload-hard"), ("Restart Dev Server (clean cache)", "restart-clean"),
                               ("Switch JS / Native Preview", "switch-preview")]
     func configureMore(_ item: NSMenuToolbarItem) {
@@ -43,6 +43,20 @@ extension NativeShell {
         addressLayout.moveRightGroups(hiding: hidden, by: moreShift + segment)
         item.isHidden = hidden
     }
+    /// LKM-430: the Mark up segment follows the overlay. A click while one is open reaches
+    /// `PreviewMarkup.begin`, which refuses a second session.
+    func updateMarkup(active: Bool) {
+        guard active != markupActive else { return }
+        markupActive = active
+        toolbarItems["markup"]?.image = ToolbarIslands.markupImage(active: active)
+        for group in toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }) { group.refresh() }
+    }
+    func markupInspect() -> [String: Any] {
+        let item = toolbarItems["markup"]
+        return ["markupEnabled":item?.isEnabled ?? false, "markupActive":markupActive, "markupLabel":item?.label ?? "", "markupToolTip":item?.toolTip ?? "",
+                "markupHasImage":item?.image != nil, "markupProminent":item?.image.map { !$0.isTemplate } ?? false,
+                "markupAccessibility":item?.image?.accessibilityDescription ?? ""]
+    }
     /// Pipe checks pick an entry the way a click on it would.
     func performMore(_ item: NSMenuToolbarItem?, _ action: String) -> Bool {
         guard let item, item.isEnabled,
@@ -55,7 +69,9 @@ extension NativeShell {
         if #available(macOS 15, *) { hidden = item?.isHidden ?? false }
         return ["moreMenu":item?.menu.items.filter { !$0.isSeparatorItem }.map(\.title) ?? [], "moreEnabled":item?.isEnabled ?? false,
                 "moreVisible":!hidden && (toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "more" } ?? false),
-                "interactionSegments":(toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? []]
+                "interactionSegments":(toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? [],
+                "toolSegments":(toolbar.items.first { $0.itemIdentifier.rawValue == "tools" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? []]
+            .merging(markupInspect()) { _, new in new }
     }
     /// LKM-319: dividers that draw inside each toolbar island (none on macOS 27).
     func islandInspect() -> [String: Any] {

@@ -32,8 +32,9 @@ and provider-seat rules are here.
   only the direct `cancelOperation:` link and responder chain everywhere.
   Toggle UI therefore goes to the menu first through `MenuFirstShortcut`
   (`src/native/MenuFirstShortcuts.swift`); add a menu key there if a focused view must not
-  see it. Never bind Escape there. Covered by `test/menu-first-shortcuts.mjs` and the
-  `toggle-ui` smoke.
+  see it (Send Feedback's ⌥⌘F is the second key there: WebKit claims it too). Never bind
+  Escape there. Covered by `test/menu-first-shortcuts.mjs` and the `toggle-ui` and
+  `toolbar-actions` smokes.
 - **A foreground capture does not map onto view frames (LKM-334).** On macOS 27 the
   ScreenCaptureKit window image from `captureVisibleRegion` drew the window 2–6 % smaller
   than its frame, varying per capture, so a pixel read at a view frame lands on the wrong
