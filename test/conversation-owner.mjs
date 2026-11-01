@@ -60,7 +60,7 @@ mock.module('../src/main/backends/index.ts', () => ({
       }
       const cap = createRecordCapture(cwd, projectKey(cwd))
       let disposed = false
-      const entry = { cwd, options, context, sent: [], settled: [] }
+      const entry = { cwd, options, context, sent: [], settled: [], hardStop: false }
       const emit = (event) => {
         if (disposed) return
         const tagged = {
@@ -89,6 +89,7 @@ mock.module('../src/main/backends/index.ts', () => ({
         },
         // A graceful stop: the provider ends the turn with its `done`.
         interrupt: async () => {
+          if (entry.hardStop) return { hardStopped: true }
           cap.finalize()
           emit({ type: 'done' })
           return undefined
@@ -175,7 +176,7 @@ const within = async (work, label, ms = 20_000) => {
 const until = async (condition, label) => {
   const deadline = Date.now() + 30_000
   while (Date.now() < deadline) {
-    if (condition()) return
+    if (await condition()) return
     await sleep(10)
   }
   throw new Error(`Timed out: ${label}`)
@@ -392,8 +393,14 @@ try {
     const home = profile('swift')
     const started = await fixture(home)
     const swift = JSON.parse(JSON.stringify(await ownerScript(started.owner())))
-    for (let i = 0; i < golden.log.length; i++)
-      assert.deepEqual(swift[i], golden.log[i], `step ${golden.log[i][0]}`)
+    for (let i = 0; i < golden.log.length; i++) {
+      const answer = swift[i]
+      if (answer[0] === 'snapshot') {
+        assert.ok(answer[1].chats.every((chat) => chat.isolated === true))
+        for (const chat of answer[1].chats) delete chat.isolated
+      }
+      assert.deepEqual(answer, golden.log[i], `step ${golden.log[i][0]}`)
+    }
     assert.equal(swift.length, golden.log.length)
     const goldenFiles = golden.files,
       swiftFiles = files(join(home, 'trezi/sessions'))
@@ -819,6 +826,241 @@ try {
     setEditingOwner(owners.editing)
     const repo = repository('repo-swift')
     const swift = await agentScenario(repo)
+    const liveEvents = []
+    window = (event) => liveEvents.push(event)
+    // LKM-404: two chats in a live checkout must not enter provider turns together.
+    for (const liveRoot of [
+      join(repository('nested-parent'), 'child'),
+      join(scratch, 'plain-project')
+    ]) {
+      mkdirSync(liveRoot, { recursive: true })
+      const first = providers.length
+      const key = projectKey(liveRoot)
+      await invoke('agent:open-project', liveRoot, { provider: 'claude' })
+      const p1 = providers[first]
+      const second = await invoke('agent:new-chat', liveRoot, { provider: 'claude' })
+      await until(() => providers.length === first + 2, 'live second provider')
+      const p2 = providers.at(-1)
+      assert.equal(p1.cwd, liveRoot)
+      assert.equal(p2.cwd, liveRoot)
+      const liveChats = (await owners.conversation.snapshot()).chats.filter(
+        (chat) => chat.project === key
+      )
+      assert.equal(liveChats.length, 2)
+      assert.ok(liveChats.every((chat) => chat.isolated === false))
+      await invoke('agent:send', 'first live writer', undefined, key, {}, `live-first-${first}`)
+      await until(() => p1.sent.length === 1, 'live first send')
+      const competing = invoke(
+        'agent:send',
+        'second live writer',
+        undefined,
+        second.sessionKey,
+        {},
+        `live-second-${first}`
+      )
+      await sleep(50)
+      assert.equal(p2.sent.length, 0, 'the second live writer waits for the first')
+      assert.equal(
+        liveEvents.filter(
+          (event) =>
+            event.type === 'status' &&
+            event.projectKey === second.sessionKey &&
+            event.text === 'Waiting: Another chat is editing this live project.'
+        ).length,
+        1,
+        'one waiting status explains the admission delay'
+      )
+      p1.done()
+      await within(competing, 'queued live admission')
+      await until(() => p2.sent.length === 1, 'queued live provider send')
+      p2.done()
+      await until(async () => {
+        const chats = (await owners.conversation.snapshot()).chats.filter(
+          (chat) => chat.project === key
+        )
+        return chats.every((chat) => chat.phase === 'idle')
+      }, 'live turns idle')
+      await invoke(
+        'agent:send',
+        'interrupt live writer',
+        undefined,
+        key,
+        {},
+        `live-interrupt-${first}`
+      )
+      await until(() => p1.sent.length === 2, 'interrupt live send')
+      const afterInterrupt = invoke(
+        'agent:send',
+        'after writer Stop',
+        undefined,
+        second.sessionKey,
+        {},
+        `live-after-interrupt-${first}`
+      )
+      await sleep(50)
+      assert.equal(p2.sent.length, 1)
+      await within(invoke('agent:interrupt', key), 'Stop active live writer')
+      await within(afterInterrupt, 'admission after writer Stop')
+      await until(() => p2.sent.length === 2, 'provider after writer Stop')
+      p2.done()
+      await until(async () => {
+        const chats = (await owners.conversation.snapshot()).chats.filter(
+          (chat) => chat.project === key
+        )
+        return chats.every((chat) => chat.phase === 'idle')
+      }, 'stopped live turns idle')
+      await invoke(
+        'agent:send',
+        'stop first live writer',
+        undefined,
+        key,
+        {},
+        `live-stop-first-${first}`
+      )
+      await until(() => p1.sent.length === 3, 'stop first live send')
+      const stoppedWait = assert.rejects(
+        invoke(
+          'agent:send',
+          'cancel queued writer',
+          undefined,
+          second.sessionKey,
+          {},
+          `live-stop-second-${first}`
+        ),
+        /cancelled before sending/
+      )
+      await sleep(50)
+      assert.equal(p2.sent.length, 2)
+      await within(invoke('agent:interrupt', second.sessionKey), 'Stop queued live writer')
+      await stoppedWait
+      assert.equal(p2.sent.length, 2)
+      p1.done()
+      const liveIdle = () =>
+        until(async () => {
+          const chats = (await owners.conversation.snapshot()).chats.filter(
+            (chat) => chat.project === key
+          )
+          return chats.every((chat) => chat.phase === 'idle')
+        }, 'live project idle')
+      const sendLive = (text, chat, turn) =>
+        invoke('agent:send', text, undefined, chat, {}, `${turn}-${first}`)
+      await liveIdle()
+
+      // An owner turn orphaned after Bun drops its running mirror cannot hold a
+      // different chat until that original chat happens to send again.
+      const orphan = `live-orphan-${first}`
+      await owners.conversation.begin(key, orphan)
+      const orphanStarted = Date.now()
+      await within(
+        sendLive('after orphaned owner turn', second.sessionKey, 'live-orphan-peer'),
+        'peer admission after orphaned owner turn'
+      )
+      assert.equal(p2.sent.length, 3)
+      const orphanWaitMs = Date.now() - orphanStarted
+      assert.equal(
+        (await owners.conversation.snapshot()).chats.find((chat) => chat.chat === key)?.phase,
+        'idle'
+      )
+      p2.done()
+      await liveIdle()
+
+      // The deadline belongs to the queued send, not the writer. Once it expires,
+      // the owner still has no turn for the waiter and a later send can run.
+      await sendLive('writer for timeout', key, 'live-timeout-writer')
+      await until(() => p1.sent.length === 4, 'timeout writer send')
+      process.env.TREZI_TEST_LIVE_WRITER_WAIT_MS = '150'
+      const timeoutStarted = Date.now()
+      try {
+        await assert.rejects(
+          sendLive('bounded wait', second.sessionKey, 'live-timeout-peer'),
+          /Waited too long for the other chat/
+        )
+      } finally {
+        delete process.env.TREZI_TEST_LIVE_WRITER_WAIT_MS
+      }
+      const timeoutWaitMs = Date.now() - timeoutStarted
+      assert.equal(
+        (await owners.conversation.snapshot()).chats.find((chat) => chat.chat === second.sessionKey)
+          ?.phase,
+        'idle'
+      )
+      assert.equal(p2.sent.length, 3)
+      p1.done()
+      await liveIdle()
+      await sendLive('after bounded wait', second.sessionKey, 'live-after-timeout')
+      await until(() => p2.sent.length === 4, 'send after bounded wait')
+      p2.done()
+      await liveIdle()
+
+      // A hard Stop replaces the provider and resets its owner turn. The queued
+      // peer must be woken by that real handoff, before the Stop handler returns.
+      await sendLive('hard stopped writer', key, 'live-hard-writer')
+      await until(() => p1.sent.length === 5, 'hard stop writer send')
+      const afterHardStop = sendLive('after hard Stop', second.sessionKey, 'live-hard-peer')
+      await sleep(50)
+      assert.equal(p2.sent.length, 4)
+      p1.hardStop = true
+      const hardStopStarted = Date.now()
+      const hardStop = invoke('agent:interrupt', key)
+      await within(afterHardStop, 'peer admission after hard Stop')
+      const hardStopWaitMs = Date.now() - hardStopStarted
+      await until(() => p2.sent.length === 5, 'provider after hard Stop')
+      await within(hardStop, 'hard Stop restart')
+      const replacement = providers.at(-1)
+      assert.notEqual(replacement, p1)
+      p2.done()
+      await liveIdle()
+
+      // An error terminal also frees the writer after its failed landing.
+      await sendLive('crashing writer', key, 'live-crash-writer')
+      await until(() => replacement.sent.length === 1, 'crash writer send')
+      const afterCrash = sendLive('after provider crash', second.sessionKey, 'live-crash-peer')
+      await sleep(50)
+      assert.equal(p2.sent.length, 5)
+      const crashStarted = Date.now()
+      replacement.error('scripted provider crash')
+      await within(afterCrash, 'peer admission after provider crash')
+      const crashWaitMs = Date.now() - crashStarted
+      await until(() => p2.sent.length === 6, 'provider after crash')
+      p2.done()
+      await liveIdle()
+
+      // A holder orphaned while the peer is already queued: the owner cannot record
+      // the writer's end, Bun drops its running mirror, and the wake lets the peer
+      // recover the holder long before the bound.
+      await sendLive('writer orphaned late', key, 'live-late-writer')
+      await until(() => replacement.sent.length === 2, 'late orphan writer send')
+      const afterLateOrphan = sendLive('after late orphan', second.sessionKey, 'live-late-peer')
+      await sleep(50)
+      assert.equal(p2.sent.length, 6)
+      setConversationOwner(
+        new Proxy(owners.conversation, {
+          get(target, property) {
+            if (property === 'terminal')
+              return async () => {
+                setConversationOwner(owners.conversation)
+                throw new Error('scripted owner failure')
+              }
+            const value = Reflect.get(target, property, target)
+            return typeof value === 'function' ? value.bind(target) : value
+          }
+        })
+      )
+      const lateStarted = Date.now()
+      replacement.done()
+      await within(afterLateOrphan, 'peer admission after late orphan')
+      const lateOrphanWaitMs = Date.now() - lateStarted
+      assert.ok(
+        lateOrphanWaitMs < 2000,
+        `late orphan recovered by wake, not bound (${lateOrphanWaitMs} ms)`
+      )
+      await until(() => p2.sent.length === 7, 'provider after late orphan')
+      p2.done()
+      await liveIdle()
+      console.log(
+        `LKM-404 ${liveRoot.endsWith('/child') ? 'nested' : 'non-Git'} waits: orphan ${orphanWaitMs} ms, late orphan ${lateOrphanWaitMs} ms, bound ${timeoutWaitMs} ms, hard Stop ${hardStopWaitMs} ms, provider error ${crashWaitMs} ms`
+      )
+    }
     // A delayed owner cancel belongs to the turn captured when Stop was pressed.
     // Its response must never interrupt or cancel a replacement turn.
     const raceRepo = repository('repo-stop-owner-race')
@@ -1214,7 +1456,7 @@ try {
     const home = profile('crash')
     let started = await fixture(home)
     let o = started.owner()
-    await o.open('K', 'K', R('crash-1', 'K'), {}, true)
+    await o.open('K', 'K', R('crash-1', 'K'), {}, true, false)
     await o.begin('K', 't1')
     await o.send('K', 't1', U('build it', 1000))
     await o.checkpoint('K', R('crash-1', 'K', [U('build it', 1000), A('Working on', 1100)]))
@@ -1247,6 +1489,15 @@ try {
       "Bun's reader restores it in place"
     )
     assert.deepEqual(readdirSync(join(home, 'service/conversation/live')), [])
+    o = started.owner()
+    await o.open('K2', 'K', R('crash-2', 'K'), {}, true, false)
+    await o.begin('K2', 'after-crash')
+    assert.equal((await o.snapshot()).chats.find((chat) => chat.chat === 'K2')?.phase, 'preparing')
+    await o.open('K3', 'K', R('crash-3', 'K'), {}, false, false)
+    await assert.rejects(o.begin('K3', 'competing'), (error) => error.code === 'busy')
+    await o.handoff('K2', {}, R('crash-2', 'K'), 'restart')
+    await o.begin('K3', 'after-restart')
+    assert.equal((await o.snapshot()).chats.find((chat) => chat.chat === 'K3')?.phase, 'preparing')
     await stop(started)
 
     // SIGKILL inside a checkpoint write (the 4th: open, begin, send, terminal): the previous one stands.

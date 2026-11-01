@@ -13,6 +13,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Added
 
 - Active chats and comment agents can inspect a bounded same-project peer work feed with observed file overlap advisories (LKM-402).
+## [0.7.1] - 2026-10-31
+
+### Fixed
+
+- Chats in nested Git and non-Git projects now wait for the current live writer to finish before starting their own turn (LKM-404).
 
 ## [0.7.0] - 2026-10-30
 

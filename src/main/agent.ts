@@ -315,6 +315,64 @@ const stopRebuilds = new Map<string, ProviderSession>()
 // can retry the handoff. Never dispatch a new turn into that provider.
 const stoppedProviders = new Map<string, ProviderSession>()
 const preparingTurns = new Map<string, { cancelled: boolean }>()
+// The Swift owner decides admission. These notifications only wake bounded waiters
+// after an owner transition may have freed a live checkout's writer slot.
+const writerVersions = new Map<string, number>()
+const writerWaiters = new Map<string, Set<() => void>>()
+const writerWaits = new Map<string, AbortController>()
+const LIVE_WRITER_WAIT_MS = 120_000
+function liveWriterWaitMs(): number {
+  // The conversation-owner fixture shortens only its timeout case. Production
+  // always uses the normal bound, even when an inherited env variable is present.
+  const testMs = process.env.TREZI_TEST_LIVE_WRITER_WAIT_MS
+  if (process.argv.some((arg) => /(?:^|\/)conversation-owner\.mjs$/.test(arg)) && testMs) {
+    const parsed = Number(testMs)
+    if (Number.isFinite(parsed) && parsed > 0) return Math.min(parsed, LIVE_WRITER_WAIT_MS)
+  }
+  return LIVE_WRITER_WAIT_MS
+}
+function wakeLiveWriters(root: string): void {
+  const project = projectKey(root)
+  writerVersions.set(project, (writerVersions.get(project) ?? 0) + 1)
+  for (const wake of writerWaiters.get(project) ?? []) wake()
+}
+function waitForLiveWriter(
+  project: string,
+  observed: number,
+  deadline: number,
+  signal: AbortSignal
+): Promise<void> {
+  if (signal.aborted) return Promise.reject(new Error('Message cancelled before sending.'))
+  if ((writerVersions.get(project) ?? 0) !== observed) return Promise.resolve()
+  const left = deadline - Date.now()
+  if (left <= 0)
+    return Promise.reject(
+      new Error('Waited too long for the other chat to finish editing this project.')
+    )
+  return new Promise((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout>
+    const done = (error?: Error) => {
+      clearTimeout(timer)
+      signal.removeEventListener('abort', cancelled)
+      const set = writerWaiters.get(project)
+      set?.delete(wake)
+      if (!set?.size) writerWaiters.delete(project)
+      if (error) reject(error)
+      else resolve()
+    }
+    const wake = () => done()
+    const cancelled = () => done(new Error('Message cancelled before sending.'))
+    const set = writerWaiters.get(project) ?? new Set<() => void>()
+    set.add(wake)
+    writerWaiters.set(project, set)
+    signal.addEventListener('abort', cancelled, { once: true })
+    timer = setTimeout(
+      () => done(new Error('Waited too long for the other chat to finish editing this project.')),
+      left
+    )
+    if ((writerVersions.get(project) ?? 0) !== observed) wake()
+  })
+}
 // LKM-165: when each running chat last made progress, and the turn the owner admitted
 // last, so a turn that stops making progress can be ended in both places.
 const watchdog = new TurnWatchdog()
@@ -335,7 +393,17 @@ const reconciliation = new ReconciliationCoordinator({
   land: afterTurn,
   showParked: showParkedChat,
   continued: (key, turn, run) => conversation().continueTurn(key, turn, run),
-  landed: async (key, turn) => (await conversation().landed(key, turn, Date.now())).completedAt,
+  landed: async (key, turn) => {
+    const root = sessions.get(key)?.record.projectRoot
+    try {
+      const result = await conversation().landed(key, turn, Date.now())
+      return result.completedAt
+    } finally {
+      // Even a failed landing drops Bun's running mirror next; a queued peer re-checks
+      // the holder instead of sleeping until its bound.
+      if (root) wakeLiveWriters(root)
+    }
+  },
   dispatch: (session, prompt, turn, run) => {
     trackers.get(session)?.push(turn, run)
     // LKM-215: the turn's first watch closed at its first terminal event; each automatic
@@ -545,6 +613,8 @@ const interactiveEvents =
         preparingTurns.delete(sessionKey)
         turnTimings.completed(sessionKey, at.turn)
         session.emit({ type: 'landing-finished', turn: at.turn })
+        // The owner may still hold this turn; a queued live peer can now recover it.
+        wakeLiveWriters(record.projectRoot)
       })
   }
 
@@ -690,6 +760,7 @@ function releaseRuntimes(s: ProviderSession, emitKey: string): void {
  * user engaged (≥1 prompt) are kept. Never throws — History is non-critical. */
 async function closeChat(sessionKey: string, s: ProviderSession, persist: Persist): Promise<void> {
   finishPeer(peerTurn(sessionKey), sessionKey)
+  writerWaits.get(sessionKey)?.abort()
   stopProvider(s)
   releaseRuntimes(s, sessionKey)
   clearTimeout(checkpointTimers.get(sessionKey))
@@ -703,6 +774,7 @@ async function closeChat(sessionKey: string, s: ProviderSession, persist: Persis
     if (persist !== 'none' && s.record.transcript.some((t) => t.role === 'user'))
       s.record.endedAt = Date.now()
     await conversation().close(sessionKey, persist, s.record)
+    wakeLiveWriters(s.record.projectRoot)
   } catch (error) {
     console.error(
       'Trezi could not save a closed chat:',
@@ -1224,7 +1296,14 @@ export function registerAgentIpc(
     active: boolean
   ): Promise<void> => {
     try {
-      await conversation().open(sessionKey, key, s.record, options, active)
+      await conversation().open(
+        sessionKey,
+        key,
+        s.record,
+        options,
+        active,
+        s.root !== s.record.projectRoot
+      )
     } catch (error) {
       stopProvider(s)
       throw error
@@ -1533,6 +1612,7 @@ export function registerAgentIpc(
       s.record.endedAt = null
       try {
         await conversation().handoff(sessionKey, options, s.record, reason)
+        if (reason === 'restart') wakeLiveWriters(root)
       } catch (error) {
         stopProvider(s)
         throw error
@@ -1927,7 +2007,10 @@ export function registerAgentIpc(
       // The chat is busy: the caller queues the message (and the watchdog bounds the wait).
       if (key && stopRebuilds.get(key) !== session && staleChat(key, STALE_SEND_MS))
         await settleChat(key, STUCK_NOTE)
-      if (key && (runningKeys.has(key) || stopRebuilds.get(key) === session))
+      if (
+        key &&
+        (runningKeys.has(key) || writerWaits.has(key) || stopRebuilds.get(key) === session)
+      )
         throw new Error(CHAT_BUSY)
       if (key && session && stoppedProviders.get(key) === session) {
         let fencedSession = session
@@ -1959,20 +2042,80 @@ export function registerAgentIpc(
       const id =
         typeof turnId === 'string' && turnId && turnId.length <= 128 ? turnId : randomUUID()
       const admit = () => conversation().begin(key, id)
+      const writerWait = new AbortController()
+      const writerDeadline = Date.now() + liveWriterWaitMs()
+      const writerProject = projectKey(session.record.projectRoot)
+      writerWaits.set(key, writerWait)
+      let waitingForWriter = false
+      const recoveredHolders = new Set<string>()
+      let releasedOwn = false
       try {
-        await admit().catch(async (error) => {
-          // The owner still holds a turn this process no longer runs (a landing that
-          // ended without its release): free it once, then admit the message (LKM-165).
-          if (!(error instanceof ConversationError && error.code === 'busy')) throw error
-          if (runningKeys.has(key) || preparingTurns.has(key) || !(await releaseOwnerTurn(key)))
-            throw error
-          await admit()
-        })
+        for (;;) {
+          const observed = writerVersions.get(writerProject) ?? 0
+          try {
+            await admit()
+            break
+          } catch (error) {
+            if (
+              error instanceof ConversationError &&
+              error.code === 'busy' &&
+              error.message === 'Another chat is editing this live project.'
+            ) {
+              const owner = await conversation()
+                .snapshot()
+                .catch(() => null)
+              const holder = owner?.chats.find(
+                (chat) =>
+                  chat.chat !== key &&
+                  chat.project === writerProject &&
+                  !chat.isolated &&
+                  chat.phase !== 'idle' &&
+                  chat.turn
+              )
+              if (
+                holder?.turn &&
+                !recoveredHolders.has(`${holder.chat}:${holder.turn}`) &&
+                !runningKeys.has(holder.chat) &&
+                !preparingTurns.has(holder.chat) &&
+                !landingInFlight(holder.chat) &&
+                !stopRebuilds.has(holder.chat)
+              ) {
+                recoveredHolders.add(`${holder.chat}:${holder.turn}`)
+                if (await releaseOwnerTurn(holder.chat, holder.turn, holder.root)) continue
+              }
+              if (!waitingForWriter) {
+                waitingForWriter = true
+                safeSend(getWindow, 'agent:event', {
+                  type: 'status',
+                  text: `Waiting: ${error.message}`,
+                  projectKey: key
+                } satisfies AgentEvent)
+              }
+              await waitForLiveWriter(writerProject, observed, writerDeadline, writerWait.signal)
+              if (sessions.get(key) !== session) throw new Error('This chat is closed.')
+              continue
+            }
+            // The owner still holds a turn this process no longer runs (LKM-165).
+            if (!(error instanceof ConversationError && error.code === 'busy')) throw error
+            // Release once, then retry through the loop so a peer that began in between
+            // gets the bounded wait and waiting status instead of CHAT_BUSY.
+            if (releasedOwn || runningKeys.has(key) || preparingTurns.has(key)) throw error
+            releasedOwn = true
+            if (!(await releaseOwnerTurn(key))) throw error
+          }
+        }
+        if (writerWait.signal.aborted) {
+          await conversation().abort(key, id)
+          wakeLiveWriters(session.record.projectRoot)
+          throw new Error('Message cancelled before sending.')
+        }
       } catch (error) {
         if (error instanceof ConversationError && error.code === 'busy') throw new Error(CHAT_BUSY)
         if (error instanceof ConversationError && error.code === 'notFound')
           throw new Error('This chat is closed.')
         throw error
+      } finally {
+        if (writerWaits.get(key) === writerWait) writerWaits.delete(key)
       }
       turnIds.set(key, id)
       turnTimings.received(key, id, receivedAt)
@@ -2098,6 +2241,9 @@ export function registerAgentIpc(
         preparingTurns.delete(key)
         await conversation()
           .abort(key, id)
+          .then((aborted) => {
+            if (aborted) wakeLiveWriters(session.record.projectRoot)
+          })
           .catch(() => false)
         throw error
       }
@@ -2488,7 +2634,8 @@ export function registerAgentIpc(
   // the next message. Safe when the owner already moved on (a stale turn changes nothing).
   const releaseOwnerTurn = async (
     key: string,
-    expectedTurn = turnIds.get(key)
+    expectedTurn = turnIds.get(key),
+    root = sessions.get(key)?.record.projectRoot
   ): Promise<boolean> => {
     if (!expectedTurn) return false
     const aborted = await conversation()
@@ -2498,6 +2645,9 @@ export function registerAgentIpc(
       .landed(key, expectedTurn, Date.now())
       .then((result) => result.landed)
       .catch(() => false)
+    if (aborted || landed) {
+      if (root) wakeLiveWriters(root)
+    }
     return aborted || landed
   }
   // A chat that shows running with nothing in flight: no provider turn, no landing, and
@@ -2569,6 +2719,7 @@ export function registerAgentIpc(
   })
   const interruptChat = async (requestedKey?: string): Promise<void> => {
     const sessionKey = requestedKey === undefined ? activeKey : requestedKey
+    if (sessionKey) writerWaits.get(sessionKey)?.abort()
     const stoppedTurn = sessionKey ? turnIds.get(sessionKey) : undefined
     const deadline = Date.now() + INTERRUPT_IPC_CAP_MS
     const remaining = () => Math.max(0, deadline - Date.now())
@@ -2691,6 +2842,10 @@ export function registerAgentIpc(
   // lets the entry point wait for that. A chat the quit cuts short keeps its
   // checkpoint, which the next Swift launch recovers.
   app.on('before-quit', () => {
+    for (const wait of writerWaits.values()) wait.abort()
+    writerWaits.clear()
+    writerWaiters.clear()
+    writerVersions.clear()
     const currentByProject = new Map(activeSessionKeyByProject)
     for (const sessionKey of sessions.keys()) {
       const project = sessions.get(sessionKey)?.record.projectKey

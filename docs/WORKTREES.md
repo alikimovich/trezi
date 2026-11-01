@@ -419,7 +419,11 @@ exact source that would land.
 - **No isolation.** A project that is not a Git repository root (a subdirectory, a
   non-Git folder) runs on the live checkout: edits are live as they are made and there is
   no gate. `workspace_state.landingChecks` says `isolation: "unavailable"` with the reason
-  instead of claiming a private check.
+  instead of claiming a private check. Chats in the same no-isolation project take the
+  live writer turn one at a time (LKM-404): the Swift conversation owner's `begin` refuses
+  a competing live turn, and Bun waits up to 120 s until landing, Stop, restart, close or
+  orphan recovery releases it. This orders turns only; it is not a sandbox for raw shell,
+  database or remote side effects.
 
 Coverage: `test/integration-gate.mjs` (real `run_checks` scripts on a real worktree),
 `test/worktrees.mjs` and `test/repository-owner.mjs` (owner holds), the chat landing

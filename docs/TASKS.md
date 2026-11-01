@@ -11,6 +11,15 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Stub lifecycle and owner tests for foreground/background peers, cancellation, expiry, crash recovery, alias isolation and prompt-injection text.
 - [x] Review repair: full-path overlap identities and uncertainty, base-revision observation, per-project caps, delayed Stop/finish cleanup, and helper/lifecycle regression fixtures.
 - [ ] Manager: run the relevant native suite on merged main; worker has zero native calls.
+## Single live writer admission (LKM-404)
+
+- [x] Reproduce concurrent live turns with scripted providers in disposable nested Git and non-Git projects (red quick verification).
+- [x] Record isolation in the conversation owner; bound and explain waiting for a shared live writer.
+- [x] Cover release and isolated Git parallel turns in the conversation owner fixture.
+- [x] Review repair: recover an orphaned owner holder, exercise queued hard Stop, provider error and test-bound expiry in both live project types.
+- [x] Review repair: clear the waiting activity label on send acknowledgment; fixture checks the single retained status line.
+- [ ] Manager: run native chat acceptance on merged main; worker has no native calls.
+- [x] LKM-410: `docs/WORKTREES.md` "No isolation" states the single live writer rule, its release paths and its limits.
 
 ## Foreground Mark up acceptance wiring (LKM-393)
 

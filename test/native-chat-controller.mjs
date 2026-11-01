@@ -500,6 +500,65 @@ assert.equal(viewState(phaseChat, []).composer.running, true)
 assert.equal(viewState(phaseChat, []).composer.thinking, false)
 reduce(phaseChat, { type: 'landing-finished' })
 assert.equal(viewState(phaseChat, []).activity, null)
+// LKM-404: an admitted live writer must stop displaying the earlier wait while
+// the provider is quiet; the one status line remains in the transcript.
+let admitLiveWriter
+const liveWriterGate = new Promise((resolve) => {
+  admitLiveWriter = resolve
+})
+let waitingAdmitted = false
+let completedWaitingRender
+const waitingRendered = new Promise((resolve) => {
+  completedWaitingRender = resolve
+})
+const waitingController = new NativeChatController({
+  invoke: async (channel) => {
+    if (channel === 'agent:workspace-snapshot')
+      return { projects: [{ root: '/fixture', chats: [live('live-wait')] }] }
+    return channel === 'agent:send' ? liveWriterGate : {}
+  },
+  render(state) {
+    if (waitingAdmitted && state.activity?.label === 'Thinking…') completedWaitingRender()
+  },
+  effect() {}
+})
+await waitingController.command({ type: 'context', context: context('live-wait') })
+await waitingController.composer({
+  chat: 'live-wait',
+  action: 'input',
+  text: 'make a change',
+  caret: 13,
+  revision: 1
+})
+const liveSubmission = waitingController.composer({ chat: 'live-wait', action: 'send' })
+await tick()
+waitingController.event({
+  projectKey: 'live-wait',
+  type: 'status',
+  text: 'Waiting: Another chat is editing this live project.'
+})
+assert.equal(
+  waitingController.get('live-wait').activityDetail,
+  'Waiting: Another chat is editing this live project.'
+)
+waitingAdmitted = true
+admitLiveWriter({})
+await liveSubmission
+await Promise.race([
+  waitingRendered,
+  new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Admitted wait label did not clear.')), 1000)
+  )
+])
+assert.equal(waitingController.get('live-wait').activityDetail, '')
+assert.equal(viewState(waitingController.get('live-wait'), []).activity.label, 'Thinking…')
+assert.equal(
+  waitingController
+    .get('live-wait')
+    .messages.flatMap((message) => message.statuses)
+    .filter((status) => status === 'Waiting: Another chat is editing this live project.').length,
+  1
+)
 console.log(
   'Native activity: thinking, writing, tool status, waiting, stopping, landing and idle beam states passed.'
 )

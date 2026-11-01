@@ -31,6 +31,7 @@ export interface OwnedChat {
   chat: string
   project: string
   root: string
+  isolated: boolean
   active: boolean
   phase: TurnPhase
   turn: string | null
@@ -99,7 +100,8 @@ export interface ConversationOwner {
     project: string,
     record: SessionRecord,
     options: AgentOptions,
-    active: boolean
+    active: boolean,
+    isolated?: boolean
   ): Promise<void>
   activate(chat: string): Promise<void>
   checkpoint(chat: string, record: SessionRecord): Promise<boolean>

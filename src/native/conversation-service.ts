@@ -96,7 +96,7 @@ export function serviceConversation(
       await call('remove', { id })
     },
     rename: (id, title) => call('rename', { id, title }),
-    open: async (chat, project, record, agentOptions, active) => {
+    open: async (chat, project, record, agentOptions, active, isolated = true) => {
       await call('open', {
         chat,
         project,
@@ -104,6 +104,7 @@ export function serviceConversation(
         record: plain(record),
         options: plain(agentOptions),
         active,
+        isolated,
         sequence: next(chat, true)
       })
     },
