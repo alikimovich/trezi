@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Coordinated parallel work: peer feed (LKM-402)
+
+- [x] Red code-gap reproduction in disposable Git repos and the Swift conversation fixture; historical incident remains unverified.
+- [x] Service-owned ephemeral feed with canonical repository identity, lifecycle updates, bounded fields and read-only agent snapshots for chat and background tasks.
+- [x] Exact observed-file and possible intended-file advisories, without a disjoint-file safety claim or changes to landing authority.
+- [x] Stub lifecycle and owner tests for foreground/background peers, cancellation, expiry, crash recovery, alias isolation and prompt-injection text.
+- [x] Review repair: full-path overlap identities and uncertainty, base-revision observation, per-project caps, delayed Stop/finish cleanup, and helper/lifecycle regression fixtures.
+- [ ] Manager: run the relevant native suite on merged main; worker has zero native calls.
 ## Single live writer admission (LKM-404)
 
 - [x] Reproduce concurrent live turns with scripted providers in disposable nested Git and non-Git projects (red quick verification).

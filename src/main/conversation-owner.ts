@@ -55,6 +55,29 @@ export interface Released {
   kind: ApprovalKind
 }
 
+/** Compact untrusted peer intent/status. The service bounds every field and row. */
+export interface PeerWorkRow {
+  id: string
+  project: string
+  origin: 'chat' | 'comment' | 'background' | 'text-edit'
+  parent: string
+  goal: string
+  intendedFiles: string[]
+  observedFiles: string[]
+  intendedTruncated?: boolean
+  observedTruncated?: boolean
+  target?: string
+  base: string
+  phase: 'preparing' | 'running' | 'landing'
+  heartbeat?: number
+  version?: number
+}
+
+export interface PeerWorkView {
+  rows: PeerWorkRow[]
+  advisories: { peer: string; kind: 'exact-file' | 'possible-overlap'; files: string[] }[]
+}
+
 export class ConversationError extends Error {
   constructor(
     readonly code: string,
@@ -126,6 +149,9 @@ export interface ConversationOwner {
   spawn(id: string, project: string): Promise<boolean>
   spawnDone(id: string): Promise<string[]>
   spawnCancel(id: string): Promise<boolean>
+  peerUpsert(row: PeerWorkRow): Promise<void>
+  peerRemove(id: string): Promise<void>
+  peers(project: string, exclude: string): Promise<PeerWorkView>
   snapshot(): Promise<{ chats: OwnedChat[]; spawns: { running: string[]; queued: string[] } }>
   status(): Promise<{ recovered: ConversationRecovery[] }>
 }

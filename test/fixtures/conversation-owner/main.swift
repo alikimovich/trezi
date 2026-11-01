@@ -27,7 +27,14 @@ let fault: @Sendable (String) -> Void = { point in
     hits.lock.lock(); hits.count += 1; let reached = hits.count >= crashAt; hits.lock.unlock()
     if reached { kill(getpid(), SIGKILL); while true { pause() } }
 }
-let owner = ConversationOwner(options: ConversationOwner.Options(profile: profile, fault: fault), send: { emit($0) })
+final class FixtureClock: @unchecked Sendable {
+    let lock = NSLock()
+    var offset: Double = 0
+    func now() -> Double { lock.lock(); defer { lock.unlock() }; return Date().timeIntervalSince1970 * 1000 + offset }
+    func advance(_ ms: Double) { lock.lock(); offset += ms; lock.unlock() }
+}
+let clock = FixtureClock()
+let owner = ConversationOwner(options: ConversationOwner.Options(profile: profile, now: { clock.now() }, fault: fault), send: { emit($0) })
 // REPOSITORY_WORKTREES_ROOT widens where worktrees may live (the chat and Git suites use the temp dir).
 let repository = RepositoryOwner(options: RepositoryOwner.Options(profile: profile, environment: env,
                                                                  worktreesRoot: env["REPOSITORY_WORKTREES_ROOT"]), send: { emit($0) })
@@ -45,6 +52,9 @@ while let line = readLine(strippingNewline: true) {
         guard let command = try? JSValue.parse(data), let name = command["cmd"]?.text?.string else { return emit([("error", .string(JSText("bad command")))]) }
         switch name {
         case "close": emit([("closed", .bool(owner.close(timeout: 5)))])
+        case "advance":
+            if case .number(let ms)? = command["ms"] { clock.advance(ms); emit([("advanced", .number(ms))]) }
+            else { emit([("error", .string(JSText("invalid advance")))]) }
         default: emit([("error", .string(JSText("unknown command \(name)")))])
         }
     }

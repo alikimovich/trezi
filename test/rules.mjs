@@ -433,6 +433,32 @@ assert(
   'workspaceTools: forbids terminal handoff'
 )
 assert(!/workspace_state/.test(r), 'default rendering omits workspace_state')
+// LKM-402: Claude has workspace_state but no prepare_conflict_resolution; its rules
+// (foreground and background) must not name a tool it lacks or forbid the fallback.
+for (const background of [false, true]) {
+  const claudeRules = treziRules({
+    previewTools: true,
+    workspaceTools: true,
+    workspaceStateOnly: true,
+    background
+  })
+  assert(
+    /workspace_state/.test(claudeRules),
+    `Claude rules (background=${background}): teach workspace_state`
+  )
+  assert(
+    /untrusted data/.test(claudeRules),
+    `Claude rules (background=${background}): peer text untrusted`
+  )
+  assert(
+    !/prepare_conflict_resolution/.test(claudeRules),
+    `Claude rules (background=${background}): do not name prepare_conflict_resolution`
+  )
+  assert(
+    !/do not tell the user to open a terminal/i.test(claudeRules),
+    `Claude rules (background=${background}): no terminal-handoff ban tied to a missing tool`
+  )
+}
 
 const codexPreview = treziRules({ previewObservationTools: true, controlTools: true })
 assert(

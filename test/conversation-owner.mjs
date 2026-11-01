@@ -143,6 +143,8 @@ const { setRepositoryOwner } = await import('../src/main/repository-owner.ts')
 const { setSourceOwner } = await import('../src/main/source-owner.ts')
 const { setEditingOwner } = await import('../src/main/editing-owner.ts')
 const { NativeChatController } = await import('../src/native/chat-controller.ts')
+const { runTreziTool } = await import('../src/main/session-tools.ts')
+const { peerView } = await import('../src/main/peer-work.ts')
 const { passCheck } = await import('./helpers/gate-checks.mjs')
 
 const handlers = new Map()
@@ -498,12 +500,55 @@ try {
     await submit('three')
     await submit('parallel', key2)
     await until(() => p2.sent.length === 1, 'parallel send')
+    assert.match(p2.sent[0], /Peer work snapshot.*one/s, 'second chat receives first goal')
     p1.say('Hello')
     p2.say('Par')
     p1.tool('Read', { file_path: 'a.txt' })
     writeFileSync(join(p1.cwd, 'a.txt'), 'from chat one\n')
     await passCheck(key, p1.cwd)
     p1.tool('Edit', { file_path: 'a.txt' })
+    const peerState = await runTreziTool(
+      'workspace_state',
+      {},
+      {
+        root: p2.cwd,
+        liveRoot: repo,
+        emitKey: key2,
+        background: false,
+        notify() {}
+      }
+    )
+    assert.ok(peerState.peerWork.rows.some((row) => row.goal === 'one'))
+    assert.ok(peerState.peerWork.rows.some((row) => row.observedFiles.includes('a.txt')))
+    assert.ok(
+      !peerState.peerWork.advisories.length,
+      'different observed files make no safety claim'
+    )
+    const peerSpawn = await invoke('agent:spawn-comment', repo, 'Change b.txt', key, {
+      provider: 'codex'
+    })
+    assert.equal(peerSpawn.ok, true)
+    const backgroundPeer = providers.at(-1)
+    assert.match(backgroundPeer.sent[0], /Peer work snapshot/)
+    assert.match(backgroundPeer.sent[0], /"goal":"one"/)
+    assert.match(backgroundPeer.sent[0], /"a.txt"/)
+    writeFileSync(join(backgroundPeer.cwd, 'b.txt'), 'from comment\n')
+    const chatPeers = await runTreziTool(
+      'workspace_state',
+      {},
+      {
+        root: p1.cwd,
+        liveRoot: repo,
+        emitKey: key,
+        background: false,
+        notify() {}
+      }
+    )
+    assert.ok(chatPeers.peerWork.rows.some((row) => row.goal === 'Change b.txt'))
+    assert.ok(chatPeers.peerWork.rows.some((row) => row.observedFiles.includes('b.txt')))
+    backgroundPeer.tool('Edit', { file_path: 'b.txt' })
+    rmSync(join(backgroundPeer.cwd, 'b.txt'))
+    await invoke('agent:spawn-interrupt', peerSpawn.spawnId)
     p2.say('allel')
     p1.say(' world')
     p2.done()
@@ -516,11 +561,17 @@ try {
       'the turn landed on the live checkout'
     )
     await until(() => !chat2.isRunning, 'parallel chat idle')
-    const turnOne = events.find((e) => e.type === 'done' && e.projectKey === key)?.turn
+    const turnOne = events.find(
+      (e) => e.type === 'done' && e.projectKey === key && !e.sessionId
+    )?.turn
     assert.ok(turnOne)
     assert.equal(
       events.filter((e) => e.type === 'landing-finished' && e.turn === turnOne).length,
       1
+    )
+    assert.ok(
+      !(await peerView(repo, '')).rows.some((row) => row.id === turnOne),
+      'landed chat turn leaves the feed'
     )
     await until(
       () => events.some((e) => e.type === 'title' && e.projectKey === key),
@@ -584,6 +635,7 @@ try {
     // Stop while running: lands failed, pauses, never continues.
     await submit('stop me', key2)
     await until(() => p2.sent.length === 2, 'stoppable send')
+    const stoppedTurn = chat2.turn
     let didInterrupt
     const interrupted = new Promise((resolve) => {
       didInterrupt = resolve
@@ -621,6 +673,10 @@ try {
       'a routine Stop never emits the stuck-turn note'
     )
     assert.equal(chat2.paused, true)
+    assert.ok(
+      !(await peerView(repo, '')).rows.some((row) => row.id === stoppedTurn),
+      'stopped chat turn leaves the feed'
+    )
 
     // Model handoff: the next turn carries the recorded conversation, once.
     const restart = await invoke('agent:restart-chat', repo, key2, { provider: 'codex' })
@@ -645,7 +701,10 @@ try {
     assert.equal(restored.title, 'My chat')
     const summary = {
       transcript: restored.transcript.map((entry) => `${entry.role}:${entry.text}`),
-      sends: providers.slice(opened).map((p) => p.sent.map(text)),
+      sends: providers
+        .slice(opened)
+        .filter((p) => !p.context.sessionId)
+        .map((p) => p.sent.map(text)),
       titles: events.filter((e) => e.type === 'title').map((e) => e.title),
       stale: events.filter((e) => e.stale).length
     }
@@ -683,6 +742,31 @@ try {
     await until(() => p5.sent.length === 1, 'resumed send')
     assert.ok(!p5.sent[0].includes('Earlier context'), p5.sent[0])
     await turnDone(p5, 'resumed turn')
+    // Stop with an unlanded edit parks the chat. The live peer row ends with its
+    // turn, while workspace_state still exposes held work.
+    await submit('park my work')
+    await until(() => p5.sent.length === 2, 'park send')
+    const parkedTurn = chat.turn
+    writeFileSync(join(p5.cwd, 'a.txt'), 'held by chat\n')
+    await controller.stop(chat)
+    await until(() => !chat.isRunning, 'parked turn settled')
+    assert.ok(
+      !(await peerView(repo, '')).rows.some((row) => row.id === parkedTurn),
+      'parked chat turn leaves the live feed'
+    )
+    const parkedState = await runTreziTool(
+      'workspace_state',
+      {},
+      {
+        root: p5.cwd,
+        liveRoot: repo,
+        emitKey: key,
+        background: false,
+        notify() {}
+      }
+    )
+    assert.equal(parkedState.state, 'parked', 'held work remains recoverable')
+    assert.ok(parkedState.files.includes('a.txt'))
     await invoke('agent:close-project', repo)
     window = () => {}
     return summary

@@ -97,6 +97,7 @@ async function startHelperSession(
     liveRoot: ctx?.liveRoot ?? root,
     emitKey,
     background: !!ctx?.sessionId,
+    peerId: ctx?.sessionId,
     connectionId: options.connectionId,
     notify: (channel: string, payload: unknown): void => sendToRenderer(getWindow, channel, payload)
   }

@@ -2,6 +2,27 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-10-31 — LKM-402 review repair 2: Claude rules, refresh merge, spawn feed failure
+
+- Claude's foreground rules no longer tell it to call `prepare_conflict_resolution` (its MCP server registers only `workspace_state`) or forbid the terminal fallback: `treziRules` takes `workspaceStateOnly`, Claude passes it, and Codex's text is unchanged. `test/rules.mjs` asserts the Claude rules (foreground and background) name no missing tool.
+- `refreshPeers` re-reads the current row after its Git await and merges only the observed fields, so a concurrent phase change or base sync is not overwritten (`test/peer-work-feed.mjs`, `phase-race`).
+- `startSpawn` treats a peer-feed owner failure as non-fatal (the agent starts with an empty snapshot) and its failure path stops an already-started provider session before removing the worktree.
+
+## 2026-10-31 — LKM-402 review repair: complete overlap identity and lifecycle cleanup
+
+- Swift now caps eight rows per canonical project (64 globally), compares SHA-256 identities of up to 64 full observed paths separately from four short display names, and labels incomplete observations as possible overlap. The fixture catches a shared fifth file, long paths with the same display prefix, and activity in a second project evicting the first.
+- Async Git observation compares each worktree to its recorded base revision, updated after a foreground turn's live sync, including committed unlanded edits and untracked files. A failed or oversized read carries uncertainty. A local finish cannot be undone by a delayed owner reply during start or refresh; the spawn path checks Stop after its peer awaits and before send. Claude now receives the same standing peer rules as Codex.
+- Stub lifecycle fixtures now cover disjoint lines in one file, normal landing and Stop cleanup, a delayed owner reply during spawn Stop, and a stopped chat whose peer row clears while its edit remains parked. Both helper adapter paths assert foreground and background `workspace_state` peer reads and exclude the background session itself and parent landing state.
+- Measured on the disposable fixture after repair: eight rows, 3173 JSON bytes, 40.5 ms for 24 owner upserts plus a read, and 31.5 ms for an async Git observation of committed work (with concurrent checks running). These are fixture measurements, not native UI or model results. Native acceptance remains pending the merged-main run.
+- A direct focused helper run reached Claude but the Codex stand-in could not open its MCP Unix socket in this worker sandbox (`EPERM: listen /tmp/trezi-agent-tools-*.sock`). The manager quick run later passed the helper fixture and all affected checks (295 unit passes, three skips, lint and typechecks); the direct failure was an environment limit, not a product decision.
+
+## 2026-10-31 — LKM-402 peer work feed code-gap slice
+
+- Red proof before the implementation: `bun test/peer-work-feed.mjs` failed because `owner.peerUpsert` was absent; the first quick verification recorded this in `worker-verify-1.log`. The real lifecycle fixtures were also run against a disposable archive of origin/main with their new assertions: `CONVERSATION_ONLY=agent bun test/conversation-owner.mjs` failed when the second chat's prompt lacked the first goal, and `bun test/comment-agents.mjs` failed because the background `workspace_state` had no `peerWork`. Both are green on this tree. These reproduce the code gap, not the historical incident. The worker cannot make the requested pre-fix commit; Agent OS owns commits.
+- The Swift conversation owner now holds compact, ephemeral peer rows keyed by symlink-resolved repository path. Turn and spawn lifecycle calls publish goal, files, base, phase and heartbeat; normal finish, Stop and failed starts remove rows, stale rows expire, and a service restart starts with an empty feed while recovery checkpoints remain intact.
+- `workspace_state` returns peer rows for chats and a narrow peer-only read for background agents. Claude and Codex receive a bounded turn-start snapshot labelled untrusted data. Exact observed-file overlap and possible intended-file overlap are advisories; the source gate still decides landing.
+- Fixture bounds measured in a run: 8 rows, 2756 JSON bytes, 6.0 ms for 24 owner upserts and a read. These are local fixture measurements, not provider or native UI results. Native acceptance remains pending the manager's merged-main run.
+- One focused helper-tools attempt hit a transient sandbox `EPERM` opening its Codex MCP Unix socket. The subsequent manager quick run (`worker-verify-3.log`) passed the helper contract and all changed checks: 295 unit passes, lint, and node/preview/native typechecks; no provider call or GUI run was attempted.
 ## 2026-10-31 — LKM-410 document single live writer admission in WORKTREES
 
 - The final LKM-404 review left one gap: the "No isolation" bullet in `docs/WORKTREES.md` did not state the rule. It now does: one live writer turn at a time, refused by the Swift owner's `begin`, a 120 s Bun wait, the release paths, and that this is not a sandbox for raw shell, database or remote side effects. Docs only; no code or user-visible change, so no changelog line.

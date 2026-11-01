@@ -393,6 +393,7 @@ async function startSession(
       liveRoot: ctx?.liveRoot ?? root,
       emitKey,
       background: !!ctx?.sessionId,
+      peerId: ctx?.sessionId,
       connectionId: options.connectionId,
       notify: (channel: string, payload: unknown): void =>
         sendToRenderer(getWindow, channel, payload)
@@ -806,7 +807,7 @@ async function startSession(
     options,
     send: (text, images) => {
       const rules = (): string =>
-        `${treziRules({ previewObservationTools: true, controlTools: true, workspaceTools: !ctx?.sessionId, agentGitAccess: options.agentGitAccess, projectMemory: ctx?.projectMemory, background: !!ctx?.sessionId, questionTool: true })}${skillsCatalog ? `\n\n${skillsCatalog}` : ''}\n\n---\n\n`
+        `${treziRules({ previewObservationTools: true, controlTools: true, workspaceTools: true, agentGitAccess: options.agentGitAccess, projectMemory: ctx?.projectMemory, background: !!ctx?.sessionId, questionTool: true })}${skillsCatalog ? `\n\n${skillsCatalog}` : ''}\n\n---\n\n`
       const prompt = firstTurn ? `${rules()}${text}` : text
       // A thread that replaces a lost saved one is new: it needs the rules too.
       const seeded = resuming ? `${rules()}${seedPrompt(ctx?.resumeSummary ?? '', text)}` : prompt
