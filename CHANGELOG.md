@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-31
+
 ### Fixed
 
 - A late landing event no longer removes a running chat from the peer work feed, and a live sync during a feed refresh no longer causes a false exact-file advisory (LKM-411).
