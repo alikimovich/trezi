@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Added
+
+- When parallel work overlapped and its combined result passed its checks and landed, project memory saves one lesson linked to its task, commit and files; later chats read it as untrusted notes, not as rules (LKM-405).
+
 ## [0.9.0] - 2026-10-31
 
 ### Added

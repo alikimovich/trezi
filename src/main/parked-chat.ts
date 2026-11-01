@@ -174,7 +174,7 @@ export async function resolveParkedChat(
         return
       }
       if (outcome.outcome === 'merged') {
-        await landTurn(sessionKey, st, outcome, 'resolve', described)
+        await landTurn(sessionKey, st, outcome, 'resolve', described, !!verdict?.ok)
         return
       }
       if (outcome.outcome === 'noop') {
