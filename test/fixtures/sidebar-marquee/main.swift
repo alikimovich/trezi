@@ -229,7 +229,48 @@ let keeps: [String: Bool] = [
 SidebarChatCell.scriptedHover = true
 let scripted = SidebarChatCell.keepsHover(pointer: nil, in: selected)
 SidebarChatCell.scriptedHover = false
-report["hoverRestore"] = ["over": keeps["over"]!, "moved": keeps["moved"]!, "away": keeps["away"]!, "none": keeps["none"]!, "scripted": scripted]
+
+/// A real view-based outline, as `Shell.update` reloads it: `reloadData`, `expandItem`, then the
+/// row's cell at once, with no layout pass in between, the way `sidebarCell` fetches it.
+final class Branch: NSObject { let row: ShellRow, kids: [Branch]; init(_ row: ShellRow, _ kids: [Branch] = []) { self.row = row; self.kids = kids } }
+final class Rows: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate {
+    let top: [Branch]
+    init(_ top: [Branch]) { self.top = top }
+    func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int { (item as? Branch)?.kids.count ?? top.count }
+    func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any { (item as? Branch)?.kids[index] ?? top[index] }
+    func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool { !((item as? Branch)?.kids.isEmpty ?? true) }
+    func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
+        SidebarChatCell(row: (item as! Branch).row, canArchive: true, target: shell)
+    }
+    func outlineView(_ outlineView: NSOutlineView, shouldShowOutlineCellForItem item: Any) -> Bool { false }
+}
+func chatRow(_ id: String) -> ShellRow { ShellRow(["id": "chat:\(id)", "kind": "chat", "project": "p", "title": long]) }
+let branch = Branch(ShellRow(["id": "project:p", "kind": "project", "project": "p", "title": "p"]), (0..<3).map { Branch(chatRow("n\($0)")) })
+let rows = Rows([branch])
+let listed = NSOutlineView()
+SourceList.configure(listed, label: "probe")
+listed.dataSource = rows; listed.delegate = rows
+let scroll = SourceList.scrollView(listed)
+let listWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 230, height: 200), styleMask: [.borderless], backing: .buffered, defer: false)
+listWindow.contentView = scroll
+scroll.frame = NSRect(x: 0, y: 0, width: 230, height: 200)
+listed.reloadData(); listed.expandItem(branch)
+listWindow.contentView?.layoutSubtreeIfNeeded()
+listed.reloadData(); listed.expandItem(branch)
+let rebuiltRow = 2
+let rebuiltCell = listed.view(atColumn: 0, row: rebuiltRow, makeIfNecessary: true)
+let rebuiltPointer = listed.convert(NSPoint(x: listed.frameOfCell(atColumn: 0, row: rebuiltRow).midX, y: listed.frameOfCell(atColumn: 0, row: rebuiltRow).midY), to: nil)
+let rebuiltKept = rebuiltCell.map { SidebarChatCell.keepsHover(pointer: rebuiltPointer, in: $0) } ?? false
+// The row above it: the same pointer is not over that cell, so the check tells rows apart.
+let neighbour = listed.view(atColumn: 0, row: rebuiltRow - 1, makeIfNecessary: true)
+let neighbourKept = neighbour.map { SidebarChatCell.keepsHover(pointer: rebuiltPointer, in: $0) } ?? true
+
+report["hoverRestore"] = [
+    "over": keeps["over"]!, "moved": keeps["moved"]!, "away": keeps["away"]!, "none": keeps["none"]!, "scripted": scripted,
+    "rebuilt": rebuiltKept, "rebuiltNeighbour": neighbourKept, "rebuiltIsCell": rebuiltCell is SidebarChatCell, "rebuiltInWindow": rebuiltCell?.window != nil,
+    "rebuiltBounds": rebuiltCell.map { NSStringFromRect($0.bounds) } ?? "none",
+    "rebuiltPointer": NSStringFromPoint(rebuiltPointer)
+]
 
 let data = try JSONSerialization.data(withJSONObject: report, options: [.sortedKeys])
 print(String(decoding: data, as: UTF8.self))

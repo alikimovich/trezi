@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-02 — LKM-433 evidence: a real pointer's hover on a freshly rebuilt row
+
+- Review asked whether `keepsHover` can ever be true on a cell the outline has just rebuilt (`restoreSidebarHover` runs straight after `reloadData`, before any layout pass), since the native `rebuilt` stage bypasses it through `scriptedHover`. `test/fixtures/sidebar-marquee/main.swift` now hosts a real view-based `NSOutlineView` (`SourceList.configure`, `SidebarChatCell` rows, one parent with three nested chats), lays it out once, then does `reloadData` + `expandItem` and fetches the row with `view(atColumn:row:makeIfNecessary: true)` at once, with `scriptedHover` off and the pointer at that row's centre (`frameOfCell`, window coordinates).
+- Measured (`hoverRestore`): `rebuilt: true`, in a window, bounds `{{0, 0}, {198, 28}}`, pointer `{115, 120}`; the row beside it gets `rebuiltNeighbour: false` for the same pointer. So the cell is already placed when the outline returns it, and a real pointer's hover is kept: no defect, no app change. `test/sidebar-marquee.mjs` asserts both (`DEFECT:` message on a false `rebuilt`).
+
 ## 2026-11-02 — LKM-433 repair: the resume fixture read the host's Reduce Motion
 
 - GitHub CI failed `unit sidebar-marquee-resume` on a runner: the first title reported `scrolled: 0`, `handed: false`, and every later field was 0 or false. The fixture never set `SidebarMarqueeTitle.reduceMotionOverride`, so `reduceMotion` read the machine's Reduce Motion setting, and a runner with it on never scrolls (`step()` rests). It passed on the worker's Mac, where it is off. `test/sidebar-marquee.mjs` already pins this for its fixture; the new one missed it. No app code was at fault: the title behaves as designed with Reduce Motion on.

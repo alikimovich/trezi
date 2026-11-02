@@ -11,6 +11,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] The full native suite passes with the selected-weight fix: 76 smoke checks passed on 2b741ce, `sidebar-chats` and its `rebuilt` stage included.
 - [x] A hover carried over a reload is kept only while the pointer is still over that row (`SidebarChatCell.keepsHover`); the pipe's `sidebar-hover` bypasses it. Unit `test/sidebar-marquee.mjs`.
 - [x] The full native suite passes with the pointer check too: 76 passed, 0 failed, 0 skipped.
+- [x] `keepsHover` is true on a cell a real outline just rebuilt (`reloadData` + `expandItem`, no layout pass) and false for its neighbour: `hoverRestore.rebuilt` / `rebuiltNeighbour` in `test/sidebar-marquee.mjs`.
 - [ ] Find out why the failed run's restore timed out on `desktop viewport`, which skipped the 34 later checks.
 
 ## Native suite failure on main e120149f83ef (LKM-432)

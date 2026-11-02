@@ -176,5 +176,13 @@ if (process.platform !== 'darwin') {
   assert.equal(restore.away, false, 'a pointer outside the row does not')
   assert.equal(restore.none, false, 'no pointer position keeps nothing')
   assert.equal(restore.scripted, true, 'the pipe checks hover without a pointer')
+  // A cell the outline has just rebuilt (reload, expand, no layout pass) is already placed under
+  // the real pointer; if not, a real pointer's hover would be dropped on every reload.
+  assert.equal(
+    restore.rebuilt,
+    true,
+    `DEFECT: a rebuilt row under the pointer loses its hover (cell ${restore.rebuiltIsCell}, window ${restore.rebuiltInWindow}, bounds ${restore.rebuiltBounds}, pointer ${restore.rebuiltPointer})`
+  )
+  assert.equal(restore.rebuiltNeighbour, false, 'a rebuilt row beside the pointer does not keep it')
   console.log('SIDEBAR-MARQUEE PASS — text paints the whole clip, at every width and on every row')
 }
