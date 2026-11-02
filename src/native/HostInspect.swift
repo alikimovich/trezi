@@ -413,7 +413,10 @@ extension Host {
         case "sidebarVerification":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             SidebarMenuMonitor.shared.install()
-            reply(id, shell.verifySidebar(c))
+            // LKM-441: a menu press tracks in a nested run loop, which drains the main queue (and
+            // so the menu capture's main-actor task) only outside this main-queue block.
+            if c["menu"] != nil { SidebarMenuRun.outsideMainQueue { self.reply(id, self.shell.verifySidebar(c)) } }
+            else { reply(id, shell.verifySidebar(c)) }
         case "sidebarFocus":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             SidebarMenuMonitor.shared.install()
