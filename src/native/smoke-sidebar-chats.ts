@@ -259,6 +259,40 @@ export async function checkSidebarChats(host: NativeBridge, artifacts: string) {
   await sized(sidebarWidth)
   sidebarWidth = 0
 
+  // LKM-433: any row's change rebuilds every row's cell, the hovered one too. Its scroll carries on.
+  const neighbour = nativeChat.chats.get(created[2])
+  assert.ok(neighbour, 'a neighbouring chat to rename')
+  const named = neighbour.title
+  const retitle = async (text: typeof named) => {
+    neighbour.title = text
+    nativeWorkspace.changed()
+    const shown = text || 'New chat'
+    await waitFor(
+      async () =>
+        (await shell()).sidebarChats.some(
+          (item: Shell) => item.id === `chat:${created[2]}` && item.title === shown
+        ),
+      `the neighbouring row reads ${shown}`
+    )
+  }
+  await scroll('rebuilt', async () => {
+    const before = await waitFor(async () => {
+      const item = row(await shell())
+      return item.marqueeState.offset > 0 && item
+    }, 'the scroll is under way')
+    await retitle('A row that rebuilds the list')
+    const after = row(await shell())
+    assert.ok(
+      after.hovered && after.marquee,
+      `the rebuilt row keeps its hover: ${JSON.stringify(after)}`
+    )
+    assert.ok(
+      after.marqueeState.offset >= before.marqueeState.offset,
+      `the scroll does not restart: ${before.marqueeState.offset} then ${after.marqueeState.offset}`
+    )
+    await retitle(named)
+  })
+
   // Only a chat with a prompt is saved to History (`closeChat`): one stubbed turn in four chats,
   // so History is long enough for "Show N more".
   const prompted = [...created.filter((chat) => ![attached, long].includes(chat)).slice(0, 3), long]
