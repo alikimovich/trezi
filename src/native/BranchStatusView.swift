@@ -20,6 +20,11 @@ final class BranchPopUpButton: NSPopUpButton {
     private(set) var spinnerMode = SpinnerMode.inline { didSet { if spinnerMode != oldValue { needsDisplay = true } } }
     let dot = BranchStatusDot()
     private var dotPrefix = ""
+    /// The title does not fit its room and is drawn with a tail ellipsis.
+    private(set) var titleCut = false
+    /// LKM-440: the title's start (UTF-16 length) a tail cut keeps: the shown dot's slot and, inline,
+    /// the busy spinner's slot after it. 0 lets AppKit truncate, which drops them as whitespace.
+    private(set) var keptSlots = 0 { didSet { if keptSlots != oldValue { needsDisplay = true } } }
     override init(frame: NSRect, pullsDown: Bool) {
         super.init(frame: frame, pullsDown: pullsDown)
         cell = BranchPopUpCell(textCell: "", pullsDown: pullsDown)
@@ -69,7 +74,11 @@ final class BranchPopUpButton: NSPopUpButton {
         dot.frame = backingAlignedRect(NSRect(x: slot.midX - size / 2, y: slot.midY - size / 2, width: size, height: size), options: .alignAllEdgesNearest)
         // Tail truncation keeps the slot only while it and the ellipsis still fit; clipping has none.
         let title = cell?.titleRect(forBounds: bounds) ?? bounds
-        dot.isHidden = spinnerMode != .clipped && width(itemTitle(at: 0)) > title.width && slot.maxX + width("…") > title.maxX
+        titleCut = width(itemTitle(at: 0)) > title.width
+        dot.isHidden = spinnerMode != .clipped && titleCut && slot.maxX + width("…") > title.maxX
+        // Inline, a cut title already leaves the spinner's slot and the ellipsis room (`spinnerMode`).
+        let kept = spinnerMode == .inline && !progress.isHidden ? progressPrefix + BranchStatusDot.slot : dotPrefix + BranchStatusDot.slot
+        keptSlots = titleCut && !dot.isHidden ? (kept as NSString).length : 0
     }
     /// LKM-432: the spinner meets neither text, chevron nor dot. The pop-up is drawn at 8x
     /// without the spinner and the dot, and no inked run of it (title glyphs, ellipsis, chevron)
@@ -109,9 +118,43 @@ final class BranchPopUpCell: NSPopUpButtonCell {
         let stock = super.titleRect(forBounds: rect), leading = controlView?.alignmentRectInsets.left ?? 0
         return NSRect(x: rect.minX + leading, y: stock.minY, width: max(0, rect.width - leading - Self.chevronRoom - reserving), height: stock.height)
     }
+    /// LKM-440: AppKit's tail truncation drops the whitespace before its "…", the dot's en-space slot
+    /// with it, so the ellipsis ran into the drawn dot and the chevron fell up to 18 pt behind. The
+    /// title is cut at the longest start that fits with "…" and keeps its first `kept` UTF-16 units;
+    /// whitespace after them is dropped as AppKit does. Nil when the title fits or that start does not.
+    static func cut(_ title: NSAttributedString, width: CGFloat, keeping kept: Int) -> NSAttributedString? {
+        guard kept > 0, title.length > kept, title.size().width > width else { return nil }
+        let text = title.string as NSString
+        var end = title.length
+        while end > kept {
+            end = text.rangeOfComposedCharacterSequence(at: end - 1).location
+            guard end >= kept else { break }
+            var stop = end
+            while stop > kept, let scalar = UnicodeScalar(text.character(at: stop - 1)), CharacterSet.whitespaces.contains(scalar) { stop -= 1 }
+            let candidate = NSMutableAttributedString(attributedString: title.attributedSubstring(from: NSRange(location: 0, length: stop)))
+            candidate.append(NSAttributedString(string: "…", attributes: title.attributes(at: stop - 1, effectiveRange: nil)))
+            if candidate.size().width <= width { return candidate }
+        }
+        return nil
+    }
+    /// LKM-440: AppKit tightened the letters by up to ~4% before truncating, so a title the width
+    /// math here (`NSAttributedString.size`) finds cut was drawn whole. Untightened, both agree.
+    static func untightened(_ title: NSAttributedString) -> NSAttributedString {
+        let text = NSMutableAttributedString(attributedString: title)
+        text.enumerateAttribute(.paragraphStyle, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            guard let style = (value as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle else { return }
+            style.allowsDefaultTighteningForTruncation = false
+            text.addAttribute(.paragraphStyle, value: style, range: range)
+        }
+        return text
+    }
     override func drawTitle(_ title: NSAttributedString, withFrame frame: NSRect, in controlView: NSView) -> NSRect {
-        let rect = titleRect(forBounds: controlView.bounds)
+        let rect = titleRect(forBounds: controlView.bounds), title = Self.untightened(title)
         guard (controlView as? BranchPopUpButton)?.spinnerMode == .clipped else {
+            // A cut title is laid out a little wider than it measured, so AppKit does not truncate it again.
+            if let cut = Self.cut(title, width: rect.width, keeping: (controlView as? BranchPopUpButton)?.keptSlots ?? 0) {
+                return super.drawTitle(cut, withFrame: NSRect(x: rect.minX, y: frame.minY, width: max(rect.width, cut.size().width.rounded(.up) + 2), height: frame.height), in: controlView)
+            }
             return super.drawTitle(title, withFrame: NSRect(x: rect.minX, y: frame.minY, width: rect.width, height: frame.height), in: controlView)
         }
         // Laid out wide enough to need no ellipsis, then cut at the spinner's room.

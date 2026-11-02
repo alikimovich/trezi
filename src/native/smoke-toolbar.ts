@@ -37,6 +37,8 @@ export const pick = (state: Toolbar) => ({
   rightInset: state.windowWidth - state.rightGroupLeading,
   addressTruncated: state.addressTruncated,
   branchTruncated: state.branchTruncated,
+  branchTitleCut: state.branchTitleCut,
+  branchKeptSlots: state.branchKeptSlots,
   addressTextWidth: state.addressTextWidth,
   addressTextRoom: state.addressTextRoom,
   addressTextLeading: state.addressTextLeading,
@@ -101,7 +103,9 @@ function assertTitles(state: Toolbar, stage: string) {
     `Toolbar ${stage}: branch and address text share one left edge: ${detail}`
   )
   // Untruncated, the stock cell left ~4.5 pt; a tail ellipsis can leave up to a glyph more.
-  const maxGap = state.branchTruncated ? 16 : 6.5
+  // LKM-440: `branchTruncated` compares the alignment-rect intrinsic width with the frame and
+  // missed a cut title; `branchTitleCut` is the pop-up's own measure of the title it draws.
+  const maxGap = state.branchTruncated || state.branchTitleCut ? 16 : 6.5
   assert.ok(
     state.branchChevronGap >= 1 && state.branchChevronGap <= maxGap,
     `Toolbar ${stage}: the chevron follows the branch title (gap 1–${maxGap}pt): ${detail}`
