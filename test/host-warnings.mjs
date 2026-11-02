@@ -21,7 +21,9 @@ if (process.platform !== 'darwin') {
     'src/native/SidebarVerification.swift',
     'src/native/ToolbarAnchorVerification.swift',
     'src/native/BranchStatusView.swift',
-    'src/native/ComposerQueue.swift'
+    'src/native/ComposerQueue.swift',
+    // LKM-441: the sidebar menu run moved here from SidebarVerification.swift.
+    'src/native/SidebarMenuCapture.swift'
   ]
 
   const script = readFileSync(join(root, 'scripts/build-native.mjs'), 'utf8')
@@ -91,7 +93,7 @@ if (process.platform !== 'darwin') {
     )
     assert.equal(result.error, undefined, `swiftc: ${result.error}`)
     assert.equal(result.status, 0, `swiftc: ${result.stderr}`)
-    assert.deepEqual(warnings(result.stderr), [], 'the four files compile with no warning')
+    assert.deepEqual(warnings(result.stderr), [], 'the guarded files compile with no warning')
     for (const file of guarded)
       assert.doesNotMatch(
         readFileSync(join(root, file), 'utf8'),
