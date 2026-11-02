@@ -127,6 +127,13 @@ func resize(_ cell: SidebarChatCell, to width: CGFloat, at time: Double) {
         cell.layoutSubtreeIfNeeded()
     }))
 }
+/// Selection: the row's title gets wider with no change to the title's own frame.
+func select(_ cell: SidebarChatCell, at time: Double) {
+    plan.append((time, "select", {
+        cell.title!.label.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        cell.backgroundStyle = .emphasized
+    }))
+}
 /// Start, middle and end of a title with this travel; the end is well after the text arrives.
 func phases(_ scenario: String, _ cell: SidebarChatCell) {
     let travel = Double(cell.title!.travel) + 20 + 6 // the hovered title gives up the Archive width
@@ -145,6 +152,8 @@ let narrowedMid = makeCell(long, width: 230)
 let narrowedAtEnd = makeCell(long, width: 230, selected: true)
 let widenedAtEnd = makeCell(long, width: 200)
 let widenedToFit = makeCell(long, width: 200)
+let selectedMid = makeCell(long, width: 230)
+let selectedAtEnd = makeCell(long, width: 230)
 let overflowsLater = makeCell(short, width: 230)
 let fits = makeCell(short, width: 230, selected: true)
 let leaving = makeCell(long, width: 230, selected: true)
@@ -175,6 +184,11 @@ take("widenedAtEnd", "end", widenedAtEnd, at: 7.0)
 take("widenedToFit", "held", widenedToFit, at: 6.7)
 resize(widenedToFit, to: 400, at: 6.8)
 take("widenedToFit", "end", widenedToFit, at: 7.0)
+select(selectedMid, at: 1.2)
+take("selectedMid", "end", selectedMid, at: 7.8)
+take("selectedAtEnd", "held", selectedAtEnd, at: 6.7)
+select(selectedAtEnd, at: 6.8)
+take("selectedAtEnd", "end", selectedAtEnd, at: 7.8)
 resize(overflowsLater, to: 90, at: 0.9)
 take("overflowsLater", "start", overflowsLater, at: 0.6)
 take("overflowsLater", "end", overflowsLater, at: 3.0)
@@ -188,7 +202,7 @@ take("still", "end", still, at: 2.0)
 // run must not depend on it or change it. Only `still` hovers with it on.
 SidebarMarqueeTitle.reduceMotionOverride = false
 for cell in [selected, unselected, bare, narrow, narrowUnselected, narrowedInDelay, narrowedMid, narrowedAtEnd, widenedAtEnd,
-             widenedToFit, overflowsLater, fits, leaving] { cell.setHovered(true) }
+             widenedToFit, selectedMid, selectedAtEnd, overflowsLater, fits, leaving] { cell.setHovered(true) }
 SidebarMarqueeTitle.reduceMotionOverride = true
 still.setHovered(true)
 SidebarMarqueeTitle.reduceMotionOverride = false
@@ -200,6 +214,63 @@ for step in plan.sorted(by: { $0.at < $1.at }) {
 }
 still.setHovered(false)
 report["stillLeft"] = ["end": sample(still, at: 0)]
+
+// LKM-433: a reload moves rows. The pointer sits where `unselected` is now, so `selected`, the
+// row that was hovered, has lost it, and nothing in this decision reads an input event.
+func centre(_ cell: NSView) -> NSPoint { cell.convert(NSPoint(x: cell.bounds.midX, y: cell.bounds.midY), to: nil) }
+let pointer = centre(unselected)
+SidebarChatCell.scriptedHover = false
+let keeps: [String: Bool] = [
+    "over": SidebarChatCell.keepsHover(pointer: pointer, in: unselected),
+    "moved": SidebarChatCell.keepsHover(pointer: pointer, in: selected),
+    "away": SidebarChatCell.keepsHover(pointer: NSPoint(x: -50, y: -50), in: unselected),
+    "none": SidebarChatCell.keepsHover(pointer: nil, in: unselected)
+]
+SidebarChatCell.scriptedHover = true
+let scripted = SidebarChatCell.keepsHover(pointer: nil, in: selected)
+SidebarChatCell.scriptedHover = false
+
+/// A real view-based outline, as `Shell.update` reloads it: `reloadData`, `expandItem`, then the
+/// row's cell at once, with no layout pass in between, the way `sidebarCell` fetches it.
+final class Branch: NSObject { let row: ShellRow, kids: [Branch]; init(_ row: ShellRow, _ kids: [Branch] = []) { self.row = row; self.kids = kids } }
+final class Rows: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate {
+    let top: [Branch]
+    init(_ top: [Branch]) { self.top = top }
+    func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int { (item as? Branch)?.kids.count ?? top.count }
+    func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any { (item as? Branch)?.kids[index] ?? top[index] }
+    func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool { !((item as? Branch)?.kids.isEmpty ?? true) }
+    func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
+        SidebarChatCell(row: (item as! Branch).row, canArchive: true, target: shell)
+    }
+    func outlineView(_ outlineView: NSOutlineView, shouldShowOutlineCellForItem item: Any) -> Bool { false }
+}
+func chatRow(_ id: String) -> ShellRow { ShellRow(["id": "chat:\(id)", "kind": "chat", "project": "p", "title": long]) }
+let branch = Branch(ShellRow(["id": "project:p", "kind": "project", "project": "p", "title": "p"]), (0..<3).map { Branch(chatRow("n\($0)")) })
+let rows = Rows([branch])
+let listed = NSOutlineView()
+SourceList.configure(listed, label: "probe")
+listed.dataSource = rows; listed.delegate = rows
+let scroll = SourceList.scrollView(listed)
+let listWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 230, height: 200), styleMask: [.borderless], backing: .buffered, defer: false)
+listWindow.contentView = scroll
+scroll.frame = NSRect(x: 0, y: 0, width: 230, height: 200)
+listed.reloadData(); listed.expandItem(branch)
+listWindow.contentView?.layoutSubtreeIfNeeded()
+listed.reloadData(); listed.expandItem(branch)
+let rebuiltRow = 2
+let rebuiltCell = listed.view(atColumn: 0, row: rebuiltRow, makeIfNecessary: true)
+let rebuiltPointer = listed.convert(NSPoint(x: listed.frameOfCell(atColumn: 0, row: rebuiltRow).midX, y: listed.frameOfCell(atColumn: 0, row: rebuiltRow).midY), to: nil)
+let rebuiltKept = rebuiltCell.map { SidebarChatCell.keepsHover(pointer: rebuiltPointer, in: $0) } ?? false
+// The row above it: the same pointer is not over that cell, so the check tells rows apart.
+let neighbour = listed.view(atColumn: 0, row: rebuiltRow - 1, makeIfNecessary: true)
+let neighbourKept = neighbour.map { SidebarChatCell.keepsHover(pointer: rebuiltPointer, in: $0) } ?? true
+
+report["hoverRestore"] = [
+    "over": keeps["over"]!, "moved": keeps["moved"]!, "away": keeps["away"]!, "none": keeps["none"]!, "scripted": scripted,
+    "rebuilt": rebuiltKept, "rebuiltNeighbour": neighbourKept, "rebuiltIsCell": rebuiltCell is SidebarChatCell, "rebuiltInWindow": rebuiltCell?.window != nil,
+    "rebuiltBounds": rebuiltCell.map { NSStringFromRect($0.bounds) } ?? "none",
+    "rebuiltPointer": NSStringFromPoint(rebuiltPointer)
+]
 
 let data = try JSONSerialization.data(withJSONObject: report, options: [.sortedKeys])
 print(String(decoding: data, as: UTF8.self))

@@ -70,6 +70,7 @@ export const UI_SOURCES = {
       'sidebar-evidence',
       'sidebar-history-rows',
       'sidebar-marquee',
+      'sidebar-marquee-resume',
       'sidebar-project-actions',
       'sidebar-shimmer'
     ],

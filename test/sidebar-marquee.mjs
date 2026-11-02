@@ -157,6 +157,10 @@ if (process.platform !== 'darwin') {
   atEnd(report.narrowedAtEnd.end, 'narrowed at the end')
   atEnd(report.widenedAtEnd.end, 'widened at the end')
   rests(report.widenedToFit.end, 'widened until it fits')
+  // LKM-433: selection widens the text, not the title: the label follows, even while holding.
+  atEnd(report.selectedMid.end, 'selected while scrolling')
+  atEnd(report.selectedAtEnd.held, 'held before selection')
+  atEnd(report.selectedAtEnd.end, 'selected at the end')
   assert.equal(report.overflowsLater.start.running, false, 'a fitting title does not scroll')
   atEnd(report.overflowsLater.end, 'overflows only after the hover started')
 
@@ -165,5 +169,20 @@ if (process.platform !== 'darwin') {
   rests(report.stillLeft.end, 'Reduce Motion after the hover')
   assert.equal(report.leaving.scrolling.running, true, 'scrolling before the pointer leaves')
   rests(report.leaving.end, 'un-hover')
+  // LKM-433: a hover carried over a reload stays only on the row the pointer is still over.
+  const restore = report.hoverRestore
+  assert.equal(restore.over, true, 'the row under the pointer keeps its hover')
+  assert.equal(restore.moved, false, 'a row the reload moved from under the pointer does not')
+  assert.equal(restore.away, false, 'a pointer outside the row does not')
+  assert.equal(restore.none, false, 'no pointer position keeps nothing')
+  assert.equal(restore.scripted, true, 'the pipe checks hover without a pointer')
+  // A cell the outline has just rebuilt (reload, expand, no layout pass) is already placed under
+  // the real pointer; if not, a real pointer's hover would be dropped on every reload.
+  assert.equal(
+    restore.rebuilt,
+    true,
+    `DEFECT: a rebuilt row under the pointer loses its hover (cell ${restore.rebuiltIsCell}, window ${restore.rebuiltInWindow}, bounds ${restore.rebuiltBounds}, pointer ${restore.rebuiltPointer})`
+  )
+  assert.equal(restore.rebuiltNeighbour, false, 'a rebuilt row beside the pointer does not keep it')
   console.log('SIDEBAR-MARQUEE PASS — text paints the whole clip, at every width and on every row')
 }

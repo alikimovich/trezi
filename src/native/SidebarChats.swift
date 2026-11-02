@@ -95,7 +95,7 @@ final class SidebarChatCell: SourceListCell {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    override var backgroundStyle: NSView.BackgroundStyle { didSet { tint() } }
+    override var backgroundStyle: NSView.BackgroundStyle { didSet { tint(); title?.restyled() } }
     private func tint() {
         let emphasized = backgroundStyle == .emphasized
         archive?.contentTintColor = emphasized ? .alternateSelectedControlTextColor : .secondaryLabelColor
@@ -112,15 +112,25 @@ final class SidebarChatCell: SourceListCell {
         let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
         addTrackingArea(area); tracking = area
     }
+    /// Test seam for the pipe checks (`sidebar-hover`): they hover with no real pointer.
+    static var scriptedHover = false
+    /// LKM-433: a hover carried across a reload belongs to the row only while the pointer (in window
+    /// coordinates) is still over it. Reloads move rows, and the new cell's tracking area starts
+    /// outside, so a row the pointer has left would never get its `mouseExited`.
+    static func keepsHover(pointer: NSPoint?, in cell: NSView) -> Bool {
+        if scriptedHover { return true }
+        guard let pointer else { return false }
+        return cell.bounds.contains(cell.convert(pointer, from: nil))
+    }
     override func mouseEntered(with event: NSEvent) { setHovered(true) }
     override func mouseExited(with event: NSEvent) { setHovered(false) }
     /// Hover shows Archive (the title yields its width) and scrolls an overflowing title.
-    func setHovered(_ on: Bool) {
+    func setHovered(_ on: Bool, scrollingSince since: CFTimeInterval? = nil) {
         guard on != hovered else { return }
         hovered = on
         archive?.alphaValue = on ? 1 : 0
         if let hovering { resting?.isActive = !on; hovering.isActive = on }
-        if on { title?.start() } else { title?.stop() }
+        if on { title?.start(since: since) } else { title?.stop() }
     }
 }
 
@@ -135,6 +145,22 @@ extension NativeShell {
     func expandNested() { for row in rows where !row.nested.isEmpty { outline.expandItem(row) } }
     func layoutNested() {
         for row in rows { row.layoutNested(open: sidebarHistory.open.contains(row.project), all: sidebarHistory.all.contains(row.project)) }
+    }
+    /// LKM-433: a reload builds a new cell for every row, and any row's change reloads (another
+    /// chat starting, a History age ticking over, even with History hidden), so the hover and
+    /// its scroll are read here before the reload and handed to the new cell after it.
+    func sidebarHover() -> (id: String, scroll: CFTimeInterval?)? {
+        for index in 0..<outline.numberOfRows {
+            guard let cell = outline.view(atColumn: 0, row: index, makeIfNecessary: false) as? SidebarChatCell, cell.hovered,
+                  let id = cell.identifier?.rawValue else { continue }
+            return (id, cell.title?.scrollStart)
+        }
+        return nil
+    }
+    func restoreSidebarHover(_ hover: (id: String, scroll: CFTimeInterval?)?) {
+        guard let hover, let cell = sidebarCell(hover.id),
+              SidebarChatCell.keepsHover(pointer: outline.window?.mouseLocationOutsideOfEventStream, in: cell) else { return }
+        cell.setHovered(true, scrollingSince: hover.scroll)
     }
     func sidebarChatCell(_ row: ShellRow) -> NSView {
         SidebarChatCell(row: row, canArchive: canArchive(row), target: self)
@@ -177,8 +203,10 @@ extension NativeShell {
         layoutNested()
         let wasApplying = applying
         applying = true; defer { applying = wasApplying }
+        let hover = sidebarHover()
         outline.reloadItem(row, reloadChildren: true)
         outline.expandItem(row)
+        restoreSidebarHover(hover)
         if let target = sidebarTarget() {
             let index = outline.row(forItem: target)
             if index >= 0 && outline.selectedRow != index { outline.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false) }
@@ -236,6 +264,7 @@ extension NativeShell {
             emit(["event":"shell-action", "action":"select", "id":row.id, "project":row.project]); return true
         case "sidebar-hover":
             for index in 0..<outline.numberOfRows { (outline.view(atColumn: 0, row: index, makeIfNecessary: false) as? SidebarChatCell)?.setHovered(false) }
+            SidebarChatCell.scriptedHover = id != nil
             guard let id else { return true }
             guard let cell = sidebarCell(id) else { return false }
             cell.setHovered(true); return true

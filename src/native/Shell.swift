@@ -490,7 +490,11 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             alignChatHeader(); layoutToolbar()
         }
 
-        if rowsChanged || projectChanged { outline.reloadData(); expandNested() }
+        if rowsChanged || projectChanged {
+            let hover = sidebarHover()
+            outline.reloadData(); expandNested()
+            restoreSidebarHover(hover)
+        }
         // A state older than the latest pick keeps the picked row highlighted (LKM-204).
         if selection.answers(state) {
             if let selected = sidebarTarget() {

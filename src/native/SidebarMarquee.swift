@@ -24,6 +24,8 @@ final class SidebarMarqueeTitle: NSView {
     private var natural: NSLayoutConstraint?
     private var timer: Timer?
     private var began: CFTimeInterval = 0
+    /// The start of a scroll this title takes over, until its first step.
+    private var resumed: CFTimeInterval?
     private let edges = CAGradientLayer()
     /// The row is hovered, whether or not the title overflows right now.
     private var wanted = false
@@ -62,10 +64,21 @@ final class SidebarMarqueeTitle: NSView {
         if resized && wanted { wake() }
     }
 
-    /// Follows the hover: scrolls whenever the title overflows the width it has.
-    func start() {
+    /// A title hovered before it had a window scrolls once it has one.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if wanted && window != nil { wake() }
+    }
+
+    /// When the running scroll began, for `start(since:)`; nil at rest.
+    var scrollStart: CFTimeInterval? { running ? began : nil }
+
+    /// Follows the hover: scrolls whenever the title overflows the width it has. LKM-433: `since`
+    /// carries on the scroll of the title this one replaces when a reload rebuilds its row.
+    func start(since: CFTimeInterval? = nil) {
         guard !wanted else { return }
         wanted = true
+        resumed = since
         superview?.layoutSubtreeIfNeeded()
         step()
     }
@@ -73,7 +86,15 @@ final class SidebarMarqueeTitle: NSView {
     /// Back to the truncated title at its start.
     func stop() {
         wanted = false
+        resumed = nil
         rest()
+    }
+
+    /// LKM-433: a row's selection changes the title's weight, so its width, without resizing the
+    /// title. A rebuilt row is selected just after its hover comes back, and a held title has no
+    /// frames running. The next step applies it.
+    func restyled() {
+        if wanted { wake() }
     }
 
     private func wake() {
@@ -89,12 +110,14 @@ final class SidebarMarqueeTitle: NSView {
         guard wanted, window != nil, !Self.reduceMotion, distance > 1 else { rest(); return }
         if !running {
             running = true
-            began = CACurrentMediaTime()
+            began = resumed ?? CACurrentMediaTime()
+            resumed = nil
             fit.isActive = false
             let natural = label.widthAnchor.constraint(equalToConstant: ceil(label.intrinsicContentSize.width))
             natural.isActive = true; self.natural = natural
             label.lineBreakMode = .byClipping
         }
+        natural?.constant = ceil(label.intrinsicContentSize.width)
         let moved = min(distance, max(0, CGFloat(CACurrentMediaTime() - began - Self.delay) * Self.speed))
         let scale = window?.backingScaleFactor ?? 2
         offset = (moved * scale).rounded() / scale
@@ -102,7 +125,7 @@ final class SidebarMarqueeTitle: NSView {
         layoutSubtreeIfNeeded()
         label.needsDisplay = true
         shade(distance)
-        // Holding at the end needs no frames; a resize wakes it.
+        // Holding at the end needs no frames; a resize or a selection wakes it.
         if moved >= distance { timer?.invalidate(); timer = nil } else { wake() }
     }
 
