@@ -133,21 +133,39 @@ export async function checkSidebarHistory(
     await capture('header-focus', { focus })
     await restoreSidebarFocus(host, 'header focus')
 
-    // The menu offers Show History; a capture of its own window is evidence, not an assertion.
+    // The menu offers Show History, and a capture of its own window is the picture to inspect.
+    // LKM-441: the capture ends in `shot` or `shotError` before the reply, and leaves nothing behind.
     const open = await menu(full, { capture: true })
+    const { png, ...shot } = open.shot ?? {}
+    writeFileSync(
+      join(artifacts, 'sidebar-history-menu.json'),
+      JSON.stringify(
+        { ...open, shot: png ? { ...shot, png: 'sidebar-history-menu.png' } : undefined },
+        null,
+        2
+      )
+    )
+    if (png) writeFileSync(join(artifacts, 'sidebar-history-menu.png'), Buffer.from(png, 'base64'))
     assert.deepEqual(open.titles, PROJECT_MENU)
     assert.deepEqual(open.states, PROJECT_MENU)
     assert.ok(open.opened && open.closed, 'the "…" press opened and closed the menu')
-    if (open.shot?.png)
-      writeFileSync(
-        join(artifacts, 'sidebar-history-menu.png'),
-        Buffer.from(open.shot.png, 'base64')
-      )
-    else console.log(`Sidebar history: menu not captured: ${open.shotError}`)
-    writeFileSync(
-      join(artifacts, 'sidebar-history-menu.json'),
-      JSON.stringify({ ...open, shot: undefined }, null, 2)
+    const receipt = JSON.stringify({ ...open, shot: png ? shot : open.shot })
+    assert.ok(
+      open.shot || open.shotError,
+      `the menu capture recorded shot or shotError: ${receipt}`
     )
+    const { capture: run } = open
+    assert.ok(run?.requested && run.started, `the menu capture started: ${receipt}`)
+    assert.ok(
+      run.observersRemoved === run.observers && !run.timersValid && !run.taskPending,
+      `the menu capture left no observer, timer or task: ${receipt}`
+    )
+    if (process.env.TREZI_NATIVE_BACKGROUND_TEST === '1')
+      console.log(`Sidebar history: background run, menu not captured: ${open.shotError}`)
+    else {
+      assert.ok(png && run.completed && !run.fallbackCancel, `the menu was captured: ${receipt}`)
+      assert.ok(shot.width > 0 && shot.height > 0, `the menu capture has a size: ${receipt}`)
+    }
     await restoreSidebarFocus(host, 'History menu')
 
     // Show History reveals this project's closed chats and the count, and only here.

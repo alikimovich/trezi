@@ -151,6 +151,7 @@ const host = compile(
     join(root, 'src/native/SidebarMarquee.swift'),
     join(root, 'src/native/SidebarTitleShimmer.swift'),
     join(root, 'src/native/SidebarVerification.swift'),
+    join(root, 'src/native/SidebarMenuCapture.swift'),
     join(root, 'src/native/SidebarSizing.swift'),
     join(root, 'src/native/SidebarFocus.swift'),
     join(root, 'src/native/SidebarIcon.swift'),
