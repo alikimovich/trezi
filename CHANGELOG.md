@@ -13,6 +13,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Changed
 
 - The pointer becomes a pointing hand over chat code that a click copies, the feedback now reads "Copied to clipboard" and is announced politely, and copying the same code again without moving off it no longer re-shows the feedback (LKM-442).
+## [0.13.3] - 2026-11-02
+
+### Fixed
+
+- A branch title cut short in a narrow toolbar now ends its ellipsis after the CI dot, not on top of it, and the menu chevron follows it again (LKM-440).
 
 ## [0.13.2] - 2026-11-01
 
