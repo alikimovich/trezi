@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-11-01
+
 ### Fixed
 
 - Building the native app from source no longer prints Swift compiler warnings from the sidebar and toolbar menu checks, the branch status and the composer queue (LKM-436).
