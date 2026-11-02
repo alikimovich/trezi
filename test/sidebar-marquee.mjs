@@ -157,6 +157,10 @@ if (process.platform !== 'darwin') {
   atEnd(report.narrowedAtEnd.end, 'narrowed at the end')
   atEnd(report.widenedAtEnd.end, 'widened at the end')
   rests(report.widenedToFit.end, 'widened until it fits')
+  // LKM-433: selection widens the text, not the title: the label follows, even while holding.
+  atEnd(report.selectedMid.end, 'selected while scrolling')
+  atEnd(report.selectedAtEnd.held, 'held before selection')
+  atEnd(report.selectedAtEnd.end, 'selected at the end')
   assert.equal(report.overflowsLater.start.running, false, 'a fitting title does not scroll')
   atEnd(report.overflowsLater.end, 'overflows only after the hover started')
 

@@ -95,7 +95,7 @@ final class SidebarChatCell: SourceListCell {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    override var backgroundStyle: NSView.BackgroundStyle { didSet { tint() } }
+    override var backgroundStyle: NSView.BackgroundStyle { didSet { tint(); title?.restyled() } }
     private func tint() {
         let emphasized = backgroundStyle == .emphasized
         archive?.contentTintColor = emphasized ? .alternateSelectedControlTextColor : .secondaryLabelColor
@@ -115,12 +115,12 @@ final class SidebarChatCell: SourceListCell {
     override func mouseEntered(with event: NSEvent) { setHovered(true) }
     override func mouseExited(with event: NSEvent) { setHovered(false) }
     /// Hover shows Archive (the title yields its width) and scrolls an overflowing title.
-    func setHovered(_ on: Bool) {
+    func setHovered(_ on: Bool, scrollingSince since: CFTimeInterval? = nil) {
         guard on != hovered else { return }
         hovered = on
         archive?.alphaValue = on ? 1 : 0
         if let hovering { resting?.isActive = !on; hovering.isActive = on }
-        if on { title?.start() } else { title?.stop() }
+        if on { title?.start(since: since) } else { title?.stop() }
     }
 }
 
@@ -135,6 +135,21 @@ extension NativeShell {
     func expandNested() { for row in rows where !row.nested.isEmpty { outline.expandItem(row) } }
     func layoutNested() {
         for row in rows { row.layoutNested(open: sidebarHistory.open.contains(row.project), all: sidebarHistory.all.contains(row.project)) }
+    }
+    /// LKM-433: a reload builds a new cell for every row, and any row's change reloads (another
+    /// chat starting, a History age ticking over, even with History hidden), so the hover and
+    /// its scroll are read here before the reload and handed to the new cell after it.
+    func sidebarHover() -> (id: String, scroll: CFTimeInterval?)? {
+        for index in 0..<outline.numberOfRows {
+            guard let cell = outline.view(atColumn: 0, row: index, makeIfNecessary: false) as? SidebarChatCell, cell.hovered,
+                  let id = cell.identifier?.rawValue else { continue }
+            return (id, cell.title?.scrollStart)
+        }
+        return nil
+    }
+    func restoreSidebarHover(_ hover: (id: String, scroll: CFTimeInterval?)?) {
+        guard let hover else { return }
+        sidebarCell(hover.id)?.setHovered(true, scrollingSince: hover.scroll)
     }
     func sidebarChatCell(_ row: ShellRow) -> NSView {
         SidebarChatCell(row: row, canArchive: canArchive(row), target: self)
@@ -177,8 +192,10 @@ extension NativeShell {
         layoutNested()
         let wasApplying = applying
         applying = true; defer { applying = wasApplying }
+        let hover = sidebarHover()
         outline.reloadItem(row, reloadChildren: true)
         outline.expandItem(row)
+        restoreSidebarHover(hover)
         if let target = sidebarTarget() {
             let index = outline.row(forItem: target)
             if index >= 0 && outline.selectedRow != index { outline.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false) }
