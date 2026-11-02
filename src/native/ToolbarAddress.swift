@@ -30,6 +30,7 @@ extension NativeShell {
                 "branchTitleRectLeading":branchMenu.convert(branchMenu.cell?.titleRect(forBounds: branchMenu.bounds) ?? .zero, to: nil).minX,
                 "branchFrameLeading":branchMenu.convert(branchMenu.bounds, to: nil).minX, "branchFrameWidth":branchMenu.bounds.width,
                 "branchTitleEnd":titleEnd, "branchChevronLeading":chevron.0, "branchChevronTrailing":chevron.1,"branchChevronGap":chevron.0 - titleEnd,
+                "branchTitleCut":branchMenu.titleCut, "branchKeptSlots":branchMenu.keptSlots,
                 "windowAppearance":window?.effectiveAppearance.name.rawValue ?? ""]
     }
     @objc func windowResized(_ notification: Notification) { alignChatHeader() }

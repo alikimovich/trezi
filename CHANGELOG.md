@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+
+- A branch title cut short in a narrow toolbar now ends its ellipsis after the CI dot, not on top of it, and the menu chevron follows it again (LKM-440).
+
 ## [0.13.2] - 2026-11-01
 
 ### Fixed
