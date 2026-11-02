@@ -35,6 +35,10 @@ and provider-seat rules are here.
   see it (Send Feedback's ⌥⌘F is the second key there: WebKit claims it too). Never bind
   Escape there. Covered by `test/menu-first-shortcuts.mjs` and the `toggle-ui` and
   `toolbar-actions` smokes.
+  The `toolbar-actions` shortcut audit (`src/native/MenuShortcutAudit.swift`) skips
+  AppKit's own Edit rows, Start Dictation… (`startDictation:`) and Emoji & Symbols
+  (`orderFrontCharacterPalette:`): their keys depend on the system. A Trezi item bound to
+  either selector is therefore not audited. Covered by `test/menu-shortcut-audit.mjs`.
 - **A foreground capture does not map onto view frames (LKM-334).** On macOS 27 the
   ScreenCaptureKit window image from `captureVisibleRegion` drew the window 2–6 % smaller
   than its frame, varying per capture, so a pixel read at a view frame lands on the wrong
