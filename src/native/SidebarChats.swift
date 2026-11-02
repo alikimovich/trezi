@@ -112,6 +112,16 @@ final class SidebarChatCell: SourceListCell {
         let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
         addTrackingArea(area); tracking = area
     }
+    /// Test seam for the pipe checks (`sidebar-hover`): they hover with no real pointer.
+    static var scriptedHover = false
+    /// LKM-433: a hover carried across a reload belongs to the row only while the pointer (in window
+    /// coordinates) is still over it. Reloads move rows, and the new cell's tracking area starts
+    /// outside, so a row the pointer has left would never get its `mouseExited`.
+    static func keepsHover(pointer: NSPoint?, in cell: NSView) -> Bool {
+        if scriptedHover { return true }
+        guard let pointer else { return false }
+        return cell.bounds.contains(cell.convert(pointer, from: nil))
+    }
     override func mouseEntered(with event: NSEvent) { setHovered(true) }
     override func mouseExited(with event: NSEvent) { setHovered(false) }
     /// Hover shows Archive (the title yields its width) and scrolls an overflowing title.
@@ -148,8 +158,9 @@ extension NativeShell {
         return nil
     }
     func restoreSidebarHover(_ hover: (id: String, scroll: CFTimeInterval?)?) {
-        guard let hover else { return }
-        sidebarCell(hover.id)?.setHovered(true, scrollingSince: hover.scroll)
+        guard let hover, let cell = sidebarCell(hover.id),
+              SidebarChatCell.keepsHover(pointer: outline.window?.mouseLocationOutsideOfEventStream, in: cell) else { return }
+        cell.setHovered(true, scrollingSince: hover.scroll)
     }
     func sidebarChatCell(_ row: ShellRow) -> NSView {
         SidebarChatCell(row: row, canArchive: canArchive(row), target: self)
@@ -253,6 +264,7 @@ extension NativeShell {
             emit(["event":"shell-action", "action":"select", "id":row.id, "project":row.project]); return true
         case "sidebar-hover":
             for index in 0..<outline.numberOfRows { (outline.view(atColumn: 0, row: index, makeIfNecessary: false) as? SidebarChatCell)?.setHovered(false) }
+            SidebarChatCell.scriptedHover = id != nil
             guard let id else { return true }
             guard let cell = sidebarCell(id) else { return false }
             cell.setHovered(true); return true

@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-02 — LKM-433 repair: a carried hover only stays under the pointer
+
+- Review found the full native suite green on 2b741ce (76 smoke checks, `sidebar-chats` and its `rebuilt` stage included), so the "Not confirmed natively" bullet in the entry below is stale: it describes the session before that run. It also found a regression in the hover hand-over: `restoreSidebarHover` set the old row's hover by id, but a reload moves rows (`recentChats` is newest first, so a new chat pushes every row down), and the new cell's tracking area starts outside, with no `.assumeInside`. The old row would keep Archive and its scroll until the pointer entered and left it, while the row really under the pointer could hover too. The entry below said the new tracking area "behaves as `updateTrackingAreas` already did": that missed the case, because before this ticket a reload cleared the hover.
+- Fix: `SidebarChatCell.keepsHover(pointer:in:)` restores the hover only if the window's pointer location, in the new cell's coordinates, is inside its bounds. A row the pointer left is not hovered after the reload. The pipe's `sidebar-hover` sets `SidebarChatCell.scriptedHover` (cleared by `sidebar-hover` with no row), which bypasses the check: smoke hover has no real pointer, so the `rebuilt` stage still exercises the hand-over.
+- Check: `test/sidebar-marquee.mjs` runs the decision on the real rows with the pointer on one row and asks the row that was hovered (the moved one) and the one under it, plus a pointer outside the row, no pointer and the scripted seam. No input event is synthesised. Red first: always keeping the hover fails "a row the reload moved from under the pointer does not".
+- Native: the full suite passed on this change, 76 smoke checks passed, 0 failed, 0 skipped (`sidebar-chats` with its `rebuilt` stage included, using the scripted hover). The earlier `desktop viewport` restore timeout is not explained by this run and stays open in `docs/TASKS.md`.
+- Also: the `## [0.13.0]` heading in `CHANGELOG.md` now has its blank line before it.
+
 ## 2026-11-01 — LKM-433 native suite: a sidebar reload dropped the hovered row's scroll
 
 - Nightly failure on 14ea803a: `sidebar-chats` timed out on `resized: scrolled to the end`. The `mid` capture had the row hovered at offset 154 of 307. At the timeout it read `hovered: false`, `marquee: false`, offset 0, with the sidebar still at 200 pt. So the hover was lost in the seconds after `mid`, and the title was not simply slow. None of the commits since the last green run touch the sidebar.

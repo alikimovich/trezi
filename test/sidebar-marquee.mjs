@@ -169,5 +169,12 @@ if (process.platform !== 'darwin') {
   rests(report.stillLeft.end, 'Reduce Motion after the hover')
   assert.equal(report.leaving.scrolling.running, true, 'scrolling before the pointer leaves')
   rests(report.leaving.end, 'un-hover')
+  // LKM-433: a hover carried over a reload stays only on the row the pointer is still over.
+  const restore = report.hoverRestore
+  assert.equal(restore.over, true, 'the row under the pointer keeps its hover')
+  assert.equal(restore.moved, false, 'a row the reload moved from under the pointer does not')
+  assert.equal(restore.away, false, 'a pointer outside the row does not')
+  assert.equal(restore.none, false, 'no pointer position keeps nothing')
+  assert.equal(restore.scripted, true, 'the pipe checks hover without a pointer')
   console.log('SIDEBAR-MARQUEE PASS — text paints the whole clip, at every width and on every row')
 }

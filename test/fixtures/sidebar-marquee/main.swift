@@ -215,5 +215,21 @@ for step in plan.sorted(by: { $0.at < $1.at }) {
 still.setHovered(false)
 report["stillLeft"] = ["end": sample(still, at: 0)]
 
+// LKM-433: a reload moves rows. The pointer sits where `unselected` is now, so `selected`, the
+// row that was hovered, has lost it, and nothing in this decision reads an input event.
+func centre(_ cell: NSView) -> NSPoint { cell.convert(NSPoint(x: cell.bounds.midX, y: cell.bounds.midY), to: nil) }
+let pointer = centre(unselected)
+SidebarChatCell.scriptedHover = false
+let keeps: [String: Bool] = [
+    "over": SidebarChatCell.keepsHover(pointer: pointer, in: unselected),
+    "moved": SidebarChatCell.keepsHover(pointer: pointer, in: selected),
+    "away": SidebarChatCell.keepsHover(pointer: NSPoint(x: -50, y: -50), in: unselected),
+    "none": SidebarChatCell.keepsHover(pointer: nil, in: unselected)
+]
+SidebarChatCell.scriptedHover = true
+let scripted = SidebarChatCell.keepsHover(pointer: nil, in: selected)
+SidebarChatCell.scriptedHover = false
+report["hoverRestore"] = ["over": keeps["over"]!, "moved": keeps["moved"]!, "away": keeps["away"]!, "none": keeps["none"]!, "scripted": scripted]
+
 let data = try JSONSerialization.data(withJSONObject: report, options: [.sortedKeys])
 print(String(decoding: data, as: UTF8.self))

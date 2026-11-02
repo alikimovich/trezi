@@ -8,7 +8,9 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] A sidebar reload keeps the hovered row's hover and hands its scroll to the rebuilt title (`sidebarHover`, `restoreSidebarHover`, `SidebarMarqueeTitle.start(since:)`).
 - [x] `sidebar-chats` adds a `rebuilt` scroll stage that changes a neighbouring row mid-scroll. Unit `test/sidebar-marquee-resume.mjs` covers the hand-over on the real title.
 - [x] A hovered title follows the wider selected weight, even while holding at the end (`SidebarMarqueeTitle.restyled()`). Unit `test/sidebar-marquee.mjs`.
-- [ ] The full native suite passes with the selected-weight fix; the only run so far predates it.
+- [x] The full native suite passes with the selected-weight fix: 76 smoke checks passed on 2b741ce, `sidebar-chats` and its `rebuilt` stage included.
+- [x] A hover carried over a reload is kept only while the pointer is still over that row (`SidebarChatCell.keepsHover`); the pipe's `sidebar-hover` bypasses it. Unit `test/sidebar-marquee.mjs`.
+- [x] The full native suite passes with the pointer check too: 76 passed, 0 failed, 0 skipped.
 - [ ] Find out why the failed run's restore timed out on `desktop viewport`, which skipped the 34 later checks.
 
 ## Native suite failure on main e120149f83ef (LKM-432)
