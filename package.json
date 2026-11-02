@@ -1,7 +1,7 @@
 {
   "name": "trezi",
   "productName": "Trezi",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "AI design & prototyping tool — chat on the left, live preview of your repo on the right",
   "main": "./out/native/Trezi.app/Contents/Resources/backend/index.cjs",
   "license": "MIT",
@@ -149,6 +149,8 @@
     "test:markup-controller": "bun test/markup-controller.mjs",
     "test:key-shortcuts": "bun test/key-shortcuts.mjs",
     "test:menu-first-shortcuts": "bun test/menu-first-shortcuts.mjs",
+    "test:menu-shortcut-audit": "bun test/menu-shortcut-audit.mjs",
+    "test:branch-spinner": "bun test/branch-spinner.mjs",
     "test:agent-load-routing": "bun test/agent-load-routing.mjs",
     "test:inline-style": "bun test/inline-style.mjs",
     "test:css-values": "bun test/css-values.mjs",

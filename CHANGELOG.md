@@ -13,6 +13,12 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Added
 
 - Clicking inline code or a code block in chat copies its exact text and shows a brief Copied beside the pointer, and inline code now has a subtle grey background like code blocks.
+## [0.12.1] - 2026-11-01
+
+### Fixed
+
+- The branch status spinner stays inside the branch title at the minimum window width, and off the text when a long branch name is cut (LKM-432).
+
 ## [0.12.0] - 2026-11-01
 
 ### Added
