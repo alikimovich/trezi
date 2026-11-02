@@ -3,8 +3,11 @@ import AppKit
 // LKM-431: one click on a code snippet copies it. The real text view in a real window:
 // every click, double click and drag below goes through hit-testing and NSTextView's own
 // tracking loop, at the glyphs' actual geometry.
+// Every failure is reported, not just the first: CI runs another macOS than a local run, and
+// one that stopped at its first failure would hide the next. Any failure fails the run.
+var failures = 0
 func require(_ condition: Bool, _ message: String) {
-    if !condition { fputs("FAIL: \(message)\n", stderr); exit(1) }
+    if !condition { fputs("FAIL: \(message)\n", stderr); failures += 1 }
 }
 final class KeyWindow: NSWindow {
     override var canBecomeKey: Bool { true }
@@ -13,8 +16,10 @@ final class KeyWindow: NSWindow {
 _ = NSApplication.shared
 NSApp.setActivationPolicy(.accessory)
 let width: CGFloat = 320
-let window = KeyWindow(contentRect: NSRect(x: -4000, y: -4000, width: width, height: 900), styleMask: [.titled], backing: .buffered, defer: false)
-let root = NSView(frame: NSRect(x: 0, y: 0, width: width, height: 900))
+// Short enough for a small display: Copied keeps to the screen, so a window that reached past
+// it would move the feedback away from what the checks below click.
+let window = KeyWindow(contentRect: NSRect(x: -4000, y: -4000, width: width, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
+let root = NSView(frame: NSRect(x: 0, y: 0, width: width, height: 600))
 window.contentView = root
 let view = ChatTextView.make()
 root.addSubview(view)
@@ -200,7 +205,10 @@ require(click(point("inline  code")) == "inline  code", "The next click copies a
 
 // Links: an explicit link keeps priority, even when its text is code.
 var routed: [String] = []
-view.onLink = { routed.append($0) }
+// Some macOS versions return a link's fragment `#` as `%23`; the app accepts either, so the
+// routed links are compared with it normalised, as in the chat-text fixture.
+func plain(_ link: String) -> String { link.replacingOccurrences(of: "%23", with: "#") }
+view.onLink = { routed.append(plain($0)) }
 reset()
 press(point("a link")); settle()
 require(writes.isEmpty && routed == ["trezi-code:src/a.ts#L1"], "A link opens and does not copy: \(writes) \(routed)")
@@ -208,6 +216,10 @@ load("See [`linked`](trezi-code:src/b.ts#L2) and `plain`.")
 routed = []
 require(click(point("linked")) == nil && routed == ["trezi-code:src/b.ts#L2"], "Code in a link is the link: \(writes) \(routed)")
 require(view.rich.snippets.map(\.text) == ["plain"], "Only real code outside links is a snippet: \(view.rich.snippets)")
+// The form those versions hand over, on every version: the click still routes that link.
+load("See [encoded](trezi-code:src/c.ts%23L3).")
+routed = []
+require(click(point("encoded")) == nil && routed == ["trezi-code:src/c.ts#L3"], "An encoded fragment routes the same link: \(writes) \(routed)")
 view.onLink = nil
 
 // Chips: only on code, one rect per wrapped line, around the glyphs and clear of the
@@ -314,4 +326,5 @@ reset(); press(spot); settle()
 require(toast() != nil, "Feedback before the close")
 reset(); press(spot); view.removeFromSuperview(); settle()
 require(writes.isEmpty && toast() == nil, "Leaving the window drops the click and the feedback")
+if failures > 0 { exit(1) }
 print("CHAT-CODE-CLICK PASS — single clicks copy raw inline and fenced code; drags, double clicks, links, prose and filler do not; chips, Copied feedback and cleanup")
