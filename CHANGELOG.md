@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-01
+
 ### Fixed
 
 - A hovered sidebar chat keeps its Archive button and its long-title scroll when another row changes, and a title selected mid-scroll still reaches its last letter (LKM-433).
