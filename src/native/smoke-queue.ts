@@ -116,7 +116,8 @@ export function queueGeometryProblems(
     if (geometry.header.paused !== paused)
       problems.push(`header paused ${geometry.header.paused}, wanted ${paused}`)
     if (paused) target(resume, 'Send now')
-    else if (resume) problems.push('Send now shown on an unpaused queue')
+    else if (resume !== null)
+      problems.push(`Send now shown on an unpaused queue: ${JSON.stringify(resume)}`)
   }
   return problems
 }

@@ -272,6 +272,8 @@ export const UNIT = [
   'preview-speed-placement',
   'toolbar-island-dividers',
   'branch-spinner',
+  'host-warnings',
+  'composer-queue-header',
   'sidebar-marquee-resume',
   'menu-shortcut-audit',
   'tw-classes',

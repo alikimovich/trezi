@@ -5,7 +5,7 @@ extension NativeShell {
     var projectCells: [ProjectCell] {
         (0..<outline.numberOfRows).compactMap { outline.view(atColumn: 0, row: $0, makeIfNecessary: false) as? ProjectCell }
     }
-    func verifySidebar(_ command: [String: Any]) -> [String: Any] {
+    @MainActor func verifySidebar(_ command: [String: Any]) -> [String: Any] {
         if let hover = command["hover"] as? String {
             for index in 0..<outline.numberOfRows {
                 guard let row = outline.item(atRow: index) as? ShellRow,
@@ -25,31 +25,29 @@ extension NativeShell {
         if let key = command["menu"] as? String, let row = rows.first(where: { $0.id == key }),
            let cell = outline.view(atColumn: 0, row: outline.row(forItem: row), makeIfNecessary: true) as? ProjectCell {
             // Press the real "…", then cancel the menu deterministically without changing a project.
-            var menu: NSMenu?, closed = false, shot: [String: Any] = [:]
+            let run = SidebarMenuRun(self)
             let center = NotificationCenter.default
-            let observers = [center.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: nil) { menu = $0.object as? NSMenu },
-                             center.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: nil) { _ in closed = true }]
+            let observers = [center.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: nil) { note in
+                                 MainActor.assumeIsolated { run.menu = note.object as? NSMenu } },
+                             center.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: nil) { _ in
+                                 MainActor.assumeIsolated { run.closed = true } }]
             defer { observers.forEach(center.removeObserver) }
             let capture = command["capture"] as? Bool == true
             // The capture cancels when it is done; the timer closes the menu either way.
-            let cancel = Timer(timeInterval: capture ? 3 : 0.3, repeats: false) { _ in menu?.cancelTracking() }
-            let shoot = Timer(timeInterval: 0.3, repeats: false) { _ in
-                Task { @MainActor in
-                    shot = await self.captureMenuWindow()
-                    menu?.cancelTracking()
-                }
-            }
+            let cancel = Timer(timeInterval: capture ? 3 : 0.3, repeats: false) { _ in MainActor.assumeIsolated { run.menu?.cancelTracking() } }
+            let shoot = Timer(timeInterval: 0.3, repeats: false) { _ in MainActor.assumeIsolated { run.shoot() } }
             RunLoop.main.add(cancel, forMode: .common)
             if capture { RunLoop.main.add(shoot, forMode: .common) }
             defer { cancel.invalidate(); shoot.invalidate() }
             cell.more.performClick(nil)
+            let menu = run.menu
             let titles = menu?.items.map { $0.title } ?? []
             let states = menu?.items.map { $0.isEnabled ? $0.title : "\($0.title) (disabled)" } ?? []
             if command["memory"] as? Bool == true { menu?.performActionForItem(at: 0) }
             // A pick is a person's choice: a disabled item does nothing, as in the real menu.
             if let pick = command["pick"] as? String, let index = menu?.indexOfItem(withTitle: pick), index >= 0,
                menu?.item(at: index)?.isEnabled == true { menu?.performActionForItem(at: index) }
-            return shot.merging(["titles": titles, "states": states, "project": row.project, "opened": menu != nil, "closed": closed]) { _, new in new }
+            return run.shot.merging(["titles": titles, "states": states, "project": row.project, "opened": menu != nil, "closed": run.closed]) { _, new in new }
         }
         if let key = command["drag"] as? String, let row = rows.first(where: { $0.id == key }),
            let writer = outlineView(outline, pasteboardWriterForItem: row) {
@@ -108,11 +106,28 @@ extension NativeShell {
     }
     /// The open menu's own window, which a capture of the main window does not contain. A failure
     /// comes back as `shotError`: the menu's titles are the assertion, the picture is evidence.
-    @MainActor private func captureMenuWindow() async -> [String: Any] {
+    @MainActor fileprivate func captureMenuWindow() async -> [String: Any] {
         let menuWindow = NSApp.windows.first { $0 !== window && $0.isVisible && String(describing: type(of: $0)).contains("Menu") }
         guard let menuWindow else { return ["shotError": "no menu window among \(NSApp.windows.map { String(describing: type(of: $0)) })"] }
         do { return ["shot": try await captureOwnWindow(menuWindow)] }
         catch { return ["shotError": error.localizedDescription] }
+    }
+}
+
+/// One "…" press's menu, shared by its observers and timers. They all run on the main thread
+/// during the menu's tracking, and `MainActor.assumeIsolated` traps if one ever does not.
+@MainActor private final class SidebarMenuRun {
+    private let shell: NativeShell
+    var menu: NSMenu?
+    var closed = false
+    var shot: [String: Any] = [:]
+    init(_ shell: NativeShell) { self.shell = shell }
+    /// Captures the open menu's window, then closes the menu.
+    func shoot() {
+        Task {
+            shot = await shell.captureMenuWindow()
+            menu?.cancelTracking()
+        }
     }
 }
 

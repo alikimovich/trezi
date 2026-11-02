@@ -112,6 +112,22 @@ export function swiftCompile(args, output, { cwd = root, timeout = 400_000 } = {
   }
 }
 
+/** One uncached `swiftc -frontend` run in the swiftc lane with the shared module cache,
+ *  for a test that reads a compile's diagnostics. Returns spawnSync's result. */
+export function swiftFrontend(args, { cwd = root, timeout = 400_000 } = {}) {
+  mkdirSync(SWIFT_CACHE, { recursive: true })
+  const release = acquireSlot()
+  try {
+    return spawnSync(
+      compiler[0],
+      [...compiler.slice(1), '-frontend', ...args, '-module-cache-path', MODULE_CACHE],
+      { cwd, encoding: 'utf8', timeout, maxBuffer: 64 * 1024 * 1024 }
+    )
+  } finally {
+    release()
+  }
+}
+
 /** The key part of one argument: a file's repo path (or name) and bytes, else the flag. */
 function keyPart(arg, cwd) {
   const path = resolve(cwd, arg)

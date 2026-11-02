@@ -3,6 +3,17 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Swift warnings of release build 0.13.1 (1258) (LKM-436)
+
+- [x] Baseline on 5b5356f: a fresh uncached release build prints all eight reported warnings; warnings as errors is red on them alone.
+- [x] Sidebar and toolbar menu checks keep their menus in `@MainActor` state (`SidebarMenuRun`, `MenuFrameProbe`) reached through `MainActor.assumeIsolated`.
+- [x] The unreachable `?? ""` on `itemTitle(at: 0)` is gone. The queue header is an explicit `[String: Any]` with `resume` a frame or JSON null.
+- [x] Unit `test/host-warnings.mjs` (the compiler's diagnostics for the four files, red on the original) and `test/composer-queue-header.mjs` (the real queue host, resume present and absent).
+- [x] The same uncached release build prints none of the eight.
+- [ ] Manager: the native suite on the merged SHA: `sidebar`, `sidebar-history`, `preview-overlay`, `publish-progress` and the queue smoke.
+- [ ] Rebuild on the reporter's MacOSX27 SDK: not available here, so their log has not been reproduced on that SDK.
+- [ ] Separate follow-up, not filed from this worktree: `src/service/SkillsImport.swift:30:36` warns in TreziService (no `async` operation inside `await`), outside this ticket's four files.
+
 ## Native suite failure on main 14ea803aac62 (LKM-433)
 
 - [x] A sidebar reload keeps the hovered row's hover and hands its scroll to the rebuilt title (`sidebarHover`, `restoreSidebarHover`, `SidebarMarqueeTitle.start(since:)`).
