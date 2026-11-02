@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-02 — LKM-433 repair: the resume fixture read the host's Reduce Motion
+
+- GitHub CI failed `unit sidebar-marquee-resume` on a runner: the first title reported `scrolled: 0`, `handed: false`, and every later field was 0 or false. The fixture never set `SidebarMarqueeTitle.reduceMotionOverride`, so `reduceMotion` read the machine's Reduce Motion setting, and a runner with it on never scrolls (`step()` rests). It passed on the worker's Mac, where it is off. `test/sidebar-marquee.mjs` already pins this for its fixture; the new one missed it. No app code was at fault: the title behaves as designed with Reduce Motion on.
+- Fix: `test/fixtures/sidebar-marquee-resume/main.swift` sets the override to `false` before the first title starts, and `test/sidebar-marquee-resume.mjs` asserts that in the source (set, before the first `.start(`, never `nil`), as `sidebar-marquee.mjs` does. Red: with the override `true`, the new source check fails. The run still reads no system setting and changes none.
+- The native suite is unaffected: no app source changed in this repair, and the native run on the same app code passed 76 of 76.
+
 ## 2026-11-02 — LKM-433 repair: a carried hover only stays under the pointer
 
 - Review found the full native suite green on 2b741ce (76 smoke checks, `sidebar-chats` and its `rebuilt` stage included), so the "Not confirmed natively" bullet in the entry below is stale: it describes the session before that run. It also found a regression in the hover hand-over: `restoreSidebarHover` set the old row's hover by id, but a reload moves rows (`recentChats` is newest first, so a new chat pushes every row down), and the new cell's tracking area starts outside, with no `.assumeInside`. The old row would keep Archive and its scroll until the pointer entered and left it, while the row really under the pointer could hover too. The entry below said the new tracking area "behaves as `updateTrackingAreas` already did": that missed the case, because before this ticket a reload cleared the hover.

@@ -5,6 +5,9 @@ import AppKit
 // way `restoreSidebarHover` hands the scroll over, beside one started afresh; a last title is
 // hovered before it has a window. One JSON report on stdout.
 _ = NSApplication.shared
+// Never nil: nil reads the host's Reduce Motion setting (some CI runners have it on, and then
+// nothing scrolls), and this run must not depend on it or change it.
+SidebarMarqueeTitle.reduceMotionOverride = false
 let longTitle = "A sidebar chat whose title is much too long to fit in the sidebar row"
 let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 120), styleMask: [.borderless], backing: .buffered, defer: false)
 window.contentView = NSView(frame: window.contentRect(forFrameRect: window.frame))

@@ -1,5 +1,18 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { runFixture, swiftBuild } from './helpers/swift-build.mjs'
+
+// The fixture must not read the host's Reduce Motion setting: a runner with it on never scrolls.
+const fixture = readFileSync('test/fixtures/sidebar-marquee-resume/main.swift', 'utf8')
+assert.ok(
+  fixture.includes('reduceMotionOverride = false') &&
+    !/reduceMotionOverride\s*=\s*nil/.test(fixture),
+  'the fixture pins Reduce Motion off and never hands it back to the host'
+)
+assert.ok(
+  fixture.indexOf('reduceMotionOverride = false') < fixture.indexOf('.start('),
+  'Reduce Motion is off before the first title starts'
+)
 
 // LKM-433: a reload rebuilds the hovered row's title, and the scroll must not start over. The
 // real SidebarMarqueeTitle runs offscreen; a new one takes over with the old one's start time.
