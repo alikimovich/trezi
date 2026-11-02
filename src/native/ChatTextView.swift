@@ -2,13 +2,15 @@ import AppKit
 
 /// LKM-186: an assistant text segment in one non-editable, selectable TextKit 1 view
 /// (`ChatRichText`), so a drag, Select All and Copy cover all of it. It draws the code
-/// and table backgrounds itself, keeps a Copy button on each code block and fades in
-/// newly streamed words.
+/// and table backgrounds itself, keeps a Copy button on each code block, copies a code
+/// snippet on a single click (LKM-431) and fades in newly streamed words.
 final class ChatTextView: NSTextView {
     /// Views on screen by `identity` (message id and segment), for verification.
     static let live = NSMapTable<NSString, ChatTextView>.strongToWeakObjects()
     /// Where Copy and the code Copy buttons write; verification swaps in a private one.
     static var pasteboard = NSPasteboard.general
+    /// Writes copied code; whether it reached the pasteboard decides the Copied feedback.
+    static var write: (String) -> Bool = { copyChatText($0, to: pasteboard) }
     private static let selected = Notification.Name("TreziChatTextSelected")
 
     private(set) var rich = ChatRichText(markdown: "")
@@ -18,6 +20,7 @@ final class ChatTextView: NSTextView {
             guard identity != oldValue else { return }
             if let oldValue, Self.live.object(forKey: oldValue as NSString) === self { Self.live.removeObject(forKey: oldValue as NSString) }
             if let identity { Self.live.setObject(self, forKey: identity as NSString) }
+            endClick()
         }
     }
     var reduceMotion = false
@@ -27,6 +30,8 @@ final class ChatTextView: NSTextView {
     private(set) var copyButtons: [NSButton] = []
     private var arrivals: [(range: NSRange, time: TimeInterval)] = []
     private var revealTimer: Timer?
+    /// A released click on a snippet, waiting out the double-click interval.
+    private(set) var clickTimer: Timer?
     private var measured: (width: CGFloat, size: CGSize)?
     private var observer: NSObjectProtocol?
 
@@ -49,7 +54,10 @@ final class ChatTextView: NSTextView {
         }
         return view
     }
-    deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
+    deinit {
+        clickTimer?.invalidate()
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+    }
 
     func show(_ next: String, streaming: Bool) {
         guard next != source, let storage = textStorage else { return }
@@ -113,13 +121,40 @@ final class ChatTextView: NSTextView {
             return (block, NSRect(x: origin.x, y: frame.minY, width: width, height: frame.height), block.cells.count > 1 ? header : nil)
         }
     }
+    /// Where an inline snippet's chip paints: one rect per line it wraps onto, around its
+    /// glyphs, the same on every line. The last line's width already holds the kerned padding.
+    func inlineFrames(_ snippet: ChatCodeSnippet) -> [NSRect] {
+        guard let manager = layoutManager, let container = textContainer, let storage = textStorage,
+              !snippet.block, snippet.range.upperBound <= storage.length,
+              let font = storage.attribute(.font, at: snippet.range.location, effectiveRange: nil) as? NSFont else { return [] }
+        manager.ensureLayout(for: container)
+        let glyphs = manager.glyphRange(forCharacterRange: snippet.range, actualCharacterRange: nil), origin = textContainerOrigin
+        let padding = ChatRichText.inlinePadding
+        var frames: [NSRect] = []
+        manager.enumerateLineFragments(forGlyphRange: glyphs) { line, _, _, lineGlyphs, _ in
+            let part = NSIntersectionRange(glyphs, lineGlyphs)
+            guard part.length > 0 else { return }
+            let box = manager.boundingRect(forGlyphRange: part, in: container)
+            let baseline = line.minY + manager.location(forGlyphAt: part.location).y
+            let left = max(line.minX, box.minX - padding)
+            let right = min(line.maxX, part.upperBound == glyphs.upperBound ? box.maxX : box.maxX + padding)
+            frames.append(NSRect(x: left + origin.x, y: baseline - font.ascender - 1 + origin.y, width: right - left, height: font.ascender - font.descender + 2))
+        }
+        return frames
+    }
     override func draw(_ dirtyRect: NSRect) {
         for item in blockFrames() where item.frame.intersects(dirtyRect) {
-            NSColor.quaternaryLabelColor.setFill()
+            (item.block.kind == .code ? ChatRichText.codeFill : NSColor.quaternaryLabelColor).setFill()
             NSBezierPath(roundedRect: item.frame, xRadius: ChatRichText.cornerRadius, yRadius: ChatRichText.cornerRadius).fill()
             if let rule = item.rule {
                 NSColor.separatorColor.setFill()
                 NSRect(x: item.frame.minX + ChatRichText.codeInset, y: rule, width: item.frame.width - 2 * ChatRichText.codeInset, height: 1).fill()
+            }
+        }
+        ChatRichText.codeFill.setFill()
+        for snippet in rich.snippets where !snippet.block {
+            for frame in inlineFrames(snippet) where frame.intersects(dirtyRect) {
+                NSBezierPath(roundedRect: frame, xRadius: ChatRichText.inlineRadius, yRadius: ChatRichText.inlineRadius).fill()
             }
         }
         super.draw(dirtyRect)
@@ -147,12 +182,81 @@ final class ChatTextView: NSTextView {
         }
     }
     @objc private func copyCode(_ sender: NSButton) {
-        if let code = code(at: sender.tag) { copyChatText(code, to: Self.pasteboard) }
+        guard let code = code(at: sender.tag), !code.isEmpty else { return }
+        // A click still waiting on its interval would overwrite this later.
+        clickTimer?.invalidate(); clickTimer = nil
+        copy(code, at: sender.convert(NSPoint(x: sender.bounds.midX, y: sender.bounds.midY), to: nil))
     }
     /// The text a code block's Copy button copies.
     func code(at index: Int) -> String? {
         let codes = rich.blocks.filter { $0.kind == .code }
-        return codes.indices.contains(index) ? (rich.string.string as NSString).substring(with: codes[index].range) : nil
+        return codes.indices.contains(index) ? codes[index].raw : nil
+    }
+
+    // MARK: Click to copy
+
+    /// The snippet painted at `point`, in view coordinates: all of a code block's
+    /// background, each line of an inline chip. Anywhere else is not a snippet.
+    func snippet(at point: NSPoint) -> ChatCodeSnippet? {
+        if let code = blockFrames().first(where: { $0.block.kind == .code && $0.frame.contains(point) }) {
+            return rich.snippets.first { $0.block && $0.range == code.block.range }
+        }
+        return rich.snippets.first { snippet in inlineFrames(snippet).contains { $0.contains(point) } }
+    }
+    /// A single primary click copies the snippet under it. A press that begins on a snippet
+    /// waits here for what follows, reading the mouse events without taking them: a release
+    /// within `clickSlop` on the same snippet is the click, taken here and not by NSTextView.
+    /// Anything else (a drag, a release elsewhere) goes to NSTextView untouched, which then
+    /// tracks it as always, so selection, partial copy and every other press are its own.
+    /// Nothing depends on how NSTextView tracks a press or what `NSApp.currentEvent` is after
+    /// it. A press that clears a selection only clears it, so it cannot replace what that
+    /// selection just copied. Links are not snippets and go on to `clicked(onLink:at:)`.
+    override func mouseDown(with event: NSEvent) {
+        clickTimer?.invalidate(); clickTimer = nil
+        let start = event.locationInWindow
+        let single = event.clickCount == 1 && event.modifierFlags.isDisjoint(with: [.shift, .command, .control, .option])
+        guard single, selectedRange().length == 0, let target = snippet(at: convert(start, from: nil)),
+              let up = release(of: start, on: target) else { return super.mouseDown(with: event) }
+        window?.makeFirstResponder(self)
+        // The next press may be a double click's second: it cancels this, and only then
+        // has the click proved to be single.
+        let point = up.locationInWindow
+        let timer = Timer(timeInterval: Self.doubleClickWait, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            clickTimer = nil
+            // A stream may have reparsed the text since: only the same snippet still counts.
+            if window != nil, selectedRange().length == 0, rich.snippets.contains(target) { copy(target.text, at: point) }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        clickTimer = timer
+    }
+    /// The mouse-up that ends a click begun at `start` on `target`, taken from the queue; nil
+    /// at the first drag past the slop or a release elsewhere, both left queued. Movement
+    /// within the slop is a steady hand's and is dropped.
+    private func release(of start: NSPoint, on target: ChatCodeSnippet) -> NSEvent? {
+        func far(_ event: NSEvent) -> Bool { hypot(event.locationInWindow.x - start.x, event.locationInWindow.y - start.y) > Self.clickSlop }
+        while let next = NSApp.nextEvent(matching: [.leftMouseUp, .leftMouseDragged], until: .distantFuture, inMode: .eventTracking, dequeue: false) {
+            if far(next) { return nil }
+            if next.type == .leftMouseUp {
+                guard snippet(at: convert(next.locationInWindow, from: nil)) == target else { return nil }
+                return NSApp.nextEvent(matching: [.leftMouseUp], until: .distantPast, inMode: .eventTracking, dequeue: true) ?? next
+            }
+            _ = NSApp.nextEvent(matching: [.leftMouseDragged], until: .distantPast, inMode: .eventTracking, dequeue: true)
+        }
+        return nil
+    }
+    private static let clickSlop: CGFloat = 4
+    /// The user's double-click speed. A process cut off from the input services reads 0,
+    /// which would turn every double click into a copy, so that takes the system default.
+    static var doubleClickWait: TimeInterval { NSEvent.doubleClickInterval > 0 ? NSEvent.doubleClickInterval : 0.5 }
+    /// Writes `code` and, once it is on the pasteboard, shows Copied at `point` (window coordinates).
+    private func copy(_ code: String, at point: NSPoint) {
+        if Self.write(code) { ChatCopiedToast.show(at: point, from: self) }
+    }
+    /// Reuse or close: no waiting click may copy, and no feedback outlives its view.
+    private func endClick() {
+        clickTimer?.invalidate(); clickTimer = nil
+        ChatCopiedToast.dismiss(from: self)
     }
 
     // MARK: Links
@@ -225,7 +329,67 @@ final class ChatTextView: NSTextView {
     }
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { stopReveal() }
+        if window == nil { stopReveal(); endClick() }
+    }
+}
+
+/// LKM-431: a brief "Copied" beside the click. A plain subview over the chat, so it shows
+/// in window captures; hit-testing passes through it, it never takes focus and moves
+/// nothing. One shows at a time: a newer one replaces it.
+final class ChatCopiedToast: NSView {
+    private(set) static weak var current: ChatCopiedToast?
+    /// Verification holds it longer for a capture.
+    static var lifetime: TimeInterval = 1.2
+    private static let label = NSAttributedString(string: "Copied", attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.labelColor])
+    private static let gap = NSSize(width: 12, height: 10), margin: CGFloat = 6
+    private weak var source: ChatTextView?
+    private var timer: Timer?
+
+    /// `point` is in window coordinates.
+    static func show(at point: NSPoint, from view: ChatTextView) {
+        guard let window = view.window else { return }
+        current?.dismiss()
+        // The window's content view is a split view here, which would take a subview as a pane.
+        var host: NSView = view
+        while let next = host.superview, !(next is NSSplitView), host !== window.contentView { host = next }
+        var visible = window.contentLayoutRect.intersection(host.convert(host.bounds, to: nil))
+        if let screen = window.screen { visible = visible.intersection(window.convertFromScreen(screen.visibleFrame)) }
+        let size = NSSize(width: ceil(label.size().width) + 16, height: 22)
+        let toast = ChatCopiedToast(frame: host.convert(place(size, near: point, in: visible), from: nil))
+        toast.wantsLayer = true; toast.source = view
+        toast.setAccessibilityElement(true); toast.setAccessibilityRole(.staticText); toast.setAccessibilityLabel("Copied")
+        host.addSubview(toast, positioned: .above, relativeTo: nil)
+        current = toast
+        let timer = Timer(timeInterval: lifetime, repeats: false) { [weak toast] _ in toast?.dismiss() }
+        RunLoop.main.add(timer, forMode: .common)
+        toast.timer = timer
+        NSAccessibility.post(element: toast, notification: .announcementRequested, userInfo: [.announcement: "Copied", .priority: NSAccessibilityPriorityLevel.high.rawValue])
+    }
+    /// Up and to the right of `point`, on the other side where that leaves `visible`, then
+    /// kept inside it (y grows upward, as in window coordinates).
+    static func place(_ size: NSSize, near point: NSPoint, in visible: NSRect) -> NSRect {
+        var origin = NSPoint(x: point.x + gap.width, y: point.y + gap.height)
+        guard !visible.isEmpty else { return NSRect(origin: origin, size: size) }
+        let area = visible.insetBy(dx: min(margin, visible.width / 2), dy: min(margin, visible.height / 2))
+        if origin.x + size.width > area.maxX { origin.x = point.x - gap.width - size.width }
+        if origin.y + size.height > area.maxY { origin.y = point.y - gap.height - size.height }
+        origin.x = max(area.minX, min(origin.x, area.maxX - size.width))
+        origin.y = max(area.minY, min(origin.y, area.maxY - size.height))
+        return NSRect(origin: origin, size: size)
+    }
+    static func dismiss(from view: ChatTextView) { if current?.source === view { current?.dismiss() } }
+    private func dismiss() {
+        timer?.invalidate(); timer = nil
+        removeFromSuperview()
+        if Self.current === self { Self.current = nil }
+    }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 6, yRadius: 6)
+        NSColor.windowBackgroundColor.setFill(); shape.fill()
+        NSColor.separatorColor.setStroke(); shape.stroke()
+        let size = Self.label.size()
+        Self.label.draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2))
     }
 }
 
