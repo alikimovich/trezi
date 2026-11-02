@@ -65,9 +65,20 @@ extension Host {
         var routed: [String] = []
         let keptLink = view.onLink, keptWeb = ChatTextView.appKitLinks, keptLifetime = ChatCopiedToast.lifetime
         view.onLink = { routed.append($0) }
-        // Copied must outlast a capture, which takes about as long as Copied itself.
-        if c["capture"] as? Bool == true { ChatCopiedToast.lifetime = 8 }
+        // Copied must outlast a capture, which takes about as long as Copied itself, and a
+        // repeat that waits out the user's double-click interval (`hold`).
+        if c["capture"] as? Bool == true || c["hold"] as? Bool == true { ChatCopiedToast.lifetime = 8 }
         defer { view.onLink = keptLink; ChatCopiedToast.lifetime = keptLifetime }
+        let shownBefore = ChatCopiedToast.shown
+        // LKM-442: the move goes to the view's own handler (its tracking area's owner), as
+        // AppKit would deliver it; the cursor is read back, nothing on screen moves.
+        if action == "hover" {
+            let responder = window.firstResponder
+            view.mouseMoved(with: try event(.mouseMoved, at))
+            return ["pointing": NSCursor.current == NSCursor.pointingHand, "hovered": view.hovered != nil, "shownMore": ChatCopiedToast.shown - shownBefore,
+                    "pasteboard": board.string(forType: .string) ?? NSNull(), "point": NSStringFromPoint(at), "hit": String(describing: type(of: hit)),
+                    "focusKept": window.firstResponder === responder]
+        }
         var events: [NSEvent] = []
         switch action {
         case "click": events = [try event(.leftMouseDown, at), try event(.leftMouseUp, at)]
@@ -94,8 +105,10 @@ extension Host {
                                      "selected": text.substring(with: view.selectedRange()), "firstResponder": window.firstResponder === view]
         let shown = toasts()
         result["toasts"] = shown.count
+        result["shownMore"] = ChatCopiedToast.shown - shownBefore
         if let toast = shown.first, let parent = toast.superview {
             result["toast"] = NSStringFromRect(parent.convert(toast.frame, to: nil))
+            result["toastText"] = toast.accessibilityLabel() ?? NSNull()
             result["visible"] = NSStringFromRect(window.contentLayoutRect)
         }
         if c["copy"] as? Bool == true {
