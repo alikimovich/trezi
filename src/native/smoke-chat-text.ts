@@ -190,10 +190,12 @@ async function checkCodeClick(host: NativeBridge, artifacts: string) {
           const result = await pointer('click', find, extra)
           assert.equal(result.pasteboard, expected, `${label}: click on ${find}`)
           assert.equal(result.toasts, 1, `${label}: one Copied after ${find}`)
+          assert.equal(result.toastText, 'Copied to clipboard', `${label}: the feedback's words`)
+          assert.equal(result.shownMore, 1, `${label}: shown once for ${find}`)
           const toast = rect(result.toast)
           const { x, y } = rect(result.point)
           const away = Math.hypot(toast.x + toast.width / 2 - x, toast.y + toast.height / 2 - y)
-          assert.ok(away < 70, `${label}: Copied ${result.toast} by the pointer ${result.point}`)
+          assert.ok(away < 100, `${label}: Copied ${result.toast} by the pointer ${result.point}`)
           const covered = x >= toast.x && x <= toast.x + toast.width
           assert.ok(
             !(covered && y >= toast.y && y <= toast.y + toast.height),
@@ -224,8 +226,15 @@ async function checkCodeClick(host: NativeBridge, artifacts: string) {
             `${label}: ${name} code ${fill} is a darker grey than ${ground}`
           )
         }
-        await copies('func café', BLOCK)
-        await copies('func café', BLOCK, { spot: 'end' })
+        // LKM-442: the same block again, the pointer still on it, keeps the Copied shown.
+        // Held, so the repeat's double-click wait cannot outlast it.
+        const first = await copies('func café', BLOCK, { hold: true })
+        const again = await pointer('click', 'func café', { spot: 'end', hold: true })
+        assert.equal(again.pasteboard, BLOCK, `${label}: a repeat on the block still copies`)
+        assert.ok(
+          again.toasts === 1 && again.shownMore === 0 && again.toast === first.toast,
+          `${label}: a repeat keeps Copied ${first.toast} in place, not ${again.toast} (${again.shownMore} more)`
+        )
         await copies(LONG, LONG, { line: 1 })
         assert.deepEqual((await pointer('dismiss', '')).dismissed, true, `${label}: Copied leaves`)
         if (layout !== 'wide' || mode !== 'light') continue
@@ -255,6 +264,22 @@ async function checkCodeClick(host: NativeBridge, artifacts: string) {
           'trezi-code:src/never.ts#L1',
           'a link still opens'
         )
+        // LKM-442: a pointing hand over what a click copies, the text cursor elsewhere;
+        // moving over code copies nothing and shows nothing.
+        for (const [name, find, extra, pointing] of [
+          ['inline code', 'inline  code', {}, true],
+          ['a block', 'func café', {}, true],
+          ["a block's padding", 'func café', { spot: 'end' }, true],
+          ['prose', 'Prose before', {}, false],
+          ['the gap under a block', 'Last words.', { spot: 'gap' }, false]
+        ] as const) {
+          const hover = await pointer('hover', find, extra)
+          assert.equal(hover.pointing, pointing, `pointing hand over ${name}: ${hover.pointing}`)
+          assert.equal(hover.hovered, pointing, `${name} is hovered: ${hover.hovered}`)
+          assert.equal(hover.pasteboard, SENTINEL, `hovering ${name} does not copy`)
+          assert.equal(hover.shownMore, 0, `hovering ${name} shows nothing`)
+          assert.equal(hover.focusKept, true, `hovering ${name} keeps focus`)
+        }
         const double = await pointer('double', 'func café')
         assert.equal(double.pasteboard, SENTINEL, 'a double click does not copy')
         assert.ok(double.selected.length > 0, 'a double click still selects')

@@ -3,7 +3,8 @@ import AppKit
 /// LKM-186: an assistant text segment in one non-editable, selectable TextKit 1 view
 /// (`ChatRichText`), so a drag, Select All and Copy cover all of it. It draws the code
 /// and table backgrounds itself, keeps a Copy button on each code block, copies a code
-/// snippet on a single click (LKM-431) and fades in newly streamed words.
+/// snippet on a single click (LKM-431) with a pointing hand over it (LKM-442) and fades in
+/// newly streamed words.
 final class ChatTextView: NSTextView {
     /// Views on screen by `identity` (message id and segment), for verification.
     static let live = NSMapTable<NSString, ChatTextView>.strongToWeakObjects()
@@ -32,6 +33,9 @@ final class ChatTextView: NSTextView {
     private var revealTimer: Timer?
     /// A released click on a snippet, waiting out the double-click interval.
     private(set) var clickTimer: Timer?
+    /// LKM-442: the snippet under the pointer, which shows the pointing hand.
+    private(set) var hovered: ChatCodeSnippet?
+    private var pointerArea: NSTrackingArea?
     private var measured: (width: CGFloat, size: CGSize)?
     private var observer: NSObjectProtocol?
 
@@ -182,10 +186,12 @@ final class ChatTextView: NSTextView {
         }
     }
     @objc private func copyCode(_ sender: NSButton) {
-        guard let code = code(at: sender.tag), !code.isEmpty else { return }
+        let codes = rich.blocks.filter { $0.kind == .code }
+        guard codes.indices.contains(sender.tag), !codes[sender.tag].raw.isEmpty else { return }
         // A click still waiting on its interval would overwrite this later.
         clickTimer?.invalidate(); clickTimer = nil
-        copy(code, at: sender.convert(NSPoint(x: sender.bounds.midX, y: sender.bounds.midY), to: nil))
+        let block = codes[sender.tag]
+        copy(ChatCodeSnippet(range: block.range, text: block.raw, block: true), at: sender.convert(NSPoint(x: sender.bounds.midX, y: sender.bounds.midY), to: nil))
     }
     /// The text a code block's Copy button copies.
     func code(at index: Int) -> String? {
@@ -225,7 +231,7 @@ final class ChatTextView: NSTextView {
             guard let self else { return }
             clickTimer = nil
             // A stream may have reparsed the text since: only the same snippet still counts.
-            if window != nil, selectedRange().length == 0, rich.snippets.contains(target) { copy(target.text, at: point) }
+            if window != nil, selectedRange().length == 0, rich.snippets.contains(target) { copy(target, at: point) }
         }
         RunLoop.main.add(timer, forMode: .common)
         clickTimer = timer
@@ -249,14 +255,52 @@ final class ChatTextView: NSTextView {
     /// The user's double-click speed. A process cut off from the input services reads 0,
     /// which would turn every double click into a copy, so that takes the system default.
     static var doubleClickWait: TimeInterval { NSEvent.doubleClickInterval > 0 ? NSEvent.doubleClickInterval : 0.5 }
-    /// Writes `code` and, once it is on the pasteboard, shows Copied at `point` (window coordinates).
-    private func copy(_ code: String, at point: NSPoint) {
-        if Self.write(code) { ChatCopiedToast.show(at: point, from: self) }
+    /// Writes the snippet's code and, once it is on the pasteboard, shows Copied at `point`
+    /// (window coordinates).
+    private func copy(_ snippet: ChatCodeSnippet, at point: NSPoint) {
+        if Self.write(snippet.text) { ChatCopiedToast.show(at: point, from: self, for: snippet) }
     }
     /// Reuse or close: no waiting click may copy, and no feedback outlives its view.
     private func endClick() {
         clickTimer?.invalidate(); clickTimer = nil
+        hovered = nil
         ChatCopiedToast.dismiss(from: self)
+    }
+
+    // MARK: Pointer (LKM-442)
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let pointerArea { removeTrackingArea(pointerArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .cursorUpdate, .activeInActiveApp, .inVisibleRect], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        pointerArea = area
+    }
+    /// A pointing hand over exactly what a click copies (`snippet(at:)`, a block's padding
+    /// included) and the text view's own cursor elsewhere. Leaving a snippet lets its next
+    /// copy show Copied anew; until then a repeat keeps the Copied already shown.
+    @discardableResult func pointerMoved(to point: NSPoint) -> Bool {
+        let over = snippet(at: point)
+        if over != hovered {
+            if let hovered { ChatCopiedToast.left(hovered, from: self) }
+            if over == nil { NSCursor.iBeam.set() }
+            hovered = over
+        }
+        if over != nil { NSCursor.pointingHand.set() }
+        return over != nil
+    }
+    override func mouseMoved(with event: NSEvent) {
+        if !pointerMoved(to: convert(event.locationInWindow, from: nil)) { super.mouseMoved(with: event) }
+    }
+    override func cursorUpdate(with event: NSEvent) {
+        if !pointerMoved(to: convert(event.locationInWindow, from: nil)) { super.cursorUpdate(with: event) }
+    }
+    override func mouseExited(with event: NSEvent) {
+        if event.trackingArea === pointerArea, let hovered {
+            ChatCopiedToast.left(hovered, from: self); self.hovered = nil
+            NSCursor.arrow.set()
+        }
+        super.mouseExited(with: event)
     }
 
     // MARK: Links
@@ -333,21 +377,28 @@ final class ChatTextView: NSTextView {
     }
 }
 
-/// LKM-431: a brief "Copied" beside the click. A plain subview over the chat, so it shows
-/// in window captures; hit-testing passes through it, it never takes focus and moves
-/// nothing. One shows at a time: a newer one replaces it.
+/// LKM-431: a brief "Copied to clipboard" (LKM-442) beside the click. A plain subview over
+/// the chat, so it shows in window captures; hit-testing passes through it, it never takes
+/// focus and moves nothing. One shows at a time: a newer one replaces it, and the same
+/// snippet copied again before the pointer has left it keeps the one shown.
 final class ChatCopiedToast: NSView {
     private(set) static weak var current: ChatCopiedToast?
     /// Verification holds it longer for a capture.
     static var lifetime: TimeInterval = 1.2
-    private static let label = NSAttributedString(string: "Copied", attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.labelColor])
+    static let message = "Copied to clipboard"
+    /// How many were shown and announced, for verification.
+    private(set) static var shown = 0
+    private static let label = NSAttributedString(string: message, attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.labelColor])
     private static let gap = NSSize(width: 12, height: 10), margin: CGFloat = 6
     private weak var source: ChatTextView?
+    /// What it confirms, until the pointer leaves that snippet.
+    private(set) var snippet: ChatCodeSnippet?
     private var timer: Timer?
 
     /// `point` is in window coordinates.
-    static func show(at point: NSPoint, from view: ChatTextView) {
+    static func show(at point: NSPoint, from view: ChatTextView, for snippet: ChatCodeSnippet) {
         guard let window = view.window else { return }
+        if let current, current.source === view, current.snippet == snippet { return current.restart() }
         current?.dismiss()
         // The window's content view is a split view here, which would take a subview as a pane.
         var host: NSView = view
@@ -356,14 +407,23 @@ final class ChatCopiedToast: NSView {
         if let screen = window.screen { visible = visible.intersection(window.convertFromScreen(screen.visibleFrame)) }
         let size = NSSize(width: ceil(label.size().width) + 16, height: 22)
         let toast = ChatCopiedToast(frame: host.convert(place(size, near: point, in: visible), from: nil))
-        toast.wantsLayer = true; toast.source = view
-        toast.setAccessibilityElement(true); toast.setAccessibilityRole(.staticText); toast.setAccessibilityLabel("Copied")
+        toast.wantsLayer = true; toast.source = view; toast.snippet = snippet
+        toast.setAccessibilityElement(true); toast.setAccessibilityRole(.staticText); toast.setAccessibilityLabel(message)
         host.addSubview(toast, positioned: .above, relativeTo: nil)
-        current = toast
-        let timer = Timer(timeInterval: lifetime, repeats: false) { [weak toast] _ in toast?.dismiss() }
+        current = toast; shown += 1
+        toast.restart()
+        // Polite: queued after what VoiceOver is saying, not interrupting it.
+        NSAccessibility.post(element: toast, notification: .announcementRequested, userInfo: [.announcement: message, .priority: NSAccessibilityPriorityLevel.medium.rawValue])
+    }
+    /// The pointer left `snippet`: copying it again shows Copied anew.
+    static func left(_ snippet: ChatCodeSnippet, from view: ChatTextView) {
+        if let current, current.source === view, current.snippet == snippet { current.snippet = nil }
+    }
+    private func restart() {
+        timer?.invalidate()
+        let timer = Timer(timeInterval: Self.lifetime, repeats: false) { [weak self] _ in self?.dismiss() }
         RunLoop.main.add(timer, forMode: .common)
-        toast.timer = timer
-        NSAccessibility.post(element: toast, notification: .announcementRequested, userInfo: [.announcement: "Copied", .priority: NSAccessibilityPriorityLevel.high.rawValue])
+        self.timer = timer
     }
     /// Up and to the right of `point`, on the other side where that leaves `visible`, then
     /// kept inside it (y grows upward, as in window coordinates).

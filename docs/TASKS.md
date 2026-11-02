@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Code block copy: pointer cursor and "Copied to clipboard" (LKM-442)
+
+- [x] The copy trigger is unchanged: a single click on code (LKM-431), not a hover. The existing `native-chat-code-click` click, drag, link and cleanup checks are untouched and pass.
+- [x] Pointing hand over exactly what a click copies (`snippet(at:)`), the text cursor elsewhere, via the view's own tracking area.
+- [x] `ChatCopiedToast` says "Copied to clipboard", only after a write that worked, announced at medium (polite) priority, no focus taken.
+- [x] The same snippet copied again before the pointer leaves it keeps the shown feedback in place (lifetime restarted, no new announcement).
+- [x] Unit `native-chat-code-click` covers cursor, words, failure, repeat and leave; the `chat-text` native check has a `hover` action and a same-block repeat.
+- [ ] Manager: the native suite on the merged SHA, `chat` group (`chat-text`), with its `chat-code-click-*.png` captures showing the new words.
 ## Sidebar verification menu capture lifecycle (LKM-441)
 
 - [x] Root cause: the pipe runs `verifySidebar` in a main-queue block, so the nested menu tracking loop never drains the main queue and the capture's main-actor task waits for the 3 s fallback (native runs 34 to 51, since LKM-388).
