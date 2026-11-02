@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native suite failure on main 01a19bee5f24 (LKM-440)
+
+- [x] Cause: the minimum-width block was 86.5 pt (87 in every earlier green run), so the placeholder `Branch · ○ · ?` was cut. AppKit's tail truncation dropped the dot's en-space slot, its "…" ran into the dot and the chevron sat 18 pt after the ink. Reproduced offscreen on the real `BranchPopUpButton`.
+- [x] `BranchPopUpCell` cuts the tail itself and keeps a shown dot's slot (`keptSlots`, `cut`); it draws the title untightened, so AppKit's drawing agrees with the width math (`untightened`).
+- [x] `shellInspect` reports `branchTitleCut`; `toolbar-address` allows the ellipsis gap for a title the pop-up cut. Unit `test/branch-spinner.mjs` (`cutAfterSlot`, `fitsWhole`), red on the old drawing (gap 18 pt).
+- [ ] Frames of 85.5–87.5 pt hide the dot and keep AppKit's cut (`Branch ·…`), whose chevron gap is 16.6–18.6 pt. The toolbar's minimum stage has not reached them (block 86.5–87, frame 91.5–92).
+
 ## Swift warnings of release build 0.13.1 (1258) (LKM-436)
 
 - [x] Baseline on 5b5356f: a fresh uncached release build prints all eight reported warnings; warnings as errors is red on them alone.
