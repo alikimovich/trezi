@@ -274,6 +274,7 @@ export const UNIT = [
   'branch-spinner',
   'host-warnings',
   'composer-queue-header',
+  'sidebar-menu-capture',
   'sidebar-marquee-resume',
   'menu-shortcut-audit',
   'tw-classes',

@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Sidebar verification menu capture lifecycle (LKM-441)
+
+- [x] Root cause: the pipe runs `verifySidebar` in a main-queue block, so the nested menu tracking loop never drains the main queue and the capture's main-actor task waits for the 3 s fallback (native runs 34 to 51, since LKM-388).
+- [x] `SidebarMenuRun` (`src/native/SidebarMenuCapture.swift`) always ends a capture in `shot` or `shotError`, cancels a late task and reports a `capture` receipt. The broker runs menu commands from the main run loop.
+- [x] Unit `test/sidebar-menu-capture.mjs` (red without the receipt on the main-queue path) and the `sidebar-history` smoke now require the menu PNG, a receipt and no leftover observer, timer or task.
+- [ ] Manager: the native `sidebar` group (`project-switching` smoke) on the merged SHA, with `sidebar-history-menu.png` and its JSON as the evidence.
+
 ## Swift warnings of release build 0.13.1 (1258) (LKM-436)
 
 - [x] Baseline on 5b5356f: a fresh uncached release build prints all eight reported warnings; warnings as errors is red on them alone.
