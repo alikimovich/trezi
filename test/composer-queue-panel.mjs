@@ -147,6 +147,10 @@ fails(noResume, 3, true, true, /Send now: missing/, 'paused without Send now')
 const resumeUnpaused = inspected({ rows: 1, header: true })
 resumeUnpaused.queueGeometry.header.resume = box(330, 406, 8, 36)
 fails(resumeUnpaused, 1, true, false, /Send now shown on an unpaused queue/, 'Send now unpaused')
+// LKM-436: no Send now is JSON null, so a dropped key is not read as absent.
+const resumeDropped = inspected({ rows: 1, header: true })
+delete resumeDropped.queueGeometry.header.resume
+fails(resumeDropped, 1, true, false, /unpaused queue: undefined/, 'resume key dropped')
 
 const noDivider = inspected({ rows: 1, header: true })
 noDivider.queueGeometry.header.divider = null

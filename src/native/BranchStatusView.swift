@@ -61,7 +61,7 @@ final class BranchPopUpButton: NSPopUpButton {
         let natural = full.minX + width(progressPrefix)
         // The slot in the text is only the spinner's room while the text around it is not cut:
         // the ellipsis of a truncated title would otherwise sit under it.
-        if progress.isHidden || width(itemTitle(at: 0) ?? "") <= full.width || natural + side + width("…") <= full.maxX { spinnerMode = .inline }
+        if progress.isHidden || width(itemTitle(at: 0)) <= full.width || natural + side + width("…") <= full.maxX { spinnerMode = .inline }
         else if slot.maxX <= full.maxX - side + 0.5 { spinnerMode = .clipped }
         else { spinnerMode = .trailing }
         let x = spinnerMode == .inline ? max(full.minX, min(natural, full.maxX - side)) : full.maxX - side
@@ -69,7 +69,7 @@ final class BranchPopUpButton: NSPopUpButton {
         dot.frame = backingAlignedRect(NSRect(x: slot.midX - size / 2, y: slot.midY - size / 2, width: size, height: size), options: .alignAllEdgesNearest)
         // Tail truncation keeps the slot only while it and the ellipsis still fit; clipping has none.
         let title = cell?.titleRect(forBounds: bounds) ?? bounds
-        dot.isHidden = spinnerMode != .clipped && width(itemTitle(at: 0) ?? "") > title.width && slot.maxX + width("…") > title.maxX
+        dot.isHidden = spinnerMode != .clipped && width(itemTitle(at: 0)) > title.width && slot.maxX + width("…") > title.maxX
     }
     /// LKM-432: the spinner meets neither text, chevron nor dot. The pop-up is drawn at 8x
     /// without the spinner and the dot, and no inked run of it (title glyphs, ellipsis, chevron)
@@ -79,7 +79,7 @@ final class BranchPopUpButton: NSPopUpButton {
         let dotHidden = dot.isHidden, dotFrame = dot.convert(dot.bounds, to: nil), spinner = progress.convert(progress.bounds, to: nil)
         progress.isHidden = true; dot.isHidden = true
         defer { progress.isHidden = false; dot.isHidden = dotHidden }
-        guard let ink = renderedText(self, text: itemTitle(at: 0) ?? "", font: font) else { return false }
+        guard let ink = renderedText(self, text: itemTitle(at: 0), font: font) else { return false }
         let inked = ink.runs.contains { $0.0 < spinner.maxX - 0.5 && $0.1 > spinner.minX + 0.5 }
         return !inked && (dotHidden || !dotFrame.insetBy(dx: 0.5, dy: 0.5).intersects(spinner))
     }

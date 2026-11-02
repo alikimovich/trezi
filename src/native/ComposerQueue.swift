@@ -285,7 +285,7 @@ final class ComposerQueueHost: NSHostingView<AnyView> {
         var header: Any = NSNull()
         if let measured = line("header") {
             header = ["frame": measured, "glyph": line("header-glyph") ?? NSNull(), "divider": line("divider") ?? NSNull(),
-                      "resume": line("resume") ?? NSNull(), "paused": model.paused]
+                      "resume": line("resume") ?? NSNull(), "paused": model.paused] as [String: Any]
         }
         return ["visible": Double(frame.maxY - composerTop), "height": Double(frame.height), "hidden": isHidden, "panel": panel, "header": header, "rows": rows,
                 "motion": model.motion.dictionary.merging(["insertions": insertions, "lastInserted": lastInserted, "lastInsertion": lastInsertion, "reduceMotion": reduceMotion]) { _, new in new }]
