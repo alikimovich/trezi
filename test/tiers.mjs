@@ -270,6 +270,8 @@ export const UNIT = [
   'device-frame',
   'preview-speed-placement',
   'toolbar-island-dividers',
+  'branch-spinner',
+  'menu-shortcut-audit',
   'tw-classes',
   'tw-styles',
   'token-match',

@@ -235,6 +235,71 @@ export async function checkPublishProgress(
         await capture(host, artifacts, `branch-status-running-${width}-${appearance}`)
       }
     }
+    // LKM-432: a branch name longer than the title is cut inside the name. The spinner takes
+    // the trailing room and stays clear of the truncated text and the chevron (its fit reads
+    // the drawn ink), at the minimum width in both appearances.
+    const entry = git.sheets.workspace.active
+    assert.ok(entry, 'An active workspace entry names the branch')
+    const named = entry.branch
+    entry.branch = 'trezi/chat-0123456789abcdef-a-branch-name-longer-than-the-title'
+    try {
+      git.render()
+      assert.ok(await host.request('shellPerform', { action: 'window-width', row: '850' }))
+      for (const appearance of ['light', 'dark']) {
+        assert.ok(
+          await host.request('shellPerform', { action: 'window-appearance', row: appearance })
+        )
+        let previous = ''
+        const view = await waitFor(
+          async () => {
+            const current = await host.request('shellInspect')
+            const frame = `${current.windowWidth}|${current.branchProgressFrame}|${current.branchFrameWidth}`
+            const settled =
+              Math.abs(Number(current.windowWidth) - 850) < 1 &&
+              current.branchBusy &&
+              String(current.branchDisplay).includes('a-branch-name-longer') &&
+              frame === previous
+            previous = frame
+            return settled ? current : null
+          },
+          `Settled running spinner on a truncated branch name in ${appearance}`,
+          5000,
+          async () => {
+            const s = await host.request('shellInspect')
+            return {
+              windowWidth: s.windowWidth,
+              branchBusy: s.branchBusy,
+              branchProgressMode: s.branchProgressMode,
+              branchProgressFits: s.branchProgressFits,
+              branchProgressFrame: s.branchProgressFrame,
+              branchDisplay: s.branchDisplay
+            }
+          }
+        )
+        const where = `${appearance}: ${JSON.stringify({ mode: view.branchProgressMode, frame: view.branchProgressFrame, width: view.branchFrameWidth })}`
+        assert.equal(
+          view.branchProgressMode,
+          'trailing',
+          `Truncated name keeps the trailing room, ${where}`
+        )
+        assert.ok(
+          view.branchProgressFits,
+          `Spinner clear of the truncated name and chevron, ${where}`
+        )
+        assert.equal(view.branchTruncation, 'tail')
+        assert.ok(
+          view.branchChevronTrailing <= view.branchFrameLeading + view.branchFrameWidth + 0.5
+        )
+        writeFileSync(
+          join(artifacts, `branch-status-truncated-850-${appearance}.json`),
+          JSON.stringify(view, null, 2)
+        )
+        await capture(host, artifacts, `branch-status-running-truncated-850-${appearance}`)
+      }
+    } finally {
+      entry.branch = named
+      git.render()
+    }
     await host.request('shellPerform', { action: 'window-appearance', row: '' })
     await host.request('shellPerform', { action: 'window-width', row: '1320' })
     const statusCase = async (

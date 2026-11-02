@@ -8,7 +8,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] The `toolbar-actions` shortcut audit leaves out the Start Dictation… and Emoji & Symbols rows AppKit adds to any Edit menu.
 - [x] The branch spinner stays inside the title rect at the 850 pt window.
 - [x] `core` passes natively, 45 of 45, with `toolbar-actions` run end to end for the first time.
-- [ ] Decide whether the address and branch text should follow the page in a forced dark window: `toolbar-toolbar-actions-minimum-dark.png` shows near-black text on the dark toolbar.
+- [x] Repair after review: a truncated title never has the spinner on its text. `BranchPopUpButton` (`src/native/BranchStatusView.swift`) takes 12 pt of the title for the spinner when its slot in the text would sit under the ellipsis: `clipped` (cut with no ellipsis, the CI dot keeps its slot) or `trailing` (ellipsis, dot hidden). `branchProgressFits` now reads the drawn ink (text, ellipsis, chevron) and the dot.
+- [x] `publish-progress` adds a truncated-branch step at 850 pt in light and dark (a long branch name on the active entry, spinner mode `trailing`).
+- [x] Unit `test/branch-spinner.mjs` (the real pop-up offscreen: inline, clipped, trailing, idle, and a spinner moved over the text that the fit check refuses) and `test/menu-shortcut-audit.mjs` (`MenuShortcutAudit` keeps ordinary rows including `d`, drops only `startDictation:` and `orderFrontCharacterPalette:`).
+- [x] Trezi bindings on those two selectors are no longer audited; documented in `src/native/MenuShortcutAudit.swift` and `docs/agent-guide/gotchas.md`. Trezi binds neither.
+- [x] Checked whether the near-black address and branch text in `toolbar-toolbar-actions-minimum-dark.png` is LKM-430's: it is not. The text follows the preview page's under-page colour (`updatePreviewColor`, 851ea908, 2026-09-23), which LKM-430 did not touch; the smoke only exposes it by forcing a dark window over a white page in the mobile viewport. Out of scope for LKM-432 and LKM-430.
+- [ ] Separate follow-up, not filed from this worktree: decide whether the address and branch text follow the window appearance rather than the page in a forced dark window (`previewTextColor`). The dark assertions of `toolbar-actions` stay as they are.
+- [ ] Manager: run the `core` and `settings` groups natively together on this branch.
 
 ## Send Feedback shortcut, Mark up button, device switch in the tools island (LKM-430)
 

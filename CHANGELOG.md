@@ -12,7 +12,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 
-- The branch status spinner stays inside the branch title at the minimum window width (LKM-432).
+- The branch status spinner stays inside the branch title at the minimum window width, and off the text when a long branch name is cut (LKM-432).
 
 ## [0.12.0] - 2026-11-01
 

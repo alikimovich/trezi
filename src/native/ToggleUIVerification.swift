@@ -42,21 +42,7 @@ extension Host {
                 "keyWindow":NSApp.keyWindow === window, "active":NSApp.isActive, "firstResponder":toggleUIResponder(window.firstResponder),
                 "menu":["title":item?.title ?? "", "key":item?.keyEquivalent ?? "", "command":item?.keyEquivalentModifierMask == .command,
                         "menu":item?.menu?.title ?? "", "enabled":item?.isEnabled ?? false],
-                "shortcuts":menuShortcuts(NSApp.mainMenu)]
-    }
-    /// LKM-430: every key equivalent in the live menus, for the collision audit. LKM-432: not
-    /// AppKit's own rows. It adds Start Dictation… and Emoji & Symbols to any Edit menu, each with
-    /// hidden twins on Globe keys, and the keys depend on the system, not on Trezi's bindings.
-    private func menuShortcuts(_ menu: NSMenu?) -> [[String: Any]] {
-        (menu?.items ?? []).flatMap { item -> [[String: Any]] in
-            let names: [(NSEvent.ModifierFlags, String)] = [(.control, "control"), (.option, "option"), (.shift, "shift"), (.command, "command")]
-            // An upper-case key equivalent means Shift whether or not the mask says so.
-            let upper = item.keyEquivalent != item.keyEquivalent.lowercased()
-            let system = ["startDictation:", "orderFrontCharacterPalette:"].contains(item.action.map(NSStringFromSelector) ?? "")
-            let own: [[String: Any]] = item.keyEquivalent.isEmpty || system ? [] : [["title":item.title, "key":item.keyEquivalent.lowercased(), "menu":menu?.title ?? "",
-                "modifiers":names.filter { item.keyEquivalentModifierMask.contains($0.0) || (upper && $0.0 == .shift) }.map(\.1)]]
-            return own + menuShortcuts(item.submenu)
-        }
+                "shortcuts":MenuShortcutAudit.collect(NSApp.mainMenu)]
     }
     private func toggleUIResponder(_ responder: NSResponder?) -> String {
         guard let responder else { return "none" }
