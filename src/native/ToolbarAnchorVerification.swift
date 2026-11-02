@@ -36,8 +36,8 @@ extension Host {
     @MainActor func toolbarMenuProbe(_ key: String) -> [String: Any] {
         guard let group = shell.toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }).first(where: { $0.segmentAnchor(key) != nil }),
               let menu = (group.shown.first { $0.itemIdentifier.rawValue == key } as? NSMenuToolbarItem)?.menu else { return toolbarAnchorInspect() }
-        let seen = MenuFrameProbe()
-        let cancel = Timer(timeInterval: 0.3, repeats: false) { _ in seen.frame = MenuFrameProbe.visibleMenu(); menu.cancelTracking() }
+        let seen = MenuFrameProbe(menu)
+        let cancel = Timer(timeInterval: 0.3, repeats: false) { _ in MainActor.assumeIsolated { seen.finish() } }
         RunLoop.main.add(cancel, forMode: .common)
         defer { cancel.invalidate() }
         group.popUpMenu(key)
@@ -47,9 +47,17 @@ extension Host {
     }
 }
 
-/// Written and read on the main thread only (the timer fires there during menu tracking).
-private final class MenuFrameProbe: @unchecked Sendable {
-    var frame: NSRect?
+/// Owned by the main actor: the timer fires on the main thread during menu tracking, and
+/// `MainActor.assumeIsolated` traps if it ever does not.
+@MainActor private final class MenuFrameProbe {
+    private let menu: NSMenu
+    private(set) var frame: NSRect?
+    init(_ menu: NSMenu) { self.menu = menu }
+    /// Reads the open menu's frame, then closes it.
+    func finish() {
+        frame = Self.visibleMenu()
+        menu.cancelTracking()
+    }
     /// This process's open menu window: AppKit's own list first, else the window server's
     /// list of this process's on-screen windows (bounds only, flipped to screen coordinates).
     static func visibleMenu() -> NSRect? {
