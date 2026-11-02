@@ -129,6 +129,7 @@ export const UNIT = [
   'native-smoke-composer-attach',
   'native-chat-reveal',
   'native-chat-text',
+  'native-chat-code-click',
   'native-diff-list',
   'native-changes-fixture',
   'native-island-editing',

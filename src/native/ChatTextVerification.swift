@@ -9,6 +9,7 @@ extension Host {
     func verifyChatText(_ c: [String: Any]) async throws -> [String: Any] {
         func fail(_ reason: String) -> NSError { NSError(domain: "ChatText", code: 1, userInfo: [NSLocalizedDescriptionKey: reason]) }
         if c["restore"] as? Bool == true {
+            if ChatTextView.pasteboard.name != NSPasteboard.general.name { ChatTextView.pasteboard.releaseGlobally() }
             window.appearance = nil; ChatTextView.pasteboard = .general
             window.makeFirstResponder(nil)
             return [:]
@@ -21,6 +22,7 @@ extension Host {
         let message = c["message"] as? String ?? ""
         let view = try await chatTextView(message)
         if let href = c["click"] as? String { return try clickLink(view, href) }
+        if c["pointer"] != nil { return try await verifyChatPointer(view, c) }
         let views = (ChatTextView.live.keyEnumerator().allObjects as? [String] ?? []).filter { $0.hasPrefix(message + "#") }.count
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("trezi.chat-text.\(UUID().uuidString)"))
         defer { pasteboard.releaseGlobally(); ChatTextView.pasteboard = .general }
