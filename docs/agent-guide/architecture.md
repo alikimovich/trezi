@@ -51,8 +51,9 @@ src/
                     for other app surfaces
     ChatMarkdown.swift / ChatRichText.swift / ChatTextView.swift   one selectable
                     TextKit text view per reply text segment: Markdown to one
-                    attributed string (code/table blocks), Copy, code Copy buttons
-                    and the streaming word reveal (LKM-186)
+                    attributed string (code/table blocks), Copy, code Copy buttons,
+                    click to copy code (LKM-431) and the streaming word reveal
+                    (LKM-186)
     WorkspaceLayout.swift        authoritative view/divider geometry and AppKit divider input
     SourceEditor.swift / Layers.swift / EditingInspector.swift
                     native source, layers and property/style inspector; the Layers
