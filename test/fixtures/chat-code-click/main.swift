@@ -253,6 +253,43 @@ require(view.snippet(at: point("Prose before")) == nil, "Prose has no chip")
 require(view.snippet(at: point("cell")) == nil, "A table's own cells have no chip")
 require(view.snippet(at: point("a link")) == nil, "A link has no chip")
 
+// LKM-442: a pointing hand over exactly what a click copies, through the view's own
+// mouse-moved handling; moving over code copies nothing and shows nothing.
+func move(_ at: NSPoint) -> Bool {
+    view.mouseMoved(with: event(.mouseMoved, at))
+    return NSCursor.current == NSCursor.pointingHand
+}
+// The last copy's Copied first goes; a loaded machine fires its timer late.
+reset()
+let hoverStart = Date()
+while root.subviews.contains(where: { $0 is ChatCopiedToast }), Date().timeIntervalSince(hoverStart) < 5 { spin(0.02) }
+let hoverCount = ChatCopiedToast.shown
+let blockLine = lines(text.range(of: "func caf"))[0], blockFrame = view.blockFrames().first { $0.block.kind == .code }!.frame
+for (name, at) in [("inline code", point("inline  code")), ("its last letter", point("inline  code", fraction: 0.97)),
+                   ("a wrapped line", NSPoint(x: wrapped[1].midX, y: wrapped[1].midY)), ("a block's code", NSPoint(x: blockLine.midX, y: blockLine.midY)),
+                   ("a block's right padding", NSPoint(x: width - 4, y: blockLine.midY)), ("a block's top padding", NSPoint(x: width - 60, y: blockLine.minY - 16)),
+                   ("a block's bottom padding", NSPoint(x: blockFrame.minX + 6, y: blockFrame.maxY - 3))] {
+    require(move(at), "Pointing hand over \(name): \(NSCursor.current)")
+    require(view.hovered != nil, "\(name) is hovered")
+}
+for (name, at) in [("prose", point("Prose before")), ("the space after a line", NSPoint(x: width - 3, y: lines(text.range(of: "Last words."))[0].midY)),
+                   ("the gap under a block", NSPoint(x: width / 2, y: lines(text.range(of: "Between."))[0].minY - 6)),
+                   ("just under a block", NSPoint(x: blockFrame.midX, y: blockFrame.maxY + 2)), ("an empty block's filler", NSPoint(x: width / 2, y: filler.midY)),
+                   ("a table cell", point("cell"))] {
+    _ = move(point("inline  code"))
+    require(!move(at) && NSCursor.current == NSCursor.iBeam, "The text cursor over \(name), after code: \(NSCursor.current)")
+    require(view.hovered == nil, "\(name) is not hovered")
+}
+_ = move(point("inline  code"))
+_ = move(point("a link"))
+require(view.hovered == nil, "A link is not code: its own cursor stays NSTextView's")
+for fraction in stride(from: 0.05, through: 0.95, by: 0.15) { _ = move(point("inline  code", fraction: fraction)) }
+let hoverToasts = root.subviews.filter { $0 is ChatCopiedToast }
+require(writes.isEmpty && hoverToasts.isEmpty && ChatCopiedToast.shown == hoverCount, "Moving over code copies and shows nothing: \(writes)")
+require(window.firstResponder === view && view.selectedRange().length == 0, "Moving takes no focus and selects nothing")
+_ = move(point("Prose before"))
+require(view.trackingAreas.contains { $0.options.contains(.mouseMoved) && $0.options.contains(.cursorUpdate) && $0.owner === view }, "The view tracks the pointer: \(view.trackingAreas.map(\.options))")
+
 // Copied: only after a write that worked, beside the click, passing clicks through.
 func toast() -> ChatCopiedToast? { root.subviews.compactMap { $0 as? ChatCopiedToast }.first }
 let spot = point("inline  code")
@@ -262,27 +299,48 @@ require(toast() == nil, "Nothing shows before the click has proved to be single"
 settle()
 guard let shown = toast() else { require(false, "Copied shows after the write: \(writes)"); exit(1) }
 let click1 = view.convert(spot, to: nil)
-require(ChatCopiedToast.current === shown && shown.frame.height <= 24 && shown.frame.width <= 70, "Small: \(shown.frame)")
-require(hypot(shown.frame.midX - click1.x, shown.frame.midY - click1.y) < 70 && !shown.frame.contains(click1), "Beside the click, not under it: \(shown.frame) \(click1)")
+// LKM-442: the exact words, on screen and to assistive tech.
+require(ChatCopiedToast.message == "Copied to clipboard" && shown.accessibilityLabel() == "Copied to clipboard" && shown.isAccessibilityElement(), "Says Copied to clipboard: \(String(describing: shown.accessibilityLabel()))")
+require(ChatCopiedToast.current === shown && shown.frame.height <= 24 && shown.frame.width <= 140, "Small: \(shown.frame)")
+require(hypot(shown.frame.midX - click1.x, shown.frame.midY - click1.y) < 100 && !shown.frame.contains(click1), "Beside the click, not under it: \(shown.frame) \(click1)")
 require(root.frame.contains(shown.frame), "Inside the window: \(shown.frame)")
 require(root.hitTest(NSPoint(x: shown.frame.midX, y: shown.frame.midY)) !== shown, "Clicks pass through it")
 require(!shown.acceptsFirstResponder && window.firstResponder === view, "It takes no focus")
 let frameKept = view.frame
+// Held through the repeats below, each of which waits out a double-click interval.
+let keptLifetime = ChatCopiedToast.lifetime
+ChatCopiedToast.lifetime = 8
 reset(); press(point("rm -rf ./nothing")); settle()
 let toasts = root.subviews.compactMap { $0 as? ChatCopiedToast }
-require(toasts.count == 1 && toasts[0] !== shown && shown.superview == nil, "A repeated click replaces it: \(toasts)")
+require(toasts.count == 1 && toasts[0] !== shown && shown.superview == nil, "A click on other code replaces it: \(toasts)")
 require(view.frame == frameKept, "Nothing moved")
+// LKM-442: the same code again while the pointer stays on it keeps the one shown, in place.
+let other = toasts[0], otherFrame = other.frame, count = ChatCopiedToast.shown
+for fraction in [0.2, 0.8, 0.5] {
+    view.pointerMoved(to: point("rm -rf ./nothing", fraction: fraction))
+    reset(); press(point("rm -rf ./nothing", fraction: fraction)); settle()
+    require(writes == ["rm -rf ./nothing"], "A repeat still copies: \(writes)")
+}
+require(toast() === other && other.frame == otherFrame && ChatCopiedToast.shown == count, "Repeats on the same code do not show it again: \(ChatCopiedToast.shown - count) more, \(String(describing: toast()?.frame)) \(otherFrame)")
+// Off the code and back: the next copy shows it anew.
+ChatCopiedToast.lifetime = keptLifetime
+view.pointerMoved(to: point("Prose before"))
+view.pointerMoved(to: point("rm -rf ./nothing"))
+reset(); press(point("rm -rf ./nothing")); settle()
+require(toast() != nil && toast() !== other && ChatCopiedToast.shown == count + 1, "After the pointer left, a copy shows it again: \(ChatCopiedToast.shown - count)")
+view.pointerMoved(to: point("Prose before"))
 let settled = Date()
 while toast() != nil, Date().timeIntervalSince(settled) < 3 { spin(0.02) }
 require(toast() == nil, "It dismisses itself")
 writable = false
+let beforeFailure = ChatCopiedToast.shown
 require(click(spot) == "inline  code", "The failed write was tried")
-require(toast() == nil && ChatCopiedToast.current == nil, "A failed write shows nothing")
+require(toast() == nil && ChatCopiedToast.current == nil && ChatCopiedToast.shown == beforeFailure, "A failed write shows nothing")
 writable = true
 reset(); view.copyButtons[0].performClick(nil)
 require(writes == [block] && toast() != nil, "The Copy button writes the raw code and uses the same feedback: \(writes)")
 let button = view.copyButtons[0].convert(NSPoint(x: 9, y: 9), to: nil)
-require(hypot(toast()!.frame.midX - button.x, toast()!.frame.midY - button.y) < 70, "Beside the button: \(toast()!.frame)")
+require(hypot(toast()!.frame.midX - button.x, toast()!.frame.midY - button.y) < 100, "Beside the button: \(toast()!.frame)")
 reset(); press(spot); view.copyButtons[0].performClick(nil); settle()
 require(writes == [block], "A waiting click does not overwrite the Copy button's text: \(writes)")
 let emptyButton = view.rich.blocks.filter { $0.kind == .code }.count - 1
@@ -291,12 +349,12 @@ reset(); view.copyButtons[emptyButton].performClick(nil)
 require(writes.isEmpty, "Its Copy button writes nothing")
 
 // Placement: flips and stays inside the visible area in each corner.
-let area = NSRect(x: 100, y: 100, width: 300, height: 200), toastSize = NSSize(width: 54, height: 22)
+let area = NSRect(x: 100, y: 100, width: 300, height: 200), toastSize = shown.frame.size
 for near in [NSPoint(x: 105, y: 105), NSPoint(x: 395, y: 105), NSPoint(x: 105, y: 295), NSPoint(x: 395, y: 295), NSPoint(x: 250, y: 200)] {
     let placed = ChatCopiedToast.place(toastSize, near: near, in: area)
     require(area.contains(placed), "Kept inside: \(placed) for \(near)")
     require(!placed.contains(near), "Not under the cursor: \(placed) for \(near)")
-    require(hypot(placed.midX - near.x, placed.midY - near.y) < 70, "Still beside the cursor: \(placed) for \(near)")
+    require(hypot(placed.midX - near.x, placed.midY - near.y) < 100, "Still beside the cursor: \(placed) for \(near)")
 }
 
 // Stale work: a reparse, a reuse and a close each drop a waiting click and the feedback.
