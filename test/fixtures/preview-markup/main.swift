@@ -315,6 +315,49 @@ check(overlay.canvas.frame == overlay.bounds, "a page past the area is clipped t
 overlay.page = nil; overlay.layout()
 overlay.removeFromSuperview(); holder.removeFromSuperview(); window.contentView!.addSubview(overlay)
 
+// LKM-451: the Host's window (resizable, with a minSize) hit-tested from its theme frame, as the
+// smoke does. The page's bottom edge is the window's, so a probe 2 pt inside the snapshot's
+// corner lands in the band the window claims for resizing: the raw probe is RED, the overlay's
+// corner probe GREEN. Without `.resizable` the raw point is the canvas: that is the control.
+func hostWindow(resizable: Bool) -> (NSWindow, PreviewMarkupOverlay) {
+    var mask: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
+    if resizable { mask.insert(.resizable) }
+    let host = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1320, height: 860), styleMask: mask, backing: .buffered, defer: true)
+    host.isReleasedWhenClosed = false
+    if resizable { host.minSize = NSSize(width: 850, height: 550) }
+    let page = PreviewMarkupOverlay(image: solid(1600, 1000, .systemBlue))
+    page.frame = NSRect(x: 456, y: 0, width: 634, height: 760)
+    host.contentView!.addSubview(page)
+    page.layoutSubtreeIfNeeded(); page.layout()
+    return (host, page)
+}
+for resizable in [true, false] {
+    let (host, page) = hostWindow(resizable: resizable)
+    let root = host.contentView!.superview!, snapshot = page.convert(page.canvas.frame, to: nil)
+    let edges = root.convert(root.bounds, to: nil), label = resizable ? "Host window" : "control (not resizable)"
+    check(near(snapshot.minY, edges.minY) && near(snapshot.minX, 456), "\(label): the page's bottom edge is the window's: \(snapshot) in \(edges)")
+    let raw = NSPoint(x: snapshot.minX + 2, y: snapshot.minY + 2), corner = page.cornerProbe()
+    check(root.hitTest(raw) === (resizable ? root : page.canvas), "\(label): the raw corner point hits \(root.hitTest(raw).map { "\(type(of: $0))" } ?? "nil")")
+    check(root.hitTest(corner) === page.canvas, "\(label): the corner probe \(corner) draws: \(root.hitTest(corner).map { "\(type(of: $0))" } ?? "nil")")
+    check(snapshot.contains(corner) && corner.x >= edges.minX + PreviewMarkupOverlay.edgeClear && corner.y >= edges.minY + PreviewMarkupOverlay.edgeClear, "\(label): the corner probe is on the page, clear of the edges")
+    let island = page.convert(page.barFrame, to: nil)
+    for (x, y) in [(snapshot.midX, min(snapshot.maxY - 2, island.maxY + 4)), (snapshot.midX, island.minY - 4), (island.minX - 4, island.midY), (island.maxX + 4, island.midY)] {
+        check(root.hitTest(NSPoint(x: x, y: y)) === page.canvas, "\(label): (\(x), \(y)) beside the island draws")
+    }
+    let center = root.hitTest(NSPoint(x: island.midX, y: island.midY))
+    check(center === page.island || center?.isDescendant(of: page.island) == true, "\(label): the island takes its own points")
+}
+// A page that does not touch the window's edges keeps its corner 2 pt in; one too small stays inside.
+do {
+    let (host, page) = hostWindow(resizable: true)
+    page.frame = NSRect(x: 456, y: 100, width: 634, height: 600); page.layout()
+    let snapshot = page.convert(page.canvas.frame, to: nil)
+    check(page.cornerProbe() == NSPoint(x: snapshot.minX + 2, y: snapshot.minY + 2), "a page clear of the band keeps its corner probe 2 pt in: \(page.cornerProbe())")
+    page.frame = NSRect(x: 456, y: 0, width: 20, height: 20); page.layout()
+    check(page.convert(page.canvas.frame, to: nil).contains(page.cornerProbe()), "a page smaller than the band still gets a probe on it")
+    _ = host
+}
+
 // MARK: session
 let parent = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
 window.contentView!.addSubview(parent)
