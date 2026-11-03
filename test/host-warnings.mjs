@@ -24,6 +24,9 @@ if (process.platform !== 'darwin') {
     'src/native/ComposerQueue.swift',
     // LKM-441: the sidebar menu run moved here from SidebarVerification.swift.
     'src/native/SidebarMenuCapture.swift',
+    // LKM-444: the code editor pop-out's full-screen-aware hide and its test hook.
+    'src/native/SourcePopout.swift',
+    'src/native/SourcePopoutVerification.swift',
     // LKM-447: the opt-in Dreamer acceptance's host steps.
     'src/native/DreamerAcceptance.swift',
     // LKM-453: the opt-in chat recovery acceptance's host steps.
@@ -77,6 +80,14 @@ if (process.platform !== 'darwin') {
     const sdk = spawnSync('/usr/bin/xcrun', ['--show-sdk-path'], { encoding: 'utf8' }).stdout.trim()
     assert.ok(sdk, 'an SDK path')
     const arch = process.arch === 'arm64' ? 'arm64' : 'x86_64'
+    // `swiftc -frontend` skips the driver's plugin search: SwiftUI's @State is a macro in this
+    // SDK, so without the platform's host plugins ComposerQueue.swift fails to expand it.
+    const platform = spawnSync('/usr/bin/xcrun', ['--sdk', 'macosx', '--show-sdk-platform-path'], {
+      encoding: 'utf8'
+    }).stdout.trim()
+    const plugins = platform
+      ? ['-plugin-path', join(platform, 'Developer/usr/lib/swift/host/plugins')]
+      : []
     const check = (primary, others) =>
       swiftFrontend([
         '-typecheck',
@@ -86,6 +97,7 @@ if (process.platform !== 'darwin') {
         sdk,
         '-target',
         `${arch}-apple-macosx${MIN_MACOS}`,
+        ...plugins,
         ...primary.flatMap((file) => ['-primary-file', file]),
         ...others
       ])
