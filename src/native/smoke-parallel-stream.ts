@@ -33,8 +33,16 @@ import { nativeWorkspace } from './workspace-runtime'
  * LKM-412: the check runs in its own disposable Git project. The suite's project has no Git
  * repository, so its chats share the live folder and LKM-404 admits one writer turn at a time
  * there; only per-chat worktrees can stream at once.
+ *
+ * LKM-451: each stream stops after `STREAM_CHUNKS` deltas (about 22 000 characters; green runs end
+ * near 15 000). The timer runs on the wall clock, so on a loaded host whose inspections take a
+ * second each the reply grew to 52 000 characters before the last switch, a row whose height
+ * changes by thousands of points between frames. That workload depended on the host's speed, not
+ * on the switching this check covers. The turn stays open after the cap, so later steps switch
+ * between two running chats with a fixed target text.
  */
 const CHUNK_MS = 90
+const STREAM_CHUNKS = 200
 const SWITCHES = 3
 const PROJECT = 'Parallel Stream'
 /** Opening a project and forking a chat's worktree take longer than a step of the stream. */
@@ -136,12 +144,11 @@ export async function checkParallelStream(host: NativeBridge, fixture: string, a
   }
   const stream = (stub: ReturnType<typeof stubAgentSendForSmoke>, name: string) => {
     let chunk = 0
-    timers.push(
-      setInterval(
-        () => stub.emit({ type: 'delta', text: `${name}${++chunk} ${para}` } as AgentEvent),
-        CHUNK_MS
-      )
-    )
+    const timer = setInterval(() => {
+      stub.emit({ type: 'delta', text: `${name}${++chunk} ${para}` } as AgentEvent)
+      if (chunk >= STREAM_CHUNKS) clearInterval(timer)
+    }, CHUNK_MS)
+    timers.push(timer)
   }
   const select = (chat: string) =>
     host.emit('shell-action', { action: 'select', id: `chat:${chat}`, project: key })

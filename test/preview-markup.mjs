@@ -159,5 +159,11 @@ if (process.platform !== 'darwin') {
   const native = source('index.ts')
   assert.match(native, /installMarkup\(/)
   assert.ok(!/1280/.test(source('PreviewMarkupHost.swift')), 'not the agent frame budget')
+  // LKM-451: the smoke's corner probe is the overlay's, clear of the window's resize band, and
+  // the inspect keeps what it needs to diagnose a miss.
+  const inspect = source('PreviewMarkupHost.swift')
+  assert.match(inspect, /overlay\.cornerProbe\(\)/, 'the corner probe is clear of the resize band')
+  for (const key of ['probes', 'rawCornerHit', 'contentLayoutRect', 'hitBesideDetail'])
+    assert.match(inspect, new RegExp(`"${key}"`), `the inspect reports ${key}`)
   console.log('PREVIEW-MARKUP PASS')
 }

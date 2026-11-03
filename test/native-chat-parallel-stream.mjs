@@ -142,6 +142,13 @@ assert.ok(
   `${opened}`
 )
 assert.match(setup, /assert\.notEqual\(await isolatedCwd\(root, chat\), root/)
+// LKM-451: the stream stops at a fixed size. Wall-clock deltas on a loaded host grew a reply to
+// 52 000 characters; the cap stays above every green run (at most 15 182) and below that.
+const cap = Number(check.match(/const STREAM_CHUNKS = (\d+)/)?.[1])
+const para = check.match(/const para =\s*'([^']+)'/)?.[1] ?? ''
+const capped = Array.from({ length: cap }, (_, i) => `A${i + 1} ${para}`).join('').length
+assert.ok(para.length > 80 && capped > 16_000 && capped < 26_000, `stream cap ${cap}: ${capped}`)
+assert.match(setup, /if \(chunk >= STREAM_CHUNKS\) clearInterval\(timer\)/)
 // Restored after the turns end, then the second chat and the disposable project closed last.
 const restore = check.slice(check.indexOf('export async function restoreParallelStream'))
 const order = [

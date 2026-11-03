@@ -68,16 +68,24 @@ extension Host {
         // The snapshot and the island in window coordinates, beside the WKWebView's frame.
         let snapshot = overlay.convert(canvas.frame, to: nil), island = overlay.convert(overlay.barFrame, to: nil)
         func hit(_ x: CGFloat, _ y: CGFloat) -> NSView? { window.contentView?.superview?.hitTest(NSPoint(x: x, y: y)) }
-        // Window points run up: above the island is between it and the page's top edge.
-        let beside = [hit(snapshot.midX, min(snapshot.maxY - 2, island.maxY + 4)), hit(snapshot.midX, island.minY - 4),
-                      hit(island.minX - 4, island.midY), hit(island.maxX + 4, island.midY), hit(snapshot.minX + 2, snapshot.minY + 2)]
+        func name(_ view: NSView?) -> String { view.map { $0 === canvas ? "canvas" : "\(type(of: $0))" } ?? "nil" }
+        // Window points run up: above the island is between it and the page's top edge. The corner
+        // is the snapshot's lower-left, clear of the window's resize band (LKM-451).
+        let corner = overlay.cornerProbe(), rawCorner = NSPoint(x: snapshot.minX + 2, y: snapshot.minY + 2)
+        let probes = [NSPoint(x: snapshot.midX, y: min(snapshot.maxY - 2, island.maxY + 4)), NSPoint(x: snapshot.midX, y: island.minY - 4),
+                      NSPoint(x: island.minX - 4, y: island.midY), NSPoint(x: island.maxX + 4, y: island.midY), corner]
+        let beside = probes.map { hit($0.x, $0.y) }
         let islandState: [String: Any] = [
             "frame":rect(island), "snapshot":rect(snapshot), "glass":overlay.island.glass,
+            // Where the probes were and what the window looked like (diagnosis only, LKM-451).
+            "probes":probes.map { [$0.x, $0.y] }, "rawCorner":[rawCorner.x, rawCorner.y], "rawCornerHit":name(hit(rawCorner.x, rawCorner.y)),
+            "window":rect(window.frame), "contentLayoutRect":rect(window.contentLayoutRect),
+            "root":rect(window.contentView?.superview.map { $0.convert($0.bounds, to: nil) } ?? .zero),
             // The island takes its own points; the snapshot takes the rest, right beside it.
             "hitIsland":hit(island.midX, island.midY).map { $0 === overlay.island || $0.isDescendant(of: overlay.island) } ?? false,
             "hitBeside":beside.allSatisfy { $0 === canvas },
             // Above, below, left, right, snapshot corner: what each probe point hit (diagnosis only).
-            "hitBesideDetail":beside.map { $0.map { $0 === canvas ? "canvas" : "\(type(of: $0))" } ?? "nil" }
+            "hitBesideDetail":beside.map(name)
         ]
         let marks: [[String: Any]] = canvas.document.marks.map { mark in
             ["tool":mark.tool.rawValue, "points":mark.points.map { [$0.x, $0.y] }, "view":mark.points.map { point -> [CGFloat] in let p = mapping.toView(point); return [p.x, p.y] }]
