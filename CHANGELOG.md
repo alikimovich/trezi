@@ -14,6 +14,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 - Closing or docking the popped-out code editor while it is in full screen no longer leaves a black, empty full-screen Space: the editor leaves full screen first and the main window comes back in front, and reopening the editor keeps its caret and selection (LKM-444).
 - A peer's edit that landed while the previous file check was still running is no longer missed, so two tasks editing the same file are flagged as a known overlap instead of staying "uncertain" (LKM-444).
+
 ## [0.13.8] - 2026-11-03
 
 ### Changed
