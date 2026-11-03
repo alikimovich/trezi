@@ -286,6 +286,56 @@ for (const [label, next] of [
   assert.equal(none.toasts.length, 1)
 }
 
+// LKM-448: the top bar button toggles. Off it begins; on it asks the host for the overlay's own
+// Cancel, which adds, saves and attaches nothing; once the host says cancelled it begins again.
+{
+  const { calls, chats, sent, toasts, markup } = fixture()
+  await chats.command({ type: 'context', context: context('a', '/one') })
+  chats.get('a').text = 'Keep me'
+  const methods = () => sent.map(([method]) => method)
+  markup.toggle()
+  const first = last(sent, 'markupBegin').session
+  assert.ok(first, 'a click while off enters Mark up')
+  markup.toggle()
+  assert.deepEqual(methods(), ['markupBegin', 'markupCancel'], 'a click while on cancels')
+  assert.deepEqual(last(sent, 'markupCancel'), { session: first }, 'that session, by its token')
+  assert.equal(markup.session, first, 'it ends on the host’s word, not before')
+  // A second click before the host answers asks again and opens nothing.
+  markup.toggle()
+  assert.deepEqual(methods(), ['markupBegin', 'markupCancel', 'markupCancel'])
+  markup.state({ session: first, state: 'cancelled' })
+  assert.equal(markup.session, null, 'cancelled ends the session')
+  const chat = chats.get('a')
+  assert.equal(chat.attachments.length, 0, 'Cancel attaches nothing')
+  assert.equal(chat.text, 'Keep me', 'and keeps the draft')
+  assert.deepEqual(sends(calls), [], 'and sends nothing')
+  assert.deepEqual(toasts, [], 'and says nothing')
+  assert.ok(!methods().includes('markupDone') && !methods().includes('composerFocus'))
+  // The host's answer to the late second Cancel is for a closed session: ignored.
+  markup.state({ session: first, state: 'cancelled' })
+  markup.toggle()
+  const again = last(sent, 'markupBegin').session
+  assert.ok(again && again !== first, 'a click after Cancel enters again, a new session')
+  assert.equal(markup.session, again)
+  // The Actions menu entry only opens: begin on an open session does nothing.
+  markup.begin()
+  assert.equal(methods().filter((m) => m === 'markupBegin').length, 2)
+  assert.equal(methods().filter((m) => m === 'markupCancel').length, 2)
+  // A failed open ends the session too, so the next click enters rather than cancels.
+  markup.state({ session: again, state: 'failed', message: 'No page' })
+  markup.toggle()
+  assert.equal(methods().at(-1), 'markupBegin')
+}
+
+// The top bar button goes through `toggle`; the Actions menu entry stays an opener.
+{
+  const index = readFileSync('src/native/index.ts', 'utf8')
+  assert.match(index, /'shell-action'[\s\S]{0,140}action\.action === 'markup'\) markup\.toggle\(\)/)
+  assert.match(index, /'menu'[\s\S]{0,80}action === 'markup'\) markup\.begin\(\)/)
+  const host = readFileSync('src/native/Host.swift', 'utf8')
+  assert.match(host, /case "markupCancel": markup\?\.cancel\(c\["session"\]/)
+}
+
 // A provider without image input keeps the attachment reviewable and says so before Send.
 {
   const { chats, sent, toasts, markup } = fixture('gemini')

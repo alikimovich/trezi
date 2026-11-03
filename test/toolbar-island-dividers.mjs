@@ -67,9 +67,17 @@ assert.equal(markup.label, 'Mark up')
 assert.equal(markup.tooltip, 'Mark up', `the segment's tooltip: ${at}`)
 for (const state of ['plain', 'active']) {
   assert.equal(markup[state].present, true, `${state} image is non-nil: ${at}`)
-  assert.equal(markup[state].accessibility, 'Mark up', `${state} image is labelled: ${at}`)
   assert.ok(markup[state].ink > 40, `${state} image draws the glyph: ${at}`)
 }
+// LKM-448: while on, a click cancels, and VoiceOver says so.
+assert.equal(markup.plain.accessibility, 'Mark up', `the idle image is labelled: ${at}`)
+assert.equal(
+  markup.active.accessibility,
+  'Cancel Mark up',
+  `the active image says what a click does: ${at}`
+)
+assert.equal(markup.cancelLabel, 'Cancel Mark up')
+assert.equal(markup.plain.ink, markup.active.ink, `the same glyph in both states: ${at}`)
 assert.equal(markup.plain.template, true, `at rest it tints like its neighbours: ${at}`)
 assert.equal(markup.active.template, false, `active it keeps the accent colour: ${at}`)
 assert.deepEqual(markup.clicks, ['markup'], `enabled, one click sends one action: ${at}`)
@@ -88,8 +96,60 @@ assert.deepEqual(
 assert.equal(markup.narrowClicked, true)
 assert.deepEqual(markup.narrowClicks, ['markup'], `after a hidden segment it still hits: ${at}`)
 
+// LKM-448: Select, Slow Motion and Mark up share one on-state look, in light and dark: the same
+// glyph, size and weight as at rest (same ink, same bounds), template at rest, accent while on.
+const { states } = result
+const STATEFUL = ['select-object', 'speed', 'markup']
+const st = JSON.stringify(states)
+assert.deepEqual(
+  Object.keys(states)
+    .filter((k) => STATEFUL.includes(k))
+    .sort(),
+  [...STATEFUL].sort()
+)
+for (const key of STATEFUL) {
+  const s = states[key]
+  assert.equal(s.idleTemplate, true, `${key} at rest tints like its neighbours: ${st}`)
+  assert.equal(s.activeTemplate, false, `${key} on keeps the accent: ${st}`)
+  assert.deepEqual(s.idleSize, states.neighbourSize, `${key} at the toolbar's optical size: ${st}`)
+  assert.deepEqual(s.activeSize, s.idleSize, `${key} does not change size when on: ${st}`)
+  for (const appearance of ['light', 'dark']) {
+    const { idle, active } = s[appearance]
+    assert.ok(idle.ink > 40, `${key} ${appearance} draws the glyph: ${st}`)
+    assert.equal(
+      active.ink,
+      idle.ink,
+      `${key} ${appearance}: the same glyph and weight when on: ${st}`
+    )
+    assert.deepEqual(active.bounds, idle.bounds, `${key} ${appearance}: in the same place: ${st}`)
+    assert.ok(active.accentDistance < 0.08, `${key} ${appearance}: on is the accent colour: ${st}`)
+    assert.ok(
+      idle.accentDistance > 0.08 || active.accentDistance < idle.accentDistance,
+      `${key} ${appearance}: idle is not: ${st}`
+    )
+  }
+  // Active is the glyph, not the control's pressed highlight, and nothing stays after it ends.
+  assert.equal(states[`${key}ActiveHighlight`], false, `${key} on is not drawn as pressed: ${st}`)
+  assert.equal(states[`${key}ActiveAccent`], true, `${key} on shows on its segment: ${st}`)
+  assert.equal(
+    states[`${key}AfterClickHighlight`],
+    false,
+    `${key} keeps no pressed fill after a click: ${st}`
+  )
+  assert.equal(
+    states[`${key}DisabledTemplate`],
+    true,
+    `${key} disabled draws like any disabled segment: ${st}`
+  )
+  assert.equal(states[`${key}ReenabledAccent`], true, `${key} enabled again shows its state: ${st}`)
+  assert.equal(states[`${key}EndedTemplate`], true, `${key} leaves no accent once off: ${st}`)
+  assert.equal(states[`${key}EndedHighlight`], false, `${key} leaves no fill once off: ${st}`)
+}
+assert.equal(states.momentary, true, `pressed is the control's transient highlight: ${st}`)
+assert.equal(states.pressedGlyphTemplate, true, `and leaves the glyph alone: ${st}`)
+
 // Wiring the fixture cannot reach. One control per action: the lists are the only source of
-// the groups, the action goes through the same shell-action as the "…" and Actions entries,
+// the groups, the segment's shell-action toggles (LKM-448) while the Actions entry only opens,
 // and the segment follows the overlay.
 const source = (name) => readFileSync(`src/native/${name}`, 'utf8')
 const layout = source('ToolbarLayout.swift')
@@ -108,5 +168,19 @@ assert.match(
   /changed: \{[^\n]*updateMarkup\(active: self\?\.markup\?\.overlay != nil\)/
 )
 const controller = readFileSync('src/native/index.ts', 'utf8')
-assert.match(controller, /action\.action === 'markup'[\s\S]{0,80}markup\.begin\(\)/)
+assert.match(controller, /action\.action === 'markup'\) markup\.toggle\(\)/)
+// Every on state is drawn by the one helper: no filled or rayed variant swapped in, no animation
+// (Reduce Motion has nothing to reduce), and the tooltip follows the toggle.
+assert.match(shell, /ToolbarIslands\.stateImage\("select-object"/)
+assert.ok(!/cursorarrow\.rays/.test(shell), 'Select keeps its glyph when on')
+const speed = source('ToolbarSpeed.swift')
+assert.match(speed, /ToolbarIslands\.stateImage\("speed"/)
+assert.ok(!/tortoise\.fill/.test(speed), 'Slow Motion keeps its glyph when on')
+const more = source('ToolbarMore.swift')
+assert.match(more, /toolTip = ToolbarIslands\.markupToolTip\(active: active\)/)
+for (const [name, text] of [
+  ['ToolbarSpeed.swift', speed],
+  ['ToolbarMore.swift', more]
+])
+  assert.ok(!/animator\(\)|NSAnimationContext/.test(text), `${name} swaps states without motion`)
 console.log('toolbar island dividers: OK')

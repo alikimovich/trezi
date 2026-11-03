@@ -26,29 +26,50 @@ func toolbarSymbol(_ name: String, _ label: String? = nil, size: CGFloat = 20) -
     return image
 }
 
+/// An accent glyph that remembers its plain template, which a disabled segment draws instead
+/// (LKM-448), so a disabled button looks the same whatever its state.
+final class ToolbarAccentImage: NSImage {
+    var plain: NSImage?
+}
+
 /// The symbol in the accent colour, for a segment that shows a state (LKM-213: slow motion
 /// inside the interaction group, where an item's prominent style does not draw).
 func toolbarAccentSymbol(_ name: String, _ label: String? = nil) -> NSImage? {
     guard let glyph = toolbarSymbol(name, label) else { return nil }
-    let image = NSImage(size: glyph.size, flipped: false) { rect in
+    let image = ToolbarAccentImage(size: glyph.size, flipped: false) { rect in
         glyph.draw(in: rect)
         NSColor.controlAccentColor.set(); rect.fill(using: .sourceAtop)
         return true
     }
+    image.plain = glyph
     image.accessibilityDescription = label
     return image
 }
 
 /// The preview toolbar's two islands, in segment order. LKM-430: the device switch belongs with
-/// code, layers and expand, and Mark up has its own segment (the "…" and Actions entries stay).
+/// code, layers and expand, and Mark up has its own segment. LKM-448: the Actions menu entry
+/// stays; the "…" one is gone.
 enum ToolbarIslands {
     static let interaction = ["select-object", "overlay", "speed", "markup"]
     static let tools = ["code", "layers", "device", "expand"]
     static let markupLabel = "Mark up"
     static let markupSymbol = "pencil.tip"
-    /// The accent glyph while an overlay is open, as slow motion shows its state.
-    static func markupImage(active: Bool) -> NSImage? {
-        active ? toolbarAccentSymbol(markupSymbol, markupLabel) : toolbarSymbol(markupSymbol, markupLabel)
+    /// LKM-448: the buttons that show an on state, each with its one glyph for both states.
+    static let stateSymbols = ["select-object": "cursorarrow", "speed": "tortoise", "markup": markupSymbol]
+    /// LKM-448: one look for every on state. The same glyph, size and weight as at rest, in the
+    /// accent colour while on; the control's own highlight stays the pressed look, so active
+    /// never reads as pressed, and hover, focus and disabled are the island control's, alike for all.
+    static func stateImage(_ key: String, _ label: String?, active: Bool) -> NSImage? {
+        guard let symbol = stateSymbols[key] else { return nil }
+        return active ? toolbarAccentSymbol(symbol, label) : toolbarSymbol(symbol, label)
+    }
+    /// While on, a click cancels it (LKM-448), so the tooltip and VoiceOver say so.
+    static func markupToolTip(active: Bool) -> String { active ? "Cancel Mark up" : markupLabel }
+    static func markupImage(active: Bool) -> NSImage? { stateImage("markup", markupToolTip(active: active), active: active) }
+    /// What a segment draws: a disabled one never keeps an accent glyph.
+    static func segmentImage(_ item: NSToolbarItem) -> NSImage? {
+        guard !item.isEnabled, let accent = item.image as? ToolbarAccentImage else { return item.image }
+        return accent.plain ?? item.image
     }
 }
 
@@ -153,7 +174,7 @@ final class MomentaryToolbarGroup: NSToolbarItemGroup {
         if control.segmentCount != items.count { control.segmentCount = items.count }
         for (index, item) in items.enumerated() {
             control.setWidth(32, forSegment: index)
-            control.setImage(item.image, forSegment: index)
+            control.setImage(ToolbarIslands.segmentImage(item), forSegment: index)
             control.setEnabled(item.isEnabled, forSegment: index)
             control.setToolTip(item.toolTip ?? item.label, forSegment: index)
         }
@@ -161,6 +182,10 @@ final class MomentaryToolbarGroup: NSToolbarItemGroup {
         control.needsLayout = true
     }
     var visibleDividers: Int { control.visibleDividers }
+    /// The image a subitem's segment draws now (LKM-448 checks).
+    func segmentImage(_ identifier: String) -> NSImage? {
+        shown.firstIndex { $0.itemIdentifier.rawValue == identifier }.flatMap { control.image(forSegment: $0) }
+    }
     /// Removes or restores a subitem's segment; returns how much narrower the control got.
     func setSegment(_ identifier: String, hidden hide: Bool) -> CGFloat {
         guard hiddenSegments.contains(identifier) != hide else { return 0 }

@@ -431,6 +431,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "previewOverlay": previewOverlay.apply(c)
         case "markupBegin": markup?.begin(c["session"] as? String ?? "")
         case "markupEnd": markup?.end(c["session"] as? String ?? "")
+        case "markupCancel": markup?.cancel(c["session"] as? String ?? "")
         case "markupDone": markup?.finished(c["session"] as? String ?? "", ok: c["ok"] as? Bool == true, message: c["message"] as? String)
         case "capture":
             if let agent = c["agent"] as? [String: Any] {
