@@ -266,9 +266,18 @@ if (process.platform !== 'darwin') {
     // require SwiftUI to dispatch the posted Space to Resolve.
     assert.equal(idle.key.found, true, `key target: ${all}`)
     assert.equal(idle.key.focused, true, `key focus: ${all}`)
-    if (idle.keyWindow && idle.keyboardNavigation)
+    if (idle.keyWindow && idle.keyboardNavigation) {
       assert.deepEqual(idle.key.emitted, ['resolve'], `key dispatch: ${all}`)
-    else assert.deepEqual(idle.key.emitted, [], `offscreen key dispatch: ${all}`)
+    } else {
+      // Whether an offscreen window delivers the Space to the focused button depends on
+      // the host (a CI runner does, a local desktop session does not): none or exactly
+      // Resolve are both fine, anything else or a repeat is not.
+      assert.ok(
+        idle.key.emitted.length === 0 ||
+          (idle.key.emitted.length === 1 && idle.key.emitted[0] === 'resolve'),
+        `offscreen key dispatch: ${all}`
+      )
+    }
     console.log('CHAT-RECOVERY-ACCEPTANCE PASS')
   } finally {
     rmSync(scratch, { recursive: true, force: true })
