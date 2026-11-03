@@ -1,5 +1,41 @@
 # Testing Trezi
 
+## Mark up foreground acceptance (LKM-455)
+
+After LKM-455 merges, the operator or watchdog holds the canonical shared native-desktop
+lease and runs `bun run acceptance:markup` on the reviewed SHA, followed by
+`bun run acceptance:markup --red=active-fill`. The command takes the repository
+runner lock, refuses a competing ephemeral host or a background run, and launches
+only the disposable synthetic-project prelude and `markup-toggle-overlay-native`.
+Input is posted through the AppKit event queue; focus and disabled setup are
+explicitly synthetic. No provider, installed app, system preference, or account is used.
+
+Icon matrix (light and dark; idle, hover, pressed, focus, disabled; all eight
+segments). Routes are labelled in `evidence.json`: idle posts no input; hover is a
+posted `mouseMoved`, and AppKit's tracking-area hover follows the real cursor, so the
+hover capture may show the idle look and is not proof of a hover highlight; pressed
+posts mouse-down, captures a resting baseline and a held frame, reads the segment
+while held (no accent) and waits for a release outside the segment (no action runs),
+and fails if the held crop is identical to the baseline or the press overlapped the
+next step; focus and disabled are synthetic setup. "One shared treatment" is measured,
+not declared: per phase all eight segments share one image size, hit width/height
+and vertical centre (within 1 pt), a unique glyph from the toolbar's own symbol
+table, and painted ink (size, centre, coverage) that matches a fresh render of that
+symbol at `ToolbarSymbolSpec`. The selected-Select, selected-Slow-Motion and
+selected-Mark-up steps assert the other state buttons are not accented. A failing
+island hit probe now reports what each probe point hit (`hitBesideDetail`).
+
+Each invocation creates a new immutable directory under
+`test/artifacts/native/markup-acceptance/` with `run.json`, `evidence.json` and a
+foreground PNG for every recorded step. `run.json` names the tested SHA and dirty
+state. Inspect the JSON and PNGs for the icon states, island position and unchanged
+viewport at ordinary and 850 pt widths, including active resize and repeated Cancel
+cycles. The RED invocation must exit successfully only after the fixture itself fails
+at the no-active-fill-after-Cancel assertion after a test-only synthetic setup leaves
+the real Mark up segment visibly accented. Retain both run directories, including
+on failure. Record the tested merged SHA and the GREEN and RED verdicts; this is an
+operator check after merge, not acceptance on the worker branch.
+
 The test runner is `node test/run.mjs unit|native|live|all`. Unit checks run with
 bounded concurrency (by default `max(min(4, cores), min(cores - 2, 8))` workers) and
 one exclusive barrier (`native-chat-send-follow`, LKM-371). Swift compiles share a

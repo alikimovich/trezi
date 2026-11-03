@@ -13,13 +13,18 @@ import {
   CHAT_RECOVERY_ACCEPTANCE_CHECK,
   DREAMER_ACCEPTANCE_CHECK,
   DREAMER_ACCEPTANCE_FLAG,
+  MARKUP_ACCEPTANCE_CHECK,
+  MARKUP_ACCEPTANCE_FLAG,
   NATIVE_SMOKE_GROUPS,
   parseSmokeGroups,
   SMOKE_CHECK_GROUPS,
   SMOKE_PRELUDE,
   SOURCE_POPOUT_ACCEPTANCE_CHECK,
+  SOURCE_POPOUT_ACCEPTANCE_FLAG,
   selectDreamerAcceptance,
+  selectMarkupAcceptance,
   selectSmokeChecks,
+  selectSourcePopoutAcceptance,
   smokeLauncherTimeoutMs
 } from '../src/native/smoke-groups.ts'
 
@@ -94,8 +99,12 @@ for (const name of Object.keys(SMOKE_CHECK_GROUPS).filter(
   (key) => key !== CHAT_RECOVERY_ACCEPTANCE_CHECK
 ))
   assert.ok(
-    [OPT_IN_LIVE, DREAMER_ACCEPTANCE_CHECK, SOURCE_POPOUT_ACCEPTANCE_CHECK].includes(name) ||
-      names.some((check) => check.name === name),
+    [
+      OPT_IN_LIVE,
+      DREAMER_ACCEPTANCE_CHECK,
+      MARKUP_ACCEPTANCE_CHECK,
+      SOURCE_POPOUT_ACCEPTANCE_CHECK
+    ].includes(name) || names.some((check) => check.name === name),
     `Group map names a real check: ${name}`
   )
 // LKM-453: the chat recovery acceptance is opt-in too; test/chat-recovery-selection.mjs
@@ -104,6 +113,7 @@ assert.deepEqual(SMOKE_CHECK_GROUPS[CHAT_RECOVERY_ACCEPTANCE_CHECK], ['chat'])
 for (const pushed of [
   `'${OPT_IN_LIVE}'`,
   'DREAMER_ACCEPTANCE_CHECK',
+  'MARKUP_ACCEPTANCE_CHECK',
   'SOURCE_POPOUT_ACCEPTANCE_CHECK'
 ])
   assert.match(source, new RegExp(`checks\\.push\\(\\{\\n\\s*name: ${pushed},`))
@@ -228,6 +238,40 @@ console.log(
   'Dreamer acceptance selection: prelude plus dreamer-export-primary only; bad combinations fail.'
 )
 
+const markupArgv = ['--test', '--only=core', MARKUP_ACCEPTANCE_FLAG]
+const markupChecks = [...names, { name: MARKUP_ACCEPTANCE_CHECK, dependsOn: ['chat-ready'] }]
+assert.deepEqual(
+  selectMarkupAcceptance(
+    selectSmokeChecks(markupChecks, parseSmokeGroups(markupArgv), () => {}),
+    markupArgv
+  ).map((c) => c.name),
+  [...SMOKE_PRELUDE, MARKUP_ACCEPTANCE_CHECK]
+)
+assert.throws(
+  () => parseSmokeGroups(['--only=chat', MARKUP_ACCEPTANCE_FLAG]),
+  /needs the core group/
+)
+assert.throws(() => selectMarkupAcceptance(names, markupArgv), /was not selected/)
+assert.throws(() => selectMarkupAcceptance(markupChecks, [...markupArgv, '--live']), /cannot run/)
+assert.throws(
+  () => selectMarkupAcceptance(markupChecks, [...markupArgv, DREAMER_ACCEPTANCE_FLAG]),
+  /cannot run/
+)
+// The two opt-in core acceptances never combine: each would drop the other's check.
+assert.throws(
+  () => selectMarkupAcceptance(markupChecks, [...markupArgv, SOURCE_POPOUT_ACCEPTANCE_FLAG]),
+  /cannot run/
+)
+assert.throws(
+  () =>
+    selectSourcePopoutAcceptance(
+      [...markupChecks, { name: SOURCE_POPOUT_ACCEPTANCE_CHECK }],
+      ['--test', '--only=core', SOURCE_POPOUT_ACCEPTANCE_FLAG, MARKUP_ACCEPTANCE_FLAG],
+      () => {}
+    ),
+  /cannot run/
+)
+
 if (process.platform === 'darwin') {
   const cwd = fileURLToPath(new URL('../', import.meta.url))
   const dev = (...args) =>
@@ -250,10 +294,18 @@ if (process.platform === 'darwin') {
   assert.equal(acceptanceGroup.status, 1)
   assert.match(acceptanceGroup.stderr, /needs the settings group/)
   assert.doesNotMatch(acceptanceGroup.stdout, /Building/)
+  const markupWithoutTest = dev(MARKUP_ACCEPTANCE_FLAG)
+  assert.equal(markupWithoutTest.status, 1)
+  assert.match(markupWithoutTest.stderr, /requires --test/)
+  const markupGroup = dev('--test', '--only=chat', MARKUP_ACCEPTANCE_FLAG)
+  assert.equal(markupGroup.status, 1)
+  assert.match(markupGroup.stderr, /needs the core group/)
+  assert.doesNotMatch(markupGroup.stdout, /Building/)
   const help = dev('--help')
   assert.equal(help.status, 0)
   assert.match(help.stdout, /--only=group,group/)
   assert.match(help.stdout, /--dreamer-acceptance/)
+  assert.match(help.stdout, /--markup-acceptance/)
   assert.ok(
     all.every((group) => help.stdout.includes(group)),
     'Help lists every group'

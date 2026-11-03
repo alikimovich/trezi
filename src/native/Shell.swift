@@ -43,7 +43,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     private(set) var toolbarItems: [String: NSToolbarItem] = [:]
     private let items = [ "chat", "address", "interaction", "tools", "more", "publish"] + ToolbarIslands.interaction + ToolbarIslands.tools
     private let labels = ["select-object":"Select Object", "layers":"Show Layers", "home":"Back to Project", "address":"Preview Address", "device":"Switch to Mobile", "overlay":"Rulers and Grids", "branch":"Branch", "publish":"Publish", "code":"Show Code", "expand":"Expand Preview", "speed":"Slow Motion", "markup":ToolbarIslands.markupLabel, "more":"More Preview Actions"]
-    private let symbols = ["select-object":"cursorarrow", "layers":"square.3.layers.3d", "home":"house", "device":"iphone", "overlay":"ruler", "markup":ToolbarIslands.markupSymbol, "branch":"arrow.triangle.branch", "publish":"arrow.up.circle", "code":"chevron.left.forwardslash.chevron.right", "expand":"arrow.up.left.and.arrow.down.right"]
+    /// Internal, not private: the LKM-455 acceptance probe reads each segment's glyph from here.
+    let symbols = ["select-object":"cursorarrow", "layers":"square.3.layers.3d", "home":"house", "device":"iphone", "overlay":"ruler", "markup":ToolbarIslands.markupSymbol, "branch":"arrow.triangle.branch", "publish":"arrow.up.circle", "code":"chevron.left.forwardslash.chevron.right", "expand":"arrow.up.left.and.arrow.down.right"]
     /// A Mark up overlay is open: the segment shows it (`updateMarkup`).
     var markupActive = false
     /// The rulers-and-grids button opens its native popover (LKM-205) instead of asking main.

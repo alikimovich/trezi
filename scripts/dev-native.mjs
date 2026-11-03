@@ -15,6 +15,7 @@ if (process.argv.includes('--help')) {
       'bun run dev:native [--project /path/to/repo]',
       'bun run dev:native --test [--only=group,group] [--live]',
       'bun run dev:native --test --only=settings --dreamer-acceptance',
+      'bun run dev:native --test --only=core --markup-acceptance',
       'Build and launch Trezi with Bun + WebKit. Use bun run test:native for integration checks.',
       `--only (with --test) runs only the named smoke groups: ${NATIVE_SMOKE_GROUPS.join(', ')}.`,
       'Without --only every group runs.',
@@ -36,13 +37,13 @@ for (let i = 0; i < args.length; i++) {
     i++
     continue
   }
-  if (['--test', '--live', '--dreamer-acceptance', '--source-popout-acceptance'].includes(args[i]) || args[i] === '--only' || args[i].startsWith('--only=')) continue
+  if (['--test', '--live', '--dreamer-acceptance', '--markup-acceptance', '--source-popout-acceptance'].includes(args[i]) || args[i] === '--only' || args[i].startsWith('--only=')) continue
   console.error(
     `Unknown native argument: ${args[i]}. Use --project /path/to/repo; Trezi manages its dev server.`
   )
   process.exit(1)
 }
-for (const flag of ['--dreamer-acceptance', '--source-popout-acceptance'])
+for (const flag of ['--dreamer-acceptance', '--markup-acceptance', '--source-popout-acceptance'])
   if (args.includes(flag) && !args.includes('--test')) {
     console.error(`${flag} is a native smoke check and requires --test.`)
     process.exit(1)
