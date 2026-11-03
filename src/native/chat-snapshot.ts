@@ -132,6 +132,13 @@ export function snapshot(
   const selection = resolveSelection(providers, chat.settings)
   const { provider, model, permissionMode } = chat.settings
   const cards: NativeChatCard[] = []
+  if (chat.recoveryOutcome)
+    cards.push({
+      id: 'recovery-outcome',
+      title: 'Changes settled',
+      detail: chat.recoveryOutcome,
+      actions: [{ label: 'Dismiss', action: 'recovery-outcome-dismiss' }]
+    })
   if (start?.planning)
     cards.push({
       id: 'planning',
@@ -200,17 +207,34 @@ export function snapshot(
   else if (chat.isolation === 'parked' && chat.stopped !== 'held')
     cards.push({
       id: 'conflict',
-      title: 'This turn’s changes didn’t land',
-      detail: [
-        chat.landingError
-          ? `Trezi couldn’t apply them to the project: ${chat.landingError}`
-          : 'The project changed under them, so Trezi held them instead of overwriting.',
-        ...(chat.isolationFiles ?? [])
-      ].join('\n'),
+      title: chat.recoveryProblem ? 'Problem' : 'This turn’s changes didn’t land',
+      detail:
+        chat.recoveryProblem ??
+        [
+          chat.landingError
+            ? `Trezi couldn’t apply them to the project: ${chat.landingError}`
+            : 'The project changed under them, so Trezi held them instead of overwriting.',
+          ...(chat.isolationFiles ?? [])
+        ].join('\n'),
+      ...(chat.recoveryProblem && chat.isolationFiles?.length
+        ? { fullDetail: chat.isolationFiles.join('\n') }
+        : {}),
+      busy: !!chat.recovery && !chat.recoveryTimedOut,
       actions: [
-        { label: 'Discard', action: 'discard', disabled: chat.isRunning },
-        { label: 'Retry', action: 'landing-retry', disabled: chat.isRunning },
-        { label: 'Resolve', action: 'resolve', disabled: chat.isRunning }
+        { label: 'Discard', action: 'discard', disabled: chat.isRunning || !!chat.recovery },
+        {
+          label: chat.recovery === 'retry' ? 'Retrying…' : 'Retry',
+          action: 'landing-retry',
+          disabled: chat.isRunning || !!chat.recovery
+        },
+        {
+          label: chat.recovery === 'resolve' ? 'Resolving…' : 'Resolve',
+          action: 'resolve',
+          disabled: chat.isRunning || !!chat.recovery
+        },
+        ...(chat.recoveryReport
+          ? [{ label: 'Copy support report', action: 'recovery-report' }]
+          : [])
       ]
     })
   const peers = peerCard(chat.peerWork)

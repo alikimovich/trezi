@@ -13,6 +13,12 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Changed
 
 - Mark up leaves the "…" menu (the top bar button and Actions → Mark up stay). A second click on the top bar button now cancels Mark up, its controls float in an island at the top of the preview without moving or resizing the page, and Select, Slow Motion and Mark up show their on state the same way (LKM-448).
+## [0.13.7] - 2026-11-03
+
+### Fixed
+
+- Held chat changes with deletions can land through the checked repository path; Retry and Resolve show immediate progress, and recovery failures offer a chat-scoped support report (LKM-446).
+
 ## [0.13.6] - 2026-11-03
 
 ### Fixed

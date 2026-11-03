@@ -14,7 +14,7 @@ struct ChatMessage: Decodable, Identifiable {
     let comment: ChatComment?; let landingCheck: ChatLandingCheck?; let liveChange: ChatLiveChange?; let incident: ChatIncident?
 }
 struct ChatAction: Decodable { let label: String; let action: String; let value: String?; let disabled: Bool? }
-struct ChatCard: Decodable, Identifiable { let id: String; let title: String; let detail: String?; let fullDetail: String?; let actions: [ChatAction]; let agent: ChatAgentInfo? }
+struct ChatCard: Decodable, Identifiable { let id: String; let title: String; let detail: String?; let fullDetail: String?; let actions: [ChatAction]; let agent: ChatAgentInfo?; let busy: Bool? }
 struct ChatQuestionOption: Decodable { let label: String; let description: String? }
 struct ChatQuestion: Decodable { let header: String; let question: String; let options: [ChatQuestionOption]; let multiSelect: Bool }
 struct ChatQuestionRequest: Decodable, Identifiable { let id: String; let questions: [ChatQuestion] }
@@ -260,7 +260,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
          "islands":model.snapshot?.messages.flatMap { $0.segments.compactMap { $0.island }.map { ["id":$0.id,"revision":$0.revision,"status":$0.status,"title":$0.title,"blocks":$0.blocks.count,"blockKinds":$0.blocks.map(\.kind),"fields":$0.fields.count,"sourceRevision":$0.sourceRevision,
                  "name":$0.name ?? "","reason":$0.reason ?? "","disabledBy":$0.disabledBy ?? "","disabledFields":$0.fields.filter { $0.disabled != nil }.map(\.id)] as [String: Any] } } ?? [],
          "cards":model.snapshot?.cards.map(\.id) ?? [],
-         "cardStates":model.snapshot?.cards.map { ["id":$0.id, "title":$0.title, "detail":$0.detail ?? "", "actions":$0.actions.map(\.label)] as [String: Any] } ?? [],
+         "cardStates":model.snapshot?.cards.map { ["id":$0.id, "title":$0.title, "detail":$0.detail ?? "", "busy":$0.busy ?? false, "actions":$0.actions.map(\.label), "disabled":$0.actions.map { $0.disabled ?? false }] as [String: Any] } ?? [],
          "questionCount":model.snapshot?.questions.count ?? 0]
         return state.merging(inspectAgents()) { $1 }.merging(inspectChatUi()) { $1 }
     }
@@ -604,7 +604,10 @@ private struct NativeChatCard: View {
     @ObservedObject var model: ChatModel
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(card.title).font(.headline)
+            HStack(spacing: 8) {
+                Text(card.title).font(.headline)
+                if card.busy == true { ProgressView().controlSize(.small).accessibilityLabel("Recovery in progress") }
+            }
             if let detail = card.detail, !detail.isEmpty { Text(detail).textSelection(.enabled).font(.system(size: 12)).help(card.fullDetail ?? "") }
             HStack {
                 // A collapsed detail copies with its full paths.

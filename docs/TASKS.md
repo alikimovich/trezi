@@ -11,6 +11,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Select, Slow Motion and Mark up draw their on state with one helper (`ToolbarIslands.stateImage`): the same glyph, size and weight, accent when on, plain when disabled; the tooltip and VoiceOver say "Cancel Mark up" while on.
 - [x] Unit `markup-controller`, `preview-markup` and `toolbar-island-dividers` cover the toggle, the island geometry and hit-testing, token Cancel and the light/dark state matrix (red on 8899067b). The `toolbar-actions` smoke records enter → cancel → enter cycles with WKWebView/container frames and innerWidth/innerHeight/scrollY unchanged, at default and 850 pt, a resize while on, and light/dark; `toolbar-more` asserts the entry is gone.
 - [ ] Operator: `markup-toggle-overlay-native` (real pointer, disposable profile, 850 pt, resize while active, repeated cycles, light/dark state matrix) and the native `core` group on the merged SHA.
+## Chat recovery flow (LKM-446)
+
+- [x] Add red regressions for immediate Retry state and missing browser checks; use the owner's gated patch path for checked deletions.
+- [x] Scope Retry, Resolve and Discard busy state to their chat; produce a readable redacted support report for a failed or still-held request.
+- [x] Retire deleted checked-page recipes with replacement evidence, surface turn-end Problem reports, and keep a timed-out request's mutation lock until IPC settles.
+- [x] Review repair: Resolve handover outside the request deadline, backend in-flight guard for Resolve/Discard/Retry, recorded replay failures on Retry, automatic browser check only when it can run, multi-chat terminal clearing.
+- [ ] Native foreground acceptance after merge, including deferred requests, pointer and keyboard, still-held outcome, and multi-chat clearing.
+- [ ] Confirm obsolete checked-page recipe retirement and final outcome wording against a real held session.
 ## Dreamer acceptance on the shipping code (LKM-447)
 
 - [x] Opt-in `dreamer-export-primary` check (`--dreamer-acceptance`, settings group, prelude only): real menu, 780 and 680 pt foreground captures, footer clip/overlap/default checks, no Agent OS copy.
