@@ -33,11 +33,18 @@ export interface PackageBuild {
   durationMs: number
 }
 
-/** The command a build runs, for tests and the report: default sandboxing only. */
+/**
+ * The command a build runs, for tests and the report: default sandboxing only. The build
+ * system is pinned to `native`: Xcode 27's SwiftPM defaults to `swiftbuild`, which leaves
+ * its products outside `<scratch>/<arch>-apple-macosx/debug`, where `bin` below (and the
+ * modules, module maps and resource bundles read from it) expects them.
+ */
 export function packageBuildArgs(wrapper: string, scratch: string): string[] {
   return [
     'swift',
     'build',
+    '--build-system',
+    'native',
     '--package-path',
     wrapper,
     '--scratch-path',
