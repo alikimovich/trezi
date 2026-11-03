@@ -14,9 +14,12 @@ if (process.argv.includes('--help')) {
     [
       'bun run dev:native [--project /path/to/repo]',
       'bun run dev:native --test [--only=group,group] [--live]',
+      'bun run dev:native --test --only=settings --dreamer-acceptance',
       'Build and launch Trezi with Bun + WebKit. Use bun run test:native for integration checks.',
       `--only (with --test) runs only the named smoke groups: ${NATIVE_SMOKE_GROUPS.join(', ')}.`,
-      'Without --only every group runs.'
+      'Without --only every group runs.',
+      '--dreamer-acceptance (with --test) runs only the opt-in Dreamer acceptance (LKM-447);',
+      'use bun run acceptance:dreamer, which takes the runner lock and records the evidence.'
     ].join('\n')
   )
   process.exit(0)
@@ -27,10 +30,14 @@ for (let i = 0; i < args.length; i++) {
     i++
     continue
   }
-  if (['--test', '--live'].includes(args[i]) || args[i] === '--only' || args[i].startsWith('--only=')) continue
+  if (['--test', '--live', '--dreamer-acceptance'].includes(args[i]) || args[i] === '--only' || args[i].startsWith('--only=')) continue
   console.error(
     `Unknown native argument: ${args[i]}. Use --project /path/to/repo; Trezi manages its dev server.`
   )
+  process.exit(1)
+}
+if (args.includes('--dreamer-acceptance') && !args.includes('--test')) {
+  console.error('--dreamer-acceptance is a native smoke check and requires --test.')
   process.exit(1)
 }
 // Fail before the build: a typo in a group name should not cost a full build.

@@ -67,6 +67,8 @@ export const UI_SOURCES = {
       'sidebar-icon',
       'sidebar-favicon',
       'native-settings-layout',
+      // LKM-447: compiles the sheet sources (the sidebar draws its icons) to measure Dreamer's footer.
+      'dreamer-acceptance',
       'sidebar-evidence',
       'sidebar-history-rows',
       'sidebar-marquee',

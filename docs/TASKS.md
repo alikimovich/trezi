@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Dreamer acceptance on the shipping code (LKM-447)
+
+- [x] Opt-in `dreamer-export-primary` check (`--dreamer-acceptance`, settings group, prelude only): real menu, 780 and 680 pt foreground captures, footer clip/overlap/default checks, no Agent OS copy.
+- [x] Export… by click and by Return through the real `NSSavePanel` into a temp folder; unzipped `Dreamer Report/{evidence.json, proposals.json, report.md}` holds only the selected, redacted proposal; Cancel writes nothing and shows nothing; the legacy-URL stand-in gets zero requests.
+- [x] `bun run acceptance:dreamer` (runner lock, refuses a concurrent ephemeral host, `run.json` with the source SHA) and `--red=stub-save-panel`; documented in `docs/DREAMER.md`.
+- [x] Unit `dreamer-acceptance` (footer, archive and Swift-fixture GREEN/RED), `native-smoke-groups` selection and launcher guards.
+- [ ] Operator: `bun run acceptance:dreamer` GREEN and `--red=stub-save-panel` RED under the shared desktop lock on the merged SHA. `dreamer-export-primary` is not passed until then.
 ## Dreamer Proposals: Export… the sole primary action (LKM-443)
 
 - [x] Send to Agent OS removed: no `send` action, no route in `NativeDreamerController.handle`, no `sendToAgentOs`, no `fetch` on the Dreamer host.
