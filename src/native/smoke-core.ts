@@ -92,6 +92,7 @@ import { checkSidebarChats, restoreSidebarChats } from './smoke-sidebar-chats'
 import { checkSidebarStatus, restoreSidebarStatus } from './smoke-sidebar-status'
 import { checkSkillsSettings, restoreSkillsSettings } from './smoke-skills'
 import { checkSourceEditor } from './smoke-source-editor'
+import { checkSourcePopout, cleanupSourcePopout } from './smoke-source-popout'
 import { checkSourceStamps } from './smoke-source-stamp'
 import { checkSourceSyntax, restoreSourceSyntax } from './smoke-source-syntax'
 import { checkSourceWrap, restoreSourceWrap } from './smoke-source-wrap'
@@ -1408,6 +1409,18 @@ export async function runNativeCoreSmoke(
         if ((await host.request('sourceInspect')).visible)
           await host.request('sourcePerform', { action: { root: fixture, action: 'hide' } })
       }
+    },
+    {
+      name: 'source-popout',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkSourcePopout(host, fixture, artifacts, inspect, (source) =>
+          invoke('source:popout', fixture, source)
+        )
+        await cleanupSourcePopout(host, fixture)
+        await geometry('after source pop-out')
+      },
+      cleanup: () => cleanupSourcePopout(host, fixture)
     },
     {
       name: 'source-syntax',

@@ -225,6 +225,8 @@ const host = compile(
     join(root, 'src/native/ActivityIndicator.swift'),
     join(root, 'src/native/BuildBadge.swift'),
     join(root, 'src/native/SourceEditor.swift'),
+    join(root, 'src/native/SourcePopout.swift'),
+    join(root, 'src/native/SourcePopoutVerification.swift'),
     join(root, 'src/native/SourceSyntax.swift'),
     join(root, 'src/native/SourceSyntaxVerification.swift'),
     join(root, 'src/native/SourceWrap.swift'),
