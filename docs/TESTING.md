@@ -46,6 +46,10 @@ source/content/style writes, window geometry, docking, preview input isolation a
 that exactly one WebKit view exists. `TREZI_NATIVE_BACKGROUND_TEST=1` skips real
 pointer gestures/animation timing, which must be reported as reduced coverage.
 `test:native-live` separately submits a real provider turn against a fixture.
+`bun run acceptance:dreamer` (LKM-447) is an opt-in foreground check of the shipping
+Dreamer review window: real menu, real `NSSavePanel`, both widths. It runs under the
+shared desktop lock and is not part of any tier. Command, lock, artifacts and cleanup
+are in `docs/DREAMER.md` ("Acceptance on the shipping code").
 
 ### Focused verification (LOCAL-TEST-AUDIT)
 

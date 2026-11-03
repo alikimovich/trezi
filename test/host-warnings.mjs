@@ -23,7 +23,9 @@ if (process.platform !== 'darwin') {
     'src/native/BranchStatusView.swift',
     'src/native/ComposerQueue.swift',
     // LKM-441: the sidebar menu run moved here from SidebarVerification.swift.
-    'src/native/SidebarMenuCapture.swift'
+    'src/native/SidebarMenuCapture.swift',
+    // LKM-447: the opt-in Dreamer acceptance's host steps.
+    'src/native/DreamerAcceptance.swift'
   ]
 
   const script = readFileSync(join(root, 'scripts/build-native.mjs'), 'utf8')
