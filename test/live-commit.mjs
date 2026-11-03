@@ -319,7 +319,7 @@ try {
     const branch = `trezi/chat-${cwd.split('/').at(-1)}`
     await beforeTurn(key, 'partial edit')
     writeFileSync(join(cwd, 'a.txt'), 'partial\n')
-    afterTurn(key, 'partial edit', [], 'failed')
+    const parking = afterTurn(key, 'partial edit', [], 'failed')
     ok(
       await waitFor(() => {
         try {
@@ -332,6 +332,8 @@ try {
     )
     ok(g(repo, 'show', 'HEAD:a.txt') === 'a\n', 'failed work is not committed live')
     ok(porcelain(repo).length === 0, 'failed work is not written into the live checkout')
+    // The card offers Discard only once the park settled; a landing still running refuses it.
+    await parking
     ok((await discardParkedChat(key)).ok, 'the failed parked turn can be discarded')
     ok(await waitFor(() => !branchExists(repo, branch)), 'discard deletes the failed-turn branch')
     await releaseChat(key)

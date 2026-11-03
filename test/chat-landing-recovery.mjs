@@ -5,7 +5,7 @@
 // and source owners (test/repository-owner.mjs, suites list).
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -14,6 +14,7 @@ import {
   afterTurn,
   agentWorkspaceState,
   beforeTurn,
+  discardParkedChat,
   initChatIsolation,
   isolatedCwd,
   isolationSnapshot,
@@ -102,6 +103,17 @@ try {
   assert.match(settled.guidance, /Never describe earlier changes as pending/)
   await releaseChat(sw.key)
 
+  // A checked cumulative batch with deletions uses the owner's gated patch path.
+  const deleted = await fixture()
+  rmSync(join(deleted.cwd, OTHER))
+  writeFileSync(join(deleted.cwd, FILE), 'export const bar = 3\n')
+  await passCheck(deleted.key, deleted.cwd)
+  await afterTurn(deleted.key, 'Remove baz and update bar', [], 'success')
+  assert.equal(events.at(-1).state, 'merged', 'deletions land with the rest of the checked batch')
+  assert.equal(existsSync(join(deleted.root, OTHER)), false)
+  assert.equal(read(deleted.root), 'export const bar = 3\n')
+  await releaseChat(deleted.key)
+
   // The stuck chat: a failed Codex turn's hold goes stale under a live edit, so the
   // next successful turn parks as a conflict. Resolve's turn must be allowed and land.
   const stuck = await fixture()
@@ -161,6 +173,7 @@ try {
   assert.equal(state.state, 'failed')
   assert.equal(state.lastLanding.outcome, 'failed')
   assert.match(state.guidance, /Do not say the changes are pending/)
+  assert.doesNotMatch(state.guidance, /prepare_conflict_resolution/)
   assert.equal(read(failed.root), 'export const bar = 0\n')
   rmSync(lock)
   const retried = await retryLanding(failed.key)
@@ -258,6 +271,14 @@ try {
     const early = await retryLanding(drain.key)
     assert.equal(early.ok, false, 'a Retry while the abandoned landing runs is refused')
     assert.match(early.error, /still finishing/)
+    // Resolve and Discard are refused too: the backend, not only the buttons, guards a landing.
+    const earlyDiscard = await discardParkedChat(drain.key)
+    assert.equal(earlyDiscard.ok, false, 'Discard during a landing is refused')
+    assert.match(earlyDiscard.error, /still finishing/)
+    const earlyResolve = await resolveParkedChat(drain.key)
+    assert.equal(earlyResolve.ok, false, 'Resolve during a landing is refused')
+    assert.match(earlyResolve.error, /still finishing/)
+    assert.equal(isolationSnapshot(drain.key).state, 'parked', 'the held work is untouched')
     const next = afterTurn(drain.key, 'Next turn', [], 'success')
     assert.equal(landingInFlight(drain.key), true, 'the new guard exists before its chain starts')
     assert.equal(abandonLanding(drain.key, 'Stopped behind the draining write.'), true)
