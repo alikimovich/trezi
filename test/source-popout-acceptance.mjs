@@ -71,6 +71,83 @@ if (process.platform === 'darwin') {
 } else console.log('SOURCE-POPOUT-ACCEPTANCE: real SourcePopout steps SKIP — macOS AppKit required')
 assert.deepEqual(closedProblems(green(fullSteps), 'full', expected), [], 'GREEN on the fixed close')
 
+// LKM-457: the posted clicks land on their controls in the real editor's pop-out layout. The old
+// point, the midpoint of `visibleRect`, was the window centre over the code (LKM-456's refusal);
+// it is reported, not asserted. Hidden, empty, clipped, off-screen and foreign controls refuse.
+if (process.platform === 'darwin') {
+  const binary = swiftBuild('source-popout-hit', [
+    'test/fixtures/source-popout-hit/main.swift',
+    'src/native/ControlHitPoint.swift',
+    'src/native/SourceEditor.swift',
+    'src/native/SourcePopout.swift',
+    'src/native/SourceFileTree.swift',
+    'src/native/SourceDiffList.swift',
+    'src/native/SourceSyntax.swift',
+    'src/native/SourceSyntaxVerification.swift',
+    'src/native/SourceWrap.swift',
+    'src/native/KeyShortcuts.swift'
+  ])
+  const hits = JSON.parse(runFixture(binary))
+  // A failure on a runner with a display diagnoses itself from the log alone.
+  const where = (name) => {
+    const hit = hits[name]
+    return JSON.stringify({
+      target: name,
+      hasScreen: hits.hasScreen,
+      visibleFrame: hits.visibleFrame,
+      popoutFrame: hits.popoutFrame,
+      fits: hits.fits,
+      windowFrame: hit.windowFrame,
+      screenFrame: hit.screenFrame,
+      point: hit.point,
+      pointOnScreen: hit.pointOnScreen,
+      refused: hit.refused,
+      hitView: hit.hitView,
+      hitIsTarget: hit.hitIsTarget
+    })
+  }
+  assert.equal(
+    hits.fits,
+    true,
+    `the fixture window lies inside the screen: ${where('editor-close')}`
+  )
+  for (const target of ['editor-close', 'editor-dock', 'window-close']) {
+    const hit = hits[target]
+    assert.equal(hit.refused, null, `${target}: located ${where(target)}`)
+    assert.equal(hit.hitIsTarget, true, `${target}: not the control ${where(target)}`)
+    assert.equal(hit.pointInControl, true, `${target}: point outside the control ${where(target)}`)
+    if (hits.hasScreen)
+      assert.equal(hit.pointOnScreen, true, `${target}: checked on screen ${where(target)}`)
+    const [, , width, height] = hit.bounds
+    assert.ok(
+      width > 0 && height > 0 && width < 100 && height < 100,
+      `${target}: bounds ${hit.bounds} ${where(target)}`
+    )
+    console.log(
+      `SOURCE-POPOUT-HIT ${target}: ${JSON.stringify(hit.point)} → ${hit.hitView}; visibleRect ${JSON.stringify(hit.visibleRect)}, old point ${JSON.stringify(hit.legacy.point)} → ${hit.legacy.hitView}`
+    )
+  }
+  for (const [guard, pattern] of [
+    ['hidden', /is hidden/],
+    ['zero-size', /has no size/],
+    ['clipped', /clipped out of view/],
+    ['other-window', /is not in the window/],
+    ['off-screen', /is off screen/]
+  ]) {
+    assert.match(hits[guard].refused ?? '', pattern, `${guard} refuses ${where(guard)}`)
+    assert.equal(hits[guard].located, false, `${guard}: no point is guessed ${where(guard)}`)
+  }
+  const titleBar = hits['off-screen-title-bar']
+  const titleBarWhere = where('off-screen-title-bar')
+  assert.equal(
+    titleBar.refused,
+    null,
+    `a title-bar host records an off-screen point ${titleBarWhere}`
+  )
+  assert.equal(titleBar.pointOnScreen, false, titleBarWhere)
+  assert.equal(titleBar.hitIsTarget, true, titleBarWhere)
+} else console.log('SOURCE-POPOUT-ACCEPTANCE: control hit points SKIP — macOS AppKit required')
+
 // RED: the pre-LKM-444 order-out leaves the pop-out off screen and still in full screen.
 const stranded = {
   ...green(['full', 'order-out']),
@@ -204,7 +281,14 @@ for (const banned of [
   /AXIsProcessTrusted/,
   /CGRequest/
 ])
-  assert.doesNotMatch(swift, banned, `SourcePopoutAcceptance.swift uses no ${banned.source}`)
+  for (const [file, source] of [
+    ['SourcePopoutAcceptance.swift', swift],
+    ['ControlHitPoint.swift', read('src/native/ControlHitPoint.swift')]
+  ])
+    assert.doesNotMatch(source, banned, `${file} uses no ${banned.source}`)
+// LKM-457: the click point comes from the control's laid-out bounds, never `visibleRect` alone.
+assert.match(swift, /ControlHitPoint\.locate\(view, in: host, onScreen: host === target\)/)
+assert.doesNotMatch(swift, /\.visibleRect|visible\.mid/)
 // The RED order-out is armed per input and restored, in the test profile only.
 assert.match(
   swift,

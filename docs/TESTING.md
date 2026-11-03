@@ -128,6 +128,17 @@ check.
   hit-tests to the intended control. Any failure refuses the step with a precise
   receipt and posts nothing. The route is in-process, so no Accessibility or Input
   Monitoring grant is requested and no system setting changes.
+- **Click point** (LKM-457, `src/native/ControlHitPoint.swift`): the centre of the
+  control's own bounds, clipped to what its ancestors show. It is not the midpoint of
+  `visibleRect`: views no longer clip to their bounds by default, so a header
+  button's `visibleRect` is the whole window and its midpoint was the window centre,
+  over the code view. A hidden, zero-size, clipped or off-window control, or a point
+  off the window's screen, refuses. Only AppKit's full-screen title-bar window
+  records an off-screen point instead. Each pointer receipt keeps the geometry it
+  used under `preflight.geometry`: frames, bounds, `visibleRect`, the rect in the
+  window, the window, screen and ancestor chain. A step that is about to fail first
+  saves `failure-<step>.png`, taken after its input, because a capture makes its
+  window key. Unit fixture: `test/fixtures/source-popout-hit/main.swift`.
 - **Evidence:** the run writes to `test/artifacts/native/source-popout-acceptance/`:
   - `evidence.json`: build SHA, every step's state before and after, receipts and
     probes

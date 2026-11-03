@@ -30,15 +30,15 @@ extension Host {
                                        "targetOnActiveSpace": target.isOnActiveSpace, "sheet": target.attachedSheet != nil,
                                        "hostWindow": String(describing: type(of: host)), "hostIsTarget": host === target, "hostVisible": host.isVisible,
                                        "permission": "none needed: in-process app event queue (no Accessibility or Input Monitoring grant is asked for)"]
-            var point = NSPoint.zero
+            var point = NSPoint.zero, layout: String?
             if let view {
-                let visible = view.visibleRect
-                point = view.convert(NSPoint(x: visible.midX, y: visible.midY), to: nil)
-                let hit = (host.contentView?.superview ?? host.contentView)?.hitTest(point)
-                info["point"] = [Double(point.x), Double(point.y)]
-                info["hitView"] = hit.map { String(describing: type(of: $0)) } ?? ""
-                info["hitIsTarget"] = hit.map { $0 === view || $0.isDescendant(of: view) } ?? false
-                info["pointOnScreen"] = host.screen.map { $0.frame.contains(host.convertPoint(toScreen: point)) } ?? false
+                // The centre of the control's own laid-out bounds, not of its `visibleRect` (LKM-457,
+                // ControlHitPoint.swift); empty, clipped or off-window layout refuses.
+                let located = ControlHitPoint.locate(view, in: host, onScreen: host === target)
+                point = located.point ?? .zero; layout = located.refused.map { "\(name): \($0)" }
+                info["geometry"] = located.info
+                for key in ["point", "hitView", "pointOnScreen"] { info[key] = located.info[key] }
+                info["hitIsTarget"] = located.info["hitIsTarget"] as? Bool ?? false
                 info["enabled"] = (view as? NSControl)?.isEnabled ?? true
             }
             let refused: String? = !NSApp.isActive ? "the app is not active (key window: \(NSApp.keyWindow?.title ?? "none"))"
@@ -46,6 +46,7 @@ extension Host {
                 : !target.isVisible ? "\(name): \(target.title) is not visible"
                 : !target.isKeyWindow ? "\(name): \(target.title) is not key (key window: \(NSApp.keyWindow?.title ?? "none"))"
                 : target.attachedSheet != nil ? "\(name): a sheet is attached to \(target.title)"
+                : layout != nil ? layout
                 : view != nil && info["hitIsTarget"] as? Bool != true ? "\(name): the point hit-tests to \(info["hitView"] ?? ""), not the control"
                 : info["enabled"] as? Bool == false ? "\(name): the control is disabled" : nil
             return (refused, info, point)

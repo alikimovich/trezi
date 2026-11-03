@@ -83,6 +83,17 @@ export async function checkSourcePopoutAcceptance(
     evidence.captures.push(file)
     record()
   }
+  /** LKM-457: a PNG of a step that is about to fail, taken right before its assertion (never
+   *  before the input: a capture makes its window key). A capture error is recorded and never
+   *  replaces the step's own failure. */
+  const failureShot = async (label: string, window: 'main' | 'popout') => {
+    try {
+      await shot(`failure-${label}`, window)
+    } catch (error) {
+      steps[label].failureCapture = error instanceof Error ? error.message : String(error)
+      record()
+    }
+  }
   const popped = () => inspect('sourceInspect', (s) => s.visible && s.popped)
   let draft = ''
   const keeps = (state: State, label: string) => {
@@ -95,6 +106,9 @@ export async function checkSourcePopoutAcceptance(
     const state = await verification('inspect')
     steps[label].reopened = state
     record()
+    const kept =
+      state.text === draft && JSON.stringify(state.selection) === JSON.stringify(SELECTION)
+    if (!(state.editorInPopout && state.visible && kept)) await failureShot(label, 'popout')
     assert.ok(state.editorInPopout && state.visible, `${label}: reopened in the pop-out`)
     keeps(state, `${label} reopened`)
   }
@@ -118,14 +132,13 @@ export async function checkSourcePopoutAcceptance(
     // The state right before the input, recorded before anything that can fail.
     entry.preInput = await acceptance('inspect')
     record()
+    // The receipt carries the control's and window's geometry as the preflight read it.
     const sent = await acceptance('input', { input, red: redArmed })
     Object.assign(entry, { receipt: sent.receipt, afterInput: sent.after })
     record()
-    assert.deepEqual(
-      receiptProblems(sent.receipt, label),
-      [],
-      `${label}: ${JSON.stringify(sent.receipt)}`
-    )
+    const refused = receiptProblems(sent.receipt, label)
+    if (refused.length) await failureShot(label, entry.preInput?.visible ? 'popout' : 'main')
+    assert.deepEqual(refused, [], `${label}: ${JSON.stringify(sent.receipt)}`)
     entry.closed = await acceptance('wait-closed')
     if (redArmed) evidence.stranded = entry.closed
     record()
@@ -133,18 +146,21 @@ export async function checkSourcePopoutAcceptance(
     record()
     entry.settle = await verification('settle')
     record()
-    if (before !== 'windowed' || redArmed) await shot(`closed-${label}`)
+    const closedShot = before !== 'windowed' || redArmed
+    if (closedShot) await shot(`closed-${label}`)
     const problems = closedProblems(entry.settle, label, {
       full: before !== 'windowed',
       text: draft,
       selection: SELECTION
     })
+    const unusable = probeProblems(entry.probe, label)
+    const undocked =
+      input === 'editor-dock' &&
+      (entry.settle.editorInPopout !== false || entry.settle.editorHidden !== false)
+    if (!closedShot && (problems.length || unusable.length || undocked))
+      await failureShot(label, 'main')
     assert.deepEqual(problems, [], problems.join('; '))
-    assert.deepEqual(
-      probeProblems(entry.probe, label),
-      [],
-      `${label}: ${JSON.stringify(entry.probe)}`
-    )
+    assert.deepEqual(unusable, [], `${label}: ${JSON.stringify(entry.probe)}`)
     if (input === 'editor-dock') {
       assert.equal(entry.settle.editorInPopout, false, `${label}: docked into the main window`)
       assert.equal(entry.settle.editorHidden, false, `${label}: the docked editor shows`)
@@ -210,7 +226,9 @@ export async function checkSourcePopoutAcceptance(
       const sent = await acceptance('input', { input: 'editor-close' })
       entry.receipt = sent.receipt
       record()
-      assert.deepEqual(receiptProblems(sent.receipt, 'main-fullscreen-docked'), [])
+      const refused = receiptProblems(sent.receipt, 'main-fullscreen-docked')
+      if (refused.length) await failureShot('main-fullscreen-docked', 'main')
+      assert.deepEqual(refused, [])
       await inspect('sourceInspect', (s) => !s.visible)
       // Reopened where it was, docked: `open` without a location keeps `popped`.
       await perform('open')
@@ -222,8 +240,14 @@ export async function checkSourcePopoutAcceptance(
       entry.probe = await acceptance('probe')
       entry.state = await verification('inspect')
       record()
+      const unusable = probeProblems(entry.probe, 'main-fullscreen-docked')
+      const kept =
+        entry.state.text === draft &&
+        JSON.stringify(entry.state.selection) === JSON.stringify(SELECTION)
+      if (entry.mainFullScreen !== true || unusable.length || !kept)
+        await failureShot('main-fullscreen-docked', 'main')
       assert.equal(entry.mainFullScreen, true, 'the main window stays full screen')
-      assert.deepEqual(probeProblems(entry.probe, 'main-fullscreen-docked'), [])
+      assert.deepEqual(unusable, [])
       keeps(entry.state, 'docked in a full-screen main window')
       await shot('main-fullscreen-docked')
     } finally {
