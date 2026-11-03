@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native suite failure on main 8899067bb056 (LKM-449)
+
+- [x] Cause: on run 54 NSToolbar laid out the interaction island 155–159 pt wide at 1320 pt (151 in runs 47, 48, 51), so the measured right-group inset was 478, not 474. Hiding "…" and slow motion subtracts the usual 77 pt shift, so the minimum stage's in-resize width used 401 against a real 397 and the block stopped 24 pt before the right groups.
+- [x] `MomentaryToolbarGroup` hugs its control at required priority (stock: 250), so the toolbar cannot hand the islands its slack.
+- [x] Unit `toolbar-island-dividers` asserts the hugging and that each island keeps its intrinsic width in a wider slot; red without the line (both islands stretch to 400 pt).
+- [ ] Manager: the native `core` group (`toolbar-address`) on the merged SHA.
+
 ## Dreamer Proposals: Export… the sole primary action (LKM-443)
 
 - [x] Send to Agent OS removed: no `send` action, no route in `NativeDreamerController.handle`, no `sendToAgentOs`, no `fetch` on the Dreamer host.

@@ -2,6 +2,13 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-02 — LKM-449 native suite: the toolbar islands no longer stretch
+
+- Failure: `core/toolbar-address`, minimum stage, inside the resize. The block was 83 pt wide and ended 24 pt before the right groups, not 20. Its stored inset was 401 and the real one 397 (as in every green run). No toolbar code changed since the last green run (`01a19bee..8899067b` touches only the branch title, chat copy, sidebar capture and Dreamer). Runs 52 and 53 passed, so the failure is intermittent.
+- Evidence from run 54's `toolbar-overflow-session-first.json` at 1320 pt: the interaction item was `{838, 159}` and the flexible space 12 pt. In runs 47, 48 and 51 they were `{846, 151}` and 16 pt, with the chat header 4 pt narrower and the same total width. The toolbar gave its slack to the island, not the flexible space. `measure` read the stretched island and stored an inset of 478 (474 in green runs). `fitMore`'s hide shift (`moreShift` from frames plus the speed segment's intrinsic delta) is the usual 77 pt, so the 850 pt pass used 401. Later in the same run, `branch-status-1320` showed the island back at 151.
+- Fix: `MomentaryToolbarGroup` sets the control's horizontal content hugging to required (`NSSegmentedControl` defaults to 250), so both islands keep their intrinsic width and their frame is the one the inset math assumes. Segment widths, the bezel and the hide/show estimate are unchanged.
+- Test: `toolbar-island-dividers` now reports each island's hugging and its width under a 750-priority "fill a 400 pt slot" constraint. With the line removed both islands stretch to 400 pt and the test fails; with it they stay at 128 pt. An offscreen window does not lay out its toolbar, so the real slack hand-off is left to the native `core` group.
+
 ## 2026-11-02 — LKM-443 Dreamer Proposals: Export… is the only primary action
 
 - Traced before the edit: `reviewActions` made `send` the only `primary` action, which the sectioned sheet renders rightmost with `.keyboardShortcut(.defaultAction)` (`Sheets.swift` `SheetContent.button`, `SheetSections.swift`), and `sheetInspect`'s `defaultAction` is the first primary, non-destructive action (`SheetAlertRoles`). `NativeDreamerController.handle` posted through `sendToAgentOs` and, on any failure, opened the save panel ("Not sent: … exported instead"). The Overview's `target` row came from `targetText()` and the `sent` row from `result.sent`.
