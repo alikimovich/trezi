@@ -60,7 +60,7 @@ extension Host {
         }
         agentBrowsers.removeAll(); agentBrowserStatuses.removeAll(); agentBrowserLoads.removeAll()
         sheets.close(sheets.model.state?.id ?? "")
-        for editor in sourceEditors.values { editor.isHidden = true; editor.popout?.orderOut(nil) }
+        for editor in sourceEditors.values { editor.isHidden = true; editor.presenter?.hide() }
         nativeLayout.layout()
         toast.show(["id": "service-restart", "message": "\(reason). Restarting it…", "seconds": 30.0], in: canvas)
     }

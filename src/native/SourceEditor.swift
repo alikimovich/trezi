@@ -85,6 +85,8 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
     let panel = NSSegmentedControl(labels: ["Files", "Changes"], trackingMode: .selectOne, target: nil, action: nil)
     let changes = SourceDiffList(), treeScroll = NSScrollView(), operations = NSStackView()
     var popout: NSWindow?, updating = false
+    /// Shows and hides `popout`, leaving full screen first (LKM-444, `SourcePopout.swift`).
+    var presenter: SourcePopout?
     /// Grammar highlighting (`SourceSyntax.swift`): the last applied revision, the
     /// reported visible lines and a test-only main-thread timing hook.
     var highlighted = -1, viewport: [Int] = [], viewportWork: DispatchWorkItem?
@@ -253,6 +255,8 @@ final class NativeSourceEditor: NSView, NSTextViewDelegate, NSSearchFieldDelegat
     func filter() { tree.update(files, query: search.stringValue) }
     func controlTextDidChange(_ obj: Notification) { filter() }
     func windowShouldClose(_ sender: NSWindow) -> Bool { send("hide"); return false }
+    func windowDidFailToEnterFullScreen(_ window: NSWindow) { presenter?.failed(entering: true) }
+    func windowDidFailToExitFullScreen(_ window: NSWindow) { presenter?.failed(entering: false) }
 }
 
 /// Revealing code (LKM-363): a `range` selects and bands its whole lines and scrolls its

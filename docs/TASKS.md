@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Code editor pop-out: closing it in full screen left a black Space (LKM-444)
+
+- [x] Cause, from the source: `sourceState` ordered the pop-out out (hide and dock) whatever its full-screen state, and nothing left full screen first, so its Space stayed behind, black and empty. Confirmed against the real `SourcePopout` with AppKit's notification sequence scripted (red: ordered out in full screen, no exit toggle); not reproduced on a display by this worker.
+- [x] `SourcePopout` (`src/native/SourcePopout.swift`) leaves full screen first (waiting out an enter in progress), orders the window out only after `didExitFullScreen`, makes the main window key again and keeps full screen available.
+- [x] Reopening without a location keeps the caret and selection (`editor-controller.ts`, `test/native-editor.mjs`).
+- [x] Unit `test/source-popout.mjs` (full, entering, exiting, re-shown, failed enter/exit, five rounds, windowed control) and the native `source-popout` smoke (`src/native/smoke-source-popout.ts`, group `core`): ×, red button and ⌘W from full screen, dock, hide while entering and leaving, three rounds, windowed close and dock, a docked editor in a full-screen main window, draft and selection after each.
+- [ ] Manager: the native `core` group on the merged SHA, `source-popout` with `source-popout.json` and its `source-popout-*.png` captures, plus the ticket's live foreground check.
+
 ## Mark up: real toggle, floating island, no "…" entry (LKM-448)
 
 - [x] "…" (`ToolbarMore.moreActions`) has no Mark up entry; the interaction segment and Actions → Mark up keep it.
