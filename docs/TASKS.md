@@ -38,6 +38,10 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] `bun run acceptance:dreamer` (runner lock, refuses a concurrent ephemeral host, `run.json` with the source SHA) and `--red=stub-save-panel`; documented in `docs/DREAMER.md`.
 - [x] Unit `dreamer-acceptance` (footer, archive and Swift-fixture GREEN/RED), `native-smoke-groups` selection and launcher guards.
 - [ ] Operator: `bun run acceptance:dreamer` GREEN and `--red=stub-save-panel` RED under the shared desktop lock on the merged SHA. `dreamer-export-primary` is not passed until then.
+- [x] LKM-452: `steps` in evidence.json is written before every wait, with the `savePress` route, the button pressed and the panel's `before` snapshot. A failed wait adds the host state seen then. Each export is recorded when it starts. Unit `dreamer-acceptance` covers the step log, the wait order and the snapshot and press target (Swift fixture).
+- [x] LKM-452 (decision b2543e30): the panel's Save and Cancel take one of two routes. An in-process button is clicked locally. The remote panel gets a window-server Return or Escape, sent only when `CGPreflightPostEventAccess()` (never prompts) and the focus guard (active, frontmost, attached, on screen, key) both pass. Otherwise nothing is sent and the check fails with the `access` receipt. Unit `dreamer-acceptance` covers the route matrix, denied access, wrong focus, and the local Save/Cancel press.
+- [ ] Operator: on the merged SHA, run `bun run acceptance:dreamer` from a launcher that already has post-event access. If `run.json` `access.preflight` is false, that is an access wait, not a failure of the route.
+
 ## Native suite failure on main 8899067bb056 (LKM-449)
 
 - [x] Cause: on run 54 NSToolbar laid out the interaction island 155–159 pt wide at 1320 pt (151 in runs 47, 48, 51), so the measured right-group inset was 478, not 474. Hiding "…" and slow motion subtracts the usual 77 pt shift, so the minimum stage's in-resize width used 401 against a real 397 and the block stopped 24 pt before the right groups.

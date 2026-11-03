@@ -249,7 +249,31 @@ bun run acceptance:dreamer --red=stub-save-panel  # RED: must fail at the save p
 - **Input.** Clicks and keys are mouse and key events posted to the app's own event
   queue, where the window server's input arrives. They pass through the window's hit
   test and key-equivalent handling but need no Accessibility or Input Monitoring
-  permission, so no system prompt can appear.
+  permission. The one exception is the save panel's remote route, below. It never
+  prompts either.
+  - LKM-452: on current macOS the `NSSavePanel` is drawn by AppKit's out-of-process
+    panel service, so its Save and Cancel are not in-process `NSButton`s. On a8bebe7f
+    the old `savePress` found none, posted Return to the app's own queue, and the
+    panel stayed open (`save panel closed; false`). The mismatch between the remote
+    and in-process views is traced in the source. A sandboxed probe (exit 69) shows
+    only that the panel runs out of process. It does not show how the service handles
+    posted events or focus.
+  - So `savePress` (`NativeSheets.pressSavePanel`) chooses one of two routes.
+    - **Local.** An in-process button with the Return or Escape key equivalent is
+      clicked through the app queue, like Export….
+    - **Remote.** Otherwise the press is a window-server Return (Save) or Escape
+      (Cancel) key, posted at the HID tap. Before the key is sent:
+      - `CGPreflightPostEventAccess()` must be true. This call never prompts. Nothing
+        requests access or opens System Settings.
+      - The focus guard must hold. The test app is active and frontmost, and the panel
+        is a sheet on the Dreamer window, on screen and key.
+    - If either fails, nothing is sent. The check fails at once and records why in
+      `refused`.
+    - Missing access is an access wait for the operator. The `access` receipt names
+      the process that lacked it: the check, the preflight result, the process, its
+      parent and the route.
+  - The reply records the route, input, preflight, guard, `sent`, `refused` and the
+    panel's `before` snapshot (`remote`, `views`, `buttons`, `saveTarget`).
 - **Default button.** SwiftUI's footer buttons are not `NSButton`s, and the app builds
   no accessibility tree without an assistive client. So the host records AppKit's
   default button and the accessibility default only when AppKit reports one, and then
@@ -258,9 +282,18 @@ bun run acceptance:dreamer --red=stub-save-panel  # RED: must fail at the save p
 - **Artifacts.** In `test/artifacts/native/dreamer-acceptance/` (cleared at the start
   of each run):
   - `run.json`: source sha, branch and dirty flag; GREEN or RED and whether that
-    expectation was met; command, exit code and times.
+    expectation was met; command, exit code and times; `access`, the remote route's
+    access receipt (LKM-452), or null.
   - `evidence.json`: the build stamp; menu, sheet state and footer measures; each
     export's input, panel, button, message and archive listing; requests.
+    - Each export is recorded when it starts (`closed` turns true once the panel
+      closes), so a timeout still leaves it.
+    - `steps` (LKM-452) is written before every wait that can fail. It holds each
+      input. For `savePress` it also holds the route, the preflight, the focus guard,
+      `sent`, `refused` and the panel's `before` snapshot: visible, attached, key
+      window, first responder, directory, name, buttons, remote. `access` holds the
+      receipt. A failed wait adds `failed: <label>` with the error and the
+      save panel and sheet as they were then, before cleanup dismisses them.
   - `dreamer-ordinary-780.png` and `dreamer-minimum-680.png`: foreground captures.
 - **Cleanup.** The check restores the controller's result, its save-panel host and the
   three legacy preferences. It closes the stand-in and any open save panel, and removes

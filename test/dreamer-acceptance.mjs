@@ -17,6 +17,7 @@ import {
   DREAMER_WIDTHS,
   footerProblems,
   PLANTED,
+  stepLog,
   UNSELECTED_MARKER
 } from '../src/native/dreamer-acceptance.ts'
 import { exportDreamerReport } from '../src/native/dreamer-export.ts'
@@ -267,7 +268,199 @@ try {
     console.log(
       `Dreamer acceptance footer measure: shipping footer passes at ${DREAMER_WIDTHS.ordinary} and ${DREAMER_WIDTHS.minimum} pt; a long label and Send to Agent OS fail.`
     )
+
+    // LKM-452: the save-panel snapshot written before each wait, and the button savePress picks.
+    const local = measured['panel-in-process']
+    const remote = measured['panel-remote']
+    for (const field of [
+      'visible',
+      'key',
+      'attached',
+      'keyWindow',
+      'firstResponder',
+      'remote',
+      'views',
+      'buttons',
+      'saveTarget',
+      'cancelTarget'
+    ])
+      assert.ok(field in local && field in remote, `the snapshot reports ${field}`)
+    assert.equal(local.remote, false)
+    assert.equal(local.saveTarget, 'Save', 'the visible Return button, not the hidden one')
+    assert.equal(local.cancelTarget, 'Cancel')
+    assert.deepEqual(
+      local.buttons.map((b) => [b.title, b.hidden, b.key]),
+      [
+        ['New Folder', true, 'return'],
+        ['Cancel', false, 'escape'],
+        ['Save', false, 'return']
+      ]
+    )
+    assert.equal(remote.remote, true, 'a remote view in the panel is reported')
+    assert.deepEqual(remote.buttons, [])
+    assert.equal(remote.saveTarget, null, 'no in-process Save: savePress takes the remote route')
+    assert.equal(remote.cancelTarget, null)
+    console.log(
+      'Dreamer acceptance save panel snapshot: focus, views and buttons reported; Save picked in process, none behind a remote view.'
+    )
+
+    // Route selection: in-process buttons stay local; the remote key needs access and every focus check.
+    const routes = Object.fromEntries(measured.routes.routes.map((r) => [r.name, r]))
+    assert.deepEqual(routes.local, { name: 'local', route: 'local', refused: null })
+    assert.deepEqual(routes.remote, { name: 'remote', route: 'remote', refused: null })
+    assert.match(routes['no-access'].refused, /CGPreflightPostEventAccess\(\) is false/)
+    for (const [name, reason] of Object.entries({
+      inactive: 'app not active',
+      'not-frontmost': 'app not frontmost',
+      detached: 'panel not attached to the Dreamer window',
+      offscreen: 'panel not on screen',
+      'not-key': 'panel not key'
+    })) {
+      assert.equal(routes[name].route, 'remote', name)
+      assert.equal(routes[name].refused, `the save panel is not in focus: ${reason}`, name)
+    }
+
+    // Guard denied: preflight false sends nothing and writes the access receipt.
+    const denied = measured['press-remote-no-access']
+    assert.equal(denied.route, 'remote')
+    assert.equal(denied.input, 'window-server return')
+    assert.equal(denied.sent, false)
+    assert.equal(denied.preflight, false)
+    assert.match(denied.refused, /not granted/)
+    assert.deepEqual(denied.posted, { keys: [], clicks: 0, preflightCalls: 1 })
+    assert.equal(denied.receipt.check, 'dreamer-export-primary')
+    assert.equal(denied.receipt.preflight, false)
+    assert.equal(denied.receipt.route, 'remote window-server return')
+    assert.match(denied.receipt.access, /never requested/)
+    for (const field of ['process', 'pid', 'bundle', 'parentPid', 'parent'])
+      assert.ok(field in denied.receipt, `the receipt names the ${field}`)
+    assert.ok(!denied.receipt.parent.includes('/'), 'the receipt names the parent without its path')
+    assert.equal(denied.before.remote, true, 'the pre-input snapshot is kept')
+    // Wrong focus: access granted, but this panel is hidden, unattached and not key.
+    const unfocused = measured['press-remote-unfocused']
+    assert.equal(unfocused.sent, false)
+    assert.equal(unfocused.preflight, true)
+    assert.deepEqual(unfocused.posted.keys, [], 'no global Escape without focus')
+    assert.equal(unfocused.posted.clicks, 0)
+    assert.equal(unfocused.guard.attached, false)
+    assert.equal(unfocused.guard.foreground, false)
+    assert.equal(unfocused.guard.key, false)
+    assert.match(
+      unfocused.refused,
+      /not in focus: .*panel not attached.*panel not on screen.*panel not key/
+    )
+    assert.equal(unfocused.receipt.route, 'remote window-server escape')
+    // Local: an in-process Save or Cancel is clicked through the app queue, with no access check.
+    for (const [name, title] of [
+      ['press-local-save', 'Save'],
+      ['press-local-cancel', 'Cancel']
+    ]) {
+      const local = measured[name]
+      assert.equal(local.route, 'local', name)
+      assert.equal(local.pressed, title, name)
+      assert.equal(local.sent, true, name)
+      assert.deepEqual(local.posted, { keys: [], clicks: 1, preflightCalls: 0 }, name)
+      assert.ok(!('receipt' in local), name)
+    }
+    console.log(
+      'Dreamer acceptance save panel input: local clicks in process; the remote key is refused without access or focus and sends nothing.'
+    )
   }
+
+  // Save and Cancel keep their real semantics: the host never saves or cancels the panel
+  // itself (only the failure cleanup cancels), never asks for access, and the check still
+  // needs the panel to close, the zip, and an empty folder and message after Cancel.
+  const swift = readFileSync(join(root, 'src/native/DreamerAcceptance.swift'), 'utf8')
+  const pressCode = swift.slice(
+    swift.indexOf('static func pressSavePanel'),
+    swift.indexOf('static func postWindowServerKey')
+  )
+  assert.ok(pressCode.includes('postKey(code, true)'), 'pressSavePanel found')
+  assert.doesNotMatch(pressCode, /\.ok\(|\.cancel\(|performClick|NSApp\.postEvent/)
+  assert.equal([...swift.matchAll(/\.cancel\(nil\)/g)].length, 1, 'only dismissSavePanel cancels')
+  assert.doesNotMatch(
+    swift,
+    /CGRequestPostEventAccess|AXIsProcessTrustedWithOptions|kAXTrustedCheckOptionPrompt|System Events|NSAppleScript|osascript|x-apple\.systempreferences/
+  )
+  const sentAt = source.indexOf('if (!press.sent)')
+  assert.ok(
+    sentAt > 0 && sentAt < source.indexOf("until('save panel closed'"),
+    'a refused press fails before the close wait'
+  )
+  for (const kept of [
+    "until('save panel closed'",
+    "'the save panel wrote one zip where it was told'",
+    "archiveProblems(archive, ['speed-bash'])",
+    "'a cancelled export writes nothing'",
+    "s.message === ''",
+    "'no request reaches the Agent OS stand-in'"
+  ])
+    assert.ok(source.includes(kept), `the check still has ${kept}`)
+
+  // LKM-452: a wait is noted before it starts, and a failed one adds the host state seen then.
+  const written = []
+  const log = stepLog(
+    (steps) => written.push(JSON.parse(JSON.stringify(steps))),
+    () => 'now'
+  )
+  log.note('savePress save', { press: { route: 'remote', pressed: null, sent: true } })
+  assert.equal(
+    await log.wait(
+      'ready',
+      async () => 'ok',
+      async () => 'unused'
+    ),
+    'ok'
+  )
+  await assert.rejects(
+    log.wait(
+      'save panel closed',
+      async () => {
+        assert.deepEqual(written.at(-1).at(-1), { step: 'wait: save panel closed', at: 'now' })
+        throw new Error('Native check timed out: save panel closed; false')
+      },
+      async () => ({ savePanel: { open: true, remote: true } })
+    ),
+    /save panel closed; false/
+  )
+  assert.deepEqual(
+    written.at(-1).map((s) => s.step),
+    ['savePress save', 'wait: ready', 'wait: save panel closed', 'failed: save panel closed']
+  )
+  assert.deepEqual(written.at(-1).at(-1).state, { savePanel: { open: true, remote: true } })
+  await assert.rejects(
+    log.wait(
+      'broken',
+      async () => {
+        throw new Error('x')
+      },
+      async () => {
+        throw new Error('host gone')
+      }
+    ),
+    /x/
+  )
+  assert.match(written.at(-1).at(-1).state, /state unavailable: Error: host gone/)
+
+  // Every wait in the check goes through the log, and an export is recorded before its waits.
+  const waits = [...source.matchAll(/\b(waitFor|inspectUntil)\(/g)].length
+  assert.equal(waits, 2, 'waitFor and inspectUntil are called only inside until() and sheet()')
+  const at = (text) => {
+    const index = source.indexOf(text)
+    assert.ok(index >= 0, `smoke-dreamer-acceptance.ts has ${text}`)
+    return index
+  }
+  assert.ok(
+    at('.push(entry)') < at('`real NSSavePanel opened by'),
+    'the export entry exists before its first wait'
+  )
+  assert.ok(
+    at('log.note(`savePress ${button}`') < at("until('save panel closed'"),
+    'the press and the panel it saw are written before the panel must close'
+  )
+  console.log(
+    'Dreamer acceptance step log: notes precede every wait; a timeout keeps its error and the host state.'
+  )
 } finally {
   rmSync(temp, { recursive: true, force: true })
 }
