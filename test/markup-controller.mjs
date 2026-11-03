@@ -333,7 +333,11 @@ for (const [label, next] of [
   assert.match(index, /'shell-action'[\s\S]{0,140}action\.action === 'markup'\) markup\.toggle\(\)/)
   assert.match(index, /'menu'[\s\S]{0,80}action === 'markup'\) markup\.begin\(\)/)
   const host = readFileSync('src/native/Host.swift', 'utf8')
-  assert.match(host, /case "markupCancel": markup\?\.cancel\(c\["session"\]/)
+  // A host without an overlay object still answers `cancelled`, so a toggle never hangs.
+  assert.match(
+    host,
+    /case "markupCancel":[\s\S]{0,260}if let markup \{ markup\.cancel\(token\) \} else \{ emit\(\["event":"markup-state", "session":token, "state":"cancelled"\]\) \}/
+  )
 }
 
 // A provider without image input keeps the attachment reviewable and says so before Send.

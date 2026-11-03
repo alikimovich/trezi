@@ -11,6 +11,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Select, Slow Motion and Mark up draw their on state with one helper (`ToolbarIslands.stateImage`): the same glyph, size and weight, accent when on, plain when disabled; the tooltip and VoiceOver say "Cancel Mark up" while on.
 - [x] Unit `markup-controller`, `preview-markup` and `toolbar-island-dividers` cover the toggle, the island geometry and hit-testing, token Cancel and the light/dark state matrix (red on 8899067b). The `toolbar-actions` smoke records enter → cancel → enter cycles with WKWebView/container frames and innerWidth/innerHeight/scrollY unchanged, at default and 850 pt, a resize while on, and light/dark; `toolbar-more` asserts the entry is gone.
 - [ ] Operator: `markup-toggle-overlay-native` (real pointer, disposable profile, 850 pt, resize while active, repeated cycles, light/dark state matrix) and the native `core` group on the merged SHA.
+
 ## Chat recovery flow (LKM-446)
 
 - [x] Add red regressions for immediate Retry state and missing browser checks; use the owner's gated patch path for checked deletions.
