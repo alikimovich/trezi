@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native suite failure on main a85a880c4dcf (LKM-451)
+
+- [x] Cause: run 55's host was slow for the whole suite (`captureShell` 0.9–1.6 s from the first checks; `shellInspect` and `chatState` 0.3–1.2 s during `parallel-stream`, none in run 54). The check samples every 100 ms, but samples came 0.7–4 s apart while the wall-clock stream went on, so chat A's reply reached 46 000–52 000 characters by `to-a-2` (green runs: at most 15 182) and no row was in view for 5 s. No chat code changed since the last green run.
+- [x] `parallel-stream` stops each stream after `STREAM_CHUNKS` (200 deltas, 21 892 characters). The turns stay open; green runs never reach the cap.
+- [x] Unit `native-chat-parallel-stream` pins the cap, its size band and the timer's stop.
+- [ ] Follow-up, not in this ticket: offscreen, with the main thread blocked 0.4 s per loop, a new chat whose reply arrives at about 32 000 characters had no realized row for about 10 s (the `LazyVStack` document kept its old estimated height, and the settle realized 19 times without a frame). This is the likely trigger of LKM-354's blank column on a loaded host.
+- [ ] Manager: the full native suite on the merged SHA.
+
 ## Native suite failure on main 8899067bb056 (LKM-449)
 
 - [x] Cause: on run 54 NSToolbar laid out the interaction island 155–159 pt wide at 1320 pt (151 in runs 47, 48, 51), so the measured right-group inset was 478, not 474. Hiding "…" and slow motion subtracts the usual 77 pt shift, so the minimum stage's in-resize width used 401 against a real 397 and the block stopped 24 pt before the right groups.

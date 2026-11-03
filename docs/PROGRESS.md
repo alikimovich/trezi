@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-03 — LKM-451 native suite: parallel-stream's reply no longer grows with host lag
+
+- Failure: `chat+sidebar/parallel-stream`, step `to-a-2`: no message row in view for 5 s (0 realized, 2 of 2 rows in Swift), chat column blank in `failure-parallel-stream.png`. The commits since the last green run (`0425d447..a85a880c`) touch only Dreamer, the toolbar islands' hugging and releases. No chat code changed.
+- Evidence from run 55's `parallel-stream-timeline.json` and `host-exit.log`: from `to-a-0` on, samples came 0.7–4 s apart instead of 100 ms. The host logged slow main-thread commands for the whole suite (`captureShell` 0.9–1.6 s from the first checks at 08:32; `shellInspect` 0.3–1.2 s and `chatState` 0.3–0.6 s during this check). Run 54 logged none during `parallel-stream`. The streams are Bun `setInterval` timers on the wall clock, so A's reply kept growing at about 1 100 characters per second: 26 000 at `to-a-1`, 46 400 when `to-a-2` began and 52 000 at the failure. Green runs 45–54 ended at 12 432–15 182 characters.
+- Offscreen (the `chat-parallel-stream` fixture with the real `NativeChat`, two rows per chat as in the smoke): a 45 000-character reply streaming normally kept its row in view. With the main thread blocked 0.4 s per loop and a new chat's reply arriving at about 32 000 characters, 17–19 of 22 samples had no realized row for about 10 s: the document kept a 2 492 pt estimate for a row of about 10 000 pt, `bottomPosition` read 0, and the settle realized 19 times without getting a frame. This is a real gap on a saturated host, the likely trigger of LKM-354's blank column, but changing the lazy stack is outside this ticket. It is recorded in TASKS as a follow-up.
+- Fix (test only): `parallel-stream` stops each stream after `STREAM_CHUNKS` = 200 deltas (21 892 characters), above every green run and well below the failing size. Both turns stay open, so the later steps still switch between two running chats, with a fixed target text. Bounds, steps and assertions are unchanged.
+- Test: `native-chat-parallel-stream` reads the cap and the paragraph from the check's source, asserts the capped text is 16 000–26 000 characters and that the timer stops at the cap. No changelog line: only the native smoke's workload changed.
+
 ## 2026-11-02 — LKM-449 native suite: the toolbar islands no longer stretch
 
 - Failure: `core/toolbar-address`, minimum stage, inside the resize. The block was 83 pt wide and ended 24 pt before the right groups, not 20. Its stored inset was 401 and the real one 397 (as in every green run). No toolbar code changed since the last green run (`01a19bee..8899067b` touches only the branch title, chat copy, sidebar capture and Dreamer). Runs 52 and 53 passed, so the failure is intermittent.
