@@ -124,6 +124,8 @@ export const UNIT = [
   'native-chat-latest-settle',
   'native-chat-bottom-marker',
   'native-chat-send-follow',
+  'chat-recovery-acceptance',
+  'chat-recovery-selection',
   'native-chat-parallel-stream',
   'native-smoke-wait',
   'native-smoke-shared-chat',
@@ -407,6 +409,8 @@ export const UNIT_TIMEOUT_MS = {
   'native-settings-layout': 240_000,
   // LKM-447: a compile of the sheet sources and the Dreamer acceptance's host code.
   'dreamer-acceptance': 240_000,
+  // LKM-453: a compile of the chat sources and the chat recovery acceptance's host code.
+  'chat-recovery-acceptance': 300_000,
   'native-composer-layout': 240_000,
   // LKM-381: the same composer source compile, then one short sending delay.
   'composer-attach': 240_000,

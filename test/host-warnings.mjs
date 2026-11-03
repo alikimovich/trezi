@@ -29,6 +29,8 @@ if (process.platform !== 'darwin') {
     'src/native/SourcePopoutVerification.swift',
     // LKM-447: the opt-in Dreamer acceptance's host steps.
     'src/native/DreamerAcceptance.swift',
+    // LKM-453: the opt-in chat recovery acceptance's host steps.
+    'src/native/ChatRecoveryAcceptance.swift',
     // LKM-456: the opt-in fullscreen-popout-close-native acceptance's host steps.
     'src/native/SourcePopoutAcceptance.swift'
   ]

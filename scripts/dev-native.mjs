@@ -21,6 +21,9 @@ if (process.argv.includes('--help')) {
       'Without --only every group runs.',
       '--dreamer-acceptance (with --test) runs only the opt-in Dreamer acceptance (LKM-447);',
       'use bun run acceptance:dreamer, which takes the runner lock and records the evidence.',
+      'bun run dev:native --test --only=chat --chat-recovery-acceptance',
+      '--chat-recovery-acceptance (with --test) runs only the opt-in chat recovery acceptance (LKM-453);',
+      'use bun run acceptance:chat-recovery, which takes the runner lock and records the evidence.',
       '--source-popout-acceptance (with --test --only=core) runs only fullscreen-popout-close-native (LKM-456);',
       'use bun run acceptance:source-popout, which also checks the SHA and keeps the evidence.'
     ].join('\n')
@@ -29,6 +32,7 @@ if (process.argv.includes('--help')) {
 }
 const args = process.argv.slice(2)
 for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--chat-recovery-acceptance') continue
   if (args[i] === '--project' && args[i + 1]) {
     i++
     continue
@@ -44,6 +48,10 @@ for (const flag of ['--dreamer-acceptance', '--markup-acceptance', '--source-pop
     console.error(`${flag} is a native smoke check and requires --test.`)
     process.exit(1)
   }
+if (args.includes('--chat-recovery-acceptance') && !args.includes('--test')) {
+  console.error('--chat-recovery-acceptance is a native smoke check and requires --test.')
+  process.exit(1)
+}
 // Fail before the build: a typo in a group name should not cost a full build.
 if (args.some(arg => arg === '--only' || arg.startsWith('--only='))) {
   if (!args.includes('--test')) {

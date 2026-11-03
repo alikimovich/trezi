@@ -33,6 +33,15 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: Resolve handover outside the request deadline, backend in-flight guard for Resolve/Discard/Retry, recorded replay failures on Retry, automatic browser check only when it can run, multi-chat terminal clearing.
 - [ ] Native foreground acceptance after merge, including deferred requests, pointer and keyboard, still-held outcome, and multi-chat clearing.
 - [ ] Confirm obsolete checked-page recipe retirement and final outcome wording against a real held session.
+
+## Chat recovery acceptance fixture (LKM-453)
+
+- [x] Opt-in `chat-recovery-flow-native` check (`--chat-recovery-acceptance`, chat group, prelude only) on the disposable profile: the shared chat, the smoke provider stub, synthetic isolation events, and recovery replies held at `services.invoke`.
+- [x] Retry and Resolve by posted pointer clicks, and Resolve by focus plus a posted Space. Busy label, spinner and disabled mutations are measured within 1 s while the request is held. A second click, Discard and the other recovery send nothing.
+- [x] PNG and JSON for held-busy, held-blocked, still-held, clean, handover, failure (with the kept 0600 redacted report), isolation and terminal-clear, tied to the source SHA. `bun run acceptance:chat-recovery` and `--red=delay-busy` are documented in `docs/TESTING.md`.
+- [x] Unit `chat-recovery-acceptance` (rules GREEN/RED, report redaction, render gate, and a Swift fixture of the real card: locator, derived disabled frames, posted click and Space), plus `native-smoke-groups` selection and launcher guards.
+- [ ] Operator: `bun run acceptance:chat-recovery` GREEN and `--red=delay-busy` RED under the shared desktop lock on the merged SHA. `chat-recovery-flow-native` is not passed until then.
+
 ## Dreamer acceptance on the shipping code (LKM-447)
 
 - [x] Opt-in `dreamer-export-primary` check (`--dreamer-acceptance`, settings group, prelude only): real menu, 780 and 680 pt foreground captures, footer clip/overlap/default checks, no Agent OS copy.
