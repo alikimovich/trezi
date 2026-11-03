@@ -46,6 +46,8 @@
     "test:dreamer-export": "bun test/dreamer-export.mjs",
     "test:dreamer-acceptance": "bun test/dreamer-acceptance.mjs",
     "acceptance:dreamer": "bun scripts/dreamer-acceptance.mjs",
+    "test:chat-recovery-acceptance": "bun test/chat-recovery-acceptance.mjs",
+    "acceptance:chat-recovery": "bun scripts/chat-recovery-acceptance.mjs",
     "test:slash-token": "bun test/slash-token.mjs",
     "test:skills": "bun test/skills-discovery.mjs",
     "test:github-connect": "bun test/github-connect.mjs",

@@ -20,6 +20,7 @@ import { checkBuildBadge, restoreBuildBadge } from './smoke-build-badge'
 import { checkChangesPanel, restoreChangesPanel } from './smoke-changes-panel'
 import { checkNativeChat } from './smoke-chat'
 import { captureChatGate, checkChatGate, restoreChatGate } from './smoke-chat-gate'
+import { checkChatRecoveryAcceptance } from './smoke-chat-recovery-acceptance'
 import { checkChatText } from './smoke-chat-text'
 import { checkChatUi } from './smoke-chat-ui'
 import { checkCodeLinkClick, restoreCodeLinkClick } from './smoke-code-link'
@@ -37,9 +38,12 @@ import {
 import { smokeFocusHooks } from './smoke-focus'
 import { checkGitUpdates } from './smoke-git-updates'
 import {
+  CHAT_RECOVERY_ACCEPTANCE_CHECK,
+  CHAT_RECOVERY_ACCEPTANCE_FLAG,
   DREAMER_ACCEPTANCE_CHECK,
   DREAMER_ACCEPTANCE_FLAG,
   parseSmokeGroups,
+  selectChatRecoveryAcceptance,
   selectDreamerAcceptance,
   selectSmokeChecks
 } from './smoke-groups'
@@ -1803,13 +1807,23 @@ export async function runNativeCoreSmoke(
           await host.request('sheetPerform', { action: 'closeWindow' })
       }
     })
+  // LKM-453: the opt-in chat recovery acceptance (docs/TESTING.md); its own check cleans up.
+  if (process.argv.includes(CHAT_RECOVERY_ACCEPTANCE_FLAG))
+    checks.push({
+      name: CHAT_RECOVERY_ACCEPTANCE_CHECK,
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkChatRecoveryAcceptance(host, artifacts)
+      }
+    })
   let hostClosed = false
   void host.closed.then(() => {
     hostClosed = true
   })
   // `--only` filters which named checks run; failure collection is unchanged.
   const selected = selectSmokeChecks(checks, parseSmokeGroups(process.argv))
-  const results = await runSmokeChecks(selectDreamerAcceptance(selected, process.argv), {
+  const optedIn = selectChatRecoveryAcceptance(selected, process.argv)
+  const results = await runSmokeChecks(selectDreamerAcceptance(optedIn, process.argv), {
     capture: (name) => captureSmokeFailure(host, artifacts, name),
     restore: () => restoreSmokeState(host, firstProject),
     deadline: Number(process.env.TREZI_NATIVE_SMOKE_DEADLINE_MS) || undefined,

@@ -25,7 +25,9 @@ if (process.platform !== 'darwin') {
     // LKM-441: the sidebar menu run moved here from SidebarVerification.swift.
     'src/native/SidebarMenuCapture.swift',
     // LKM-447: the opt-in Dreamer acceptance's host steps.
-    'src/native/DreamerAcceptance.swift'
+    'src/native/DreamerAcceptance.swift',
+    // LKM-453: the opt-in chat recovery acceptance's host steps.
+    'src/native/ChatRecoveryAcceptance.swift'
   ]
 
   const script = readFileSync(join(root, 'scripts/build-native.mjs'), 'utf8')

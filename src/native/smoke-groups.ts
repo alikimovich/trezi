@@ -45,6 +45,8 @@ export function parseSmokeGroups(argv: readonly string[]): Set<NativeSmokeGroup>
     throw new Error('--live needs the core group in --only')
   if (argv.includes(DREAMER_ACCEPTANCE_FLAG) && !names.includes('settings'))
     throw new Error(`${DREAMER_ACCEPTANCE_FLAG} needs the settings group in --only`)
+  if (argv.includes(CHAT_RECOVERY_ACCEPTANCE_FLAG) && !names.includes('chat'))
+    throw new Error(`${CHAT_RECOVERY_ACCEPTANCE_FLAG} needs the chat group in --only`)
   return new Set(names as NativeSmokeGroup[])
 }
 
@@ -123,6 +125,8 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'browser-setup': ['settings'],
   'security-session': ['settings'],
   'native-chat': ['chat'],
+  // LKM-453: opt-in, pushed only with --chat-recovery-acceptance (selectChatRecoveryAcceptance).
+  'chat-recovery-flow-native': ['chat'],
   'sidebar-status': ['sidebar', 'chat'],
   'sidebar-chats': ['sidebar', 'chat'],
   'sent-attachments': ['chat'],
@@ -190,6 +194,35 @@ export function selectDreamerAcceptance<T extends { name: string }>(
     )
   log(
     `DREAMER ACCEPTANCE (${DREAMER_ACCEPTANCE_FLAG}): running ${picked.map((c) => c.name).join(', ')}; not full-suite acceptance.`
+  )
+  return picked
+}
+
+/** LKM-453: the opt-in chat recovery acceptance (`bun run acceptance:chat-recovery`,
+ *  docs/TESTING.md "Chat recovery acceptance"). */
+export const CHAT_RECOVERY_ACCEPTANCE_FLAG = '--chat-recovery-acceptance'
+export const CHAT_RECOVERY_ACCEPTANCE_CHECK = 'chat-recovery-flow-native'
+
+/** With the flag, only the prelude and the chat recovery acceptance run (the flag's check
+ *  must be among `checks`); without it the selection is unchanged. */
+export function selectChatRecoveryAcceptance<T extends { name: string }>(
+  checks: T[],
+  argv: readonly string[],
+  log: (line: string) => void = console.log
+): T[] {
+  const flag = CHAT_RECOVERY_ACCEPTANCE_FLAG
+  if (!argv.includes(flag)) return checks
+  if (argv.includes('--live')) throw new Error(`${flag} cannot run with --live`)
+  if (argv.includes(DREAMER_ACCEPTANCE_FLAG))
+    throw new Error(`${flag} cannot run with ${DREAMER_ACCEPTANCE_FLAG}`)
+  const prelude: readonly string[] = SMOKE_PRELUDE
+  const picked = checks.filter(
+    ({ name }) => prelude.includes(name) || name === CHAT_RECOVERY_ACCEPTANCE_CHECK
+  )
+  if (!picked.some(({ name }) => name === CHAT_RECOVERY_ACCEPTANCE_CHECK))
+    throw new Error(`${flag}: the ${CHAT_RECOVERY_ACCEPTANCE_CHECK} check was not selected`)
+  log(
+    `CHAT RECOVERY ACCEPTANCE (${flag}): running ${picked.map((c) => c.name).join(', ')}; not full-suite acceptance.`
   )
   return picked
 }
