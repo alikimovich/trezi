@@ -791,17 +791,33 @@ bun run acceptance:chat-recovery --red=delay-busy  # RED: must fail at the held 
   - The keyboard route (the handover Resolve) focuses the button's key-view proxy with
     `makeFirstResponder`. That focusing is programmatic, and each JSON says so. The route
     then posts a real Space key down and up.
-  - Space activating a SwiftUI button needs keyboard navigation (Full Keyboard Access).
-    The check records `NSApp.isFullKeyboardAccessEnabled` in `evidence.json` and never
-    changes it. With it off, the keyboard step fails and names the setting.
+  - The check records `NSApp.isFullKeyboardAccessEnabled` in `evidence.json` and never
+    changes it, or any other setting or permission. Focusing the proxy works with it off
+    (unit fixture). Whether the foreground window then sends the Space to the button with
+    it off is open until an operator run reaches that step (LKM-458). Each key step records
+    `keyboardNavigation`, `proxyAcceptsFirstResponder`, `focusedBeforeSpace`,
+    `firstResponderBeforeSpace` and `foreground`. If the Space sends no request, the check
+    fails with a "keyboard route" error that names them, not the busy-state error.
+    Programmatic focus alone never counts as a keyboard pass.
   - A disabled SwiftUI button has no key-view proxy. On the busy card the disabled
-    buttons' frames are derived from the last all-enabled row, and the JSON marks each
-    as `frameSource`. The unit `chat-recovery-acceptance` checks that derivation against
-    the drawn frames.
+    buttons' frames are derived from the last all-enabled row of the same chat and card
+    (LKM-458). The card's actions must be the leading actions of that row: a request
+    clears the Problem, so the busy card loses Copy support report and the copy glyph.
+    The row must have the same chat frame and inset, and the card must be the last one.
+    The row is moved by how far the conversation's end has moved since it was measured.
+    It must match the live proxies still on the card and have a spinner above it. The
+    JSON marks each frame as `frameSource`. The unit `chat-recovery-acceptance` checks
+    the derivation against the busy cards the real chat controller builds, short and
+    scrolled: each derived centre, clicked on the same card drawn enabled, must press
+    that button. It also checks that a row measured in another chat is refused.
   - The second chat is set up by events, not input.
 - **Artifacts.** In `test/artifacts/native/chat-recovery-acceptance/`, cleared at the
-  start of each run: `evidence.json` (source sha, build stamp, outcomes, error), the
-  PNG/JSON pairs above and `failure-report.json`. The failure PNG shows the planted fake
+  start of each run: `evidence.json` (source sha, build stamp, outcomes, steps, error), the
+  PNG/JSON pairs above and `failure-report.json`. Before every press, fallible wait and
+  refusal, a numbered `step-NN-<name>.json` and `.png` record the source sha, the card's
+  measurement (frame sources, stored row, window), `layoutInspect` geometry and both
+  chats' controller state. A refused run ends with `step-NN-refused`, taken before
+  the held request is released. The failure PNG shows the planted fake
   secret in the card's reason, as the product does. Only the report is redacted.
 
   The script copies them, with `run.json` (source sha, branch, dirty flag, mode, whether

@@ -6,6 +6,7 @@ import SwiftUI
 // measures its buttons, then sends the acceptance's own click and Space events to the window
 // (`sendEvent`: the posted queue needs the app's event loop) and records the chat actions the
 // card emitted. Prints one JSON line per case; test/chat-recovery-acceptance.mjs judges them.
+// Its first argument (LKM-458) holds the parked and busy cards of the real chat controller.
 var emitted: [String] = []
 func emit(_ value: [String: Any]) {
     if value["event"] as? String == "chat-action" { emitted.append(value["action"] as? String ?? "") }
@@ -49,11 +50,16 @@ func conflict(busy: String?, report: Bool = false, full: Bool = false, enabled: 
     if full { card["fullDetail"] = "/fixture/project/fixture.ts" }
     return card
 }
-func push(_ card: [String: Any]?, question: Bool = false) {
-    let messages: [[String: Any]] = [["id": "m1", "role": "user", "text": "Change the heading", "segments": [["kind": "text", "text": "Change the heading"]], "at": 1_760_000_000_000.0],
+/// `tall`: enough turns that the conversation scrolls and the card sits at its pinned end.
+func push(_ card: [String: Any]?, question: Bool = false, chatId: String = "fixture", tall: Bool = false) {
+    var messages: [[String: Any]] = [["id": "m1", "role": "user", "text": "Change the heading", "segments": [["kind": "text", "text": "Change the heading"]], "at": 1_760_000_000_000.0],
                                      ["id": "m2", "role": "assistant", "text": "Done.", "segments": [["kind": "text", "text": "Done."]], "at": 1_760_000_000_000.0, "workedMs": 4000.0]]
+    if tall {
+        let text = "Changed the heading and the spacing around it, then checked the page again."
+        messages = (0..<16).map { ["id": "t\($0)", "role": $0 % 2 == 0 ? "user" : "assistant", "text": text, "segments": [["kind": "text", "text": text]], "at": 1_760_000_000_000.0] } + messages
+    }
     let questions: [[String: Any]] = question ? [["id": "q1", "sessionKey": "fixture", "questions": [["header": "Layout", "question": "Which layout?", "options": [["label": "Compact"], ["label": "Roomy"]], "multiSelect": false]]]] : []
-    let state: [String: Any] = ["visible": true, "chat": "fixture", "messages": messages, "running": false, "cards": card.map { [$0] } ?? [], "questions": questions, "ready": true,
+    let state: [String: Any] = ["visible": true, "chat": chatId, "messages": messages, "running": false, "cards": card.map { [$0] } ?? [], "questions": questions, "ready": true,
                                 "bounds": ["x": 0.0, "y": 0.0, "width": Double(width), "height": Double(height)], "composer": ["text": ""]]
     chat.update(state, composer: composer)
     chat.model.pressLatest()
@@ -113,4 +119,55 @@ push(conflict(busy: "retry", report: true, full: true, enabled: true))
 report("problem-busy-drawn")
 push(conflict(busy: nil), question: true)
 report("question")
+
+// LKM-458: the cards the real controller draws (test/chat-recovery-acceptance.mjs passes them
+// as JSON). A request clears the Problem and its report, so the busy card drops the trailing
+// Copy support report and the copy glyph, and its title and detail change. On a2c03fbb the
+// locator refused that busy card ("…no all-enabled row of the same actions at this width was
+// measured first"): it required the row's whole action list.
+let real = CommandLine.arguments.count > 1
+    ? (try? JSONSerialization.jsonObject(with: Data(CommandLine.arguments[1].utf8))) as? [String: [String: Any]] ?? [:] : [:]
+func enabledTwin(_ card: [String: Any]) -> [String: Any] {
+    var twin = card
+    twin["actions"] = (card["actions"] as? [[String: Any]] ?? []).map { var action = $0; action["disabled"] = false; return action }
+    return twin
+}
+/// Clicks the drawn card at each point and returns what each click emitted.
+func clicks(_ points: [[Double]]) -> [[String]] {
+    points.map { point in
+        emitted = []
+        for event in NativeChat.recoveryClick(at: NSPoint(x: point[0], y: point[1]), in: window) { window.sendEvent(event) }
+        spin(0.3)
+        return emitted
+    }
+}
+func realCase(_ name: String, busy: [String: Any], labels: [String], tall: Bool) {
+    guard let parked = real["parked"] else { return }
+    let id = name
+    push(parked, chatId: id, tall: tall)
+    report("\(name)-parked")
+    push(busy, chatId: id, tall: tall)
+    let found = chat.recoveryCardButtons("conflict").buttons
+    report(name, ["presses": labels.map { press($0) }, "key": press(labels[0], key: true)])
+    push(nil, chatId: id, tall: tall)
+    push(enabledTwin(busy), chatId: id, tall: tall)
+    // The busy card's derived centres, clicked on the same card drawn enabled: each must
+    // press the button it names.
+    report("\(name)-drawn", ["derivedClicks": clicks(found.map { [Double($0.center.x), Double($0.center.y)] }),
+                             "derivedActions": found.map(\.action)])
+}
+if let retry = real["busyRetry"], let resolve = real["busyResolve"] {
+    realCase("real-retry", busy: retry, labels: ["Retrying…", "Discard", "Resolve"], tall: false)
+    realCase("real-resolve", busy: resolve, labels: ["Resolving…", "Discard", "Retry"], tall: false)
+    // Rows are kept per chat: one measured in another chat never stands in for this one.
+    // (Before the tall case: this offscreen view, switched from a scrolled chat to a short
+    // one, lays out no rows within one push.)
+    if let parked = real["parked"] {
+        push(parked, chatId: "real-other")
+        report("other-parked")
+        push(retry, chatId: "real-unmeasured")
+        report("unmeasured")
+    }
+    realCase("real-retry-tall", busy: retry, labels: ["Retrying…", "Discard", "Resolve"], tall: true)
+}
 window.close()
