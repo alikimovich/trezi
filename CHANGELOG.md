@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.13.5] - 2026-11-02
+
 ### Removed
 
 - Dreamer Proposals no longer has Send to Agent OS: Export… (a redacted zip of the selected proposals) is its default button, and Settings → Dreamer keeps only the weekly run; Agent OS settings saved earlier are left in place but no longer used (LKM-443).
