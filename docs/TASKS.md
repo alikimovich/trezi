@@ -8,6 +8,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Add red regressions for immediate Retry state and missing browser checks; use the owner's gated patch path for checked deletions.
 - [x] Scope Retry, Resolve and Discard busy state to their chat; produce a readable redacted support report for a failed or still-held request.
 - [x] Retire deleted checked-page recipes with replacement evidence, surface turn-end Problem reports, and keep a timed-out request's mutation lock until IPC settles.
+- [x] Review repair: Resolve handover outside the request deadline, backend in-flight guard for Resolve/Discard/Retry, recorded replay failures on Retry, automatic browser check only when it can run, multi-chat terminal clearing.
 - [ ] Native foreground acceptance after merge, including deferred requests, pointer and keyboard, still-held outcome, and multi-chat clearing.
 - [ ] Confirm obsolete checked-page recipe retirement and final outcome wording against a real held session.
 ## Dreamer acceptance on the shipping code (LKM-447)

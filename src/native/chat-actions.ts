@@ -26,24 +26,32 @@ export async function resolveHeld(controller: NativeChatController, chat: Chat) 
     const result = await controller.services.invoke('agent:resolve-conflict', chat.chat)
     if (!result.ok) throw new Error(result.error ?? 'Unable to resolve changes.')
     if (chat.recoveryTimedOut) return
-    if (result.prompt && result.conflicted.length)
-      await controller.run(chat, {
-        id: crypto.randomUUID(),
-        text: result.prompt,
-        attachments: [],
-        selection: null,
-        turn: {}
-      })
-    else if (chat.isolation === 'parked')
+    if (result.prompt && result.conflicted.length) {
+      const prompt = result.prompt
+      // The agent turn is not a request in flight: it starts after the request ends,
+      // outside the deadline, and the running-turn lock takes over from the busy state.
+      return () =>
+        controller.run(chat, {
+          id: crypto.randomUUID(),
+          text: prompt,
+          attachments: [],
+          selection: null,
+          turn: {}
+        })
+    }
+    if (chat.isolation === 'parked')
       chat.recoveryProblem = result.error ?? 'The changes are still held. Review the reason below.'
   })
 }
+
+/** A request's follow-up that outlives the request (an agent turn); it gets no deadline. */
+type Handover = () => Promise<void>
 
 async function recoveryRequest(
   controller: NativeChatController,
   chat: Chat,
   kind: NonNullable<Chat['recovery']>,
-  request: () => Promise<void>
+  request: () => Promise<Handover | void>
 ) {
   if (chat.isRunning || chat.sending || chat.recovery) return
   chat.recovery = kind
@@ -56,29 +64,32 @@ async function recoveryRequest(
   const id = chat.recoveryId
   chat.recoveryStartedAt = Date.now()
   controller.changed(chat)
-  let requestPromise: Promise<void> | undefined
+  let requestPromise: Promise<Handover | void> | undefined
+  let handover: Handover | undefined
   let timedOut = false
   try {
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
       requestPromise = request()
-      await Promise.race([
-        requestPromise,
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            timedOut = true
-            reject(
-              new Error(
-                'The recovery request did not answer within two minutes. The changes remain held.'
+      handover =
+        (await Promise.race([
+          requestPromise,
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              timedOut = true
+              reject(
+                new Error(
+                  'The recovery request did not answer within two minutes. The changes remain held.'
+                )
               )
-            )
-          }, recoveryRequestMs)
-        })
-      ])
+            }, recoveryRequestMs)
+          })
+        ])) || undefined
     } finally {
       if (timer) clearTimeout(timer)
     }
     if (
+      !handover &&
       !chat.recoveryProblem &&
       !chat.isRunning &&
       chat.recoverySettled &&
@@ -117,9 +128,11 @@ async function recoveryRequest(
     } else {
       chat.recovery = undefined
       chat.recoveryTimedOut = false
-      controller.changed(chat)
+      // A handover starts its turn right away, which renders the running state itself.
+      if (!handover) controller.changed(chat)
     }
   }
+  if (handover) await handover()
 }
 
 /** Card actions call application services directly; shell effects only refresh web panels. */
@@ -147,7 +160,8 @@ export async function cardAction(
   if (action.action === 'discard')
     return recoveryRequest(controller, chat, 'discard', async () => {
       chat.paused = false
-      await invoke('agent:discard-conflict', chat.chat)
+      const result = await invoke('agent:discard-conflict', chat.chat)
+      if (!result.ok && result.error) throw new Error(result.error)
     })
   if (action.action === 'landing-retry')
     return recoveryRequest(controller, chat, 'retry', async () => {

@@ -540,7 +540,8 @@ export class NativeChatController {
       chat.unreadAnswer = true
     reduce(chat, event)
     if (event.type === 'isolation' && !chat.recovery) {
-      if (event.state === 'merged') {
+      // Landed or discarded: the held problem and its report are history.
+      if (event.state !== 'parked') {
         chat.recoveryProblem = undefined
         chat.recoveryReport = undefined
       } else if (

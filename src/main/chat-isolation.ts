@@ -32,13 +32,17 @@ import { recordEdit } from './edit-history'
 import { editingOwner } from './editing-owner'
 import { isRepoRoot } from './git'
 import {
+  arrangeChecks,
   dropGateEvidence,
-  integrationGate,
   lastReplayFailures,
   replayChecks
 } from './integration-gate'
 import { commitLiveTurn } from './live-commit'
 import { reconcileParkOnChain } from './park-reconcile'
+import {
+  discardParkedChat as discardHeldChat,
+  resolveParkedChat as resolveHeldChat
+} from './parked-chat'
 import { peerGateRefresh } from './peer-freshness'
 import { peerTurn } from './peer-work'
 import { previewEvidence } from './preview-evidence'
@@ -61,9 +65,7 @@ export { reconcileIdleParks, reconcilePark } from './park-reconcile'
 export {
   applyParkedBranch,
   discardParkedBranch,
-  discardParkedChat,
   parkedResolution,
-  resolveParkedChat,
   showParkedChat
 } from './parked-chat'
 
@@ -233,6 +235,44 @@ const draining = new Set<string>()
 export function landingInFlight(sessionKey: string): boolean {
   return landings.has(sessionKey) || draining.has(sessionKey)
 }
+
+/** Chats with a card Retry, Resolve or Discard running: one mutation at a time. */
+const recovering = new Set<string>()
+const LANDING_BUSY = 'The previous landing is still finishing. Try again in a moment.'
+const RECOVERY_BUSY = 'Another recovery step for this chat is still running. Try again in a moment.'
+
+/** Runs one recovery mutation unless a landing or another recovery of this chat is in
+ *  flight; `refused` builds the typed refusal the card shows as its reason. */
+async function exclusive<T>(
+  sessionKey: string,
+  refused: (error: string) => T,
+  run: () => Promise<T>
+): Promise<T> {
+  if (landingInFlight(sessionKey)) return refused(LANDING_BUSY)
+  if (recovering.has(sessionKey)) return refused(RECOVERY_BUSY)
+  recovering.add(sessionKey)
+  try {
+    return await run()
+  } finally {
+    recovering.delete(sessionKey)
+  }
+}
+
+/** Resolve for a held chat, refused while a landing or another recovery runs. */
+export const resolveParkedChat = (sessionKey: string) =>
+  exclusive(
+    sessionKey,
+    (error) => ({ ok: false, conflicted: [] as string[], error }),
+    () => resolveHeldChat(sessionKey)
+  )
+
+/** Discard for a held chat, refused while a landing or another recovery runs. */
+export const discardParkedChat = (sessionKey: string) =>
+  exclusive(
+    sessionKey,
+    (error): { ok: boolean; error?: string } => ({ ok: false, error }),
+    () => discardHeldChat(sessionKey)
+  )
 
 /** The tail of a transcript from its LAST user message on — the "last turn" a park
  *  record surfaces in the review UI (prompt + the assistant's reply to it). */
@@ -529,17 +569,21 @@ async function landingFailed(
  * otherwise the chat shows the same card with the new reason. A stopped turn's hold
  * is not retried here: its own card offers Keep.
  */
-export async function retryLanding(
+export function retryLanding(
+  sessionKey: string
+): Promise<{ ok: boolean; state: 'isolated' | 'parked'; error?: string }> {
+  return exclusive(
+    sessionKey,
+    (error) => ({ ok: false, state: 'parked' as const, error }),
+    () => retryHeldLanding(sessionKey)
+  )
+}
+
+async function retryHeldLanding(
   sessionKey: string
 ): Promise<{ ok: boolean; state: 'isolated' | 'parked'; error?: string }> {
   const st = states.get(sessionKey)
   if (!st) return { ok: false, state: 'isolated', error: 'That chat is no longer open.' }
-  if (draining.has(sessionKey))
-    return {
-      ok: false,
-      state: 'parked',
-      error: 'The previous landing is still finishing. Try again in a moment.'
-    }
   if (!st.parked || st.reverted || (st.interrupted && !st.landingError))
     return { ok: true, state: st.parked && !st.reverted ? 'parked' : 'isolated' }
   // LKM-403: only the user's answer moves this work on; retrying would pick a side.
@@ -565,12 +609,24 @@ export async function retryLanding(
   }
   // The source to land has no passing checks (new after reconciling, or never checked
   // since its last edit): the host runs the session's checks that passed before again.
-  const scope = chatGateScope(sessionKey, st)
-  const verdict = await integrationGate(scope)
-  if (!verdict.ok && (verdict.reason === 'unchecked' || verdict.reason === 'runtime-changed'))
-    await replayChecks(scope)
+  const { failures } = await arrangeChecks(chatGateScope(sessionKey, st))
   // Its outcome reaches the chat as the usual isolation event (merged, or the card again).
   await afterTurn(sessionKey, 'Land held chat changes', [], 'success')
+  // Still held after Trezi tried to arrange the evidence: say why it is missing.
+  if (st.parked && st.landingError && failures.length) {
+    st.landingError = `${st.landingError} Trezi's own check did not pass: ${failures.join('; ')}`
+    if (st.lastLanding) st.lastLanding.error = st.landingError
+    emitIsolation(
+      sessionKey,
+      'parked',
+      st.wt.branch,
+      st.parkedFiles,
+      undefined,
+      undefined,
+      'failed',
+      st.landingError
+    )
+  }
   return {
     ok: true,
     state: st.parked ? 'parked' : 'isolated',

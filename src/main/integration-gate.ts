@@ -347,8 +347,16 @@ export function setCheckReplayer(next: CheckReplayer | null): void {
  * source. Answers how many ran; the gate then judges their receipts like any other.
  */
 export async function replayChecks(scope: GateScope): Promise<number> {
-  if (!replayer) return 0
   const session = sessionOf(scope)
+  if (!replayer) {
+    // A web project that needs a browser check, with nothing to run one: say so.
+    const web = (await privateRuntimeKind(scope.root)) === 'web'
+    replayFailures.set(
+      session,
+      web ? ['browser: Trezi cannot arrange a browser check here (no check runner).'] : []
+    )
+    return 0
+  }
   const latest = newest(items(evidenceOf(session)))
   const retired = await retiredRoutes(scope)
   const active = latest.filter(
@@ -395,4 +403,21 @@ export async function replayChecks(scope: GateScope): Promise<number> {
   }
   replayFailures.set(session, failures.slice(-8))
   return ran
+}
+
+/**
+ * What a landing Retry arranges before it lands again: when the gate lacks passing
+ * evidence (never checked, or its private server changed), the checks that passed
+ * before run again on the current source, plus one browser check for a web project
+ * that has none. Answers how many ran and the recorded reasons of any that did not
+ * pass, so the card can say why evidence is still missing.
+ */
+export async function arrangeChecks(
+  scope: GateScope
+): Promise<{ ran: number; failures: readonly string[] }> {
+  const verdict = await integrationGate(scope)
+  if (verdict.ok || (verdict.reason !== 'unchecked' && verdict.reason !== 'runtime-changed'))
+    return { ran: 0, failures: [] }
+  const ran = await replayChecks(scope)
+  return { ran, failures: lastReplayFailures(scope) }
 }

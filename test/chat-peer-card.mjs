@@ -200,6 +200,44 @@ states.clear()
   )
 }
 
+// A Retry or Resolve that ends still held: one concise Problem line on the one card, with
+// the report action, and neither a duplicate error card nor a card for the decision.
+{
+  const stillHeld = newChat('chat-3')
+  reduce(stillHeld, {
+    type: 'isolation',
+    state: 'parked',
+    files: ['page.txt'],
+    reason: 'failed',
+    error: 'the browser check did not pass'
+  })
+  for (const recovery of ['retry', 'resolve']) {
+    stillHeld.recovery = recovery
+    const busy = snapshot(stillHeld, []).cards.find((card) => card.id === 'conflict')
+    assert.equal(busy.busy, true, `${recovery} shows progress`)
+    assert.ok(
+      busy.actions.every((action) => action.disabled),
+      'and locks every action'
+    )
+    stillHeld.recovery = undefined
+    stillHeld.recoveryProblem =
+      'Problem: the changes are still held: the browser check did not pass'
+    stillHeld.recoveryReport = '/tmp/report'
+    const done = snapshot(stillHeld, []).cards
+    assert.equal(done.filter((card) => card.id === 'conflict').length, 1)
+    assert.equal(done.filter((card) => card.id === 'error').length, 0)
+    assert.equal(done.find((card) => card.id === 'conflict').busy, false)
+    assert.equal(done.find((card) => card.id === 'conflict').detail.split('\n').length, 1)
+    assert.ok(
+      done
+        .find((card) => card.id === 'conflict')
+        .actions.some((a) => a.action === 'recovery-report')
+    )
+    stillHeld.recoveryProblem = undefined
+    stillHeld.recoveryReport = undefined
+  }
+}
+
 // The rail: the same words on the comment's card, under what it is doing now.
 const spawn = { id: 's', label: 'Update the hero', status: 'running', activity: 'Reading' }
 assert.equal(agentCard(spawn).detail, 'Reading')

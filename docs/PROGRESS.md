@@ -2,6 +2,15 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-03 — LKM-446 second review repair
+
+- Why: the reviewer's approval carried open items, so the merge gate refused it. Every code and test gap is fixed below, each with a regression that failed first. Native foreground acceptance stays the operator's (`chat-recovery-flow-native`): the issue says "Merge does not equal runtime acceptance; native/live acceptance is recorded by the operator."
+- A Resolve handover no longer runs under the 120 s request deadline. `recoveryRequest` (`src/native/chat-actions.ts`) applies the deadline to the IPC only; the request returns a handover that starts the agent turn after `chat.recovery` ended, so a long agent turn is neither timed out nor written up as a Problem, and the running-turn lock takes over from the busy state. `test/stop-recovery-ui.mjs` holds `agent:send` open past a 1 ms deadline.
+- The backend guards every recovery mutation. `resolveParkedChat`, `discardParkedChat` and `retryLanding` (`src/main/chat-isolation.ts`) run through one `exclusive` guard: refused while a landing is in flight or draining, or while another recovery of the same chat runs. Discard now reports a refusal on its card instead of ignoring it. `test/chat-landing-recovery.mjs` asserts Discard and Resolve are refused during an abandoned landing and leave the held work alone.
+- `arrangeChecks` (`src/main/integration-gate.ts`) replays earlier checks (plus one browser check for a web project) only when the gate lacks evidence, and returns the recorded failures. `retryLanding` appends them to the card's reason, so Retry says why evidence is still missing. A web project with no check runner records "cannot arrange a browser check"; a non-web project never gets an automatic browser check. The preview tool's own error text now reaches the recorded failure. `test/integration-gate.mjs` covers a web project with only `run_checks` evidence, a failing browser replay, no runner and non-web kinds.
+- Landed or discarded (any non-parked isolation event) now clears a chat's held Problem and report; other chats keep theirs. `test/stop-recovery-ui.mjs` (two chats) and `test/chat-peer-card.mjs` (one concise line, no duplicate error card) cover it.
+- Corrected earlier claim: `chat-landing-recovery` runs inside the `repository-owner` unit test (`test/repository-owner.mjs:144-159`, `worker-verify-4.log:170` PASS), not as a skipped suite.
+
 ## 2026-11-03 — LKM-446 review repair
 
 - A deleted conventional page route now deliberately supersedes its old browser recipe. Retry replays the remaining checks and requires a replacement browser receipt on the current source tree; failed replays stay in the bounded recovery history. The integration gate regression covers replacement evidence and a recorded failed replay.

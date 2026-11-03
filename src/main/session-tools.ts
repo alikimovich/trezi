@@ -103,7 +103,13 @@ setCheckReplayer(async (recipe, scope) => {
     const result = await runCommandCheck(recipe.check, scope)
     return 'verified' in result && result.verified
   }
-  return !(await runPreviewVerify(recipe.args, scope)).isError
+  const result = await runPreviewVerify(recipe.args, scope)
+  if (result.isError) {
+    // The tool's own reason reaches the recorded replay failure and the card.
+    const text = result.content.find((part) => part.type === 'text')
+    throw new Error(text?.type === 'text' ? text.text : 'preview_verify did not pass')
+  }
+  return true
 })
 
 /** Native host is the gate; tests may supply a deterministic clock/result. */

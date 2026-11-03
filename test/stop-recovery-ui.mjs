@@ -7,6 +7,7 @@ import { liveCheckoutEdit } from '../src/main/live-write-guard.ts'
 import { setRecoveryRequestDeadlineForTests } from '../src/native/chat-actions.ts'
 import { NativeChatController } from '../src/native/chat-controller.ts'
 import { readableRecoveryReport } from '../src/native/chat-recovery-report.ts'
+import { snapshot } from '../src/native/chat-snapshot.ts'
 import { DevErrorReader, touchedFile } from '../src/shared/dev-error.ts'
 import { projectRelative } from '../src/shared/project-path.ts'
 import { describeSelectionForPrompt } from '../src/shared/selection-context.ts'
@@ -455,7 +456,94 @@ assert.ok(card('conflict').actions.find((action) => action.action === 'discard')
 finishTimedOut({ ok: true, state: 'parked' })
 await tick()
 assert.equal(chat.recovery, undefined, 'the original IPC release unlocks mutations')
+
+// A Resolve handover to an agent turn is not a request in flight: the deadline covers
+// only the IPC, so a long agent turn is never timed out or reported as a Problem.
+emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
+const reportsBefore = calls.filter((call) => call[0] === 'recovery:copy-report').length
+answers['agent:resolve-conflict'] = {
+  ok: true,
+  conflicted: ['src/a.tsx'],
+  prompt: 'Fix the conflict markers'
+}
+let admitTurn
+answers['agent:send'] = new Promise((resolve) => {
+  admitTurn = resolve
+})
+const handover = act('resolve', 'conflict')
+await new Promise((resolve) => setTimeout(resolve, 30)) // far past the 1 ms deadline
+assert.equal(chat.recoveryTimedOut, false, 'the handed-over turn never trips the request deadline')
+assert.equal(chat.recoveryProblem, undefined, 'a running agent turn is not a Problem')
+assert.equal(chat.recoveryReport, undefined, 'no support report for a legitimately running turn')
+assert.equal(chat.recovery, undefined, 'the recovery request ended at the handover')
+assert.equal(chat.isRunning, true, 'the agent turn owns the lock now')
+assert.equal(card('conflict')?.busy ?? false, false, 'no request spinner while the agent runs')
+assert.equal(
+  card('conflict')?.actions?.find((action) => action.action === 'landing-retry')?.disabled ?? true,
+  true,
+  'mutations stay locked by the running agent turn'
+)
+assert.equal(calls.filter((call) => call[0] === 'agent:send').at(-1)[1], 'Fix the conflict markers')
+admitTurn({ ok: true })
+await handover
+emit({ type: 'done' })
+await tick()
+assert.equal(chat.recoveryProblem, undefined)
+assert.equal(calls.filter((call) => call[0] === 'recovery:copy-report').length, reportsBefore)
+delete answers['agent:send']
 setRecoveryRequestDeadlineForTests(null)
+
+// Two chats held at once: each shows one concise Problem line on its own card and no
+// separate error card, and a terminal event clears only its own chat.
+await controller.command({
+  type: 'context',
+  context: {
+    chat: 'b',
+    root: live,
+    selection: null,
+    turn: {},
+    setup: { needed: false, dismissed: false, status: null },
+    tokens: { needed: false, dismissed: false },
+    notes: [],
+    spawns: []
+  }
+})
+const other = controller.get('b')
+const cardsOf = (target) => snapshot(target, []).cards
+const heldCard = (target) => cardsOf(target).find((c) => c.id === 'conflict')
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20))
+emit({ type: 'isolation', state: 'merged', files: [] })
+for (const key of ['a', 'b'])
+  controller.event({
+    projectKey: key,
+    type: 'isolation',
+    state: 'parked',
+    files: ['src/a.tsx'],
+    reason: 'failed',
+    error: `${key} is still held`
+  })
+await settle()
+for (const target of [chat, other]) {
+  assert.equal(heldCard(target).title, 'Problem')
+  assert.equal(heldCard(target).detail, `Problem: ${target.chat} is still held`, 'one concise line')
+  assert.equal(
+    cardsOf(target).filter((c) => c.id === 'error').length,
+    0,
+    'a still-held chat shows no duplicate error card'
+  )
+  assert.ok(target.recoveryReport, 'the report exists for this chat')
+}
+assert.notEqual(chat.recoveryReport, other.recoveryReport, 'each report is scoped to its chat')
+controller.event({ projectKey: 'a', type: 'isolation', state: 'merged', files: ['src/a.tsx'] })
+assert.equal(heldCard(chat), undefined, 'the landed chat clears')
+assert.equal(chat.recoveryProblem, undefined)
+assert.equal(chat.recoveryReport, undefined)
+assert.equal(heldCard(other)?.title, 'Problem', 'another chat keeps its own held problem')
+assert.ok(other.recoveryReport)
+controller.event({ projectKey: 'b', type: 'isolation', state: 'isolated' })
+assert.equal(heldCard(other), undefined, 'a discarded chat clears too')
+assert.equal(other.recoveryProblem, undefined)
+assert.equal(other.recoveryReport, undefined)
 console.log(
   'STOP RECOVERY UI OK — guard, relative sources, dev-server errors, post-Stop and preview-error cards, queue'
 )

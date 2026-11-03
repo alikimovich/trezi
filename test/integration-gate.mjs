@@ -29,6 +29,7 @@ import {
   runCommandCheck
 } from '../src/main/command-checks.ts'
 import {
+  arrangeChecks,
   dropGateEvidence,
   holdMessage,
   integrationGate,
@@ -290,7 +291,73 @@ try {
   await replayChecks(scope)
   assert.match(lastReplayFailures(scope).join('\n'), /webkit \/: the check did not pass/)
   setCheckReplayer(null)
+
+  // A Retry on a web project whose session only ran `run_checks`: the host arranges
+  // one fresh browser check on the exact tree, then the gate passes.
+  const only = { emitKey: 'gate-only-commands', root, liveRoot: live }
+  write('only commands\n')
+  assert.equal((await runCommandCheck('pass', only)).verified, true)
+  assert.equal((await integrationGate(only)).reason, 'unchecked', 'a command alone is not enough')
+  const arranged = []
+  setCheckReplayer(async (recipe, replayScope) => {
+    arranged.push(recipe.kind)
+    if (recipe.kind === 'browser') {
+      const receipt = browser(null, null)
+      receipt.source.tree = await candidateOf(root)
+      recordReceipt(receiptSession(replayScope.emitKey, projectKey(root)), receipt)
+    } else await runCommandCheck(recipe.check, replayScope)
+    return true
+  })
+  let arrangement = await arrangeChecks(only)
+  assert.deepEqual(arranged.toSorted(), ['browser', 'command'])
+  assert.deepEqual(arrangement.failures, [])
+  const arrangedVerdict = await integrationGate(only)
+  assert.equal(arrangedVerdict.ok, true, JSON.stringify(arrangedVerdict))
+  assert.equal(arrangedVerdict.candidate, await candidateOf(root), 'evidence is on the exact tree')
+  // An already satisfied gate arranges nothing.
+  arranged.length = 0
+  assert.equal((await arrangeChecks(only)).ran, 0)
+  assert.deepEqual(arranged, [])
+
+  // The browser check fails: the reason is recorded and returned, never swallowed.
+  write('browser fails\n')
+  assert.equal((await runCommandCheck('pass', only)).verified, true)
+  setCheckReplayer(async (recipe) => {
+    if (recipe.kind === 'browser') throw new Error('preview_verify failed: the page never rendered')
+    return true
+  })
+  arrangement = await arrangeChecks(only)
+  assert.match(arrangement.failures.join('\n'), /preview_verify failed: the page never rendered/)
+  assert.equal(
+    (await integrationGate(only)).reason,
+    'unchecked',
+    'a failed arrangement passes nothing'
+  )
+
+  // No check runner: Trezi says it cannot arrange the browser check instead of passing it.
+  setCheckReplayer(null)
+  arrangement = await arrangeChecks(only)
+  assert.equal(arrangement.ran, 0)
+  assert.match(arrangement.failures.join('\n'), /cannot arrange a browser check/)
+
+  // No private preview (not a web project, or no runtime owner): no browser check is arranged.
+  for (const noPreview of ['none', 'static']) {
+    kind = noPreview
+    const silent = []
+    setCheckReplayer(async (recipe) => {
+      silent.push(recipe.kind)
+      return true
+    })
+    write(`no preview ${noPreview}\n`)
+    const plain = { emitKey: `gate-no-preview-${noPreview}`, root, liveRoot: live }
+    await passCheck(plain.emitKey, root, 'pass')
+    write(`no preview again ${noPreview}\n`)
+    await arrangeChecks(plain)
+    assert.ok(!silent.includes('browser'), `no automatic browser check for a ${noPreview} project`)
+  }
+  setCheckReplayer(null)
   kind = 'none'
+  write('retired tree\n') // back to the tree the main chat's receipts prove
 
   // A closing session keeps what its receipts proved for its final landing.
   retainGateEvidence(emitKey, root)
