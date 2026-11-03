@@ -28,7 +28,9 @@ if (process.platform !== 'darwin') {
     'src/native/SourcePopout.swift',
     'src/native/SourcePopoutVerification.swift',
     // LKM-447: the opt-in Dreamer acceptance's host steps.
-    'src/native/DreamerAcceptance.swift'
+    'src/native/DreamerAcceptance.swift',
+    // LKM-456: the opt-in fullscreen-popout-close-native acceptance's host steps.
+    'src/native/SourcePopoutAcceptance.swift'
   ]
 
   const script = readFileSync(join(root, 'scripts/build-native.mjs'), 'utf8')

@@ -18,9 +18,12 @@ import {
   parseSmokeGroups,
   SMOKE_CHECK_GROUPS,
   SMOKE_PRELUDE,
+  SOURCE_POPOUT_ACCEPTANCE_CHECK,
+  SOURCE_POPOUT_ACCEPTANCE_FLAG,
   selectDreamerAcceptance,
   selectMarkupAcceptance,
   selectSmokeChecks,
+  selectSourcePopoutAcceptance,
   smokeLauncherTimeoutMs
 } from '../src/native/smoke-groups.ts'
 
@@ -93,17 +96,21 @@ for (const { name } of names)
 // The opt-in checks are pushed onto the list under their flag, so the pattern skips them.
 for (const name of Object.keys(SMOKE_CHECK_GROUPS))
   assert.ok(
-    [OPT_IN_LIVE, DREAMER_ACCEPTANCE_CHECK, MARKUP_ACCEPTANCE_CHECK].includes(name) ||
-      names.some((check) => check.name === name),
+    [
+      OPT_IN_LIVE,
+      DREAMER_ACCEPTANCE_CHECK,
+      MARKUP_ACCEPTANCE_CHECK,
+      SOURCE_POPOUT_ACCEPTANCE_CHECK
+    ].includes(name) || names.some((check) => check.name === name),
     `Group map names a real check: ${name}`
   )
-for (const name of [OPT_IN_LIVE, DREAMER_ACCEPTANCE_CHECK, MARKUP_ACCEPTANCE_CHECK])
-  assert.match(
-    source,
-    new RegExp(
-      `checks\\.push\\(\\{\\n\\s*name: (?:'${name}'|DREAMER_ACCEPTANCE_CHECK|MARKUP_ACCEPTANCE_CHECK),`
-    )
-  )
+for (const pushed of [
+  `'${OPT_IN_LIVE}'`,
+  'DREAMER_ACCEPTANCE_CHECK',
+  'MARKUP_ACCEPTANCE_CHECK',
+  'SOURCE_POPOUT_ACCEPTANCE_CHECK'
+])
+  assert.match(source, new RegExp(`checks\\.push\\(\\{\\n\\s*name: ${pushed},`))
 const listed = names.map((check) => check.name)
 assert.deepEqual(
   selectSmokeChecks(names, parseSmokeGroups(['--only=selection']), () => {}).map((c) => c.name),
@@ -242,6 +249,20 @@ assert.throws(() => selectMarkupAcceptance(names, markupArgv), /was not selected
 assert.throws(() => selectMarkupAcceptance(markupChecks, [...markupArgv, '--live']), /cannot run/)
 assert.throws(
   () => selectMarkupAcceptance(markupChecks, [...markupArgv, DREAMER_ACCEPTANCE_FLAG]),
+  /cannot run/
+)
+// The two opt-in core acceptances never combine: each would drop the other's check.
+assert.throws(
+  () => selectMarkupAcceptance(markupChecks, [...markupArgv, SOURCE_POPOUT_ACCEPTANCE_FLAG]),
+  /cannot run/
+)
+assert.throws(
+  () =>
+    selectSourcePopoutAcceptance(
+      [...markupChecks, { name: SOURCE_POPOUT_ACCEPTANCE_CHECK }],
+      ['--test', '--only=core', SOURCE_POPOUT_ACCEPTANCE_FLAG, MARKUP_ACCEPTANCE_FLAG],
+      () => {}
+    ),
   /cannot run/
 )
 

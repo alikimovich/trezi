@@ -63,6 +63,10 @@ extension Host {
             else if c["popout"] is String { Task { @MainActor in do { reply(id, try await verifySourcePopout(editor, c)) } catch { reply(id, error: error.localizedDescription) } } }
             else if c["capture"] as? Bool == true { Task { @MainActor in do { reply(id, try await editor.captureToolbar()) } catch { reply(id, error: error.localizedDescription) } } }
             else { reply(id, editor.verifyShortcut(c["key"] as? String ?? "", focus: c["focus"] as? String ?? "code", characters: c["characters"] as? String).merging(["toolbar": editor.inspectToolbar()]) { _, new in new }) }
+        case "sourcePopoutAcceptance":
+            // LKM-456: the opt-in fullscreen-popout-close-native steps (SourcePopoutAcceptance.swift).
+            guard ephemeral, let editor = sourceEditors[c["root"] as? String ?? sourceRoot] else { reply(id, error: "Test source editor required"); return true }
+            Task { @MainActor in do { reply(id, try await sourcePopoutAcceptance(editor, c)) } catch { reply(id, error: error.localizedDescription) } }
         case "sourceNavigation":
             guard ephemeral, let editor = sourceEditors[c["root"] as? String ?? sourceRoot] else { reply(id, error: "Test source editor required"); return true }
             Task { @MainActor in do { reply(id, try await verifySourceNavigation(editor, c)) } catch { reply(id, error: error.localizedDescription) } }

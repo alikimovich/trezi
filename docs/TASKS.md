@@ -10,6 +10,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Reopening without a location keeps the caret and selection (`editor-controller.ts`, `test/native-editor.mjs`).
 - [x] Unit `test/source-popout.mjs` (full, entering, exiting, re-shown, failed enter/exit, five rounds, windowed control) and the native `source-popout` smoke (`src/native/smoke-source-popout.ts`, group `core`): ×, red button and ⌘W from full screen, dock, hide while entering and leaving, three rounds, windowed close and dock, a docked editor in a full-screen main window, draft and selection after each.
 - [ ] Manager: the native `core` group on the merged SHA, `source-popout` with `source-popout.json` and its `source-popout-*.png` captures, plus the ticket's live foreground check.
+- [x] LKM-456: the live foreground check `fullscreen-popout-close-native` as one operator command, `bun run acceptance:source-popout [--red=legacy-order-out]` (docs/TESTING.md, "Pop-out full-screen close acceptance"). Closes and docks go through posted mouse and key events (`src/native/SourcePopoutAcceptance.swift`) after a read-only preflight. Every `source-popout` lifecycle assertion is kept, plus an input probe of the main window. The run leaves SHA-stamped, read-only evidence. The RED (an order-out in full screen) lives in the test profile only. Unit `test/source-popout-acceptance.mjs`.
+- [ ] Operator (LKM-456): GREEN and the deliberate RED on the merged SHA under the shared desktop lock. Both runs must print MET, with their evidence folders under `test/artifacts/native/fullscreen-popout-close/`.
 
 ## Mark up: real toggle, floating island, no "…" entry (LKM-448)
 

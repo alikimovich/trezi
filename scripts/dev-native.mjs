@@ -20,7 +20,9 @@ if (process.argv.includes('--help')) {
       `--only (with --test) runs only the named smoke groups: ${NATIVE_SMOKE_GROUPS.join(', ')}.`,
       'Without --only every group runs.',
       '--dreamer-acceptance (with --test) runs only the opt-in Dreamer acceptance (LKM-447);',
-      'use bun run acceptance:dreamer, which takes the runner lock and records the evidence.'
+      'use bun run acceptance:dreamer, which takes the runner lock and records the evidence.',
+      '--source-popout-acceptance (with --test --only=core) runs only fullscreen-popout-close-native (LKM-456);',
+      'use bun run acceptance:source-popout, which also checks the SHA and keeps the evidence.'
     ].join('\n')
   )
   process.exit(0)
@@ -31,20 +33,17 @@ for (let i = 0; i < args.length; i++) {
     i++
     continue
   }
-  if (['--test', '--live', '--dreamer-acceptance', '--markup-acceptance'].includes(args[i]) || args[i] === '--only' || args[i].startsWith('--only=')) continue
+  if (['--test', '--live', '--dreamer-acceptance', '--markup-acceptance', '--source-popout-acceptance'].includes(args[i]) || args[i] === '--only' || args[i].startsWith('--only=')) continue
   console.error(
     `Unknown native argument: ${args[i]}. Use --project /path/to/repo; Trezi manages its dev server.`
   )
   process.exit(1)
 }
-if (args.includes('--dreamer-acceptance') && !args.includes('--test')) {
-  console.error('--dreamer-acceptance is a native smoke check and requires --test.')
-  process.exit(1)
-}
-if (args.includes('--markup-acceptance') && !args.includes('--test')) {
-  console.error('--markup-acceptance is a native smoke check and requires --test.')
-  process.exit(1)
-}
+for (const flag of ['--dreamer-acceptance', '--markup-acceptance', '--source-popout-acceptance'])
+  if (args.includes(flag) && !args.includes('--test')) {
+    console.error(`${flag} is a native smoke check and requires --test.`)
+    process.exit(1)
+  }
 // Fail before the build: a typo in a group name should not cost a full build.
 if (args.some(arg => arg === '--only' || arg.startsWith('--only='))) {
   if (!args.includes('--test')) {
