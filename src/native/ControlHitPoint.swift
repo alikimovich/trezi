@@ -16,6 +16,8 @@ enum ControlHitPoint {
     @MainActor static func locate(_ view: NSView, in host: NSWindow, onScreen: Bool = true) -> Located {
         func rect(_ r: NSRect) -> [Double] { r.isNull ? [] : [r.minX, r.minY, r.width, r.height].map(Double.init) }
         let shown = view.bounds.intersection(view.visibleRect), frameView = host.contentView?.superview ?? host.contentView
+        // `screen` can be nil for a window not yet ordered in; its frame still says where it would be.
+        let screen = host.screen ?? NSScreen.screens.first { $0.frame.intersects(host.frame) }
         var ancestors: [[String: Any]] = [], next = view.superview
         while let ancestor = next {
             ancestors.append(["view": String(describing: type(of: ancestor)), "frame": rect(ancestor.frame), "bounds": rect(ancestor.bounds),
@@ -26,7 +28,7 @@ enum ControlHitPoint {
                                    "visibleRect": rect(view.visibleRect), "shownBounds": rect(shown), "rectInWindow": rect(view.convert(view.bounds, to: nil)),
                                    "flipped": view.isFlipped, "hidden": view.isHiddenOrHasHiddenAncestor, "windowFrame": rect(host.frame),
                                    "frameView": rect(frameView?.frame ?? .null), "contentLayoutRect": rect(host.contentLayoutRect),
-                                   "screenFrame": rect(host.screen?.frame ?? .null), "onScreenRequired": onScreen, "ancestors": ancestors]
+                                   "screenFrame": rect(screen?.frame ?? .null), "onScreenRequired": onScreen, "ancestors": ancestors]
         func refuse(_ reason: String) -> Located { Located(point: nil, refused: reason, info: info) }
         guard view.window === host else { return refuse("the control is not in the window \"\(host.title)\"") }
         guard !view.isHiddenOrHasHiddenAncestor else { return refuse("the control is hidden") }
@@ -36,7 +38,7 @@ enum ControlHitPoint {
         let point = view.convert(NSPoint(x: shown.midX, y: shown.midY), to: nil)
         info["point"] = [Double(point.x), Double(point.y)]
         guard frameView.frame.contains(point) else { return refuse("the control's centre \(point) lies outside the window \(frameView.frame)") }
-        let pointOnScreen = host.screen.map { $0.frame.contains(host.convertPoint(toScreen: point)) } ?? false
+        let pointOnScreen = screen.map { $0.frame.contains(host.convertPoint(toScreen: point)) } ?? false
         info["pointOnScreen"] = pointOnScreen
         if onScreen && !pointOnScreen { return refuse("the control's centre \(point) is off screen") }
         // `hitTest` takes the point in the superview's coordinates; the frame view has none, so window coordinates.

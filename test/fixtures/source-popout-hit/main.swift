@@ -14,10 +14,15 @@ final class Host: NSObject { var dockedSource: NativeSourceEditor?, sourceEditor
 
 @MainActor func run() -> [String: Any] {
     _ = NSApplication.shared
-    let screen = NSScreen.main?.visibleFrame ?? .zero
     let popout = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
     popout.isReleasedWhenClosed = false
-    popout.setFrameOrigin(NSPoint(x: screen.minX + 20, y: screen.minY + 20))
+    // With a screen, the whole frame lies inside its visible frame (menu bar and Dock excluded):
+    // shrunk to fit a small display, never hanging off its top, which is where the controls are.
+    let visible = NSScreen.main?.visibleFrame
+    if let visible {
+        let size = NSSize(width: min(popout.frame.width, visible.width), height: min(popout.frame.height, visible.height))
+        popout.setFrame(NSRect(x: visible.minX, y: visible.maxY - size.height, width: size.width, height: size.height), display: false)
+    }
     let editor = NativeSourceEditor(), container = popout.contentView!
     editor.translatesAutoresizingMaskIntoConstraints = false
     container.addSubview(editor)
@@ -38,7 +43,9 @@ final class Host: NSObject { var dockedSource: NativeSourceEditor?, sourceEditor
     }
     // A headless run may have no screen; there the targets are located without the on-screen rule.
     let hasScreen = NSScreen.main != nil
-    var out: [String: Any] = ["hasScreen": hasScreen]
+    func rect(_ r: NSRect?) -> [Double] { r.map { [$0.minX, $0.minY, $0.width, $0.height].map(Double.init) } ?? [] }
+    var out: [String: Any] = ["hasScreen": hasScreen, "visibleFrame": rect(visible), "popoutFrame": rect(popout.frame),
+                              "fits": visible.map { $0.contains(popout.frame) } ?? true]
     out["editor-close"] = probe(editor.controls["hide"]!, in: popout, onScreen: hasScreen)
     out["editor-dock"] = probe(editor.controls["popout"]!, in: popout, onScreen: hasScreen)
     out["window-close"] = probe(popout.standardWindowButton(.closeButton)!, in: popout, onScreen: hasScreen)
