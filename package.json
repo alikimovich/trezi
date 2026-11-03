@@ -157,6 +157,8 @@
     "test:composer-queue-header": "bun test/composer-queue-header.mjs",
     "test:sidebar-menu-capture": "bun test/sidebar-menu-capture.mjs",
     "test:source-popout": "bun test/source-popout.mjs",
+    "test:source-popout-acceptance": "bun test/source-popout-acceptance.mjs",
+    "acceptance:source-popout": "bun scripts/source-popout-acceptance.mjs",
     "test:sidebar-marquee-resume": "bun test/sidebar-marquee-resume.mjs",
     "test:agent-load-routing": "bun test/agent-load-routing.mjs",
     "test:inline-style": "bun test/inline-style.mjs",

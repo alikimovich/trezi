@@ -45,6 +45,8 @@ export function parseSmokeGroups(argv: readonly string[]): Set<NativeSmokeGroup>
     throw new Error('--live needs the core group in --only')
   if (argv.includes(DREAMER_ACCEPTANCE_FLAG) && !names.includes('settings'))
     throw new Error(`${DREAMER_ACCEPTANCE_FLAG} needs the settings group in --only`)
+  if (argv.includes(SOURCE_POPOUT_ACCEPTANCE_FLAG) && !names.includes('core'))
+    throw new Error(`${SOURCE_POPOUT_ACCEPTANCE_FLAG} needs the core group in --only`)
   return new Set(names as NativeSmokeGroup[])
 }
 
@@ -120,6 +122,8 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   dreamer: ['settings'],
   // LKM-447: opt-in, pushed only with --dreamer-acceptance (selectDreamerAcceptance).
   'dreamer-export-primary': ['settings'],
+  // LKM-456: opt-in, pushed only with --source-popout-acceptance (selectSourcePopoutAcceptance).
+  'fullscreen-popout-close-native': ['core'],
   'skills-settings': ['settings'],
   'browser-setup': ['settings'],
   'security-session': ['settings'],
@@ -191,6 +195,34 @@ export function selectDreamerAcceptance<T extends { name: string }>(
     )
   log(
     `DREAMER ACCEPTANCE (${DREAMER_ACCEPTANCE_FLAG}): running ${picked.map((c) => c.name).join(', ')}; not full-suite acceptance.`
+  )
+  return picked
+}
+
+/** LKM-456: the opt-in LKM-444 full-screen pop-out close acceptance with posted pointer and
+ *  keyboard input (`bun run acceptance:source-popout`, docs/TESTING.md). */
+export const SOURCE_POPOUT_ACCEPTANCE_FLAG = '--source-popout-acceptance'
+export const SOURCE_POPOUT_ACCEPTANCE_CHECK = 'fullscreen-popout-close-native'
+
+/** With the flag, only the prelude and the pop-out acceptance run; without it the selection
+ *  is unchanged. It runs alone: not with --live or the Dreamer acceptance. */
+export function selectSourcePopoutAcceptance<T extends { name: string }>(
+  checks: T[],
+  argv: readonly string[],
+  log: (line: string) => void = console.log
+): T[] {
+  const flag = SOURCE_POPOUT_ACCEPTANCE_FLAG,
+    check = SOURCE_POPOUT_ACCEPTANCE_CHECK
+  if (!argv.includes(flag)) return checks
+  if (argv.includes('--live')) throw new Error(`${flag} cannot run with --live`)
+  if (argv.includes(DREAMER_ACCEPTANCE_FLAG))
+    throw new Error(`${flag} cannot run with ${DREAMER_ACCEPTANCE_FLAG}`)
+  const prelude: readonly string[] = SMOKE_PRELUDE
+  const picked = checks.filter(({ name }) => prelude.includes(name) || name === check)
+  if (!picked.some(({ name }) => name === check))
+    throw new Error(`${flag}: the ${check} check was not selected`)
+  log(
+    `SOURCE POP-OUT ACCEPTANCE (${flag}): running ${picked.map((c) => c.name).join(', ')}; not full-suite acceptance.`
   )
   return picked
 }
