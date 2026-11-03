@@ -13,6 +13,12 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Fixed
 
 - Held chat changes with deletions can land through the checked repository path; Retry and Resolve show immediate progress, and recovery failures offer a chat-scoped support report (LKM-446).
+## [0.13.6] - 2026-11-03
+
+### Fixed
+
+- The toolbar's button islands keep their own width, so the address block no longer stops a few points short of them after the window narrows (LKM-449).
+
 ## [0.13.5] - 2026-11-02
 
 ### Removed

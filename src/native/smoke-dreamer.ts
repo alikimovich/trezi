@@ -20,7 +20,7 @@ import { inspectUntil } from './smoke-wait'
  */
 
 /** Settings an earlier version saved for the removed Send to Agent OS; now never read. */
-const LEGACY_AGENT_OS_KEYS = [
+export const LEGACY_AGENT_OS_KEYS = [
   'trezi:dreamer:agent-os-url',
   'trezi:dreamer:agent-os-project',
   'trezi:dreamer:agent-os-token'

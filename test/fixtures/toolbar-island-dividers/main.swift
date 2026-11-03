@@ -86,7 +86,24 @@ func measure() -> [String: Any] {
     return report
 }
 
+/// LKM-449: an island asked to fill a wider slot (below required, as the toolbar's slack is) keeps its own width.
+func stretch(_ group: MomentaryToolbarGroup) -> [String: Any] {
+    let control = group.view!, slot = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 40))
+    var report: [String: Any] = ["hugging": Double(control.contentHuggingPriority(for: .horizontal).rawValue),
+                                 "stockHugging": Double(stock.contentHuggingPriority(for: .horizontal).rawValue)]
+    let superview = control.superview, autoresizing = control.translatesAutoresizingMaskIntoConstraints, frame = control.frame
+    control.removeFromSuperview(); control.translatesAutoresizingMaskIntoConstraints = false; slot.addSubview(control)
+    let fill = control.widthAnchor.constraint(equalTo: slot.widthAnchor); fill.priority = .defaultHigh
+    NSLayoutConstraint.activate([fill, control.leadingAnchor.constraint(equalTo: slot.leadingAnchor), control.centerYAnchor.constraint(equalTo: slot.centerYAnchor)])
+    slot.layoutSubtreeIfNeeded()
+    report["width"] = Double(control.frame.width); report["intrinsic"] = Double(control.intrinsicContentSize.width)
+    control.removeFromSuperview(); control.translatesAutoresizingMaskIntoConstraints = autoresizing; control.frame = frame
+    superview?.addSubview(control)
+    return report
+}
+
 var result: [String: Any] = ["hidesDividers": IslandSegmentedControl.hidesDividers, "osMajor": ProcessInfo.processInfo.operatingSystemVersion.majorVersion]
+result["stretch"] = ["interaction": stretch(interaction), "tools": stretch(tools)]
 result["initial"] = measure()
 // LKM-430: the pen glyph as the toolbar draws it, plain and active, and a click on each state.
 /// Opaque pixels of the image, drawn into a 40 pt bitmap.
