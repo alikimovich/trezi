@@ -58,6 +58,16 @@ export class NativeMarkupController {
     this.bound = bound
     this.options.host.send('markupBegin', { session: this.session })
   }
+  /**
+   * LKM-448: the top bar's Mark up button. Off, it begins; on, it asks the host for the same
+   * Cancel as the overlay's button and Escape: nothing is added, saved or attached. The session
+   * ends when the host answers `cancelled`, so a second press before then asks again and opens
+   * nothing.
+   */
+  toggle() {
+    if (!this.session) return this.begin()
+    this.options.host.send('markupCancel', { session: this.session })
+  }
   private clear() {
     this.session = null
     this.bound = null

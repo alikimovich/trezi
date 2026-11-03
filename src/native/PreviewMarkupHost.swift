@@ -44,11 +44,35 @@ extension Host {
         }
     }
 
+    /// LKM-448: the frames Mark up must never change, in window coordinates: the WKWebView, its
+    /// container (the canvas the preview lives in) and the inspector slot around it.
+    func previewMarkupGeometry() -> [String: Any] {
+        func rect(_ view: NSView?) -> Any {
+            guard let view, let superview = view.superview else { return NSNull() }
+            let value = superview.convert(view.frame, to: nil)
+            return ["x":value.minX, "y":value.minY, "width":value.width, "height":value.height]
+        }
+        return ["webView":rect(views["preview"]), "container":rect(canvas), "slot":rect(inspectorSlot), "window":["width":window.frame.width, "height":window.frame.height]]
+    }
     func previewMarkupInspect() -> [String: Any] {
-        guard let overlay = markup?.overlay else { return ["open":false, "session":markup?.session ?? NSNull(), "cover":previewCoverRects().count] }
+        guard let overlay = markup?.overlay else {
+            return ["open":false, "session":markup?.session ?? NSNull(), "cover":previewCoverRects().count, "geometry":previewMarkupGeometry()]
+        }
         let canvas = overlay.canvas, mapping = canvas.mapping
         let bitmap = NSBitmapImageRep(cgImage: canvas.image)
         func rect(_ value: NSRect) -> [String: Double] { ["x":value.minX, "y":value.minY, "width":value.width, "height":value.height] }
+        // The snapshot and the island in window coordinates, beside the WKWebView's frame.
+        let snapshot = overlay.convert(canvas.frame, to: nil), island = overlay.convert(overlay.barFrame, to: nil)
+        func hit(_ x: CGFloat, _ y: CGFloat) -> NSView? { window.contentView?.superview?.hitTest(NSPoint(x: x, y: y)) }
+        // Window points run up: above the island is between it and the page's top edge.
+        let beside = [hit(snapshot.midX, min(snapshot.maxY - 2, island.maxY + 4)), hit(snapshot.midX, island.minY - 4),
+                      hit(island.minX - 4, island.midY), hit(island.maxX + 4, island.midY), hit(snapshot.minX + 2, snapshot.minY + 2)]
+        let islandState: [String: Any] = [
+            "frame":rect(island), "snapshot":rect(snapshot), "glass":overlay.island.glass,
+            // The island takes its own points; the snapshot takes the rest, right beside it.
+            "hitIsland":hit(island.midX, island.midY).map { $0 === overlay.island || $0.isDescendant(of: overlay.island) } ?? false,
+            "hitBeside":beside.allSatisfy { $0 === canvas }
+        ]
         let marks: [[String: Any]] = canvas.document.marks.map { mark in
             ["tool":mark.tool.rawValue, "points":mark.points.map { [$0.x, $0.y] }, "view":mark.points.map { point -> [CGFloat] in let p = mapping.toView(point); return [p.x, p.y] }]
         }
@@ -57,7 +81,8 @@ extension Host {
                 "backing":window.backingScaleFactor, "tool":overlay.tool.rawValue, "marks":marks, "addEnabled":overlay.addEnabled, "undoEnabled":overlay.undoEnabled,
                 "adding":overlay.adding, "status":overlay.statusText, "error":overlay.errorShown, "animates":overlay.animates, "focused":overlay.ownsFocus,
                 "topmost":canvasTopmost(overlay), "cover":previewCoverRects().count, "context":markup?.context ?? [:], "magenta":magentaPixels(bitmap),
-                "controls":overlay.controls.map { ["label":$0.cell?.accessibilityLabel() ?? "", "enabled":$0.isEnabled, "frame":rect($0.frame)] as [String: Any] }]
+                "controls":overlay.controls.map { ["label":$0.cell?.accessibilityLabel() ?? "", "enabled":$0.isEnabled, "frame":rect($0.convert($0.bounds, to: overlay))] as [String: Any] },
+                "island":islandState, "geometry":previewMarkupGeometry()]
     }
     private func canvasTopmost(_ view: NSView) -> Bool { canvas.subviews.last === view }
     /// The smoke's marker colour for Trezi's in-page chrome, sampled every few pixels.

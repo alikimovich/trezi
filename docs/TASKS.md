@@ -10,6 +10,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Reopening without a location keeps the caret and selection (`editor-controller.ts`, `test/native-editor.mjs`).
 - [x] Unit `test/source-popout.mjs` (full, entering, exiting, re-shown, failed enter/exit, five rounds, windowed control) and the native `source-popout` smoke (`src/native/smoke-source-popout.ts`, group `core`): ×, red button and ⌘W from full screen, dock, hide while entering and leaving, three rounds, windowed close and dock, a docked editor in a full-screen main window, draft and selection after each.
 - [ ] Manager: the native `core` group on the merged SHA, `source-popout` with `source-popout.json` and its `source-popout-*.png` captures, plus the ticket's live foreground check.
+## Mark up: real toggle, floating island, no "…" entry (LKM-448)
+
+- [x] "…" (`ToolbarMore.moreActions`) has no Mark up entry; the interaction segment and Actions → Mark up keep it.
+- [x] The top bar segment toggles (`NativeMarkupController.toggle`): off it begins, on it sends `markupCancel`, the overlay's own guarded Cancel (no Add, attachment, message or dialog); a stale token is answered `cancelled`. The Actions entry only opens.
+- [x] The controls float in `PreviewMarkupIsland` at the top of the page, over the snapshot, which takes the WKWebView's exact frame (`place(area:page:)`): no row, inset or resize. The island alone takes clicks; the pen draws everywhere else.
+- [x] Select, Slow Motion and Mark up draw their on state with one helper (`ToolbarIslands.stateImage`): the same glyph, size and weight, accent when on, plain when disabled; the tooltip and VoiceOver say "Cancel Mark up" while on.
+- [x] Unit `markup-controller`, `preview-markup` and `toolbar-island-dividers` cover the toggle, the island geometry and hit-testing, token Cancel and the light/dark state matrix (red on 8899067b). The `toolbar-actions` smoke records enter → cancel → enter cycles with WKWebView/container frames and innerWidth/innerHeight/scrollY unchanged, at default and 850 pt, a resize while on, and light/dark; `toolbar-more` asserts the entry is gone.
+- [ ] Operator: `markup-toggle-overlay-native` (real pointer, disposable profile, 850 pt, resize while active, repeated cycles, light/dark state matrix) and the native `core` group on the merged SHA.
 
 ## Chat recovery flow (LKM-446)
 

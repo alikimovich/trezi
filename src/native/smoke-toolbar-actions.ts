@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
+import { markupToggleChecks } from './smoke-markup-toggle'
 import { assertIslandDividers, capture } from './smoke-toolbar'
 import { waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
@@ -21,7 +22,8 @@ const MINIMUM_WINDOW = 850
  * code editor, windowed and full screen, and reaches the one existing form; a second press with
  * the form up leaves it. The disposable profile has no invite code, so the form is the invite
  * question and nothing can be sent: this check never fills a field or presses a default button.
- * The real Mark up segment takes a posted click, draws a generated stroke and cancels. The
+ * The real Mark up segment takes a posted click, draws a generated stroke and cancels; LKM-448:
+ * a second click on it cancels, a third enters again (`smoke-markup-toggle.ts`). The
  * device segment takes posted clicks in the tools island with Code, Layers and Expand on and
  * off and in full screen, and the viewport survives each of them, a resize and a project
  * switch.
@@ -191,7 +193,8 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
     await code(false)
     await fullScreen(false)
 
-    // Mark up: one click opens it, a second is no second session, a generated stroke, Cancel.
+    // Mark up: one click opens it, a generated stroke, the overlay's Cancel. LKM-448: then the
+    // segment toggles, enter → cancel → enter, with the preview's geometry unchanged throughout.
     const rest = await shell()
     assert.deepEqual(
       [rest.markupEnabled, rest.markupLabel, rest.markupToolTip, rest.markupHasImage],
@@ -199,6 +202,7 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
       'the Mark up button is ready'
     )
     assert.equal(rest.markupActive, false, 'the button rests while no overlay is open')
+    assert.ok(!rest.moreMenu.includes('Mark up'), 'the … menu has no Mark up entry')
     const cover = (await markup()).cover
     await click('markup')
     const opened = await waitFor(async () => {
@@ -206,9 +210,6 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
       return state.open && state
     }, 'the Mark up button opens the overlay')
     assert.ok(opened.cover > cover, 'the page is told the overlay covers it')
-    const session = opened.session
-    await click('markup')
-    assert.equal((await markup()).session, session, 'a second click is no second session')
     const open = await shell()
     results.markupOpen = { active: open.markupActive, prominent: open.markupProminent }
     assert.equal(open.markupActive, true, 'the button shows the open overlay')
@@ -221,10 +222,11 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
     await test({ action: 'button', label: 'Pen' })
     await test({
       action: 'pointer',
+      // Below the floating island at the top of the snapshot (LKM-448).
       points: [
-        [60, 60],
-        [120, 90],
-        [180, 60]
+        [60, 200],
+        [140, 240],
+        [220, 200]
       ]
     })
     assert.equal((await markup()).undoEnabled, true, 'the generated stroke is a mark')
@@ -233,6 +235,9 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
     await waitFor(async () => !(await shell()).markupActive, 'the button returns to rest')
     assert.equal((await shell()).markupProminent, false, 'the glyph returns to rest')
     assert.equal((await markup()).cover, cover, 'the page is uncovered again')
+    const toggle = markupToggleChecks(host, click, shot, results)
+    await toggle.cycle('default', 3)
+    await toggle.states()
 
     // Device: each state of the other tools, then full screen, in both directions.
     const flip = async (stage: string) => {
@@ -309,11 +314,15 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
       assert.ok(results[name].gap > 0, `${name}: the address block ends before the islands`)
       await appearances(name)
     }
-    // The narrowest toolbar still answers on its last island button.
-    await click('markup')
-    await waitFor(async () => (await markup()).open, 'minimum width: Mark up opens')
-    await test({ action: 'button', label: 'Cancel' })
-    await waitFor(async () => !(await markup()).open, 'minimum width: Mark up closes')
+    // The narrowest toolbar still answers on its last island button, as a toggle, with the
+    // preview unchanged; a resize while it is on keeps the island on the page (LKM-448).
+    await toggle.cycle('minimum', 2)
+    await toggle.resize(MINIMUM_WINDOW, MINIMUM_WINDOW + 150)
+    for (const appearance of ['light', 'dark'] as const) {
+      await host.request('shellPerform', { action: 'window-appearance', row: appearance })
+      await toggle.cycle(`minimum-${appearance}`, 1)
+    }
+    await host.request('shellPerform', { action: 'window-appearance', row: '' })
     await flip('desktop, minimum width')
     await host.request('shellPerform', { action: 'window-width', row: String(width) })
     await waitFor(async () => Math.abs((await shell()).windowWidth - width) < 1, 'default width')

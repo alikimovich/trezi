@@ -244,25 +244,76 @@ let elsewhere = NSTextView(frame: NSRect(x: 0, y: 0, width: 10, height: 10)); wi
 window.makeFirstResponder(elsewhere)
 check(!down(key("z", 6, .command, window: window)), "⌘Z in another view is not taken")
 elsewhere.removeFromSuperview()
-// Layout: one row when wide, wrapped when narrow, nothing clipped or overlapping.
+// Layout (LKM-448): the snapshot keeps the page's whole frame and the controls float over it in
+// an island at its top: one row when wide, wrapped when narrow, nothing clipped or overlapping.
 func noOverlap(_ label: String) {
+    let island = overlay.barFrame, shown = overlay.canvas.frame
     let frames = overlay.controls.map { $0.convert($0.bounds, to: overlay) }
     for (i, a) in frames.enumerated() {
-        check(overlay.bounds.contains(a), "\(label): control \(i) inside \(a)")
+        check(island.contains(a), "\(label): control \(i) inside the island \(a) \(island)")
         for b in frames[(i + 1)...] { check(!a.intersects(b), "\(label): controls overlap") }
     }
-    check(overlay.canvas.frame.height > 0 && !overlay.canvas.frame.intersects(overlay.barFrame), "\(label): marks never run under the bar")
+    check(shown.contains(island), "\(label): the island floats inside the snapshot")
+    check(near(island.minY, shown.minY + PreviewMarkupOverlay.inset, 1), "\(label): at its top")
+    check(near(island.midX, shown.midX, 1), "\(label): centred")
+    check(island.minX >= shown.minX + PreviewMarkupOverlay.inset - 1 && island.maxX <= shown.maxX - PreviewMarkupOverlay.inset + 1, "\(label): inset from its sides")
+    // Over the snapshot, not beside it: no row, so the snapshot loses no height.
+    check(overlay.subviews.last === overlay.island, "\(label): drawn above the snapshot")
 }
-overlay.layout(); noOverlap("wide"); let wideBar = overlay.barFrame.height
+func hits(_ label: String) {
+    let island = overlay.barFrame, shown = overlay.canvas.frame
+    let host = overlay.superview!
+    func hit(_ x: CGFloat, _ y: CGFloat) -> NSView? { overlay.hitTest(host.convert(NSPoint(x: x, y: y), from: overlay)) }
+    let center = hit(island.midX, island.midY)
+    check(center === overlay.island || center?.isDescendant(of: overlay.island) == true, "\(label): the island takes its own points")
+    // Its padding too: a press between two buttons never starts a mark.
+    check(hit(island.minX + 3, island.midY) === overlay.island, "\(label): its padding is the island's")
+    for control in overlay.controls where !control.isHidden {
+        let frame = control.convert(control.bounds, to: overlay)
+        check(hit(frame.midX, frame.midY) === control, "\(label): a press on \(control.cell?.accessibilityLabel() ?? "") is that button's")
+    }
+    // Right beside it, and everywhere else on the page, the pen draws.
+    for (x, y) in [(island.midX, island.maxY + 4), (island.minX - 4, island.midY), (island.maxX + 4, island.midY), (shown.minX + 2, shown.maxY - 2), (shown.midX, shown.midY)] {
+        check(hit(x, y) === overlay.canvas, "\(label): (\(x), \(y)) beside the island draws")
+    }
+}
+overlay.layout(); noOverlap("wide"); hits("wide"); let wideBar = overlay.barFrame.height
+check(overlay.canvas.frame == overlay.bounds, "with no page frame the snapshot fills the overlay")
 for (width, height) in [(CGFloat(420), CGFloat(600)), (300, 500), (240, 300)] {
-    overlay.frame = NSRect(x: 0, y: 0, width: width, height: height); overlay.layout(); noOverlap("\(width)")
+    overlay.frame = NSRect(x: 0, y: 0, width: width, height: height); overlay.layout(); noOverlap("\(width)"); hits("\(width)")
     check(overlay.barFrame.height > wideBar, "narrow wraps")
+    check(overlay.canvas.frame == overlay.bounds, "the snapshot keeps the whole height at \(width)")
 }
-overlay.show(error: "That went wrong")
 overlay.frame = NSRect(x: 0, y: 0, width: 300, height: 500); overlay.layout()
+let beforeError = overlay.canvas.frame, plainIsland = overlay.barFrame
+overlay.show(error: "That went wrong")
 check(overlay.statusText == "That went wrong" && overlay.errorShown, "the failure is on screen")
+check(overlay.canvas.frame == beforeError, "an error grows the island, never moves the snapshot")
+check(overlay.barFrame.height > plainIsland.height, "it shows in the island")
+noOverlap("error")
 overlay.show(error: nil)
 check(!overlay.errorShown, "and clears")
+// The island in dark and light appearances: an opaque face drawn in each.
+for name in [NSAppearance.Name.darkAqua, .aqua] {
+    overlay.appearance = NSAppearance(named: name)
+    let face = paint(overlay.island.face)
+    let c = face.rgb(face.width / 2, 2), dark = name == .darkAqua
+    check(dark ? c.r < 90 : c.r > 180, "the island's face follows \(name.rawValue): \(c)")
+}
+overlay.appearance = nil
+// The page's own frame: the snapshot sits exactly on it, wherever it is in the preview area.
+let holder = NSView(frame: NSRect(x: 0, y: 0, width: 1100, height: 760))
+window.contentView!.addSubview(holder)
+overlay.removeFromSuperview(); holder.addSubview(overlay)
+overlay.frame = NSRect(x: 40, y: 20, width: 1000, height: 700)
+overlay.page = NSRect(x: 190, y: 70, width: 700, height: 600)
+overlay.layout()
+check(overlay.canvas.convert(overlay.canvas.bounds, to: holder) == overlay.page, "the snapshot takes the page's frame: \(overlay.canvas.convert(overlay.canvas.bounds, to: holder))")
+noOverlap("page"); hits("page")
+overlay.page = NSRect(x: 0, y: 0, width: 2000, height: 2000); overlay.layout()
+check(overlay.canvas.frame == overlay.bounds, "a page past the area is clipped to it")
+overlay.page = nil; overlay.layout()
+overlay.removeFromSuperview(); holder.removeFromSuperview(); window.contentView!.addSubview(overlay)
 
 // MARK: session
 let parent = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
@@ -270,7 +321,7 @@ window.contentView!.addSubview(parent)
 var events: [[String: Any]] = []
 var pendingCapture: ((Result<PreviewMarkup.Captured, PreviewMarkup.Failure>) -> Void)?
 var focused = 0, refusal: String?
-let session = PreviewMarkup(parent: parent, emit: { events.append($0) }, refusal: { refusal }, capture: { pendingCapture = $0 }, restoreFocus: { _ in focused += 1 }, changed: {})
+let session = PreviewMarkup(parent: parent, emit: { events.append($0) }, refusal: { refusal }, capture: { pendingCapture = $0 }, restoreFocus: { if $0 != nil { focused += 1 } }, changed: {})
 func captured(_ image: CGImage) -> PreviewMarkup.Captured {
     PreviewMarkup.Captured(image: image, context: ["url":"http://localhost:5173/a?b=1", "viewportWidth":640, "viewportHeight":400, "zoom":1, "scrollX":0, "scrollY":12])
 }
@@ -310,6 +361,46 @@ check(state() == "cancelled" && session.overlay == nil && session.session == nil
 check(released == nil, "the frozen snapshot, which only the overlay holds, is released")
 check(focused == 1, "focus goes back")
 check(events.allSatisfy { $0["event"] as? String != "markup-add" }, "cancel attaches nothing")
+
+// LKM-448: the top bar button's Cancel goes by token through the same path, and opening and
+// closing moves nothing else in the preview area.
+let livePage = NSView(frame: NSRect(x: 60, y: 20, width: 700, height: 540)); parent.addSubview(livePage)
+let sibling = NSView(frame: NSRect(x: 0, y: 560, width: 900, height: 40)); parent.addSubview(sibling)
+func frames() -> [NSRect] { [livePage.frame, sibling.frame, parent.frame] }
+let closedFrames = frames()
+let pageArea = NSRect(x: 0, y: 0, width: 900, height: 560)
+session.place(area: pageArea, page: livePage.frame)
+session.begin("t1"); pendingCapture?(.success(captured(solid(1400, 1080, .white)))); pendingCapture = nil
+check(state() == "open" && session.overlay?.frame == pageArea, "it opens over the area placed before it")
+check(session.overlay?.canvas.convert(session.overlay!.canvas.bounds, to: parent) == livePage.frame, "the snapshot sits on the page")
+check(frames() == closedFrames, "opening moves and resizes nothing")
+session.overlay?.canvas.pointerDown(CGPoint(x: 100, y: 100), tool: .pen)
+session.overlay?.canvas.pointerDragged(CGPoint(x: 140, y: 120)); session.overlay?.canvas.pointerUp()
+let beforeStale = events.count
+session.cancel("t0")
+check(session.overlay != nil && session.session == "t1", "a stale token closes nothing")
+check(events.count == beforeStale + 1 && state() == "cancelled" && events.last?["session"] as? String == "t0", "but is answered, so Bun never waits")
+let focusBefore = focused
+session.cancel("t1")
+check(state() == "cancelled" && events.last?["session"] as? String == "t1", "the button cancels its session")
+check(session.overlay == nil && session.session == nil, "and closes it, marks and all")
+check(focused == focusBefore + 1, "focus goes back")
+check(frames() == closedFrames, "closing moves and resizes nothing")
+check(events.allSatisfy { $0["event"] as? String != "markup-add" }, "the button's Cancel attaches nothing")
+// A press while the snapshot is still being taken cancels too, and the late capture opens nothing.
+session.begin("t2"); check(pendingCapture != nil, "capturing")
+session.cancel("t2")
+check(state() == "cancelled" && session.session == nil, "cancel during the capture")
+check(focused == focusBefore + 1, "with no overlay, focus never moved")
+pendingCapture?(.success(captured(solid(400, 300, .white)))); pendingCapture = nil
+check(session.overlay == nil, "a late capture opens nothing")
+// And it opens again.
+session.begin("t3"); pendingCapture?(.success(captured(solid(1400, 1080, .white)))); pendingCapture = nil
+check(state() == "open" && session.session == "t3" && session.overlay != nil, "re-entering opens")
+check(session.overlay?.canvas.document.marks.isEmpty == true, "with none of the cancelled marks")
+session.cancel("t3"); check(session.overlay == nil && frames() == closedFrames, "and closes again")
+livePage.removeFromSuperview(); sibling.removeFromSuperview()
+session.place(area: .zero)
 
 // Add: the composite with its context; closes only on Bun's word; keeps marks on a refusal.
 session.begin("s4"); pendingCapture?(.success(captured(solid(800, 400, .systemGreen)))); pendingCapture = nil
