@@ -10,6 +10,21 @@ only the disposable synthetic-project prelude and `markup-toggle-overlay-native`
 Input is posted through the AppKit event queue; focus and disabled setup are
 explicitly synthetic. No provider, installed app, system preference, or account is used.
 
+Icon matrix (light and dark; idle, hover, pressed, focus, disabled; all eight
+segments). Routes are labelled in `evidence.json`: idle posts no input; hover is a
+posted `mouseMoved`, and AppKit's tracking-area hover follows the real cursor, so the
+hover capture may show the idle look and is not proof of a hover highlight; pressed
+posts mouse-down, captures a resting baseline and a held frame, reads the segment
+while held (no accent) and waits for a release outside the segment (no action runs),
+and fails if the held crop is identical to the baseline or the press overlapped the
+next step; focus and disabled are synthetic setup. "One shared treatment" is measured,
+not declared: per phase all eight segments share one image size, hit width/height
+and vertical centre (within 1 pt), a unique glyph from the toolbar's own symbol
+table, and painted ink (size, centre, coverage) that matches a fresh render of that
+symbol at `ToolbarSymbolSpec`. The selected-Select, selected-Slow-Motion and
+selected-Mark-up steps assert the other state buttons are not accented. A failing
+island hit probe now reports what each probe point hit (`hitBesideDetail`).
+
 Each invocation creates a new immutable directory under
 `test/artifacts/native/markup-acceptance/` with `run.json`, `evidence.json` and a
 foreground PNG for every recorded step. `run.json` names the tested SHA and dirty

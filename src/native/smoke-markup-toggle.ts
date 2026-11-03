@@ -44,11 +44,12 @@ export function markupToggleChecks(
     assert.ok(Math.abs(a - b) <= 1, `${label}: ${a} vs ${b}`)
   /** The island floats at the top of the snapshot, which lies exactly on the live page. */
   const island = (open: State, frames: State, label: string) => {
-    const { frame, snapshot, hitIsland, hitBeside } = open.island as {
+    const { frame, snapshot, hitIsland, hitBeside, hitBesideDetail } = open.island as {
       frame: Rect
       snapshot: Rect
       hitIsland: boolean
       hitBeside: boolean
+      hitBesideDetail: string[]
     }
     const web = frames.webView as Rect
     for (const key of ['x', 'y', 'width', 'height'] as const)
@@ -58,7 +59,12 @@ export function markupToggleChecks(
     near(frame.x + frame.width / 2, snapshot.x + snapshot.width / 2, `${label}: island centred`)
     assert.ok(frame.x >= snapshot.x && frame.x + frame.width <= snapshot.x + snapshot.width)
     assert.equal(hitIsland, true, `${label}: the island takes its own clicks`)
-    assert.equal(hitBeside, true, `${label}: the pen draws right beside it`)
+    // The detail lists what each probe point hit: above, below, left, right, snapshot corner.
+    assert.equal(
+      hitBeside,
+      true,
+      `${label}: the pen draws right beside it (hit: ${JSON.stringify(hitBesideDetail)})`
+    )
   }
   const resting = async (label: string) => {
     const rest = await waitFor(async () => {

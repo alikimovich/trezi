@@ -55,59 +55,113 @@ export async function checkMarkupAcceptance(host: NativeBridge) {
     assert.equal(reply.route, 'real event route', `${segment}: posted AppKit click`)
     return reply
   }
+  const segments = [
+    'select-object',
+    'overlay',
+    'speed',
+    'markup',
+    'code',
+    'layers',
+    'device',
+    'expand'
+  ]
+  const routes: Record<string, string> = {
+    idle: 'no input (resting)',
+    hover: 'posted mouseMoved (tracking-area hover not guaranteed)',
+    pressed: 'posted AppKit pointer',
+    focus: 'synthetic focus setup, posted key',
+    disabled: 'synthetic disabled setup'
+  }
+  /** One shared treatment across all eight segments: glyph, size, weight, alignment, hit area. */
+  const sharedTreatment = (label: string, states: Record<string, any>[]) => {
+    const first = states[0]
+    const near = (a: number, b: number, tolerance: number, what: string) =>
+      assert.ok(Math.abs(a - b) <= tolerance, `${label}: ${what} (${a} vs ${b})`)
+    const glyphs = states.map((state) => state.glyph as string)
+    assert.ok(
+      glyphs.every((glyph) => glyph) && new Set(glyphs).size === states.length,
+      `${label}: every button keeps its own glyph (${glyphs.join(', ')})`
+    )
+    for (const state of states) {
+      const id = `${label} ${state.segment}`
+      assert.equal(state.iconFamily, 'SF Symbols', `${id}: icon family`)
+      assert.equal(state.imageWidth, first.imageWidth, `${id}: image width`)
+      assert.equal(state.imageHeight, first.imageHeight, `${id}: image height`)
+      assert.equal(state.symbolWeight, first.symbolWeight, `${id}: symbol weight`)
+      near(state.frame.width, first.frame.width, 1, `${state.segment} hit width`)
+      near(state.frame.height, first.frame.height, 1, `${state.segment} hit height`)
+      near(state.windowFrame.midY, first.windowFrame.midY, 1, `${state.segment} vertical centre`)
+      assert.ok(state.frame.width >= 32 && state.frame.height >= 24, `${id}: hit area`)
+      // The painted glyph against a fresh render of its symbol at the shared spec.
+      const { ink, expectedInk } = state
+      assert.ok(ink && expectedInk && ink.coverage > 0, `${id}: glyph is painted`)
+      near(ink.width, expectedInk.width, 1, `${state.segment} ink width`)
+      near(ink.height, expectedInk.height, 1, `${state.segment} ink height`)
+      near(ink.centerX, expectedInk.centerX, 1, `${state.segment} ink centre x`)
+      near(ink.centerY, expectedInk.centerY, 1, `${state.segment} ink centre y`)
+      assert.ok(
+        Math.abs(ink.coverage / expectedInk.coverage - 1) < 0.02,
+        `${id}: symbol weight matches the shared spec (${ink.coverage} vs ${expectedInk.coverage})`
+      )
+      // Optical size: every glyph's longer side and its centre in the image agree.
+      near(
+        Math.max(ink.width, ink.height),
+        Math.max(first.ink.width, first.ink.height),
+        3,
+        `${state.segment} optical size`
+      )
+      near(ink.centerX, 20, 2, `${state.segment} glyph centred horizontally`)
+      near(ink.centerY, 20, 2, `${state.segment} glyph centred vertically`)
+    }
+  }
   const matrix = async (appearance: string, toggle: ReturnType<typeof markupToggleChecks>) => {
     await host.request('shellPerform', { action: 'window-appearance', row: appearance })
     for (const phase of ['idle', 'hover', 'pressed', 'focus', 'disabled'] as const) {
-      for (const segment of [
-        'select-object',
-        'overlay',
-        'speed',
-        'markup',
-        'code',
-        'layers',
-        'device',
-        'expand'
-      ]) {
+      const measuredStates: Record<string, any>[] = []
+      for (const segment of segments) {
         const state = (await host.request('markupAcceptanceProbe', { segment, phase })) as Record<
           string,
           any
         >
         assert.equal(state.error, undefined, `${appearance} ${phase} ${segment}: ${state.error}`)
-        assert.equal(
-          state.route,
-          phase === 'disabled'
-            ? 'synthetic disabled setup'
-            : phase === 'focus'
-              ? 'synthetic focus setup, posted key'
-              : 'posted AppKit pointer',
-          `${phase} route`
-        )
-        assert.equal(state.iconFamily, 'SF Symbols', `${segment}: icon family`)
-        assert.equal(state.imageWidth, 20, `${segment}: optical width`)
-        assert.equal(state.imageHeight, 20, `${segment}: optical height`)
-        assert.equal(state.symbolWeight, 'regular', `${segment}: symbol weight`)
-        assert.ok(state.frame.width >= 32 && state.frame.height >= 24, `${segment}: hit area`)
+        assert.equal(state.route, routes[phase], `${phase} route`)
         assert.ok(state.label && state.tooltip && state.glyph, `${segment}: identity and help`)
         assert.ok(state.axLabel, `${segment}: accessibility label`)
         if (phase === 'disabled')
           assert.equal(state.enabled, false, `${segment}: disabled appearance`)
-        if (phase === 'idle') assert.equal(state.prominent, false, `${segment}: no idle accent`)
+        else assert.equal(state.enabled, true, `${segment}: enabled`)
+        // Pressed is the control's own highlight, never the accent that marks an active button.
+        assert.equal(state.prominent, false, `${appearance} ${phase} ${segment}: no accent`)
         if (phase === 'focus') assert.equal(state.focused, true, `${segment}: keyboard focus`)
         const { pressedPNG, ...measured } = state
+        measuredStates.push(measured)
         ;(evidence.steps as Record<string, unknown>)[`${appearance}-${phase}-${segment}`] = measured
         if (phase === 'pressed') {
+          assert.equal(state.released, true, `${segment}: the press ended before the next step`)
+          assert.ok(
+            state.segmentPixelsChanged > 0,
+            `${appearance} ${segment}: pressed capture is identical to the resting segment`
+          )
           assert.ok(pressedPNG, `${segment}: mouse-down foreground PNG`)
           const name = `${appearance}-${phase}-${segment}`
           writeFileSync(join(dir, `${name}.png`), Buffer.from(pressedPNG, 'base64'))
           ;(evidence.captures as Record<string, string>)[name] = `${name}.png`
           record()
+          assert.equal((await markup()).open, false, `${segment}: a held press runs no action`)
+          assert.equal((await shell()).markupSegmentProminent, false, `${segment}: no active fill`)
         } else await capture(`${appearance}-${phase}-${segment}`)
         await host.request('markupAcceptanceProbe', { segment, phase: 'reset' })
       }
+      sharedTreatment(`${appearance} ${phase}`, measuredStates)
     }
     await toggle.states(`${appearance}-`)
     const selectOn = (evidence.steps as Record<string, any>)[`${appearance}-select-on`]
     assert.equal(selectOn.shell.selectSegmentProminent, true, `${appearance}: Select active accent`)
+    assert.equal(
+      selectOn.shell.markupSegmentProminent,
+      false,
+      `${appearance}: Select on does not light Mark up`
+    )
     assert.equal(
       (await shell()).selectSegmentProminent,
       false,
@@ -124,6 +178,13 @@ export async function checkMarkupAcceptance(host: NativeBridge) {
       `${appearance}: Slow Motion active`
     )
     await capture(`${appearance}-selected-speed`)
+    const speedOn = await shell()
+    assert.equal(speedOn.selectSegmentProminent, false, `${appearance}: Slow Motion on, Select off`)
+    assert.equal(
+      speedOn.markupSegmentProminent,
+      false,
+      `${appearance}: Slow Motion on, Mark up off`
+    )
     await host.request('shellPerform', { action: 'preview-speed', row: '1' })
     await waitFor(
       async () =>
@@ -134,6 +195,13 @@ export async function checkMarkupAcceptance(host: NativeBridge) {
     await click('markup')
     await waitFor(async () => (await markup()).open, `${appearance}: Mark up open`)
     await capture(`${appearance}-selected-markup`)
+    const markupOn = await shell()
+    assert.equal(markupOn.selectSegmentProminent, false, `${appearance}: Mark up on, Select off`)
+    assert.equal(
+      ((await host.request('previewSpeedInspect')) as { speedProminent: boolean }).speedProminent,
+      false,
+      `${appearance}: Mark up on, Slow Motion off`
+    )
     assert.equal(
       (await shell()).markupSegmentProminent,
       true,
