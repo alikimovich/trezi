@@ -10,6 +10,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Reopening without a location keeps the caret and selection (`editor-controller.ts`, `test/native-editor.mjs`).
 - [x] Unit `test/source-popout.mjs` (full, entering, exiting, re-shown, failed enter/exit, five rounds, windowed control) and the native `source-popout` smoke (`src/native/smoke-source-popout.ts`, group `core`): ×, red button and ⌘W from full screen, dock, hide while entering and leaving, three rounds, windowed close and dock, a docked editor in a full-screen main window, draft and selection after each.
 - [ ] Manager: the native `core` group on the merged SHA, `source-popout` with `source-popout.json` and its `source-popout-*.png` captures, plus the ticket's live foreground check.
+## Native suite failure on main 8899067bb056 (LKM-449)
+
+- [x] Cause: on run 54 NSToolbar laid out the interaction island 155–159 pt wide at 1320 pt (151 in runs 47, 48, 51), so the measured right-group inset was 478, not 474. Hiding "…" and slow motion subtracts the usual 77 pt shift, so the minimum stage's in-resize width used 401 against a real 397 and the block stopped 24 pt before the right groups.
+- [x] `MomentaryToolbarGroup` hugs its control at required priority (stock: 250), so the toolbar cannot hand the islands its slack.
+- [x] Unit `toolbar-island-dividers` asserts the hugging and that each island keeps its intrinsic width in a wider slot; red without the line (both islands stretch to 400 pt).
+- [ ] Manager: the native `core` group (`toolbar-address`) on the merged SHA.
 
 ## Dreamer Proposals: Export… the sole primary action (LKM-443)
 

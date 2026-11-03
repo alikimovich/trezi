@@ -13,6 +13,12 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Fixed
 
 - Closing or docking the popped-out code editor while it is in full screen no longer leaves a black, empty full-screen Space: the editor leaves full screen first and the main window comes back in front, and reopening the editor keeps its caret and selection (LKM-444).
+## [0.13.6] - 2026-11-03
+
+### Fixed
+
+- The toolbar's button islands keep their own width, so the address block no longer stops a few points short of them after the window narrows (LKM-449).
+
 ## [0.13.5] - 2026-11-02
 
 ### Removed
