@@ -194,7 +194,8 @@ export class NativeEditorController {
           doc && requested ? revealRange(doc, requested, range) : { range: null as null }
         session.state.range = shown.range
         if (shown.error) session.state.error = shown.error
-        session.state.reveal = (session.state.reveal ?? 0) + 1
+        // Reopening without a location keeps the caret and selection (LKM-444).
+        if (requested) session.state.reveal = (session.state.reveal ?? 0) + 1
       }
     } catch (error) {
       if (generation === session.generation) session.state.error = String(error)

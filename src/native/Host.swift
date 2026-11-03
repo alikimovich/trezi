@@ -320,7 +320,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             editor.update(state)
             if state["visible"] as? Bool == true { ProductLog.info("send-path", "host action=code stage=panel-shown uptimeNs=\(DispatchTime.now().uptimeNanoseconds)") }
             if state["popped"] as? Bool == true {
-                if editor.popout == nil { let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false); panel.isReleasedWhenClosed = false; panel.delegate = editor; panel.title = "Trezi · Code"; panel.contentMinSize = NSSize(width: 760, height: 420); panel.center(); editor.popout = panel }
+                if editor.popout == nil { let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false); panel.isReleasedWhenClosed = false; panel.delegate = editor; panel.title = "Trezi · Code"; panel.contentMinSize = NSSize(width: 760, height: 420); panel.center(); editor.popout = panel; editor.presenter = SourcePopout(window: panel) { [weak self] in self?.window } }
                 if let container = editor.popout?.contentView, editor.superview !== container {
                     editor.removeFromSuperview()
                     // Let the window own the editor's bounds after leaving the dock.
@@ -334,9 +334,9 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
                     ])
                 }
                 editor.isHidden = false
-                if state["visible"] as? Bool == true { if editor.popout?.isVisible != true { editor.popout?.makeKeyAndOrderFront(nil) } } else { editor.popout?.orderOut(nil) }
+                if state["visible"] as? Bool == true { editor.presenter?.show() } else { editor.presenter?.hide() }
             } else {
-                editor.popout?.orderOut(nil)
+                editor.presenter?.hide()
                 if editor.superview !== canvas {
                     editor.removeFromSuperview()
                     editor.translatesAutoresizingMaskIntoConstraints = true
