@@ -7,8 +7,8 @@ import { waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
 type Page = (code: string) => Promise<unknown>
+// LKM-448: no Mark up here; its own top bar segment and the Actions menu keep it.
 const TITLES = [
-  'Mark up',
   'Reload Without Cache',
   'Restart Dev Server (clean cache)',
   'Switch JS / Native Preview'
@@ -24,6 +24,13 @@ const TITLES = [
 export async function checkToolbarMore(host: NativeBridge, page: Page) {
   const state = await host.request('shellInspect')
   assert.deepEqual(state.moreMenu, TITLES, 'the … menu lists its entries')
+  assert.ok(!state.moreMenu.includes('Mark up'), 'the … menu has no Mark up entry')
+  assert.equal(
+    await host.request('shellPerform', { action: 'preview-more', row: 'markup' }),
+    false,
+    'and picking one finds nothing'
+  )
+  assert.ok(state.interactionSegments.includes('markup'), 'the top bar segment stays')
   assert.equal(state.moreEnabled, true, 'the … menu is enabled with a running preview')
   assert.equal(
     await host.request('shellPerform', { action: 'preview-more', row: 'nothing' }),

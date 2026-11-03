@@ -4,8 +4,8 @@ import AppKit
 /// (select | ruler | slow motion | mark up), whose click opens this menu (`MomentaryToolbarGroup`);
 /// like "…", the segment leaves windows under 1000 pt (`fitMore`), and the View menu keeps it.
 /// Its entries go to Bun as `speed` shell actions (`src/native/preview-speed.ts`), which owns the
-/// session's speed; the glyph turns filled and accent-coloured while the preview is slowed or
-/// paused (`Host.setPreviewSpeed`).
+/// session's speed; the glyph turns accent-coloured while the preview is slowed or paused
+/// (`Host.setPreviewSpeed`), the on look Select and Mark up share (LKM-448).
 extension NativeShell {
     static let speedEntries: [(String, String)] = [("Normal Speed (1×)", "1"), ("0.5×", "0.5"), ("0.25×", "0.25"), ("0.1×", "0.1"), ("Paused", "0")]
     func configureSpeed(_ item: NSMenuToolbarItem) {
@@ -17,7 +17,7 @@ extension NativeShell {
         let slowed = speed != 1
         item.label = slowed ? "Slow Motion \(previewSpeedLabel(speed))" : "Slow Motion"
         item.paletteLabel = "Slow Motion"; item.toolTip = item.label
-        item.image = slowed ? toolbarAccentSymbol("tortoise.fill", item.label) : toolbarSymbol("tortoise", item.label)
+        item.image = ToolbarIslands.stateImage("speed", item.label, active: slowed)
         defer { for group in toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }) { group.refresh() } }
         let menu = NSMenu(); menu.autoenablesItems = false
         for (title, value) in Self.speedEntries {

@@ -257,6 +257,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
         let item: NSToolbarItem = ["branch", "publish", "speed", "more"].contains(key) ? NSMenuToolbarItem(itemIdentifier: identifier) : NSToolbarItem(itemIdentifier: identifier)
         item.label = labels[key] ?? key; item.paletteLabel = item.label; item.toolTip = item.label
+        if key == "markup" { item.toolTip = ToolbarIslands.markupToolTip(active: markupActive) }
         item.image = key == "markup" ? ToolbarIslands.markupImage(active: markupActive) : toolbarSymbol(symbols[key] ?? "circle", item.label)
         // Menu-only items let AppKit open the menu from the entire control.
         if !["branch", "chat", "address", "speed", "more"].contains(key) { item.target = self; item.action = #selector(toolbarAction(_:)) }
@@ -370,7 +371,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         toolbarItems["device"]?.isEnabled = previewState["deviceEnabled"] as? Bool ?? false
         toolbarItems["select-object"]?.label = selecting ? "Stop Selecting" : "Select Object"
         toolbarItems["select-object"]?.toolTip = toolbarItems["select-object"]?.label
-        toolbarItems["select-object"]?.image = toolbarSymbol(selecting ? "cursorarrow.rays" : "cursorarrow", toolbarItems["select-object"]?.label)
+        // LKM-448: the same on look as slow motion and Mark up (`ToolbarIslands.stateImage`).
+        toolbarItems["select-object"]?.image = ToolbarIslands.stateImage("select-object", toolbarItems["select-object"]?.label, active: selecting)
         let mobile = previewState["viewport"] as? String == "mobile"
         toolbarItems["device"]?.label = mobile ? "Switch to Desktop" : "Switch to Mobile"
         toolbarItems["device"]?.toolTip = toolbarItems["device"]?.label

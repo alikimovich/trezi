@@ -847,8 +847,9 @@ async function main() {
     renderChat(state)
     markup.check()
   }
+  // LKM-448: the top bar button toggles; the Actions menu entry only opens.
   host.on('shell-action', (action) => {
-    if (action.action === 'markup') markup.begin()
+    if (action.action === 'markup') markup.toggle()
   })
   host.on('menu', ({ action }) => {
     if (action === 'markup') markup.begin()

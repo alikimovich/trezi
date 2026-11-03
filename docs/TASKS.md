@@ -11,6 +11,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Repair: `native-chat` checks LKM-446's Problem card (prefix, "still held" reason, held file, Resolve action) instead of the retired "project changed under them" text.
 - [ ] Follow-up, not in this ticket: offscreen, with the main thread blocked 0.4 s per loop, a new chat whose reply arrives at about 32 000 characters had no realized row for about 10 s (the `LazyVStack` document kept its old estimated height, and the settle realized 19 times without a frame). This is the likely trigger of LKM-354's blank column on a loaded host.
 - [ ] Manager: the full native suite on the merged SHA.
+## Mark up: real toggle, floating island, no "…" entry (LKM-448)
+
+- [x] "…" (`ToolbarMore.moreActions`) has no Mark up entry; the interaction segment and Actions → Mark up keep it.
+- [x] The top bar segment toggles (`NativeMarkupController.toggle`): off it begins, on it sends `markupCancel`, the overlay's own guarded Cancel (no Add, attachment, message or dialog); a stale token is answered `cancelled`. The Actions entry only opens.
+- [x] The controls float in `PreviewMarkupIsland` at the top of the page, over the snapshot, which takes the WKWebView's exact frame (`place(area:page:)`): no row, inset or resize. The island alone takes clicks; the pen draws everywhere else.
+- [x] Select, Slow Motion and Mark up draw their on state with one helper (`ToolbarIslands.stateImage`): the same glyph, size and weight, accent when on, plain when disabled; the tooltip and VoiceOver say "Cancel Mark up" while on.
+- [x] Unit `markup-controller`, `preview-markup` and `toolbar-island-dividers` cover the toggle, the island geometry and hit-testing, token Cancel and the light/dark state matrix (red on 8899067b). The `toolbar-actions` smoke records enter → cancel → enter cycles with WKWebView/container frames and innerWidth/innerHeight/scrollY unchanged, at default and 850 pt, a resize while on, and light/dark; `toolbar-more` asserts the entry is gone.
+- [ ] Operator: `markup-toggle-overlay-native` (real pointer, disposable profile, 850 pt, resize while active, repeated cycles, light/dark state matrix) and the native `core` group on the merged SHA.
 
 ## Chat recovery flow (LKM-446)
 
