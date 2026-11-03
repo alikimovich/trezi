@@ -2,6 +2,28 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-03 — LKM-452 Dreamer acceptance: a guarded window-server route for the save panel
+
+- Decision b2543e30: the remote `NSSavePanel` gets real window-server keys. No manual operator step is added, and the harness never saves or cancels the panel programmatically.
+- Root cause, kept honest:
+  - The mismatch is traced in the source. The panel's Save and Cancel are drawn out of process, so they are not in-process `NSButton`s. The old `savePress` therefore posted Return to the app's own queue (`NSApp.postEvent`), and on a8bebe7f the panel stayed open.
+  - The sandboxed probe (exit 69) proves only that the panel runs out of process. It does not prove how the panel service handles posted events or focus.
+- Route (`NativeSheets.pressSavePanel`, `src/native/DreamerAcceptance.swift`):
+  - **Local.** When the panel has an in-process button with the Return or Escape key equivalent, it is clicked through the app queue, as Export… still is.
+  - **Remote.** Otherwise the harness posts Return (Save) or Escape (Cancel) at the HID tap, but only if:
+    - `CGPreflightPostEventAccess()` is true. This call never prompts. Nothing requests access, uses Accessibility prompts, opens System Settings or goes through System Events or AppleScript.
+    - The focus guard holds just before the key: the test app is active and frontmost, and the panel is a sheet on the Dreamer window, on screen and key.
+  - If either check fails, nothing is sent. The check fails at once with `refused`, so it never waits for a panel that cannot close.
+  - The access receipt (check, preflight, process, pid, bundle, parent process, route) goes into evidence.json `access` and run.json `access`. Preflight false is an access wait for the operator. It is not a reason to change the executor.
+- Evidence: the `savePress` step records the route, input, preflight, guard, `sent`, `refused` and the panel's `before` snapshot. It is written before the close wait.
+- Unit `dreamer-acceptance` (Swift fixture with recording closures, so nothing is posted) covers:
+  - the route matrix: local, remote, no access, and each focus field false;
+  - a remote press without access: no key sent, one preflight call, a full receipt;
+  - a remote press out of focus: no key sent, the guard fields false;
+  - local Save and Cancel: one click and no preflight.
+  - Source checks: the press path calls no `.ok(`, `.cancel(`, `performClick` or `NSApp.postEvent`; `.cancel(nil)` appears only in cleanup; no prompting or System Settings API appears; the smoke fails on `!press.sent` before the close wait; every LKM-447 assertion is still there.
+- No timeout changed and no assertion was removed. RED still fails at `real NSSavePanel opened`. No product, exporter or controller code changed. No native run happened here (0 native calls), and `dreamer-export-primary` is not passed.
+
 ## 2026-11-03 — LKM-452 Dreamer acceptance: why Save left the panel open, and step evidence
 
 - Run on a8bebe7f: GREEN failed at `save panel closed; false`. Export… opened the real panel as a sheet and the directory step passed, but the panel stayed open after `savePress`. `exports` was empty because an entry was written only after the panel closed.

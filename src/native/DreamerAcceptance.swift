@@ -5,8 +5,10 @@ import SwiftUI
 // gates it to the test profile. It chooses Trezi → Dreamer Proposals… in the real menu,
 // measures the Overview's buttons where SwiftUI drew them, clicks Export… or presses Return
 // with events posted to the app's queue (where the window server's input arrives), and
-// answers the real NSSavePanel that Export… attaches. Nothing here changes the window, the
-// export or the panel: each step is one a user could take.
+// answers the real NSSavePanel that Export… attaches. That panel is drawn out of process, so
+// its Save and Cancel get Return and Escape from the window server, behind a non-prompting
+// access preflight and a focus guard (LKM-452). Nothing here changes the window, the export
+// or the panel: each step is one a user could take.
 extension NativeSheets {
     private func acceptanceFailure(_ message: String) -> NSError {
         NSError(domain: "DreamerAcceptance", code: 1, userInfo: [NSLocalizedDescriptionKey: message])
@@ -92,17 +94,12 @@ extension NativeSheets {
             save.directoryURL = URL(fileURLWithPath: folder, isDirectory: true)
             return savePanelState()
         case "savePress":
-            // The panel's own Save or Cancel button, clicked; its Return or Escape key if it has no in-process button.
-            // `before` is the panel as it was when the input was posted (LKM-452).
+            // The panel's own Save or Cancel (LKM-452): `pressSavePanel` below.
             guard let save = attachedSavePanel else { throw acceptanceFailure("No save panel is open") }
-            let save_ = c["button"] as? String == "save"
-            let before = NativeSheets.savePanelSnapshot(save, parent: panel)
-            if let button = NativeSheets.savePressTarget(save, save: save_) {
-                try click(at: button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil), in: save)
-                return ["route": "click", "title": button.title, "pressed": button.title, "before": before]
-            }
-            try press(save_ ? "return" : "escape", in: save)
-            return ["route": "key", "key": save_ ? "return" : "escape", "pressed": NSNull(), "before": before]
+            let (window, _) = try dreamerWindow()
+            return try NativeSheets.pressSavePanel(save, parent: window, save: c["button"] as? String == "save",
+                                                   access: { CGPreflightPostEventAccess() }, postKey: NativeSheets.postWindowServerKey,
+                                                   clickLocal: { try self.click(at: $0, in: save) })
         case "dismissSavePanel":
             // Cleanup after a failure only: never part of the checked path.
             let open = attachedSavePanel != nil
@@ -143,6 +140,70 @@ extension NativeSheets {
     static func savePressTarget(_ window: NSWindow, save: Bool) -> NSButton? {
         panelViews(window).compactMap { $0 as? NSButton }
             .first { !$0.isHiddenOrHasHiddenAncestor && $0.isEnabled && $0.keyEquivalent == (save ? "\r" : "\u{1b}") }
+    }
+    /// What must hold just before a window-server key goes to the save panel: Trezi is the
+    /// active, frontmost app, the panel is the sheet on the Dreamer window, both are on
+    /// screen, and the panel has key focus. Otherwise a global Return could reach another app.
+    struct SavePanelFocus {
+        var appActive: Bool, frontmost: Bool, attached: Bool, foreground: Bool, key: Bool
+        var failed: [String] {
+            [("app not active", appActive), ("app not frontmost", frontmost), ("panel not attached to the Dreamer window", attached),
+             ("panel not on screen", foreground), ("panel not key", key)].filter { !$0.1 }.map(\.0)
+        }
+        var dictionary: [String: Any] { ["appActive": appActive, "frontmost": frontmost, "attached": attached, "foreground": foreground, "key": key] }
+    }
+    static func savePanelFocus(_ save: NSWindow, parent: NSWindow) -> SavePanelFocus {
+        SavePanelFocus(appActive: NSApp.isActive,
+                       frontmost: NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier,
+                       attached: save.sheetParent === parent && parent.attachedSheet === save,
+                       foreground: save.isVisible && parent.isVisible && !parent.isMiniaturized && save.occlusionState.contains(.visible),
+                       key: save.isKeyWindow && NSApp.keyWindow === save)
+    }
+    /// LKM-452: in-process buttons keep the app-queue click (`local`). A panel drawn by the
+    /// out-of-process service gets Return or Escape from the window server (`remote`), and only
+    /// when post-event access is already granted (checked without a prompt) and the focus holds.
+    static func savePanelRoute(inProcess: Bool, preflight: Bool, focus: SavePanelFocus) -> (route: String, refused: String?) {
+        if inProcess { return ("local", nil) }
+        if !preflight { return ("remote", "post-event access is not granted (CGPreflightPostEventAccess() is false)") }
+        if !focus.failed.isEmpty { return ("remote", "the save panel is not in focus: \(focus.failed.joined(separator: ", "))") }
+        return ("remote", nil)
+    }
+    /// Which process asked for post-event access: this host and its parent (no paths, no arguments).
+    static func accessReceipt(preflight: Bool, route: String) -> [String: Any] {
+        let parent = getppid()
+        var path = [CChar](repeating: 0, count: 4096)
+        let parentName = proc_pidpath(parent, &path, UInt32(path.count)) > 0 ? URL(fileURLWithPath: String(cString: path)).lastPathComponent : ""
+        return ["check": "dreamer-export-primary", "access": "post events (CGPreflightPostEventAccess, never requested)",
+                "preflight": preflight, "process": ProcessInfo.processInfo.processName, "pid": Int(getpid()),
+                "bundle": Bundle.main.bundleIdentifier ?? "", "parentPid": Int(parent), "parent": parentName, "route": route]
+    }
+    /// Presses Save (Return) or Cancel (Escape) in the panel. `before` is the panel as it was
+    /// when the input was chosen. A refused route sends nothing and carries the reason and
+    /// the access receipt; the caller fails the check on `sent: false`.
+    static func pressSavePanel(_ save: NSWindow, parent: NSWindow, save isSave: Bool, access: () -> Bool,
+                               postKey: (CGKeyCode, Bool) -> Void, clickLocal: (NSPoint) throws -> Void) throws -> [String: Any] {
+        let before = savePanelSnapshot(save, parent: parent)
+        let key = isSave ? "return" : "escape"
+        if let button = savePressTarget(save, save: isSave) {
+            try clickLocal(button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil))
+            return ["route": "local", "input": "click", "pressed": button.title, "sent": true, "refused": NSNull(), "before": before]
+        }
+        let preflight = access()
+        let focus = savePanelFocus(save, parent: parent)
+        let decision = savePanelRoute(inProcess: false, preflight: preflight, focus: focus)
+        let result: [String: Any] = ["route": decision.route, "input": "window-server \(key)", "pressed": NSNull(),
+                                     "preflight": preflight, "guard": focus.dictionary, "sent": decision.refused == nil,
+                                     "refused": decision.refused ?? NSNull(), "before": before,
+                                     "receipt": accessReceipt(preflight: preflight, route: "remote window-server \(key)")]
+        if decision.refused == nil {
+            let code: CGKeyCode = isSave ? 36 : 53
+            postKey(code, true); postKey(code, false)
+        }
+        return result
+    }
+    /// One key event at the window server's HID level, which delivers it to the frontmost app's key window.
+    static func postWindowServerKey(_ code: CGKeyCode, _ down: Bool) {
+        CGEvent(keyboardEventSource: CGEventSource(stateID: .hidSystemState), virtualKey: code, keyDown: down)?.post(tap: .cghidEventTap)
     }
     private static func panelViews(_ window: NSWindow) -> [NSView] {
         func all(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap { all($0) } }

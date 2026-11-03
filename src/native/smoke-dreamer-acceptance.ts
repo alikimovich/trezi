@@ -200,8 +200,13 @@ export async function checkDreamerAcceptance(
       })
       const press = await step('savePress', { button })
       entry.press = press
-      // The route, the button pressed (none when the panel has no in-process one) and the panel then.
+      // The route (local click or remote window-server key), the preflight and focus guard,
+      // the button pressed and the panel then. A refused route sent nothing: fail now, with
+      // the access receipt, instead of waiting for a panel that cannot close.
+      if (press.receipt) evidence.access = press.receipt
       log.note(`savePress ${button}`, { press })
+      if (!press.sent)
+        throw new Error(`save panel ${button} not sent (${press.route} route): ${press.refused}`)
       await until('save panel closed', async () => !(await step('savePanel')).open)
       entry.closed = true
       return { name: panel.name as string, entry }
