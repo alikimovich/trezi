@@ -20,7 +20,8 @@ export function markupToggleChecks(
   host: NativeBridge,
   click: (segment: string) => Promise<unknown>,
   shot: (name: string) => Promise<void>,
-  results: State
+  results: State,
+  step?: (name: string) => Promise<void>
 ) {
   const shell = (): Promise<State> => host.request('shellInspect')
   const markup = (): Promise<State> => host.request('previewMarkupInspect')
@@ -43,11 +44,12 @@ export function markupToggleChecks(
     assert.ok(Math.abs(a - b) <= 1, `${label}: ${a} vs ${b}`)
   /** The island floats at the top of the snapshot, which lies exactly on the live page. */
   const island = (open: State, frames: State, label: string) => {
-    const { frame, snapshot, hitIsland, hitBeside } = open.island as {
+    const { frame, snapshot, hitIsland, hitBeside, hitBesideDetail } = open.island as {
       frame: Rect
       snapshot: Rect
       hitIsland: boolean
       hitBeside: boolean
+      hitBesideDetail: string[]
     }
     const web = frames.webView as Rect
     for (const key of ['x', 'y', 'width', 'height'] as const)
@@ -57,7 +59,12 @@ export function markupToggleChecks(
     near(frame.x + frame.width / 2, snapshot.x + snapshot.width / 2, `${label}: island centred`)
     assert.ok(frame.x >= snapshot.x && frame.x + frame.width <= snapshot.x + snapshot.width)
     assert.equal(hitIsland, true, `${label}: the island takes its own clicks`)
-    assert.equal(hitBeside, true, `${label}: the pen draws right beside it`)
+    // The detail lists what each probe point hit: above, below, left, right, snapshot corner.
+    assert.equal(
+      hitBeside,
+      true,
+      `${label}: the pen draws right beside it (hit: ${JSON.stringify(hitBesideDetail)})`
+    )
   }
   const resting = async (label: string) => {
     const rest = await waitFor(async () => {
@@ -98,7 +105,7 @@ export function markupToggleChecks(
     await waitFor(async () => !(await markup()).open, `${label}: a second click cancels`)
     await resting(label)
     const after = await composer()
-    assert.equal(after.attachments.length, draft.attachments.length, `${label}: nothing attached`)
+    assert.deepEqual(after.attachments, draft.attachments, `${label}: attachments are kept`)
     assert.equal(after.text, draft.text, `${label}: the draft is kept`)
     assert.equal((await chat()).messages?.length ?? 0, messages, `${label}: nothing is sent`)
     assert.equal((await host.request('sheetInspect')).visible, false, `${label}: no dialog`)
@@ -107,13 +114,16 @@ export function markupToggleChecks(
   /** `cycles` enter → stroke → cancel rounds at the current width, then one more entry works. */
   const cycle = async (stage: string, cycles: number) => {
     const before = await geometry()
+    await step?.(`${stage}-before`)
     const runs: State[] = []
     for (let round = 1; round <= cycles; round++) {
       const label = `${stage} #${round}`
       const open = await enter(label)
+      assert.equal(open.undoEnabled, false, `${label}: Cancel left no saved marks`)
       const during = await geometry()
       unchanged(during, before, `${label} open`)
       island(open, during, label)
+      await step?.(`${stage}-${round}-open`)
       await host.request('previewMarkupTest', { action: 'button', label: 'Pen' })
       await host.request('previewMarkupTest', {
         action: 'pointer',
@@ -127,6 +137,7 @@ export function markupToggleChecks(
       if (round === 1) await shot(`markup-${stage}-open`)
       await leave(label)
       unchanged(await geometry(), before, `${label} closed`)
+      await step?.(`${stage}-${round}-cancelled`)
       runs.push({ session: open.session, island: open.island.frame, geometry: during })
     }
     assert.equal(new Set(runs.map((run) => run.session)).size, cycles, `${stage}: new sessions`)
@@ -140,8 +151,15 @@ export function markupToggleChecks(
       await host.request('shellPerform', { action: 'window-width', row: String(size) })
       await waitFor(async () => Math.abs((await shell()).windowWidth - size) < 1, `width ${size}`)
     }
+    // Measure the target width while closed, then compare the active resize to that
+    // same width; the viewport is expected to resize with the window, not with Mark up.
+    await width(to)
+    const targetClosed = await geometry()
+    await step?.(`resize-${to}-closed-baseline`)
+    await width(from)
     const closed = await geometry()
     const open = await enter(`resize ${from}`)
+    await step?.(`resize-${from}-open`)
     await width(to)
     const resized = await waitFor(async () => {
       const state = await markup()
@@ -151,20 +169,24 @@ export function markupToggleChecks(
         : false
     }, `resize ${from} → ${to}: the snapshot follows the page`)
     island(resized.state, resized.frames, `resized to ${to}`)
+    unchanged(resized.frames, targetClosed, `resized to ${to} while active`)
+    await step?.(`resize-${to}-active`)
     assert.equal(resized.state.session, open.session, 'a resize keeps the session')
     await shot(`markup-resized-${to}`)
     await width(from)
     await leave(`resize back to ${from}`)
     unchanged(await geometry(), closed, `resize back to ${from}`)
+    await step?.(`resize-${from}-cancelled`)
   }
 
   /** Select and Mark up on: the same accent glyph on each segment, and no fill left after. */
-  const states = async () => {
+  const states = async (stage = '') => {
     await click('select-object')
     const selecting = await waitFor(async () => {
       const state = await shell()
       return state.selectMode && state
     }, 'Select turns on')
+    await step?.(`${stage}select-on`)
     await click('select-object')
     await waitFor(async () => !(await shell()).selectMode, 'Select turns off')
     const off = await shell()
@@ -182,6 +204,7 @@ export function markupToggleChecks(
       select: [selecting.selectProminent, selecting.selectSegmentProminent],
       selectOff: [off.selectProminent, off.selectSegmentProminent]
     }
+    await step?.(`${stage}select-off`)
   }
 
   return { cycle, resize, states }

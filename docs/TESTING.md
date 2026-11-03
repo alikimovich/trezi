@@ -1,5 +1,41 @@
 # Testing Trezi
 
+## Mark up foreground acceptance (LKM-455)
+
+After LKM-455 merges, the operator or watchdog holds the canonical shared native-desktop
+lease and runs `bun run acceptance:markup` on the reviewed SHA, followed by
+`bun run acceptance:markup --red=active-fill`. The command takes the repository
+runner lock, refuses a competing ephemeral host or a background run, and launches
+only the disposable synthetic-project prelude and `markup-toggle-overlay-native`.
+Input is posted through the AppKit event queue; focus and disabled setup are
+explicitly synthetic. No provider, installed app, system preference, or account is used.
+
+Icon matrix (light and dark; idle, hover, pressed, focus, disabled; all eight
+segments). Routes are labelled in `evidence.json`: idle posts no input; hover is a
+posted `mouseMoved`, and AppKit's tracking-area hover follows the real cursor, so the
+hover capture may show the idle look and is not proof of a hover highlight; pressed
+posts mouse-down, captures a resting baseline and a held frame, reads the segment
+while held (no accent) and waits for a release outside the segment (no action runs),
+and fails if the held crop is identical to the baseline or the press overlapped the
+next step; focus and disabled are synthetic setup. "One shared treatment" is measured,
+not declared: per phase all eight segments share one image size, hit width/height
+and vertical centre (within 1 pt), a unique glyph from the toolbar's own symbol
+table, and painted ink (size, centre, coverage) that matches a fresh render of that
+symbol at `ToolbarSymbolSpec`. The selected-Select, selected-Slow-Motion and
+selected-Mark-up steps assert the other state buttons are not accented. A failing
+island hit probe now reports what each probe point hit (`hitBesideDetail`).
+
+Each invocation creates a new immutable directory under
+`test/artifacts/native/markup-acceptance/` with `run.json`, `evidence.json` and a
+foreground PNG for every recorded step. `run.json` names the tested SHA and dirty
+state. Inspect the JSON and PNGs for the icon states, island position and unchanged
+viewport at ordinary and 850 pt widths, including active resize and repeated Cancel
+cycles. The RED invocation must exit successfully only after the fixture itself fails
+at the no-active-fill-after-Cancel assertion after a test-only synthetic setup leaves
+the real Mark up segment visibly accented. Retain both run directories, including
+on failure. Record the tested merged SHA and the GREEN and RED verdicts; this is an
+operator check after merge, not acceptance on the worker branch.
+
 The test runner is `node test/run.mjs unit|native|live|all`. Unit checks run with
 bounded concurrency (by default `max(min(4, cores), min(cores - 2, 8))` workers) and
 one exclusive barrier (`native-chat-send-follow`, LKM-371). Swift compiles share a
@@ -50,6 +86,72 @@ pointer gestures/animation timing, which must be reported as reduced coverage.
 Dreamer review window: real menu, real `NSSavePanel`, both widths. It runs under the
 shared desktop lock and is not part of any tier. Command, lock, artifacts and cleanup
 are in `docs/DREAMER.md` ("Acceptance on the shipping code").
+`bun run acceptance:chat-recovery` (LKM-453) is the same kind of opt-in foreground check
+for the LKM-446 chat recovery card; see "Chat recovery acceptance" below.
+
+### Pop-out full-screen close acceptance
+
+`bun run acceptance:source-popout` (LKM-456, for LKM-444) is an opt-in foreground
+check named `fullscreen-popout-close-native`. It is not part of any tier. Run it only
+while holding the shared desktop lock, on a clean checkout. The runner
+(`scripts/source-popout-acceptance.mjs`) refuses these with exit 2 and posts nothing:
+- a dirty tree
+- `TREZI_NATIVE_BACKGROUND_TEST=1`
+- another test Trezi
+- a held runner lock
+
+It builds the checkout's test profile and launches
+`bun run dev:native --test --only=core --source-popout-acceptance`. That run uses a
+disposable profile and the synthetic smoke project, and runs only the prelude and the
+check.
+
+- **Cases** (`src/native/smoke-source-popout-acceptance.ts`):
+  - Closing the editor by the editor ×, the red close button and ⌘W, both windowed and
+    in full screen.
+  - Docking, windowed and in full screen.
+  - Closing and docking during the enter and exit transitions.
+  - Three close and reopen rounds.
+  - Negative controls: a windowed pop-out, and a docked editor closed while the main
+    window is in full screen.
+
+  Each case asserts every lifecycle check of the `source-popout` smoke
+  (`src/native/source-popout-acceptance.ts`). It also checks that the draft and the
+  selection are kept, and probes the main window through input: a click on the
+  composer, a typed key, then Delete. Entering full screen, typing the draft and
+  reopening are setup, not proof.
+- **Input:** the host steps (`src/native/SourcePopoutAcceptance.swift`) post
+  window-targeted mouse down/up and key down/up events with `NSApp.postEvent`. AppKit
+  dispatches them through `sendEvent`, hit-testing and menu key equivalents. Every
+  receipt labels them as programmatic, not OS or HID hardware input.
+- **Preflight:** before posting, each step checks that the app is active, that no
+  modal or sheet is up, that the target window is visible and key, and that the point
+  hit-tests to the intended control. Any failure refuses the step with a precise
+  receipt and posts nothing. The route is in-process, so no Accessibility or Input
+  Monitoring grant is requested and no system setting changes.
+- **Evidence:** the run writes to `test/artifacts/native/source-popout-acceptance/`:
+  - `evidence.json`: build SHA, every step's state before and after, receipts and
+    probes
+  - SHA-named PNGs
+  - `cleanup.json`
+
+  The runner then copies them, with `run.json`, into a new read-only folder:
+  `test/artifacts/native/fullscreen-popout-close/<sha12>-<mode>-<start>/`. A run is
+  MET only if all of these hold:
+  - the stamped build SHA is HEAD, with no local changes
+  - cleanup left no full-screen window and the main window windowed
+  - GREEN passed, or RED failed as designed
+- **RED:** `--red=legacy-order-out` arms the first full-screen editor-× close, in the
+  test profile only. That close's hide skips `SourcePopout` and orders the full-screen
+  window out at once, as `sourceState` did before LKM-444. RED is met only if the step
+  fails on the lifecycle assertions and records the pop-out off screen while still in
+  full screen. Cleanup leaves full screen and restores the presenter.
+- **Limits:**
+  - The build is the checkout's `out/native`, not a separate copy.
+  - In full screen, the red close button lives in AppKit's title-bar window. Its
+    on-screen state is recorded rather than assumed.
+  - `test/source-popout-acceptance.mjs` (unit tier) checks the rules, the RED
+    detection, the host steps' route and the command's guards without a desktop. The
+    native run itself is an operator step.
 
 ### Focused verification (LOCAL-TEST-AUDIT)
 
@@ -629,6 +731,91 @@ An unknown or empty group name fails before the build. `--live` requires `core`
 (the live turn edits the heading the core group writes). `native-runtime` only
 demands fresh sidebar evidence when `sidebar` ran. Acceptance still needs the
 full suite.
+
+### Chat recovery acceptance (LKM-453)
+
+An opt-in native check, `chat-recovery-flow-native`, drives the LKM-446 recovery card
+(Retry, Resolve, Discard on held changes) in the shipping chat. It is not part of any
+tier, and its pass is not full-suite acceptance.
+
+```sh
+bun run acceptance:chat-recovery                   # GREEN: must pass on the shipping code
+bun run acceptance:chat-recovery --red=delay-busy  # RED: must fail at the held busy state
+```
+
+- **Lock.** It is a desktop suite. Start it only while holding the manager's shared
+  desktop lock. `scripts/chat-recovery-acceptance.mjs` also takes this checkout's runner
+  lock (`test/artifacts/runs/.runner-lock`). It refuses to start in these cases:
+  - the checkout has uncommitted changes, so the source cannot be identified by one SHA;
+  - another test Trezi (`TreziHost … ephemeral`) is running;
+  - `TREZI_NATIVE_BACKGROUND_TEST=1` is set;
+  - the host is not macOS with swiftc.
+- **Run.** The script runs `bun run dev:native --test --only=chat --chat-recovery-acceptance`.
+  That is a disposable Trezi with its own profile, preferences, data and logs, which
+  start-native removes. The script forces ad hoc signing (`TREZI_SIGN_IDENTITY=-`) so the
+  build does not use the operator's login keychain. It runs only the smoke prelude and this check
+  (`selectChatRecoveryAcceptance` in `src/native/smoke-groups.ts`). The check refuses
+  `--live` and `--dreamer-acceptance`, and it needs the `chat` group.
+- **Seams.** The check is `src/native/smoke-chat-recovery-acceptance.ts`. Its host side is
+  `src/native/ChatRecoveryAcceptance.swift`, reachable only on an ephemeral profile.
+  - It uses the shared smoke chat with the smoke's provider stub, which never reaches a
+    real provider.
+  - Held changes come from synthetic isolation events.
+  - The owner's reply to `agent:retry-landing` and `agent:resolve-conflict` is withheld
+    at `services.invoke` until the check releases it. Discard is answered with an error
+    and must never be asked.
+  - Product code is not stubbed.
+- **Deferred boundary.** Each press waits for the card to be busy within 1 s, while the
+  request is still held:
+  - the busy label (Retrying…/Resolving…);
+  - a spinner (an `NSProgressIndicator` in the card);
+  - Retry, Resolve and Discard disabled.
+
+  The rules are in `busyProblems` (`src/native/chat-recovery-acceptance.ts`). Then a
+  second click on the busy label, a click on Discard and a click on the other recovery
+  must send no request and leave the card busy.
+- **Outcomes.** One PNG and one JSON each, in this order:
+  - `held-busy` and `held-blocked`;
+  - `still-held`: one line, at most 120 characters;
+  - `clean`: a merged Resolve with one outcome line and no agent turn;
+  - `handover`: a Resolve with conflicts, which starts exactly one agent turn;
+  - `failure`: the card states the Problem and offers Copy support report. The written
+    report must be 0600, readable JSON, name only this chat and have its planted fake
+    key and token redacted. It is kept as `failure-report.json`;
+  - `isolation`: a second chat's Problem and report are its own and it was never busy;
+  - `terminal-clear`: a landed event clears this chat's card, Problem and report, and
+    the other chat keeps its own.
+- **Input.** Clicks are mouse events posted to the app's event queue at the button's
+  centre. They pass the window's hit test, and need no Accessibility or Input Monitoring
+  permission, so no system prompt appears.
+  - The keyboard route (the handover Resolve) focuses the button's key-view proxy with
+    `makeFirstResponder`. That focusing is programmatic, and each JSON says so. The route
+    then posts a real Space key down and up.
+  - Space activating a SwiftUI button needs keyboard navigation (Full Keyboard Access).
+    The check records `NSApp.isFullKeyboardAccessEnabled` in `evidence.json` and never
+    changes it. With it off, the keyboard step fails and names the setting.
+  - A disabled SwiftUI button has no key-view proxy. On the busy card the disabled
+    buttons' frames are derived from the last all-enabled row, and the JSON marks each
+    as `frameSource`. The unit `chat-recovery-acceptance` checks that derivation against
+    the drawn frames.
+  - The second chat is set up by events, not input.
+- **Artifacts.** In `test/artifacts/native/chat-recovery-acceptance/`, cleared at the
+  start of each run: `evidence.json` (source sha, build stamp, outcomes, error), the
+  PNG/JSON pairs above and `failure-report.json`. The failure PNG shows the planted fake
+  secret in the card's reason, as the product does. Only the report is redacted.
+
+  The script copies them, with `run.json` (source sha, branch, dirty flag, mode, whether
+  the expectation was met, a sha256 per file), into
+  `test/artifacts/acceptance/chat-recovery-flow-native/<sha>/<green|red-delay-busy>-<time>-<run-id>/`
+  and makes every file read-only. A run counts only when `evidence.json` is fresh and
+  names the same sha.
+- **RED.** `--red=delay-busy` arms a render gate before each input and holds every chat render until the request is released
+  (`delayRenders`), so the busy state can only appear after the reply. Its `run.json` is
+  met only when the check fails at `busy state before the reply`. The unit test covers
+  the rule-level RED cases.
+- **Cleanup.** The check restores `services.invoke` and the render gate, releases any
+  held request as still held, and resets the shared chat. start-native removes the
+  disposable profile when the app quits.
 
 ## GitHub CI
 

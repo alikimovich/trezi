@@ -288,6 +288,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-chat.ts` | test | — | smoke fixture |
 | `src/native/smoke-sidebar-status.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat-gate.ts` | test | — | smoke fixture |
+| `src/native/smoke-chat-recovery-acceptance.ts` | test | — | opt-in chat recovery acceptance fixture (held recovery requests at `services.invoke`, captures and the kept failure report in the artifacts folder, LKM-453) |
 | `src/native/smoke-chat-text.ts` | test | — | smoke fixture |
 | `src/native/smoke-chat-ui.ts` | test | — | smoke fixture |
 | `src/native/smoke-code-link.ts` | test | — | chat code-link click fixture (escape files and a second project beside the test folder, LKM-366) |
@@ -304,6 +305,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-fixture.ts` | test | — | `--test` project and failure capture |
 | `src/native/smoke-inspector-island.ts` | test | — | smoke fixture |
 | `src/native/smoke-inspector-custom.ts` | test | — | Custom tab request fixture file in the disposable test project (LKM-323) |
+| `src/native/smoke-markup-acceptance.ts` | test | — | opt-in foreground Mark up acceptance PNG and JSON evidence (LKM-455) |
 | `src/native/smoke-incident.ts` | test | — | smoke fixture |
 | `src/native/smoke-preview-timing.ts` | test | — | smoke fixture |
 | `src/native/smoke-preview-speed.ts` | test | — | smoke fixture |
@@ -340,6 +342,8 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-skills.ts` | test | — | smoke fixture |
 | `src/native/smoke-skills-imports.ts` | test | — | smoke fixture (folder, GitHub and recommendation imports) |
 | `src/native/smoke-source-editor.ts` | test | — | smoke fixture |
+| `src/native/smoke-source-popout.ts` | test | — | smoke fixture |
+| `src/native/smoke-source-popout-acceptance.ts` | test | — | opt-in pop-out full-screen close acceptance fixture (evidence and cleanup in the artifacts folder, LKM-456) |
 | `src/native/smoke-source-syntax.ts` | test | — | smoke fixture |
 | `src/native/smoke-source-wrap.ts` | test | — | smoke fixture |
 | `src/native/smoke-changes-panel.ts` | test | — | Changes list smoke (LKM-366) |

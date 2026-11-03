@@ -15,29 +15,41 @@ if (process.argv.includes('--help')) {
       'bun run dev:native [--project /path/to/repo]',
       'bun run dev:native --test [--only=group,group] [--live]',
       'bun run dev:native --test --only=settings --dreamer-acceptance',
+      'bun run dev:native --test --only=core --markup-acceptance',
       'Build and launch Trezi with Bun + WebKit. Use bun run test:native for integration checks.',
       `--only (with --test) runs only the named smoke groups: ${NATIVE_SMOKE_GROUPS.join(', ')}.`,
       'Without --only every group runs.',
       '--dreamer-acceptance (with --test) runs only the opt-in Dreamer acceptance (LKM-447);',
-      'use bun run acceptance:dreamer, which takes the runner lock and records the evidence.'
+      'use bun run acceptance:dreamer, which takes the runner lock and records the evidence.',
+      'bun run dev:native --test --only=chat --chat-recovery-acceptance',
+      '--chat-recovery-acceptance (with --test) runs only the opt-in chat recovery acceptance (LKM-453);',
+      'use bun run acceptance:chat-recovery, which takes the runner lock and records the evidence.',
+      '--source-popout-acceptance (with --test --only=core) runs only fullscreen-popout-close-native (LKM-456);',
+      'use bun run acceptance:source-popout, which also checks the SHA and keeps the evidence.'
     ].join('\n')
   )
   process.exit(0)
 }
 const args = process.argv.slice(2)
 for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--chat-recovery-acceptance') continue
   if (args[i] === '--project' && args[i + 1]) {
     i++
     continue
   }
-  if (['--test', '--live', '--dreamer-acceptance'].includes(args[i]) || args[i] === '--only' || args[i].startsWith('--only=')) continue
+  if (['--test', '--live', '--dreamer-acceptance', '--markup-acceptance', '--source-popout-acceptance'].includes(args[i]) || args[i] === '--only' || args[i].startsWith('--only=')) continue
   console.error(
     `Unknown native argument: ${args[i]}. Use --project /path/to/repo; Trezi manages its dev server.`
   )
   process.exit(1)
 }
-if (args.includes('--dreamer-acceptance') && !args.includes('--test')) {
-  console.error('--dreamer-acceptance is a native smoke check and requires --test.')
+for (const flag of ['--dreamer-acceptance', '--markup-acceptance', '--source-popout-acceptance'])
+  if (args.includes(flag) && !args.includes('--test')) {
+    console.error(`${flag} is a native smoke check and requires --test.`)
+    process.exit(1)
+  }
+if (args.includes('--chat-recovery-acceptance') && !args.includes('--test')) {
+  console.error('--chat-recovery-acceptance is a native smoke check and requires --test.')
   process.exit(1)
 }
 // Fail before the build: a typo in a group name should not cost a full build.

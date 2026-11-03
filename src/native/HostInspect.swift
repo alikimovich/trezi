@@ -32,6 +32,9 @@ extension Host {
             if ["key", "pointer", "button", "typeInstruction", "sendButton", "toolbarSegment"].contains(c["action"] as? String ?? "") {
                 Task { @MainActor in reply(id, await previewMarkupEvent(c)) }
             } else { reply(id, previewMarkupTest(c)) }
+        case "markupAcceptanceProbe":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            Task { @MainActor in reply(id, await markupAcceptanceProbe(c)) }
         case "layersInspect": reply(id, ["native":true, "visible":!layers.isHidden, "count":layers.nodes.count, "frame":NSStringFromRect(layers.frame), "selected":layers.selectedPath.map { $0 as Any } ?? NSNull()])
         case "layersIsland":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
@@ -57,8 +60,13 @@ extension Host {
         case "sourceVerification":
             guard ephemeral, let editor = sourceEditors[c["root"] as? String ?? sourceRoot] else { reply(id, error: "Test source editor required"); return true }
             if c["prepare"] as? Bool == true { reply(id, editor.prepareForeground()) }
+            else if c["popout"] is String { Task { @MainActor in do { reply(id, try await verifySourcePopout(editor, c)) } catch { reply(id, error: error.localizedDescription) } } }
             else if c["capture"] as? Bool == true { Task { @MainActor in do { reply(id, try await editor.captureToolbar()) } catch { reply(id, error: error.localizedDescription) } } }
             else { reply(id, editor.verifyShortcut(c["key"] as? String ?? "", focus: c["focus"] as? String ?? "code", characters: c["characters"] as? String).merging(["toolbar": editor.inspectToolbar()]) { _, new in new }) }
+        case "sourcePopoutAcceptance":
+            // LKM-456: the opt-in fullscreen-popout-close-native steps (SourcePopoutAcceptance.swift).
+            guard ephemeral, let editor = sourceEditors[c["root"] as? String ?? sourceRoot] else { reply(id, error: "Test source editor required"); return true }
+            Task { @MainActor in do { reply(id, try await sourcePopoutAcceptance(editor, c)) } catch { reply(id, error: error.localizedDescription) } }
         case "sourceNavigation":
             guard ephemeral, let editor = sourceEditors[c["root"] as? String ?? sourceRoot] else { reply(id, error: "Test source editor required"); return true }
             Task { @MainActor in do { reply(id, try await verifySourceNavigation(editor, c)) } catch { reply(id, error: error.localizedDescription) } }
@@ -295,6 +303,13 @@ extension Host {
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             Task { @MainActor in
                 do { reply(id, try await chatAcceptance(c)) }
+                catch { reply(id, error: error.localizedDescription) }
+            }
+        case "chatRecoveryAcceptance":
+            // LKM-453: the opt-in chat recovery acceptance's foreground, geometry and input steps.
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            Task { @MainActor in
+                do { reply(id, try await chatRecoveryAcceptance(c)) }
                 catch { reply(id, error: error.localizedDescription) }
             }
         case "chatInspect": reply(id, chat.inspect())

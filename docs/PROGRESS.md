@@ -11,6 +11,111 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - Test: `native-chat-parallel-stream` reads the cap and the paragraph from the check's source, asserts the capped text is 16 000–26 000 characters and that the timer stops at the cap. No changelog line: only the native smoke's workload changed.
 - Repair (review native run on the tree merged with LKM-446): `chat/native-chat` failed with `Resolve card lacks reason or action` and the card detail `Problem: The changes are still held after the checks and reconciliation.`. LKM-446 turns a parked isolation event with no decision into one Problem card (the smoke runs with auto-resolve off) and moves the files to the card's `fullDetail`, so the old assertion for "project changed under them" plus the file name in the detail could never hold. `smoke-chat.ts` now requires the Problem prefix, the "still held" reason, the held file in the chat's `isolationFiles` (`cardStates` does not carry `fullDetail`) and the Resolve action. Nothing was weakened: the reason, the file and the action are still each checked.
 - Repair 2 (native run of that fix passed the card check, then failed on `declined merge reached the provider as a message`): LKM-446's own recovery steps end with the chat parked (the failed Retry), whereas the merge-approval part that follows assumed a landed chat, as before LKM-446 added the steps. A parked chat queues the declined-merge message behind Resolve (`chat-queue.ts` `needsResolve`), so it never reached the stub. `smoke-chat.ts` now waits for the failed request to settle and lands the park with a `merged` isolation event (which clears the held problem) before the merge approval starts. No assertion was removed. The native run is the manager's: this session had no native call left, so the change is checked by typecheck, lint and the unit tier only.
+## 2026-11-03 — LKM-453 fixture repair during Codex handoff
+
+- The first manager quick check found the new offscreen card fixture failing: the report button's live frame shrinks when the busy label grows, and an offscreen window cannot dispatch Space as a foreground key window. The locator now trusts the enabled report button's live proxy and the unit fixture tears down the card before drawing its enabled comparison twin. The unit still checks event focus offscreen; the foreground operator fixture retains the strict Space-to-Resolve assertion.
+- The RED render gate now arms before the input event, since the recovery action publishes the busy card before it reaches `services.invoke`. The command forces ad hoc signing to avoid the login keychain, refuses a dirty checkout and gives each SHA-keyed retained run a unique folder.
+
+## 2026-11-03 — LKM-453 chat recovery acceptance fixture
+
+- Why: LKM-446 (PR #382) left `chat-recovery-flow-native` to the operator, and there was no self-contained command for it. This change adds that command, `bun run acceptance:chat-recovery` with `--red=delay-busy` (`docs/TESTING.md` "Chat recovery acceptance"). Only test, fixture and docs change; no shipping behaviour changes.
+- Seam: `src/native/smoke-chat-recovery-acceptance.ts` holds the owner's reply to `agent:retry-landing` and `agent:resolve-conflict` at `services.invoke`. The card's busy state is therefore measured before any reply. Rules live in `src/native/chat-recovery-acceptance.ts`. The host side, `src/native/ChatRecoveryAcceptance.swift`, is ephemeral only. It locates the card's buttons through their key-view proxies, posts window-targeted mouse and key events, and reads the spinner as the card's `NSProgressIndicator`.
+- Found while building it: a disabled SwiftUI button has no key-view proxy. The busy card's disabled buttons therefore get frames derived from the last all-enabled row, labelled `frameSource` in the JSON. The unit fixture checks the derivation against drawn twins with the same labels enabled (within 1.5 pt).
+- Input:
+  - In the unit fixture, a Space posted right after `makeFirstResponder` emitted nothing, so the keyboard route now waits 250 ms between the two.
+  - The route needs Full Keyboard Access. The check records that setting and never changes it.
+  - Focusing and setting up the second chat are programmatic, and the evidence says so.
+- Observation, unchanged: the card shows the failure reason as given, so the failure PNG shows the planted fake key. Only the written report is redacted, which is what LKM-446 specifies.
+- Not run here: any native suite (worker budget 0). GREEN and RED on the merged SHA are the operator's.
+## 2026-11-03 — LKM-455 Mark up acceptance fixture
+
+- Added opt-in `bun run acceptance:markup` with a disposable project, repository runner lock, unique retained evidence directory, source SHA and dirty flag; it selects only the smoke prelude and `markup-toggle-overlay-native`.
+- The fixture reuses the LKM-448 toggle and geometry checks, seeds an existing draft and attachment, records every before/open/Cancel state and foreground PNG, and probes the neighboring toolbar icons in light and dark. Pointer events are posted through AppKit; keyboard focus and disabled setup are labelled synthetic. `--red=active-fill` gives the real segment a synthetic stuck accent after Cancel, captures it, and fails at the no-accent boundary.
+- Worker native GUI budget is zero. The operator's post-merge GREEN and RED, with PNG/JSON inspection and tested SHA, remain pending.
+- Review repair: the pressed probe now holds one press at a time (baseline capture, held capture, state read while held, release outside the segment, wait for the queue) and fails if the held crop equals the baseline, the segment shows an accent, an action ran, or a fallback release fired first. The shared-treatment check measures all eight segments (size, hit area, vertical centre, unique glyph from `ToolbarIslands.stateSymbols`/the shell symbol table, ink size/centre/coverage against a fresh `renderToolbarSymbol` at the new `ToolbarSymbolSpec`) instead of constants; selected steps assert the other state buttons are not accented; hover is labelled as a posted `mouseMoved` only. `toolbarSymbol` is split into a cached wrapper and `renderToolbarSymbol` (same bitmap, no behaviour change). The island hit probe also returns `hitBesideDetail` so a miss like native run 56's names the view it hit; the assertion is unchanged. Swift host sources typechecked with `swiftc -typecheck` (no errors in touched files); no GUI run.
+## 2026-11-03 — LKM-456 LKM-444 native acceptance fixture: real foreground input, retained evidence
+
+- Why: LKM-444's live check needed one reproducible operator command whose input is not a callback, whose evidence names the exact source and survives the run, and which has a deliberate RED. Shipping behaviour is unchanged: `SourcePopout.swift` and `sourceState` are untouched.
+- Command: `bun run acceptance:source-popout [--red=legacy-order-out]` (`scripts/source-popout-acceptance.mjs`).
+  - It refuses a dirty tree, a background run, another test Trezi or a held runner lock, before it builds anything.
+  - It runs `dev:native --test --only=core --source-popout-acceptance`: a disposable profile, the synthetic smoke project, and only the prelude plus `fullscreen-popout-close-native`.
+  - It copies the evidence into a new read-only folder, `test/artifacts/native/fullscreen-popout-close/<sha12>-<mode>-<start>/`, with `run.json`.
+  - A run is MET only if the stamped build SHA equals the clean HEAD and cleanup left no full screen.
+- Input (`src/native/SourcePopoutAcceptance.swift`, test profile only):
+  - Window-targeted mouse down/up and key down/up are posted with `NSApp.postEvent`. Each receipt labels them as programmatic, not hardware input.
+  - A read-only preflight first checks that the app is active, that no modal or sheet is up, that the target is visible and key, and that the point hit-tests to the control. A failure refuses with a receipt and posts nothing.
+  - The proof never uses `performClick`, `performKeyEquivalent`, `insertText` or `makeFirstResponder`, and the unit test enforces that.
+  - The main window is probed after each close by a click on the composer, a typed key and Delete.
+- Cases (`src/native/smoke-source-popout-acceptance.ts`):
+  - ×, the red button and ⌘W, windowed and in full screen.
+  - Dock, windowed and in full screen.
+  - Close and dock while entering and while exiting full screen.
+  - Three close and reopen rounds.
+  - A docked editor in a full-screen main window.
+  - The state is recorded before each input. Every `closed` assertion of the `source-popout` smoke is kept, in `src/native/source-popout-acceptance.ts`.
+- RED: the first full-screen × skips `SourcePopout` and orders the window out at once, as before 252f23a5. The presenter is restored by `defer`. RED is met only if that step fails its lifecycle assertions with the pop-out recorded off screen and still in full screen.
+- Unit `test/source-popout-acceptance.mjs` covers:
+  - the rules, GREEN on the real `SourcePopout` steps (the LKM-444 fixture) and RED on the stranded state
+  - every receipt failure, including refusals
+  - the host steps' route and banned shortcuts
+  - the opt-in selection
+  - the command and launcher guards, which all stop before a build
+- Not run here: any native run (worker budget 0). GREEN and RED on the merged SHA are the operator's. Limits:
+  - The build is the checkout's `out/native`, not a separate copy.
+  - In full screen, the red button lives in AppKit's title-bar window. Its on-screen state is recorded, not assumed.
+  - Transition timing has not been exercised on a display.
+
+## 2026-11-03 — LKM-452 Dreamer acceptance: a guarded window-server route for the save panel
+
+- Decision b2543e30: the remote `NSSavePanel` gets real window-server keys. No manual operator step is added, and the harness never saves or cancels the panel programmatically.
+- Root cause, kept honest:
+  - The mismatch is traced in the source. The panel's Save and Cancel are drawn out of process, so they are not in-process `NSButton`s. The old `savePress` therefore posted Return to the app's own queue (`NSApp.postEvent`), and on a8bebe7f the panel stayed open.
+  - The sandboxed probe (exit 69) proves only that the panel runs out of process. It does not prove how the panel service handles posted events or focus.
+- Route (`NativeSheets.pressSavePanel`, `src/native/DreamerAcceptance.swift`):
+  - **Local.** When the panel has an in-process button with the Return or Escape key equivalent, it is clicked through the app queue, as Export… still is.
+  - **Remote.** Otherwise the harness posts Return (Save) or Escape (Cancel) at the HID tap, but only if:
+    - `CGPreflightPostEventAccess()` is true. This call never prompts. Nothing requests access, uses Accessibility prompts, opens System Settings or goes through System Events or AppleScript.
+    - The focus guard holds just before the key: the test app is active and frontmost, and the panel is a sheet on the Dreamer window, on screen and key.
+  - If either check fails, nothing is sent. The check fails at once with `refused`, so it never waits for a panel that cannot close.
+  - The access receipt (check, preflight, process, pid, bundle, parent process, route) goes into evidence.json `access` and run.json `access`. Preflight false is an access wait for the operator. It is not a reason to change the executor.
+- Evidence: the `savePress` step records the route, input, preflight, guard, `sent`, `refused` and the panel's `before` snapshot. It is written before the close wait.
+- Unit `dreamer-acceptance` (Swift fixture with recording closures, so nothing is posted) covers:
+  - the route matrix: local, remote, no access, and each focus field false;
+  - a remote press without access: no key sent, one preflight call, a full receipt;
+  - a remote press out of focus: no key sent, the guard fields false;
+  - local Save and Cancel: one click and no preflight.
+  - Source checks: the press path calls no `.ok(`, `.cancel(`, `performClick` or `NSApp.postEvent`; `.cancel(nil)` appears only in cleanup; no prompting or System Settings API appears; the smoke fails on `!press.sent` before the close wait; every LKM-447 assertion is still there.
+- No timeout changed and no assertion was removed. RED still fails at `real NSSavePanel opened`. No product, exporter or controller code changed. No native run happened here (0 native calls), and `dreamer-export-primary` is not passed.
+
+## 2026-11-03 — LKM-452 Dreamer acceptance: why Save left the panel open, and step evidence
+
+- Run on a8bebe7f: GREEN failed at `save panel closed; false`. Export… opened the real panel as a sheet and the directory step passed, but the panel stayed open after `savePress`. `exports` was empty because an entry was written only after the panel closed.
+- Diagnosis:
+  - On this macOS, `NSSavePanel` is drawn by AppKit's out-of-process panel service. A plain, non-sandboxed probe binary that only creates `NSSavePanel()` connects to ViewBridge's `ClientCallsAuxiliary`/`HostCallsAuxiliary` listeners and exits 69 when that service is unreachable (the LKM-381 composer fixture hit the same exit). So the panel's Save and Cancel buttons are not `NSButton`s in Trezi's view tree.
+  - `savePress` (`src/native/DreamerAcceptance.swift`, the `savePress` case) therefore finds no in-process button and posts Return or Escape with `NSApp.postEvent` to the panel window. Trezi itself drew the Export… button, so the same posting route worked for it. The panel did not act on the posted Return.
+  - The run cannot tell whether the service drops input that did not come from the window server or the panel was not key. The a8bebe7f harness recorded neither the route nor the panel's focus.
+  - Excluded: the wrong Save button (no in-process Save exists to pick), and a replace or name prompt (the folder was a fresh `mkdtemp` and the name `Dreamer Report <date>.zip`).
+  - Not product: `pickLogExport` (`src/native/HostLogs.swift`) presents a stock sheet, and RED proved the export path.
+- Evidence now (harness only):
+  - `stepLog` (`src/native/dreamer-acceptance.ts`) writes `steps` to evidence.json before every wait.
+  - A failed wait adds its error and the save panel and sheet as they were then, before `finally` dismisses the panel.
+  - Each export is recorded when it starts.
+  - `savePress` returns the route, the pressed button (or none) and a `before` snapshot. `NativeSheets.savePanelSnapshot` records visible, attached, key window, first responder, view classes and `remote`, every in-process button, the save and cancel targets, directory and name.
+- Unit `dreamer-acceptance`:
+  - the step log's order, timeout state and an unavailable host;
+  - a source check that every wait goes through the log and the export entry precedes its waits (both fail on a8bebe7f's source);
+  - a Swift fixture of the snapshot and press target on an in-process and a remote-style panel.
+- Open: no in-process route can press a button that another process draws. The fix waits for a decision on the input route. No product, exporter or controller code changed, `dreamer-export-primary` is not passed, and no native run happened here (0 native calls).
+## 2026-11-03 — LKM-444 peer-feedback unit flake: a stale shared Git read (fixed in `peerObservedFiles`)
+
+- Symptom: the quick unit run printed `FAIL [unit] peer-feedback 129.8s`. Not the suite limit (`UNIT_TIMEOUT_MS['peer-feedback']` is 300 s): one scenario failed, `overlap renders once per change, uncertain, and clears: Timed out waiting for the known overlap`; every other scenario was ok. The "Verification repair" bullet below records another `peer-feedback` failure under the parallel load; this entry is the one account of them.
+- Baseline, alone, `bun test/peer-feedback.mjs`: origin/main a8bebe7f (a `git archive` copy) 52.6 s, 36.8 s, 36.5 s, all pass; this branch before the fix 39.5 s, 39.1 s, 39.4 s, all pass. Alone there is no difference.
+- Load, 16 copies at once (load average about 35): with `wait` already widened to 30 s, 3 of 16 copies still failed the same scenario at 173 s. So it was not poll latency (slowest wait measured 8.4–9.4 s): the known overlap never arrived.
+- Cause: `peerObservedFiles` (`src/main/peer-work.ts`) handed a caller the Git read already in flight. A provider `status` event is not repeated, so when that read had started before the edit (a `git diff` that is slow on a loaded host), the later call kept the old answer for good and the overlap stayed uncertain. Now a call that arrives during a read starts one fresh read when it ends, shared by every call meanwhile (at most two reads per task and tree). If that read's Git call fails, it answers with the captured files of all its callers, not the first one's (asserted in the same test).
+- Red/green: `test/peer-observed-reads.mjs` (new, unit tier) puts a stand-in `git` on PATH that answers 400 ms after it looks at the tree. On the old code the late call returned `[]`, not `['a.txt']`; with the fix it passes, the burst shares one promise, and a read is one read again afterwards. Same-load comparison, 8 copies of origin/main against 8 of this branch at once: main 0/8 passed (`disjoint scopes run with no added wait` failed 8 times, `overlap renders once…` 2, `lines and waits do not depend on which rows fit the owner cap` 2); branch 7/8, the one failure being the next item. 16 copies of the branch afterwards: 16/16.
+- Test race: `lines and waits do not depend on which rows fit the owner cap` asserted the owner's byte cap right after the overlaps showed from goals alone, before the peers' observed files had reached the owner. It now `wait`s for the rows to exceed the cap (same condition, same assertions after it).
+- `wait` (`test/peer-feedback.mjs`): 500 × 10 ms was an iteration count whose length also depended on `condition()`. It is a 30 s wall-clock budget now (three times the slowest wait measured with 16 copies, 9.8 s) and every run prints `Slowest wait on this run` (about 1.7 s alone). The error text is unchanged, and a negative control checks that `wait(() => false, …, 150)` rejects with it after the budget. No assertion, scenario or suite timeout was lowered, skipped or raised. The full unit run (8 workers) was not run locally; CI runs it.
+
 ## 2026-11-03 — LKM-448 Mark up: real toggle, floating island, no "…" entry
 
 - "…": `ToolbarMore.moreActions` drops `("Mark up", "markup")`. The interaction segment (LKM-430) and `HostMenus` Actions → Mark up stay, so every window width still has it.
@@ -36,6 +141,20 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - A deleted conventional page route now deliberately supersedes its old browser recipe. Retry replays the remaining checks and requires a replacement browser receipt on the current source tree; failed replays stay in the bounded recovery history. The integration gate regression covers replacement evidence and a recorded failed replay.
 - A turn-end parked or failed landing now shows one Problem reason on its card and writes a chat-scoped report before offering Copy support report. The existing `holdForDecision` path and decision card remain the single question surface; the card regression asserts no duplicate error.
 - A timed-out card request stops its spinner but keeps mutation actions locked until the original IPC settles. The deferred UI regression checks Discard stays blocked. The native chat fixture now covers deferred Resolve, clean completion without a model turn, agent handover, held and failed outcomes, report redaction and a second chat's unaffected state. Native foreground acceptance remains for the operator after merge.
+
+## 2026-11-02 — LKM-444 CI compiler repair
+
+- GitHub run 41596027911 failed its app build and `host-warnings` on `SourcePopoutVerification.swift:40`: Swift could not typecheck the combined ⌘W menu lookup, action target check and identity comparison in reasonable time. Split it into a key-window guard, menu lookup and target identity guard, preserving the same ⌘W assertion and event path. Manager quick verification passes: typecheck, native typecheck, `host-warnings`, `source-popout`, `native-editor`, lint and 308 selected unit tests (3 skip). The full CI run also had unrelated `conversation-owner` and `browser-tools-install` failures; no code in those areas changed here. Native `core` and the foreground check remain pending on the merged revision.
+
+## 2026-11-02 — LKM-444 code editor pop-out: closing it in full screen left a black Space
+
+- Cause (from the source, then the real class under scripted AppKit notifications): `Host.swift` `sourceState` ran `popout.orderOut(nil)` for a hide (popped, not visible) and for a dock, whatever the pop-out's full-screen state. The pop-out is titled and resizable, so AppKit gives it a full-screen button and its own Space. Ordering out a full-screen window does not leave full screen, so the Space stayed up, black, with the main window on another Space: the report's screenshot. All three close paths (the editor's ×, the red button and ⌘W, which reaches `performClose:` → `windowShouldClose` → `hide`) and Dock end in that order-out. A docked editor in a full-screen main window only toggles `isHidden` and was not involved; no backend hang was involved either. Not reproduced on a display here: this worker had no native calls.
+- Fix: `SourcePopout` (`src/native/SourcePopout.swift`) owns show and hide. It tracks the phase from the will/did enter and exit notifications (the failures come through the editor's window delegate). A hide in full screen sends one exit toggle and waits. While entering, it waits for `didEnterFullScreen` and toggles on the next turn, because AppKit ignores a toggle mid-transition. While exiting, it just waits. The order-out happens only on `didExitFullScreen`, or on a failed enter. A failed exit keeps the window up, since ordering it out would strand the Space, and the next close retries. A show before the exit ends cancels the hide. Once the pop-out is gone, the main window is made key again when the pop-out had the key or nothing does. Full screen stays available. No timer or coalescing was needed.
+- Reopen: `open` without a location bumped `reveal`, which moved the caret back to the stamp line on every reopen. It now reveals only a requested source, so close → reopen keeps the draft (as before) and the selection. A reopen from a selected element still reveals that element.
+- Unit `test/source-popout.mjs`: the real `SourcePopout` with a recording window. It covers full screen, entering, exiting, a show before the exit ends, a failed enter and a failed exit, five rounds and a windowed control. It asserts no order-out while in full screen, one toggle, the order-out right after `windowed`, and the main window keyed once. Red with `hide()` reduced to the old order-out: `full` reports `stranded: 1, toggles: 0`. `test/native-editor.mjs`: a reopen and a dock keep `reveal` (red on the old controller: `reopen keeps the caret`).
+- Native `source-popout` smoke (group `core`, `src/native/smoke-source-popout.ts`, hook `SourcePopoutVerification.swift`). It types a draft and sets a selection, then runs a windowed close and dock (the controls) and, in the foreground, each close path from full screen, a dock, a hide while entering and one while leaving, three rounds, and a docked editor hidden and shown in a full-screen main window. After each, the pop-out must be off screen and windowed with nothing pending and no stray full-screen window. The main window must be key on the active Space, take composer focus and hit-test. The draft and selection must be unchanged. It writes `source-popout.json` and `source-popout-{fullscreen,closed-*,docked,main-fullscreen-docked}.png`. A background run keeps only the windowed controls. Not run here; acceptance waits on the native `core` group and the ticket's live check on the merged SHA.
+
+- Verification repair: `test/host-warnings.mjs` failed on `ComposerQueue.swift` (SwiftUI's `@State` macro plugin not found), not on the new files. It runs `swiftc -frontend`, which skips the driver's plugin search, so the test now passes the platform's `host/plugins` folder with `-plugin-path`. It passes with `SourcePopout*.swift` guarded. `peer-feedback` failed once under load and passed on the rerun (cause and fix: the 2026-11-03 entry above). `swift-preview-build` ("swift build left no libTreziPreviewDependencies.dylib") still fails in this sandbox; it is in `src/swift-preview`, which this change does not touch, and is selected only because `package.json` changed.
 
 ## 2026-11-02 — LKM-446 chat recovery flow (implementation in progress)
 
@@ -91,6 +210,8 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - Not run here: this worker had no native calls. The `settings` group's `dreamer` smoke waits for the merged SHA; the real save panel (save and cancel) and the window at its 680 pt minimum width are operator checks, since the smoke stubs the panel and has no sheet resize request.
 - Repair (manager verification): `host-warnings` failed on `ComposerQueue.swift` ("plugin for module 'SwiftUIMacros' not found") on Xcode 27.2 / Swift 6.4.2, with no Swift file changed here. `swiftFrontend` (`test/helpers/swift-build.mjs`) runs `swiftc -frontend`, which, unlike the driver, is not given the macOS platform's `host/plugins` folder, so `@State` could not expand. It now passes `-plugin-path <platform>/Developer/usr/lib/swift/host/plugins` (from `xcrun --show-sdk-platform-path`); the test's assertions are unchanged and it passes. `swift-preview-build` still fails in the same way on every run (`swift build` completes, but `libTreziPreviewDependencies.dylib` is not in `scratch/<arch>-apple-macosx/debug`, `src/swift-preview/package-build.ts`): a SwiftPM layout difference on this Xcode, unrelated to Dreamer; not reproducible in the worker sandbox (SwiftPM's own sandbox cannot nest), so left for a ticket of its own. `workflow-owner` and `peer-feedback` failed once under load and passed on the rerun.
 - Repair, attempt 3: root cause of `swift-preview-build` found. Xcode 27.2's `swift build --help` says `--build-system` defaults to `swiftbuild` (the log's `[62 / 98]` lines are its progress format), which does not leave products under `<scratch>/<arch>-apple-macosx/debug`, where `package-build.ts` reads the wrapper dylib, `Modules`, module maps and resource bundles. `packageBuildArgs` now passes `--build-system native` (still accepted, marked deprecated by SwiftPM), which keeps that layout; the tests derive the expected command from `packageBuildArgs`, so no assertion changed. Quick verify: 307 PASS, 3 SKIP, 0 FAIL (`swift-preview-build` and `host-warnings` pass). When SwiftPM drops `native`, `bin` must follow `swift build --show-bin-path` instead.
+
+- Manager rerun (full unit run, 617 s wall): `host-warnings` and `swift-preview-build` passed; `peer-feedback` ("disjoint scopes run with no added wait", timed out waiting for a comment) and `peer-coordination` (240 s timeout) failed under the parallel load. Run alone they pass (`bun test/peer-feedback.mjs` exit 0, `bun test/peer-coordination.mjs` exit 0 in 46 s). Neither touches `src/native/`, the pop-out or this change's files, so they are load timeouts, not regressions; no test was changed. (The `peer-feedback` part was later traced to a stale shared Git read in `peerObservedFiles` and fixed: see the 2026-11-03 LKM-444 peer-feedback entry at the top, the one account of that flake.)
 
 ## 2026-11-02 — LKM-442 code copy: pointing hand and "Copied to clipboard"
 

@@ -11,7 +11,20 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Repair: `native-chat` checks LKM-446's Problem card (prefix, "still held" reason, held file, Resolve action) instead of the retired "project changed under them" text.
 - [ ] Follow-up, not in this ticket: offscreen, with the main thread blocked 0.4 s per loop, a new chat whose reply arrives at about 32 000 characters had no realized row for about 10 s (the `LazyVStack` document kept its old estimated height, and the settle realized 19 times without a frame). This is the likely trigger of LKM-354's blank column on a loaded host.
 - [ ] Manager: the full native suite on the merged SHA.
+## Code editor pop-out: closing it in full screen left a black Space (LKM-444)
+
+- [x] Cause, from the source: `sourceState` ordered the pop-out out (hide and dock) whatever its full-screen state, and nothing left full screen first, so its Space stayed behind, black and empty. Confirmed against the real `SourcePopout` with AppKit's notification sequence scripted (red: ordered out in full screen, no exit toggle); not reproduced on a display by this worker.
+- [x] `SourcePopout` (`src/native/SourcePopout.swift`) leaves full screen first (waiting out an enter in progress), orders the window out only after `didExitFullScreen`, makes the main window key again and keeps full screen available.
+- [x] Reopening without a location keeps the caret and selection (`editor-controller.ts`, `test/native-editor.mjs`).
+- [x] Unit `test/source-popout.mjs` (full, entering, exiting, re-shown, failed enter/exit, five rounds, windowed control) and the native `source-popout` smoke (`src/native/smoke-source-popout.ts`, group `core`): ×, red button and ⌘W from full screen, dock, hide while entering and leaving, three rounds, windowed close and dock, a docked editor in a full-screen main window, draft and selection after each.
+- [ ] Manager: the native `core` group on the merged SHA, `source-popout` with `source-popout.json` and its `source-popout-*.png` captures, plus the ticket's live foreground check.
+- [x] LKM-456: the live foreground check `fullscreen-popout-close-native` as one operator command, `bun run acceptance:source-popout [--red=legacy-order-out]` (docs/TESTING.md, "Pop-out full-screen close acceptance"). Closes and docks go through posted mouse and key events (`src/native/SourcePopoutAcceptance.swift`) after a read-only preflight. Every `source-popout` lifecycle assertion is kept, plus an input probe of the main window. The run leaves SHA-stamped, read-only evidence. The RED (an order-out in full screen) lives in the test profile only. Unit `test/source-popout-acceptance.mjs`.
+- [ ] Operator (LKM-456): GREEN and the deliberate RED on the merged SHA under the shared desktop lock. Both runs must print MET, with their evidence folders under `test/artifacts/native/fullscreen-popout-close/`.
+
 ## Mark up: real toggle, floating island, no "…" entry (LKM-448)
+
+- [x] LKM-455: self-contained `bun run acceptance:markup` and `--red=active-fill` fixture with opt-in smoke selection, per-step foreground PNG/JSON, tested SHA, and retained runs; no shipping behavior changed.
+- [ ] LKM-455 operator or watchdog: GREEN and RED on the merged SHA under the canonical shared native-desktop lease, inspect the retained PNG/JSON and record `markup-toggle-overlay-native`. Merge alone does not complete LKM-448.
 
 - [x] "…" (`ToolbarMore.moreActions`) has no Mark up entry; the interaction segment and Actions → Mark up keep it.
 - [x] The top bar segment toggles (`NativeMarkupController.toggle`): off it begins, on it sends `markupCancel`, the overlay's own guarded Cancel (no Add, attachment, message or dialog); a stale token is answered `cancelled`. The Actions entry only opens.
@@ -28,6 +41,15 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: Resolve handover outside the request deadline, backend in-flight guard for Resolve/Discard/Retry, recorded replay failures on Retry, automatic browser check only when it can run, multi-chat terminal clearing.
 - [ ] Native foreground acceptance after merge, including deferred requests, pointer and keyboard, still-held outcome, and multi-chat clearing.
 - [ ] Confirm obsolete checked-page recipe retirement and final outcome wording against a real held session.
+
+## Chat recovery acceptance fixture (LKM-453)
+
+- [x] Opt-in `chat-recovery-flow-native` check (`--chat-recovery-acceptance`, chat group, prelude only) on the disposable profile: the shared chat, the smoke provider stub, synthetic isolation events, and recovery replies held at `services.invoke`.
+- [x] Retry and Resolve by posted pointer clicks, and Resolve by focus plus a posted Space. Busy label, spinner and disabled mutations are measured within 1 s while the request is held. A second click, Discard and the other recovery send nothing.
+- [x] PNG and JSON for held-busy, held-blocked, still-held, clean, handover, failure (with the kept 0600 redacted report), isolation and terminal-clear, tied to the source SHA. `bun run acceptance:chat-recovery` and `--red=delay-busy` are documented in `docs/TESTING.md`.
+- [x] Unit `chat-recovery-acceptance` (rules GREEN/RED, report redaction, render gate, and a Swift fixture of the real card: locator, derived disabled frames, posted click and Space), plus `native-smoke-groups` selection and launcher guards.
+- [ ] Operator: `bun run acceptance:chat-recovery` GREEN and `--red=delay-busy` RED under the shared desktop lock on the merged SHA. `chat-recovery-flow-native` is not passed until then.
+
 ## Dreamer acceptance on the shipping code (LKM-447)
 
 - [x] Opt-in `dreamer-export-primary` check (`--dreamer-acceptance`, settings group, prelude only): real menu, 780 and 680 pt foreground captures, footer clip/overlap/default checks, no Agent OS copy.
@@ -35,6 +57,10 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] `bun run acceptance:dreamer` (runner lock, refuses a concurrent ephemeral host, `run.json` with the source SHA) and `--red=stub-save-panel`; documented in `docs/DREAMER.md`.
 - [x] Unit `dreamer-acceptance` (footer, archive and Swift-fixture GREEN/RED), `native-smoke-groups` selection and launcher guards.
 - [ ] Operator: `bun run acceptance:dreamer` GREEN and `--red=stub-save-panel` RED under the shared desktop lock on the merged SHA. `dreamer-export-primary` is not passed until then.
+- [x] LKM-452: `steps` in evidence.json is written before every wait, with the `savePress` route, the button pressed and the panel's `before` snapshot. A failed wait adds the host state seen then. Each export is recorded when it starts. Unit `dreamer-acceptance` covers the step log, the wait order and the snapshot and press target (Swift fixture).
+- [x] LKM-452 (decision b2543e30): the panel's Save and Cancel take one of two routes. An in-process button is clicked locally. The remote panel gets a window-server Return or Escape, sent only when `CGPreflightPostEventAccess()` (never prompts) and the focus guard (active, frontmost, attached, on screen, key) both pass. Otherwise nothing is sent and the check fails with the `access` receipt. Unit `dreamer-acceptance` covers the route matrix, denied access, wrong focus, and the local Save/Cancel press.
+- [ ] Operator: on the merged SHA, run `bun run acceptance:dreamer` from a launcher that already has post-event access. If `run.json` `access.preflight` is false, that is an access wait, not a failure of the route.
+
 ## Native suite failure on main 8899067bb056 (LKM-449)
 
 - [x] Cause: on run 54 NSToolbar laid out the interaction island 155–159 pt wide at 1320 pt (151 in runs 47, 48, 51), so the measured right-group inset was 478, not 474. Hiding "…" and slow motion subtracts the usual 77 pt shift, so the minimum stage's in-resize width used 401 against a real 397 and the block stopped 24 pt before the right groups.

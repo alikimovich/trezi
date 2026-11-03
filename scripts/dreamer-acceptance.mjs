@@ -105,6 +105,8 @@ const run = {
   startedAt: new Date(started).toISOString(),
   finishedAt: new Date().toISOString(),
   failure: fresh ? (evidence.error ?? null) : 'the check wrote no fresh evidence.json',
+  // LKM-452: the save panel's post-event access receipt; preflight false is an access wait.
+  access: fresh ? (evidence.access ?? null) : null,
   captures: fresh ? Object.keys(evidence.captures ?? {}) : []
 }
 mkdirSync(dir, { recursive: true })

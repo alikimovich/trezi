@@ -2,27 +2,41 @@ import AppKit
 
 private var toolbarSymbolCache: [String: NSImage] = [:]
 
+/// The one symbol treatment of every toolbar glyph (LKM-455 reads it as the source of truth).
+enum ToolbarSymbolSpec {
+    static let pointSize: CGFloat = 14
+    static let weight = NSFont.Weight.regular
+    /// The glyph's longer side in the 40 px template bitmap.
+    static let glyphPixels: CGFloat = 36
+}
+
 func toolbarSymbol(_ name: String, _ label: String? = nil, size: CGFloat = 20) -> NSImage? {
     let key = name + "|" + (label ?? "") + "|" + String(Double(size))
     if let cached = toolbarSymbolCache[key] { return cached }
+    guard let image = renderToolbarSymbol(name, label, size: size) else { return nil }
+    toolbarSymbolCache[key] = image
+    return image
+}
+
+/// A fresh, uncached template bitmap of `toolbarSymbol`.
+func renderToolbarSymbol(_ name: String, _ label: String? = nil, size: CGFloat = 20) -> NSImage? {
     // Toolbar controls reconfigure SF Symbols to their own standard size.
     // Give AppKit a template bitmap with fixed glyph bounds instead, keeping
     // system tinting and native buttons without the symbol-size override.
     guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: label)?
-        .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)),
+        .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: ToolbarSymbolSpec.pointSize, weight: ToolbarSymbolSpec.weight)),
         let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 40, pixelsHigh: 40,
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
             colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
         let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return nil }
     NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = context
-    let scale = 36 / max(symbol.size.width, symbol.size.height)
+    let scale = ToolbarSymbolSpec.glyphPixels / max(symbol.size.width, symbol.size.height)
     let glyphSize = NSSize(width: symbol.size.width * scale, height: symbol.size.height * scale)
     symbol.draw(in: NSRect(x: (40 - glyphSize.width) / 2, y: (40 - glyphSize.height) / 2, width: glyphSize.width, height: glyphSize.height))
     NSGraphicsContext.restoreGraphicsState()
     let image = NSImage(size: NSSize(width: size, height: size))
     image.addRepresentation(bitmap); image.isTemplate = true
     image.accessibilityDescription = label
-    toolbarSymbolCache[key] = image
     return image
 }
 

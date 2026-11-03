@@ -20,6 +20,7 @@ import { checkBuildBadge, restoreBuildBadge } from './smoke-build-badge'
 import { checkChangesPanel, restoreChangesPanel } from './smoke-changes-panel'
 import { checkNativeChat } from './smoke-chat'
 import { captureChatGate, checkChatGate, restoreChatGate } from './smoke-chat-gate'
+import { checkChatRecoveryAcceptance } from './smoke-chat-recovery-acceptance'
 import { checkChatText } from './smoke-chat-text'
 import { checkChatUi } from './smoke-chat-ui'
 import { checkCodeLinkClick, restoreCodeLinkClick } from './smoke-code-link'
@@ -37,11 +38,20 @@ import {
 import { smokeFocusHooks } from './smoke-focus'
 import { checkGitUpdates } from './smoke-git-updates'
 import {
+  CHAT_RECOVERY_ACCEPTANCE_CHECK,
+  CHAT_RECOVERY_ACCEPTANCE_FLAG,
   DREAMER_ACCEPTANCE_CHECK,
   DREAMER_ACCEPTANCE_FLAG,
+  MARKUP_ACCEPTANCE_CHECK,
+  MARKUP_ACCEPTANCE_FLAG,
   parseSmokeGroups,
+  SOURCE_POPOUT_ACCEPTANCE_CHECK,
+  SOURCE_POPOUT_ACCEPTANCE_FLAG,
+  selectChatRecoveryAcceptance,
   selectDreamerAcceptance,
-  selectSmokeChecks
+  selectMarkupAcceptance,
+  selectSmokeChecks,
+  selectSourcePopoutAcceptance
 } from './smoke-groups'
 import { checkIncidentRow } from './smoke-incident'
 import { checkSelectionInput, preparePreviewInput } from './smoke-input'
@@ -57,6 +67,7 @@ import { checkLandingChecks } from './smoke-landing-check'
 import { checkLayersIsland, type LayersSmoke, restoreLayersIsland } from './smoke-layers'
 import { checkLegacyProject } from './smoke-legacy-project'
 import { checkManagedAgentBrowser } from './smoke-managed-agent-browser'
+import { checkMarkupAcceptance } from './smoke-markup-acceptance'
 import { checkMixedOriginCompatible, checkMixedOriginIncompatible } from './smoke-mixed-origin'
 import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-islands'
 import { checkParallelStream, restoreParallelStream } from './smoke-parallel-stream'
@@ -92,6 +103,11 @@ import { checkSidebarChats, restoreSidebarChats } from './smoke-sidebar-chats'
 import { checkSidebarStatus, restoreSidebarStatus } from './smoke-sidebar-status'
 import { checkSkillsSettings, restoreSkillsSettings } from './smoke-skills'
 import { checkSourceEditor } from './smoke-source-editor'
+import { checkSourcePopout, cleanupSourcePopout } from './smoke-source-popout'
+import {
+  checkSourcePopoutAcceptance,
+  cleanupSourcePopoutAcceptance
+} from './smoke-source-popout-acceptance'
 import { checkSourceStamps } from './smoke-source-stamp'
 import { checkSourceSyntax, restoreSourceSyntax } from './smoke-source-syntax'
 import { checkSourceWrap, restoreSourceWrap } from './smoke-source-wrap'
@@ -1410,6 +1426,18 @@ export async function runNativeCoreSmoke(
       }
     },
     {
+      name: 'source-popout',
+      dependsOn: ['open-project'],
+      run: async () => {
+        await checkSourcePopout(host, fixture, artifacts, inspect, (source) =>
+          invoke('source:popout', fixture, source)
+        )
+        await cleanupSourcePopout(host, fixture)
+        await geometry('after source pop-out')
+      },
+      cleanup: () => cleanupSourcePopout(host, fixture)
+    },
+    {
       name: 'source-syntax',
       dependsOn: ['open-project'],
       run: () => checkSourceSyntax(host, fixture, artifacts),
@@ -1803,13 +1831,48 @@ export async function runNativeCoreSmoke(
           await host.request('sheetPerform', { action: 'closeWindow' })
       }
     })
+  if (process.argv.includes(MARKUP_ACCEPTANCE_FLAG))
+    checks.push({
+      name: MARKUP_ACCEPTANCE_CHECK,
+      dependsOn: ['chat-ready'],
+      run: () => checkMarkupAcceptance(host),
+      cleanup: () => restorePreviewMarkup(host, page)
+    })
+  // LKM-456: the opt-in LKM-444 pop-out acceptance (docs/TESTING.md); its own cleanup recovers.
+  if (process.argv.includes(SOURCE_POPOUT_ACCEPTANCE_FLAG))
+    checks.push({
+      name: SOURCE_POPOUT_ACCEPTANCE_CHECK,
+      dependsOn: ['open-project'],
+      run: () =>
+        checkSourcePopoutAcceptance(host, fixture, artifacts, inspect, (source) =>
+          invoke('source:popout', fixture, source)
+        ),
+      cleanup: () => cleanupSourcePopoutAcceptance(host, fixture, artifacts)
+    })
+  // LKM-453: the opt-in chat recovery acceptance (docs/TESTING.md); its own check cleans up.
+  if (process.argv.includes(CHAT_RECOVERY_ACCEPTANCE_FLAG))
+    checks.push({
+      name: CHAT_RECOVERY_ACCEPTANCE_CHECK,
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkChatRecoveryAcceptance(host, artifacts)
+      }
+    })
   let hostClosed = false
   void host.closed.then(() => {
     hostClosed = true
   })
   // `--only` filters which named checks run; failure collection is unchanged.
-  const selected = selectSmokeChecks(checks, parseSmokeGroups(process.argv))
-  const results = await runSmokeChecks(selectDreamerAcceptance(selected, process.argv), {
+  // The chat recovery acceptance narrows the selection first and rejects any other opt-in.
+  const selected = selectChatRecoveryAcceptance(
+    selectSmokeChecks(checks, parseSmokeGroups(process.argv)),
+    process.argv
+  )
+  const optIn = selectSourcePopoutAcceptance(
+    selectMarkupAcceptance(selectDreamerAcceptance(selected, process.argv), process.argv),
+    process.argv
+  )
+  const results = await runSmokeChecks(optIn, {
     capture: (name) => captureSmokeFailure(host, artifacts, name),
     restore: () => restoreSmokeState(host, firstProject),
     deadline: Number(process.env.TREZI_NATIVE_SMOKE_DEADLINE_MS) || undefined,
