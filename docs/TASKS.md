@@ -11,6 +11,19 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Select, Slow Motion and Mark up draw their on state with one helper (`ToolbarIslands.stateImage`): the same glyph, size and weight, accent when on, plain when disabled; the tooltip and VoiceOver say "Cancel Mark up" while on.
 - [x] Unit `markup-controller`, `preview-markup` and `toolbar-island-dividers` cover the toggle, the island geometry and hit-testing, token Cancel and the light/dark state matrix (red on 8899067b). The `toolbar-actions` smoke records enter → cancel → enter cycles with WKWebView/container frames and innerWidth/innerHeight/scrollY unchanged, at default and 850 pt, a resize while on, and light/dark; `toolbar-more` asserts the entry is gone.
 - [ ] Operator: `markup-toggle-overlay-native` (real pointer, disposable profile, 850 pt, resize while active, repeated cycles, light/dark state matrix) and the native `core` group on the merged SHA.
+## Dreamer acceptance on the shipping code (LKM-447)
+
+- [x] Opt-in `dreamer-export-primary` check (`--dreamer-acceptance`, settings group, prelude only): real menu, 780 and 680 pt foreground captures, footer clip/overlap/default checks, no Agent OS copy.
+- [x] Export… by click and by Return through the real `NSSavePanel` into a temp folder; unzipped `Dreamer Report/{evidence.json, proposals.json, report.md}` holds only the selected, redacted proposal; Cancel writes nothing and shows nothing; the legacy-URL stand-in gets zero requests.
+- [x] `bun run acceptance:dreamer` (runner lock, refuses a concurrent ephemeral host, `run.json` with the source SHA) and `--red=stub-save-panel`; documented in `docs/DREAMER.md`.
+- [x] Unit `dreamer-acceptance` (footer, archive and Swift-fixture GREEN/RED), `native-smoke-groups` selection and launcher guards.
+- [ ] Operator: `bun run acceptance:dreamer` GREEN and `--red=stub-save-panel` RED under the shared desktop lock on the merged SHA. `dreamer-export-primary` is not passed until then.
+## Native suite failure on main 8899067bb056 (LKM-449)
+
+- [x] Cause: on run 54 NSToolbar laid out the interaction island 155–159 pt wide at 1320 pt (151 in runs 47, 48, 51), so the measured right-group inset was 478, not 474. Hiding "…" and slow motion subtracts the usual 77 pt shift, so the minimum stage's in-resize width used 401 against a real 397 and the block stopped 24 pt before the right groups.
+- [x] `MomentaryToolbarGroup` hugs its control at required priority (stock: 250), so the toolbar cannot hand the islands its slack.
+- [x] Unit `toolbar-island-dividers` asserts the hugging and that each island keeps its intrinsic width in a wider slot; red without the line (both islands stretch to 400 pt).
+- [ ] Manager: the native `core` group (`toolbar-address`) on the merged SHA.
 
 ## Dreamer Proposals: Export… the sole primary action (LKM-443)
 

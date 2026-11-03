@@ -54,6 +54,20 @@ for (const [stage, counts] of Object.entries(result.interactive)) {
 if (result.hidesDividers)
   for (const island of ISLANDS) assert.equal(result.dark[island].thinLayers, 0, `dark: ${island}`)
 
+// LKM-449: NSToolbar once stretched the interaction island into the flexible space's slack
+// (151 → 159 pt); the right-group inset read from it was too wide when "…" hid. A stock
+// segmented control would stretch; the islands keep their own width.
+for (const island of ISLANDS) {
+  const s = result.stretch[island]
+  const at = JSON.stringify(result.stretch)
+  assert.ok(s.stockHugging < 1000, `a stock segmented control can stretch (the probe works): ${at}`)
+  assert.equal(s.hugging, 1000, `${island} hugs its content at required priority: ${at}`)
+  assert.ok(
+    Math.abs(s.width - s.intrinsic) <= 0.5,
+    `${island} keeps its own width in a wider slot: ${at}`
+  )
+}
+
 // LKM-430: the device switch is one button of the tools island; it left the interaction island.
 const { device, markup } = result
 const at = JSON.stringify({ device, markup })
