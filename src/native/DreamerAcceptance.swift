@@ -93,14 +93,16 @@ extension NativeSheets {
             return savePanelState()
         case "savePress":
             // The panel's own Save or Cancel button, clicked; its Return or Escape key if it has no in-process button.
+            // `before` is the panel as it was when the input was posted (LKM-452).
             guard let save = attachedSavePanel else { throw acceptanceFailure("No save panel is open") }
             let save_ = c["button"] as? String == "save"
-            if let button = savePanelButtons(save).first(where: { $0.keyEquivalent == (save_ ? "\r" : "\u{1b}") && $0.isEnabled }) {
+            let before = NativeSheets.savePanelSnapshot(save, parent: panel)
+            if let button = NativeSheets.savePressTarget(save, save: save_) {
                 try click(at: button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil), in: save)
-                return ["route": "click", "title": button.title]
+                return ["route": "click", "title": button.title, "pressed": button.title, "before": before]
             }
             try press(save_ ? "return" : "escape", in: save)
-            return ["route": "key"]
+            return ["route": "key", "key": save_ ? "return" : "escape", "pressed": NSNull(), "before": before]
         case "dismissSavePanel":
             // Cleanup after a failure only: never part of the checked path.
             let open = attachedSavePanel != nil
@@ -128,18 +130,54 @@ extension NativeSheets {
             NSApp.postEvent(event, atStart: false)
         }
     }
-    private func savePanelButtons(_ save: NSSavePanel) -> [NSButton] {
-        (save.contentView.map { descendants($0) } ?? []).compactMap { $0 as? NSButton }.filter { !$0.isHiddenOrHasHiddenAncestor && !$0.keyEquivalent.isEmpty }
-    }
     private func savePanelState() -> [String: Any] {
         guard let save = attachedSavePanel else {
             return ["open": false, "savePanels": NSApp.windows.filter { $0 is NSSavePanel && $0.isVisible }.count]
         }
-        return ["open": true, "visible": save.isVisible, "key": save.isKeyWindow, "attached": save.sheetParent === panel,
-                "class": String(describing: type(of: save)), "name": save.nameFieldStringValue,
-                "directory": save.directoryURL?.path ?? "", "url": save.url?.path ?? "",
-                "buttons": savePanelButtons(save).map { ["title": $0.title, "enabled": $0.isEnabled,
-                                                         "key": $0.keyEquivalent == "\r" ? "return" : $0.keyEquivalent == "\u{1b}" ? "escape" : $0.keyEquivalent] }]
+        return NativeSheets.savePanelSnapshot(save, parent: panel)
+    }
+
+    /// The enabled, visible in-process button with Save's Return or Cancel's Escape key
+    /// equivalent: what `savePress` clicks. Nil when the panel's buttons are drawn by AppKit's
+    /// out-of-process panel service (a remote view in this window), as on macOS 26 and later.
+    static func savePressTarget(_ window: NSWindow, save: Bool) -> NSButton? {
+        panelViews(window).compactMap { $0 as? NSButton }
+            .first { !$0.isHiddenOrHasHiddenAncestor && $0.isEnabled && $0.keyEquivalent == (save ? "\r" : "\u{1b}") }
+    }
+    private static func panelViews(_ window: NSWindow) -> [NSView] {
+        func all(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap { all($0) } }
+        return window.contentView.map { all($0) } ?? []
+    }
+    /// LKM-452: the save panel as one step saw it, written to evidence.json before the wait
+    /// that follows. Window, focus, the in-process view classes (a remote view means another
+    /// process draws the buttons), every in-process button, and where the panel points.
+    static func savePanelSnapshot(_ window: NSWindow, parent: NSWindow?) -> [String: Any] {
+        let name = { (w: NSWindow?) -> String in
+            guard let w else { return "" }
+            return w === window ? "save panel" : w === parent ? "Dreamer window" : NSStringFromClass(type(of: w))
+        }
+        let views = panelViews(window)
+        var classes: [String] = []
+        for view in views where classes.count < 24 {
+            let cls = NSStringFromClass(type(of: view))
+            if !classes.contains(cls) { classes.append(cls) }
+        }
+        let key = { (b: NSButton) in b.keyEquivalent == "\r" ? "return" : b.keyEquivalent == "\u{1b}" ? "escape" : b.keyEquivalent }
+        var state: [String: Any] = [
+            "open": true, "visible": window.isVisible, "key": window.isKeyWindow, "attached": window.sheetParent === parent,
+            "class": String(describing: type(of: window)), "appActive": NSApp.isActive, "keyWindow": name(NSApp.keyWindow),
+            "firstResponder": window.firstResponder.map { NSStringFromClass(type(of: $0)) } ?? "",
+            "remote": classes.contains { $0.contains("Remote") }, "views": classes,
+            "buttons": views.compactMap { $0 as? NSButton }.map { ["title": $0.title, "enabled": $0.isEnabled, "hidden": $0.isHiddenOrHasHiddenAncestor, "key": key($0)] },
+            "saveTarget": savePressTarget(window, save: true)?.title ?? NSNull(),
+            "cancelTarget": savePressTarget(window, save: false)?.title ?? NSNull()
+        ]
+        if let save = window as? NSSavePanel {
+            state["name"] = save.nameFieldStringValue
+            state["directory"] = save.directoryURL?.path ?? ""
+            state["url"] = save.url?.path ?? ""
+        }
+        return state
     }
 
     /// The footer's geometry in the window's content coordinates; `reveal` scrolls the

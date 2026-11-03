@@ -34,3 +34,25 @@ for item in cases {
     }
     window.close()
 }
+
+// LKM-452: the save-panel snapshot and press target on two panels that are never shown
+// (a real NSSavePanel cannot be made here: it needs the panel's remote view service).
+// One draws its buttons in process; the other holds only a remote-style view, as the
+// out-of-process NSSavePanel does, so `savePress` finds no button and posts a key.
+final class FixtureRemoteView: NSView {}
+let parent = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+for (name, remote) in [("panel-in-process", false), ("panel-remote", true)] {
+    let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 300, height: 200), styleMask: [.titled], backing: .buffered, defer: false)
+    panel.isReleasedWhenClosed = false
+    let content = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 200))
+    if remote { content.addSubview(FixtureRemoteView(frame: content.bounds)) } else {
+        let folder = NSButton(title: "New Folder", target: nil, action: nil); folder.keyEquivalent = "\r"; folder.isHidden = true
+        let cancel = NSButton(title: "Cancel", target: nil, action: nil); cancel.keyEquivalent = "\u{1b}"
+        let save = NSButton(title: "Save", target: nil, action: nil); save.keyEquivalent = "\r"
+        for button in [folder, cancel, save] { content.addSubview(button) }
+    }
+    panel.contentView = content
+    var result = NativeSheets.savePanelSnapshot(panel, parent: parent)
+    result["case"] = name
+    print(String(data: try JSONSerialization.data(withJSONObject: result), encoding: .utf8)!)
+}

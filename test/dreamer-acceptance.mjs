@@ -17,6 +17,7 @@ import {
   DREAMER_WIDTHS,
   footerProblems,
   PLANTED,
+  stepLog,
   UNSELECTED_MARKER
 } from '../src/native/dreamer-acceptance.ts'
 import { exportDreamerReport } from '../src/native/dreamer-export.ts'
@@ -267,7 +268,107 @@ try {
     console.log(
       `Dreamer acceptance footer measure: shipping footer passes at ${DREAMER_WIDTHS.ordinary} and ${DREAMER_WIDTHS.minimum} pt; a long label and Send to Agent OS fail.`
     )
+
+    // LKM-452: the save-panel snapshot written before each wait, and the button savePress picks.
+    const local = measured['panel-in-process']
+    const remote = measured['panel-remote']
+    for (const field of [
+      'visible',
+      'key',
+      'attached',
+      'keyWindow',
+      'firstResponder',
+      'remote',
+      'views',
+      'buttons',
+      'saveTarget',
+      'cancelTarget'
+    ])
+      assert.ok(field in local && field in remote, `the snapshot reports ${field}`)
+    assert.equal(local.remote, false)
+    assert.equal(local.saveTarget, 'Save', 'the visible Return button, not the hidden one')
+    assert.equal(local.cancelTarget, 'Cancel')
+    assert.deepEqual(
+      local.buttons.map((b) => [b.title, b.hidden, b.key]),
+      [
+        ['New Folder', true, 'return'],
+        ['Cancel', false, 'escape'],
+        ['Save', false, 'return']
+      ]
+    )
+    assert.equal(remote.remote, true, 'a remote view in the panel is reported')
+    assert.deepEqual(remote.buttons, [])
+    assert.equal(remote.saveTarget, null, 'no in-process Save: savePress posts Return instead')
+    assert.equal(remote.cancelTarget, null)
+    console.log(
+      'Dreamer acceptance save panel snapshot: focus, views and buttons reported; Save picked in process, none behind a remote view.'
+    )
   }
+
+  // LKM-452: a wait is noted before it starts, and a failed one adds the host state seen then.
+  const written = []
+  const log = stepLog(
+    (steps) => written.push(JSON.parse(JSON.stringify(steps))),
+    () => 'now'
+  )
+  log.note('savePress save', { press: { route: 'key', pressed: null } })
+  assert.equal(
+    await log.wait(
+      'ready',
+      async () => 'ok',
+      async () => 'unused'
+    ),
+    'ok'
+  )
+  await assert.rejects(
+    log.wait(
+      'save panel closed',
+      async () => {
+        assert.deepEqual(written.at(-1).at(-1), { step: 'wait: save panel closed', at: 'now' })
+        throw new Error('Native check timed out: save panel closed; false')
+      },
+      async () => ({ savePanel: { open: true, remote: true } })
+    ),
+    /save panel closed; false/
+  )
+  assert.deepEqual(
+    written.at(-1).map((s) => s.step),
+    ['savePress save', 'wait: ready', 'wait: save panel closed', 'failed: save panel closed']
+  )
+  assert.deepEqual(written.at(-1).at(-1).state, { savePanel: { open: true, remote: true } })
+  await assert.rejects(
+    log.wait(
+      'broken',
+      async () => {
+        throw new Error('x')
+      },
+      async () => {
+        throw new Error('host gone')
+      }
+    ),
+    /x/
+  )
+  assert.match(written.at(-1).at(-1).state, /state unavailable: Error: host gone/)
+
+  // Every wait in the check goes through the log, and an export is recorded before its waits.
+  const waits = [...source.matchAll(/\b(waitFor|inspectUntil)\(/g)].length
+  assert.equal(waits, 2, 'waitFor and inspectUntil are called only inside until() and sheet()')
+  const at = (text) => {
+    const index = source.indexOf(text)
+    assert.ok(index >= 0, `smoke-dreamer-acceptance.ts has ${text}`)
+    return index
+  }
+  assert.ok(
+    at('.push(entry)') < at('`real NSSavePanel opened by'),
+    'the export entry exists before its first wait'
+  )
+  assert.ok(
+    at('log.note(`savePress ${button}`') < at("until('save panel closed'"),
+    'the press and the panel it saw are written before the panel must close'
+  )
+  console.log(
+    'Dreamer acceptance step log: notes precede every wait; a timeout keeps its error and the host state.'
+  )
 } finally {
   rmSync(temp, { recursive: true, force: true })
 }

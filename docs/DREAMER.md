@@ -250,6 +250,12 @@ bun run acceptance:dreamer --red=stub-save-panel  # RED: must fail at the save p
   queue, where the window server's input arrives. They pass through the window's hit
   test and key-equivalent handling but need no Accessibility or Input Monitoring
   permission, so no system prompt can appear.
+  - LKM-452: on current macOS the `NSSavePanel` is drawn by AppKit's out-of-process
+    panel service. Its Save and Cancel buttons are not in-process `NSButton`s, so
+    `savePress` finds none and posts Return or Escape to the panel window instead. On
+    a8bebe7f that left the panel open (`save panel closed; false`). The `savePress`
+    reply and the panel snapshot record `remote`, `views`, `buttons`, `saveTarget` and
+    the route, so the next run shows which press was made.
 - **Default button.** SwiftUI's footer buttons are not `NSButton`s, and the app builds
   no accessibility tree without an assistive client. So the host records AppKit's
   default button and the accessibility default only when AppKit reports one, and then
@@ -261,6 +267,13 @@ bun run acceptance:dreamer --red=stub-save-panel  # RED: must fail at the save p
     expectation was met; command, exit code and times.
   - `evidence.json`: the build stamp; menu, sheet state and footer measures; each
     export's input, panel, button, message and archive listing; requests.
+    - Each export is recorded when it starts (`closed` turns true once the panel
+      closes), so a timeout still leaves it.
+    - `steps` (LKM-452) is written before every wait that can fail. It holds each
+      input, and the `savePress` route and pressed button with the panel's `before`
+      snapshot: visible, attached, key window, first responder, directory, name,
+      buttons, remote. A failed wait adds `failed: <label>` with the error and the
+      save panel and sheet as they were then, before cleanup dismisses them.
   - `dreamer-ordinary-780.png` and `dreamer-minimum-680.png`: foreground captures.
 - **Cleanup.** The check restores the controller's result, its save-panel host and the
   three legacy preferences. It closes the stand-in and any open save panel, and removes

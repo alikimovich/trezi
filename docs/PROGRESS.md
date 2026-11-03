@@ -2,6 +2,26 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-03 — LKM-452 Dreamer acceptance: why Save left the panel open, and step evidence
+
+- Run on a8bebe7f: GREEN failed at `save panel closed; false`. Export… opened the real panel as a sheet and the directory step passed, but the panel stayed open after `savePress`. `exports` was empty because an entry was written only after the panel closed.
+- Diagnosis:
+  - On this macOS, `NSSavePanel` is drawn by AppKit's out-of-process panel service. A plain, non-sandboxed probe binary that only creates `NSSavePanel()` connects to ViewBridge's `ClientCallsAuxiliary`/`HostCallsAuxiliary` listeners and exits 69 when that service is unreachable (the LKM-381 composer fixture hit the same exit). So the panel's Save and Cancel buttons are not `NSButton`s in Trezi's view tree.
+  - `savePress` (`src/native/DreamerAcceptance.swift`, the `savePress` case) therefore finds no in-process button and posts Return or Escape with `NSApp.postEvent` to the panel window. Trezi itself drew the Export… button, so the same posting route worked for it. The panel did not act on the posted Return.
+  - The run cannot tell whether the service drops input that did not come from the window server or the panel was not key. The a8bebe7f harness recorded neither the route nor the panel's focus.
+  - Excluded: the wrong Save button (no in-process Save exists to pick), and a replace or name prompt (the folder was a fresh `mkdtemp` and the name `Dreamer Report <date>.zip`).
+  - Not product: `pickLogExport` (`src/native/HostLogs.swift`) presents a stock sheet, and RED proved the export path.
+- Evidence now (harness only):
+  - `stepLog` (`src/native/dreamer-acceptance.ts`) writes `steps` to evidence.json before every wait.
+  - A failed wait adds its error and the save panel and sheet as they were then, before `finally` dismisses the panel.
+  - Each export is recorded when it starts.
+  - `savePress` returns the route, the pressed button (or none) and a `before` snapshot. `NativeSheets.savePanelSnapshot` records visible, attached, key window, first responder, view classes and `remote`, every in-process button, the save and cancel targets, directory and name.
+- Unit `dreamer-acceptance`:
+  - the step log's order, timeout state and an unavailable host;
+  - a source check that every wait goes through the log and the export entry precedes its waits (both fail on a8bebe7f's source);
+  - a Swift fixture of the snapshot and press target on an in-process and a remote-style panel.
+- Open: no in-process route can press a button that another process draws. The fix waits for a decision on the input route. No product, exporter or controller code changed, `dreamer-export-primary` is not passed, and no native run happened here (0 native calls).
+
 ## 2026-11-03 — LKM-446 second review repair
 
 - Why: the reviewer's approval carried open items, so the merge gate refused it. Every code and test gap is fixed below, each with a regression that failed first. Native foreground acceptance stays the operator's (`chat-recovery-flow-native`): the issue says "Merge does not equal runtime acceptance; native/live acceptance is recorded by the operator."
