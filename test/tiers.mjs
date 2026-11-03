@@ -275,6 +275,7 @@ export const UNIT = [
   'host-warnings',
   'composer-queue-header',
   'sidebar-menu-capture',
+  'source-popout',
   'sidebar-marquee-resume',
   'menu-shortcut-audit',
   'tw-classes',
