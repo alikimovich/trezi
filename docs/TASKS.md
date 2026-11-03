@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native suite failure on main a85a880c4dcf (LKM-451)
+
+- [x] Cause: run 55's host was slow for the whole suite (`captureShell` 0.9–1.6 s from the first checks; `shellInspect` and `chatState` 0.3–1.2 s during `parallel-stream`, none in run 54). The check samples every 100 ms, but samples came 0.7–4 s apart while the wall-clock stream went on, so chat A's reply reached 46 000–52 000 characters by `to-a-2` (green runs: at most 15 182) and no row was in view for 5 s. No chat code changed since the last green run.
+- [x] `parallel-stream` stops each stream after `STREAM_CHUNKS` (200 deltas, 21 892 characters). The turns stay open; green runs never reach the cap.
+- [x] Unit `native-chat-parallel-stream` pins the cap, its size band and the timer's stop.
+- [x] Repair: `native-chat` checks LKM-446's Problem card (prefix, "still held" reason, held file, Resolve action) instead of the retired "project changed under them" text.
+- [ ] Follow-up, not in this ticket: offscreen, with the main thread blocked 0.4 s per loop, a new chat whose reply arrives at about 32 000 characters had no realized row for about 10 s (the `LazyVStack` document kept its old estimated height, and the settle realized 19 times without a frame). This is the likely trigger of LKM-354's blank column on a loaded host.
+- [x] Repair 3: `core/toolbar-actions` "the pen draws right beside it": the fifth probe (snapshot lower-left, 2 pt in) fell in the Host window's resize band (the page's bottom edge is the window's). It is now `PreviewMarkupOverlay.cornerProbe()`, 24 pt clear of the window's edges; the four island probes and every assertion stay. The `preview-markup` fixture holds the RED/GREEN regression; the smoke records the inspect JSON and a PNG before the island assertions.
+- [ ] Manager: the full native suite on the merged SHA.
 ## Code editor pop-out: closing it in full screen left a black Space (LKM-444)
 
 - [x] Cause, from the source: `sourceState` ordered the pop-out out (hide and dock) whatever its full-screen state, and nothing left full screen first, so its Space stayed behind, black and empty. Confirmed against the real `SourcePopout` with AppKit's notification sequence scripted (red: ordered out in full screen, no exit toggle); not reproduced on a display by this worker.
