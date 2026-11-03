@@ -1,6 +1,9 @@
 import AppKit
 import WebKit
 
+private var markupProbeEnabled: [String: Bool] = [:]
+private var markupProbeMarkupImage: NSImage?
+
 /// LKM-391: Mark up in the host: the capture of the live preview and the seams the native
 /// smoke drives. Wiring only; the session is `PreviewMarkup`.
 extension Host {
@@ -198,5 +201,90 @@ extension Host {
             return ["route":"real event route", "text":composer.text.string]
         default: return ["error":"Unknown Mark up event"]
         }
+    }
+}
+
+/// LKM-455 disposable-profile acceptance probe. It does not drive shipping actions.
+/// Hover and press enter through the AppKit event queue. Focus and disabled use labelled
+/// synthetic setup because those states have no natural route in the synthetic project.
+extension Host {
+    @MainActor func markupAcceptanceProbe(_ c: [String: Any]) async -> [String: Any] {
+        let phase = c["phase"] as? String ?? "", name = c["segment"] as? String ?? ""
+        if phase == "reset" {
+            for (key, enabled) in markupProbeEnabled { shell.toolbarItems[key]?.isEnabled = enabled }
+            markupProbeEnabled.removeAll()
+            if let image = markupProbeMarkupImage { shell.toolbarItems["markup"]?.image = image; markupProbeMarkupImage = nil }
+            for group in shell.toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }) { group.refresh() }
+            return ["ok":true]
+        }
+        if phase == "red-active-fill" {
+            guard let item = shell.toolbarItems["markup"], let image = item.image else { return ["error":"Mark up icon unavailable"] }
+            markupProbeMarkupImage = image
+            item.image = ToolbarIslands.markupImage(active: true)
+            for group in shell.toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }) { group.refresh() }
+            return ["route":"synthetic RED setup", "prominent":shell.segmentProminent("markup")]
+        }
+        guard let item = shell.toolbarItems[name], let anchor = shell.toolbarButtonAnchor(name),
+              let owner = anchor.view.window, let control = anchor.view as? NSSegmentedControl else { return ["error":"No visible toolbar segment \(name)"] }
+        NSApp.activate(ignoringOtherApps: true); owner.makeKeyAndOrderFront(nil)
+        guard NSApp.isActive, owner.isKeyWindow else { return ["error":"Toolbar is not foreground"] }
+        let point = anchor.view.convert(NSPoint(x: anchor.rect.midX, y: anchor.rect.midY), to: nil)
+        let hit = owner.contentView?.superview?.hitTest(point)
+        guard hit === anchor.view || hit?.isDescendant(of: anchor.view) == true else { return ["error":"Segment is not hit-testable"] }
+        func post(_ type: NSEvent.EventType, at location: NSPoint) -> Bool {
+            guard let event = NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: owner.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0) else { return false }
+            NSApp.postEvent(event, atStart: false); return true
+        }
+        var route = "posted AppKit pointer"
+        var pressPNG: String?
+        switch phase {
+        case "idle": break
+        case "hover":
+            guard post(.mouseMoved, at: point) else { return ["error":"Cannot post hover"] }
+        case "pressed":
+            guard post(.mouseMoved, at: point), post(.leftMouseDown, at: point) else { return ["error":"Cannot post mouse down"] }
+            // An AppKit tracking loop may wait for mouse up. Schedule the release independently
+            // and capture the foreground window during the held interval.
+            let ownerNumber = owner.windowNumber
+            DispatchQueue.global().asyncAfter(deadline: .now() + 2.0) {
+                // The tracking loop can block the main actor until mouse-up. Posting the
+                // release from a worker queue guarantees that this test cannot strand it.
+                if let up = NSEvent.mouseEvent(with: .leftMouseUp, location: NSPoint(x: 2, y: 2),
+                    modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: ownerNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0) {
+                    NSApp.postEvent(up, atStart: false)
+                }
+            }
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            guard let shot = try? await captureOwnWindow(owner), let png = shot["png"] as? String else { return ["error":"Pressed foreground capture failed"] }
+            pressPNG = png
+        case "focus":
+            guard owner.makeFirstResponder(control) else { return ["error":"Control cannot take keyboard focus"] }
+            route = "synthetic focus setup, posted key"
+            guard let event = NSEvent.keyEvent(with: .keyDown, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: owner.windowNumber, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53) else { return ["error":"Cannot post keyboard event"] }
+            NSApp.postEvent(event, atStart: false)
+        case "disabled":
+            markupProbeEnabled[name] = item.isEnabled
+            item.isEnabled = false
+            for group in shell.toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }) { group.refresh() }
+            route = "synthetic disabled setup"
+        default: return ["error":"Unknown acceptance phase"]
+        }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        let image = control.image(forSegment: shell.toolbar.items.compactMap { $0 as? MomentaryToolbarGroup }
+            .first { $0.shown.contains { $0.itemIdentifier.rawValue == name } }?.shown.firstIndex { $0.itemIdentifier.rawValue == name } ?? 0)
+        let glyphs = ["select-object":"cursorarrow", "overlay":"ruler", "speed":"tortoise", "markup":"pencil.tip", "code":"chevron.left.forwardslash.chevron.right",
+                      "layers":"square.3.layers.3d", "device":"iphone", "expand":"arrow.up.left.and.arrow.down.right"]
+        let rect = anchor.rect
+        var state: [String: Any] = ["route":route, "phase":phase, "segment":name, "iconFamily":"SF Symbols", "symbolWeight":"regular",
+            "glyph":glyphs[name] ?? "", "imageWidth":image?.size.width ?? 0, "imageHeight":image?.size.height ?? 0,
+            "prominent":image.map { !$0.isTemplate } ?? false, "enabled":item.isEnabled, "label":item.label, "tooltip":item.toolTip ?? "",
+            "axLabel":item.image?.accessibilityDescription ?? "",
+            "frame":["x":rect.minX, "y":rect.minY, "width":rect.width, "height":rect.height],
+            "focused":owner.firstResponder === control, "hit":"\(type(of: hit!))"]
+        if let pressPNG { state["pressedPNG"] = pressPNG }
+        return state
     }
 }

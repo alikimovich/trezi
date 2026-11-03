@@ -1,5 +1,26 @@
 # Testing Trezi
 
+## Mark up foreground acceptance (LKM-455)
+
+After LKM-455 merges, the operator or watchdog holds the canonical shared native-desktop
+lease and runs `bun run acceptance:markup` on the reviewed SHA, followed by
+`bun run acceptance:markup --red=active-fill`. The command takes the repository
+runner lock, refuses a competing ephemeral host or a background run, and launches
+only the disposable synthetic-project prelude and `markup-toggle-overlay-native`.
+Input is posted through the AppKit event queue; focus and disabled setup are
+explicitly synthetic. No provider, installed app, system preference, or account is used.
+
+Each invocation creates a new immutable directory under
+`test/artifacts/native/markup-acceptance/` with `run.json`, `evidence.json` and a
+foreground PNG for every recorded step. `run.json` names the tested SHA and dirty
+state. Inspect the JSON and PNGs for the icon states, island position and unchanged
+viewport at ordinary and 850 pt widths, including active resize and repeated Cancel
+cycles. The RED invocation must exit successfully only after the fixture itself fails
+at the no-active-fill-after-Cancel assertion after a test-only synthetic setup leaves
+the real Mark up segment visibly accented. Retain both run directories, including
+on failure. Record the tested merged SHA and the GREEN and RED verdicts; this is an
+operator check after merge, not acceptance on the worker branch.
+
 The test runner is `node test/run.mjs unit|native|live|all`. Unit checks run with
 bounded concurrency (by default `max(min(4, cores), min(cores - 2, 8))` workers) and
 one exclusive barrier (`native-chat-send-follow`, LKM-371). Swift compiles share a

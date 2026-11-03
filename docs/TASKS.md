@@ -5,6 +5,9 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 ## Mark up: real toggle, floating island, no "…" entry (LKM-448)
 
+- [x] LKM-455: self-contained `bun run acceptance:markup` and `--red=active-fill` fixture with opt-in smoke selection, per-step foreground PNG/JSON, tested SHA, and retained runs; no shipping behavior changed.
+- [ ] LKM-455 operator or watchdog: GREEN and RED on the merged SHA under the canonical shared native-desktop lease, inspect the retained PNG/JSON and record `markup-toggle-overlay-native`. Merge alone does not complete LKM-448.
+
 - [x] "…" (`ToolbarMore.moreActions`) has no Mark up entry; the interaction segment and Actions → Mark up keep it.
 - [x] The top bar segment toggles (`NativeMarkupController.toggle`): off it begins, on it sends `markupCancel`, the overlay's own guarded Cancel (no Add, attachment, message or dialog); a stale token is answered `cancelled`. The Actions entry only opens.
 - [x] The controls float in `PreviewMarkupIsland` at the top of the page, over the snapshot, which takes the WKWebView's exact frame (`place(area:page:)`): no row, inset or resize. The island alone takes clicks; the pen draws everywhere else.

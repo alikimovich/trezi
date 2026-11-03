@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-03 — LKM-455 Mark up acceptance fixture
+
+- Added opt-in `bun run acceptance:markup` with a disposable project, repository runner lock, unique retained evidence directory, source SHA and dirty flag; it selects only the smoke prelude and `markup-toggle-overlay-native`.
+- The fixture reuses the LKM-448 toggle and geometry checks, seeds an existing draft and attachment, records every before/open/Cancel state and foreground PNG, and probes the neighboring toolbar icons in light and dark. Pointer events are posted through AppKit; keyboard focus and disabled setup are labelled synthetic. `--red=active-fill` gives the real segment a synthetic stuck accent after Cancel, captures it, and fails at the no-accent boundary.
+- Worker native GUI budget is zero. The operator's post-merge GREEN and RED, with PNG/JSON inspection and tested SHA, remain pending.
+
 ## 2026-11-03 — LKM-448 Mark up: real toggle, floating island, no "…" entry
 
 - "…": `ToolbarMore.moreActions` drops `("Mark up", "markup")`. The interaction segment (LKM-430) and `HostMenus` Actions → Mark up stay, so every window width still has it.

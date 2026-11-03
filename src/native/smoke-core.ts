@@ -39,8 +39,11 @@ import { checkGitUpdates } from './smoke-git-updates'
 import {
   DREAMER_ACCEPTANCE_CHECK,
   DREAMER_ACCEPTANCE_FLAG,
+  MARKUP_ACCEPTANCE_CHECK,
+  MARKUP_ACCEPTANCE_FLAG,
   parseSmokeGroups,
   selectDreamerAcceptance,
+  selectMarkupAcceptance,
   selectSmokeChecks
 } from './smoke-groups'
 import { checkIncidentRow } from './smoke-incident'
@@ -57,6 +60,7 @@ import { checkLandingChecks } from './smoke-landing-check'
 import { checkLayersIsland, type LayersSmoke, restoreLayersIsland } from './smoke-layers'
 import { checkLegacyProject } from './smoke-legacy-project'
 import { checkManagedAgentBrowser } from './smoke-managed-agent-browser'
+import { checkMarkupAcceptance } from './smoke-markup-acceptance'
 import { checkMixedOriginCompatible, checkMixedOriginIncompatible } from './smoke-mixed-origin'
 import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-islands'
 import { checkParallelStream, restoreParallelStream } from './smoke-parallel-stream'
@@ -1803,20 +1807,30 @@ export async function runNativeCoreSmoke(
           await host.request('sheetPerform', { action: 'closeWindow' })
       }
     })
+  if (process.argv.includes(MARKUP_ACCEPTANCE_FLAG))
+    checks.push({
+      name: MARKUP_ACCEPTANCE_CHECK,
+      dependsOn: ['chat-ready'],
+      run: () => checkMarkupAcceptance(host),
+      cleanup: () => restorePreviewMarkup(host, page)
+    })
   let hostClosed = false
   void host.closed.then(() => {
     hostClosed = true
   })
   // `--only` filters which named checks run; failure collection is unchanged.
   const selected = selectSmokeChecks(checks, parseSmokeGroups(process.argv))
-  const results = await runSmokeChecks(selectDreamerAcceptance(selected, process.argv), {
-    capture: (name) => captureSmokeFailure(host, artifacts, name),
-    restore: () => restoreSmokeState(host, firstProject),
-    deadline: Number(process.env.TREZI_NATIVE_SMOKE_DEADLINE_MS) || undefined,
-    inject: parseInjectedFailures(process.env.TREZI_NATIVE_SMOKE_FAIL),
-    halted: () => (hostClosed ? 'native host (it exited)' : undefined),
-    ...smokeFocusHooks(host)
-  })
+  const results = await runSmokeChecks(
+    selectMarkupAcceptance(selectDreamerAcceptance(selected, process.argv), process.argv),
+    {
+      capture: (name) => captureSmokeFailure(host, artifacts, name),
+      restore: () => restoreSmokeState(host, firstProject),
+      deadline: Number(process.env.TREZI_NATIVE_SMOKE_DEADLINE_MS) || undefined,
+      inject: parseInjectedFailures(process.env.TREZI_NATIVE_SMOKE_FAIL),
+      halted: () => (hostClosed ? 'native host (it exited)' : undefined),
+      ...smokeFocusHooks(host)
+    }
+  )
   console.log(formatSmokeSummary(results))
   const failures = results.filter((r) => r.outcome === 'fail')
   const lines = formatFailureReport(failures)

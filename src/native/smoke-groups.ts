@@ -45,6 +45,8 @@ export function parseSmokeGroups(argv: readonly string[]): Set<NativeSmokeGroup>
     throw new Error('--live needs the core group in --only')
   if (argv.includes(DREAMER_ACCEPTANCE_FLAG) && !names.includes('settings'))
     throw new Error(`${DREAMER_ACCEPTANCE_FLAG} needs the settings group in --only`)
+  if (argv.includes(MARKUP_ACCEPTANCE_FLAG) && !names.includes('core'))
+    throw new Error(`${MARKUP_ACCEPTANCE_FLAG} needs the core group in --only`)
   return new Set(names as NativeSmokeGroup[])
 }
 
@@ -119,6 +121,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   dreamer: ['settings'],
   // LKM-447: opt-in, pushed only with --dreamer-acceptance (selectDreamerAcceptance).
   'dreamer-export-primary': ['settings'],
+  'markup-toggle-overlay-native': ['core'],
   'skills-settings': ['settings'],
   'browser-setup': ['settings'],
   'security-session': ['settings'],
@@ -170,6 +173,8 @@ export function selectSmokeChecks<T extends { name: string }>(
 /** LKM-447: the opt-in Dreamer acceptance (`bun run acceptance:dreamer`, docs/DREAMER.md). */
 export const DREAMER_ACCEPTANCE_FLAG = '--dreamer-acceptance'
 export const DREAMER_ACCEPTANCE_CHECK = 'dreamer-export-primary'
+export const MARKUP_ACCEPTANCE_FLAG = '--markup-acceptance'
+export const MARKUP_ACCEPTANCE_CHECK = 'markup-toggle-overlay-native'
 
 /** With the flag, only the prelude and the Dreamer acceptance run (the flag's check must be
  *  among `checks`); without it the selection is unchanged. */
@@ -191,5 +196,24 @@ export function selectDreamerAcceptance<T extends { name: string }>(
   log(
     `DREAMER ACCEPTANCE (${DREAMER_ACCEPTANCE_FLAG}): running ${picked.map((c) => c.name).join(', ')}; not full-suite acceptance.`
   )
+  return picked
+}
+
+/** One opt-in foreground check plus the existing disposable-project prelude. */
+export function selectMarkupAcceptance<T extends { name: string }>(
+  checks: T[],
+  argv: readonly string[]
+): T[] {
+  if (!argv.includes(MARKUP_ACCEPTANCE_FLAG)) return checks
+  if (argv.includes('--live') || argv.includes(DREAMER_ACCEPTANCE_FLAG))
+    throw new Error(
+      `${MARKUP_ACCEPTANCE_FLAG} cannot run with --live or ${DREAMER_ACCEPTANCE_FLAG}`
+    )
+  const picked = checks.filter(
+    ({ name }) =>
+      (SMOKE_PRELUDE as readonly string[]).includes(name) || name === MARKUP_ACCEPTANCE_CHECK
+  )
+  if (!picked.some(({ name }) => name === MARKUP_ACCEPTANCE_CHECK))
+    throw new Error(`${MARKUP_ACCEPTANCE_FLAG}: ${MARKUP_ACCEPTANCE_CHECK} was not selected`)
   return picked
 }
