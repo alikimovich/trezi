@@ -64,7 +64,7 @@ const sections = (): NativeSheetSection[] => [
     id: 'dreamer',
     label: 'Dreamer',
     symbol: 'moon.stars',
-    detail: 'Where Send to Agent OS posts the Dreamer’s proposals, and the optional weekly run.'
+    detail: 'The Dreamer’s optional weekly run.'
   },
   // LOCAL-WEBKIT-4: its rows come from `settings-browser.ts`.
   {
@@ -415,7 +415,7 @@ export class NativeSettingsController {
       ...sheet.state.fields.filter((f) => f.section !== 'providers'),
       ...pane.fields.map((field) => ({ ...field, section: 'providers', draft: true }))
     ]
-    // Keep the other panes' actions (Dreamer, Skills): they are not rebuilt here.
+    // Keep the other panes' actions (Skills): they are not rebuilt here.
     sheet.state.actions = [
       ...sheet.state.actions.filter((a) => a.section !== 'providers'),
       ...pane.actions

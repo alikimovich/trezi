@@ -417,6 +417,7 @@ const TEMP_WALKERS = [
   'platform-owner',
   'rename-compat',
   'browser-setup',
+  'dreamer-export',
   'browser-setup-recovery',
   'browser-tools-install',
   'syntax-bundle',

@@ -2,8 +2,9 @@
 
 The Dreamer reads past chat sessions on this Mac, finds what slowed the user down or
 went wrong, and proposes improvements. The user reviews and edits the proposals, then
-exports them or sends them to Agent OS, which turns each into a task. It never edits
-code, and nothing leaves the Mac until the user exports or sends.
+exports them as a redacted zip (Agent OS can import its `proposals.json`). It never
+edits code, and nothing leaves the Mac until the user exports. Trezi itself makes no
+request to Agent OS: Send to Agent OS was removed in LKM-443.
 
 ## Menu
 
@@ -127,55 +128,39 @@ with its evidence and an acceptance checklist.
 
 A sectioned window (`src/native/dreamer-review.ts`, `src/native/dreamer-controller.ts`):
 
-- **Overview**: a category filter, how many proposals are selected, the run's summary,
-  where Send goes, and the task ids of the last send.
-- **One pane per proposal**: Send to Agent OS (Selected / Not selected), editable
+- **Overview**: a category filter, how many proposals are selected, the run's summary
+  and the run's scope, time and model.
+- **One pane per proposal**: Include in export (Selected / Not selected), editable
   title, category, problem, proposal, acceptance criteria (one per line) and expected
   impact, the evidence, and Open Chat buttons for the first three evidence chats (they
   open the saved chat, not the turn).
-- Actions: Select All, Select None, Copy as JSON, Export…, Send to Agent OS.
-  Edits save automatically. With nothing selected, Copy and Export take every proposal.
+- Actions: Select All, Select None, Copy as JSON and Export…, the only primary action:
+  the window's default button, so Return runs it. Export… opens the save panel; Cancel
+  writes nothing and clears the message, and an error is shown in the window. Edits
+  save automatically. With nothing selected, Copy and Export take every proposal.
 
-## Send to Agent OS
+Settings → Dreamer holds only Run the Dreamer (Off, or Weekly, while Trezi is idle).
 
-Settings → Dreamer holds the Agent OS URL (default `http://127.0.0.1:4317`), the
-project ID, an optional token (Save Token / Remove Token), "When tasks are created"
-(Only create them, the default, or Start them on import) and Run the Dreamer (Off, or
-Weekly, while Trezi is idle). Send (`sendToAgentOs` in
-`src/native/dreamer-export.ts`) makes one request:
-
-- `POST <url>/proposals` with `{ "projectId": "<projectId>", "file": <file>, "start": false }`.
-  `file` is the version 1 file of the selected proposals, redacted again. `start` is
-  `true` only when "Start them on import" is chosen; Agent OS then starts a worker on
-  each created task. `Authorization: Bearer <token>` is sent when a token is set;
-  30-second limit.
-- The answer's task ids are read from `created[].issue` (Agent OS), `tasks[].id`,
-  `taskIds` or `ids`, and shown in the window and on the Overview.
-- On any failure the window says why and opens the save panel for the export instead.
-  An HTTP error keeps Agent OS's own message (`Agent OS answered 400: …`).
-
-Agent OS listens on 127.0.0.1 only, so Send works only on the Mac that runs it. When
-Agent OS cannot be reached the window says so ("accepts connections only on this Mac
-(127.0.0.1)") and offers the export.
-
-**Another Mac.** Export the report (or Copy as JSON), copy `proposals.json` to the Mac
-that runs Agent OS and import it there:
+**Into Agent OS.** Export the report (or Copy as JSON), and on the Mac that runs Agent
+OS import `proposals.json`:
 
 ```sh
 bun run cli import-proposals <project> <file.json> [--start]
 ```
 
-`--start` is the same as "Start them on import".
-
-The token is stored in Trezi's preferences, not the Keychain, and is never shown again
-after it is saved.
+LKM-443 removed Send to Agent OS, its route and its Settings rows (URL, project ID,
+token, "When tasks are created"). Values an earlier version saved under
+`trezi:dreamer:agent-os-url`, `-project`, `-token` and `-start` stay in Trezi's
+preferences: they are not read or sent, and not erased. A saved result's `sent` record
+is kept but no longer shown.
 
 ## Export
 
 `exportDreamerReport` writes a temporary `Dreamer Report` folder and zips it with
 `ditto`: `report.md`, `proposals.json` (the version 1 file) and `evidence.json` (the
 digest: statistics and short quotes, never transcripts or file contents). Everything
-is redacted again on the way out, because the user may have edited the text.
+is redacted again on the way out, because the user may have edited the text. A zip
+that fails to write is removed, so an error leaves no partial file.
 
 ## Privacy
 
@@ -183,9 +168,9 @@ is redacted again on the way out, because the user may have edited the text.
   credentials, private keys, the home folder) plus emails (`[email]`) and any
   `/Users/<name>` or `/home/<name>` path (`~`).
 - Quotes are one line of at most 160 characters in the digest, 200 in the file.
-- The model sees only the digest. Export and Send run only on the user's action.
+- The model sees only the digest. Export runs only on the user's action.
 - The product log records only counts: `Dreamer run sessions= turns= proposals=
-  fallback= ms=`, `Proposals sent|not sent`, `Report exported`, `Weekly run failed`.
+  fallback= ms=`, `Report exported`, `Weekly run failed`.
 
 ## Weekly run
 
@@ -198,11 +183,18 @@ streaming, sending or queued, and no sheet is open. A toast offers Review.
 - `test/dreamer-digest.mjs`: the digest over fixture chats and log lines (a slow tool,
   a repeated failure, a repeated request, corrections, a refusal), redaction, the
   version 1 validation, answer parsing, and a run with a stub model and each fallback.
-- `test/dreamer-export.mjs`: the zip's contents are redacted; Send's URL, token header,
-  404 fallback and errors; the review window's Send shows task ids and falls back to
-  the export; the weekly run's conditions.
+- `test/dreamer-export.mjs`: the zip's contents are redacted and a failed write leaves
+  no file; the review window has no send action or route and no Agent OS copy, Export…
+  is its only primary action; editing, selection (Select All / None), Copy as JSON and
+  Open Chat; Export… zips the selected, edited proposals, Cancel writes nothing, an
+  error rejects; no fetch even with old Agent OS settings saved, which stay; Settings →
+  Dreamer has only the weekly run; the weekly run's conditions.
 - Native smoke `dreamer` (group `settings`, `src/native/smoke-dreamer.ts`): the review
-  window from the menu with a fixture result; Send to a local stub shows the task id; a
-  proposal pane. Both panes are captured in the foreground with the test-only
+  window from the menu with a fixture result; no `send`, `defaultAction` is `export`
+  and no Agent OS text; Export… with the controller's save panel stubbed writes a zip
+  with the selected proposal, Cancel writes nothing, and a local stub at the old Agent
+  OS URL gets no request (`dreamer-export.json`); a proposal pane. The real save panel
+  and the minimum window width are operator checks. Both panes are captured in the
+  foreground with the test-only
   `captureVisibleSheet` host request (`captureSheet`'s cached display leaves a sectioned
   window's split view blank); `dreamer-review.json` records which capture was used.
