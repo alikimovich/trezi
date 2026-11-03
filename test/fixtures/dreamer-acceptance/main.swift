@@ -34,3 +34,61 @@ for item in cases {
     }
     window.close()
 }
+
+// LKM-452: the save-panel snapshot and press target on two panels that are never shown
+// (a real NSSavePanel cannot be made here: it needs the panel's remote view service).
+// One draws its buttons in process; the other holds only a remote-style view, as the
+// out-of-process NSSavePanel does, so `savePress` takes the guarded window-server route.
+// `pressSavePanel` runs with recording closures: nothing is posted, locally or globally.
+final class FixtureRemoteView: NSView {}
+let parent = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+func emitJSON(_ value: [String: Any]) {
+    print(String(data: try! JSONSerialization.data(withJSONObject: value), encoding: .utf8)!)
+}
+func pressed(_ name: String, _ panel: NSWindow, save: Bool, preflight: Bool) {
+    var keys: [[Any]] = [], clicks = 0, asked = 0
+    var result = try! NativeSheets.pressSavePanel(panel, parent: parent, save: save, access: { asked += 1; return preflight },
+                                                  postKey: { keys.append([Int($0), $1]) }, clickLocal: { _ in clicks += 1 })
+    result["case"] = name
+    result["posted"] = ["keys": keys, "clicks": clicks, "preflightCalls": asked]
+    emitJSON(result)
+}
+// The route decision on every focus: only all-true focus with access sends a remote key.
+let allFocus = NativeSheets.SavePanelFocus(appActive: true, frontmost: true, attached: true, foreground: true, key: true)
+var routes: [[String: Any]] = []
+for (name, inProcess, preflight, focus) in [
+    ("local", true, false, allFocus), ("remote", false, true, allFocus), ("no-access", false, false, allFocus),
+    ("inactive", false, true, { var f = allFocus; f.appActive = false; return f }()),
+    ("not-frontmost", false, true, { var f = allFocus; f.frontmost = false; return f }()),
+    ("detached", false, true, { var f = allFocus; f.attached = false; return f }()),
+    ("offscreen", false, true, { var f = allFocus; f.foreground = false; return f }()),
+    ("not-key", false, true, { var f = allFocus; f.key = false; return f }())
+] {
+    let decision = NativeSheets.savePanelRoute(inProcess: inProcess, preflight: preflight, focus: focus)
+    routes.append(["name": name, "route": decision.route, "refused": decision.refused ?? NSNull()])
+}
+emitJSON(["case": "routes", "routes": routes])
+for (name, remote) in [("panel-in-process", false), ("panel-remote", true)] {
+    let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 300, height: 200), styleMask: [.titled], backing: .buffered, defer: false)
+    panel.isReleasedWhenClosed = false
+    let content = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 200))
+    if remote { content.addSubview(FixtureRemoteView(frame: content.bounds)) } else {
+        let folder = NSButton(title: "New Folder", target: nil, action: nil); folder.keyEquivalent = "\r"; folder.isHidden = true
+        let cancel = NSButton(title: "Cancel", target: nil, action: nil); cancel.keyEquivalent = "\u{1b}"
+        let save = NSButton(title: "Save", target: nil, action: nil); save.keyEquivalent = "\r"
+        for button in [folder, cancel, save] { content.addSubview(button) }
+    }
+    panel.contentView = content
+    var result = NativeSheets.savePanelSnapshot(panel, parent: parent)
+    result["case"] = name
+    emitJSON(result)
+    if remote {
+        // No access: nothing sent, a receipt. Access but a hidden, unattached panel of an
+        // inactive app: the focus guard refuses, nothing sent.
+        pressed("press-remote-no-access", panel, save: true, preflight: false)
+        pressed("press-remote-unfocused", panel, save: false, preflight: true)
+    } else {
+        pressed("press-local-save", panel, save: true, preflight: false)
+        pressed("press-local-cancel", panel, save: false, preflight: false)
+    }
+}

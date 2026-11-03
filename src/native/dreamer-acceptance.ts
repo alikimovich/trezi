@@ -148,3 +148,47 @@ export function archiveProblems(archive: ExportedArchive, selected: string[]): s
     if (!proposals.includes(marker)) problems.push(`proposals.json lacks the redaction ${marker}`)
   return problems
 }
+
+/** One entry of evidence.json's `steps`: what a step did or saw, and when. */
+export interface StepEntry {
+  step: string
+  at: string
+  [field: string]: unknown
+}
+
+/**
+ * LKM-452: the acceptance's step log. `note` appends and writes at once. `wait` notes the
+ * wait before it starts, and when the wait fails notes the error with the host's `state`
+ * taken then (before any cleanup dismisses the panel), then rethrows. So evidence.json
+ * holds the last input and what the panel showed even when the run times out.
+ */
+export function stepLog(write: (steps: StepEntry[]) => void, now = () => new Date().toISOString()) {
+  const steps: StepEntry[] = []
+  const note = (step: string, fields: Record<string, unknown> = {}) => {
+    steps.push({ step, at: now(), ...fields })
+    write(steps)
+  }
+  const wait = async <T>(
+    label: string,
+    run: () => Promise<T>,
+    state: () => Promise<unknown>
+  ): Promise<T> => {
+    note(`wait: ${label}`)
+    try {
+      return await run()
+    } catch (error) {
+      let seen: unknown
+      try {
+        seen = await state()
+      } catch (failure) {
+        seen = `state unavailable: ${String(failure)}`
+      }
+      note(`failed: ${label}`, {
+        error: error instanceof Error ? error.message : String(error),
+        state: seen
+      })
+      throw error
+    }
+  }
+  return { steps, note, wait }
+}

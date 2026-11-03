@@ -18,6 +18,47 @@ Newest first. Append a dated entry when you finish a chunk of work.
   - Focusing and setting up the second chat are programmatic, and the evidence says so.
 - Observation, unchanged: the card shows the failure reason as given, so the failure PNG shows the planted fake key. Only the written report is redacted, which is what LKM-446 specifies.
 - Not run here: any native suite (worker budget 0). GREEN and RED on the merged SHA are the operator's.
+## 2026-11-03 — LKM-452 Dreamer acceptance: a guarded window-server route for the save panel
+
+- Decision b2543e30: the remote `NSSavePanel` gets real window-server keys. No manual operator step is added, and the harness never saves or cancels the panel programmatically.
+- Root cause, kept honest:
+  - The mismatch is traced in the source. The panel's Save and Cancel are drawn out of process, so they are not in-process `NSButton`s. The old `savePress` therefore posted Return to the app's own queue (`NSApp.postEvent`), and on a8bebe7f the panel stayed open.
+  - The sandboxed probe (exit 69) proves only that the panel runs out of process. It does not prove how the panel service handles posted events or focus.
+- Route (`NativeSheets.pressSavePanel`, `src/native/DreamerAcceptance.swift`):
+  - **Local.** When the panel has an in-process button with the Return or Escape key equivalent, it is clicked through the app queue, as Export… still is.
+  - **Remote.** Otherwise the harness posts Return (Save) or Escape (Cancel) at the HID tap, but only if:
+    - `CGPreflightPostEventAccess()` is true. This call never prompts. Nothing requests access, uses Accessibility prompts, opens System Settings or goes through System Events or AppleScript.
+    - The focus guard holds just before the key: the test app is active and frontmost, and the panel is a sheet on the Dreamer window, on screen and key.
+  - If either check fails, nothing is sent. The check fails at once with `refused`, so it never waits for a panel that cannot close.
+  - The access receipt (check, preflight, process, pid, bundle, parent process, route) goes into evidence.json `access` and run.json `access`. Preflight false is an access wait for the operator. It is not a reason to change the executor.
+- Evidence: the `savePress` step records the route, input, preflight, guard, `sent`, `refused` and the panel's `before` snapshot. It is written before the close wait.
+- Unit `dreamer-acceptance` (Swift fixture with recording closures, so nothing is posted) covers:
+  - the route matrix: local, remote, no access, and each focus field false;
+  - a remote press without access: no key sent, one preflight call, a full receipt;
+  - a remote press out of focus: no key sent, the guard fields false;
+  - local Save and Cancel: one click and no preflight.
+  - Source checks: the press path calls no `.ok(`, `.cancel(`, `performClick` or `NSApp.postEvent`; `.cancel(nil)` appears only in cleanup; no prompting or System Settings API appears; the smoke fails on `!press.sent` before the close wait; every LKM-447 assertion is still there.
+- No timeout changed and no assertion was removed. RED still fails at `real NSSavePanel opened`. No product, exporter or controller code changed. No native run happened here (0 native calls), and `dreamer-export-primary` is not passed.
+
+## 2026-11-03 — LKM-452 Dreamer acceptance: why Save left the panel open, and step evidence
+
+- Run on a8bebe7f: GREEN failed at `save panel closed; false`. Export… opened the real panel as a sheet and the directory step passed, but the panel stayed open after `savePress`. `exports` was empty because an entry was written only after the panel closed.
+- Diagnosis:
+  - On this macOS, `NSSavePanel` is drawn by AppKit's out-of-process panel service. A plain, non-sandboxed probe binary that only creates `NSSavePanel()` connects to ViewBridge's `ClientCallsAuxiliary`/`HostCallsAuxiliary` listeners and exits 69 when that service is unreachable (the LKM-381 composer fixture hit the same exit). So the panel's Save and Cancel buttons are not `NSButton`s in Trezi's view tree.
+  - `savePress` (`src/native/DreamerAcceptance.swift`, the `savePress` case) therefore finds no in-process button and posts Return or Escape with `NSApp.postEvent` to the panel window. Trezi itself drew the Export… button, so the same posting route worked for it. The panel did not act on the posted Return.
+  - The run cannot tell whether the service drops input that did not come from the window server or the panel was not key. The a8bebe7f harness recorded neither the route nor the panel's focus.
+  - Excluded: the wrong Save button (no in-process Save exists to pick), and a replace or name prompt (the folder was a fresh `mkdtemp` and the name `Dreamer Report <date>.zip`).
+  - Not product: `pickLogExport` (`src/native/HostLogs.swift`) presents a stock sheet, and RED proved the export path.
+- Evidence now (harness only):
+  - `stepLog` (`src/native/dreamer-acceptance.ts`) writes `steps` to evidence.json before every wait.
+  - A failed wait adds its error and the save panel and sheet as they were then, before `finally` dismisses the panel.
+  - Each export is recorded when it starts.
+  - `savePress` returns the route, the pressed button (or none) and a `before` snapshot. `NativeSheets.savePanelSnapshot` records visible, attached, key window, first responder, view classes and `remote`, every in-process button, the save and cancel targets, directory and name.
+- Unit `dreamer-acceptance`:
+  - the step log's order, timeout state and an unavailable host;
+  - a source check that every wait goes through the log and the export entry precedes its waits (both fail on a8bebe7f's source);
+  - a Swift fixture of the snapshot and press target on an in-process and a remote-style panel.
+- Open: no in-process route can press a button that another process draws. The fix waits for a decision on the input route. No product, exporter or controller code changed, `dreamer-export-primary` is not passed, and no native run happened here (0 native calls).
 ## 2026-11-03 — LKM-444 peer-feedback unit flake: a stale shared Git read (fixed in `peerObservedFiles`)
 
 - Symptom: the quick unit run printed `FAIL [unit] peer-feedback 129.8s`. Not the suite limit (`UNIT_TIMEOUT_MS['peer-feedback']` is 300 s): one scenario failed, `overlap renders once per change, uncertain, and clears: Timed out waiting for the known overlap`; every other scenario was ok. The "Verification repair" bullet below records another `peer-feedback` failure under the parallel load; this entry is the one account of them.
