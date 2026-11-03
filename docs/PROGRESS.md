@@ -18,6 +18,38 @@ Newest first. Append a dated entry when you finish a chunk of work.
   - Focusing and setting up the second chat are programmatic, and the evidence says so.
 - Observation, unchanged: the card shows the failure reason as given, so the failure PNG shows the planted fake key. Only the written report is redacted, which is what LKM-446 specifies.
 - Not run here: any native suite (worker budget 0). GREEN and RED on the merged SHA are the operator's.
+## 2026-11-03 — LKM-456 LKM-444 native acceptance fixture: real foreground input, retained evidence
+
+- Why: LKM-444's live check needed one reproducible operator command whose input is not a callback, whose evidence names the exact source and survives the run, and which has a deliberate RED. Shipping behaviour is unchanged: `SourcePopout.swift` and `sourceState` are untouched.
+- Command: `bun run acceptance:source-popout [--red=legacy-order-out]` (`scripts/source-popout-acceptance.mjs`).
+  - It refuses a dirty tree, a background run, another test Trezi or a held runner lock, before it builds anything.
+  - It runs `dev:native --test --only=core --source-popout-acceptance`: a disposable profile, the synthetic smoke project, and only the prelude plus `fullscreen-popout-close-native`.
+  - It copies the evidence into a new read-only folder, `test/artifacts/native/fullscreen-popout-close/<sha12>-<mode>-<start>/`, with `run.json`.
+  - A run is MET only if the stamped build SHA equals the clean HEAD and cleanup left no full screen.
+- Input (`src/native/SourcePopoutAcceptance.swift`, test profile only):
+  - Window-targeted mouse down/up and key down/up are posted with `NSApp.postEvent`. Each receipt labels them as programmatic, not hardware input.
+  - A read-only preflight first checks that the app is active, that no modal or sheet is up, that the target is visible and key, and that the point hit-tests to the control. A failure refuses with a receipt and posts nothing.
+  - The proof never uses `performClick`, `performKeyEquivalent`, `insertText` or `makeFirstResponder`, and the unit test enforces that.
+  - The main window is probed after each close by a click on the composer, a typed key and Delete.
+- Cases (`src/native/smoke-source-popout-acceptance.ts`):
+  - ×, the red button and ⌘W, windowed and in full screen.
+  - Dock, windowed and in full screen.
+  - Close and dock while entering and while exiting full screen.
+  - Three close and reopen rounds.
+  - A docked editor in a full-screen main window.
+  - The state is recorded before each input. Every `closed` assertion of the `source-popout` smoke is kept, in `src/native/source-popout-acceptance.ts`.
+- RED: the first full-screen × skips `SourcePopout` and orders the window out at once, as before 252f23a5. The presenter is restored by `defer`. RED is met only if that step fails its lifecycle assertions with the pop-out recorded off screen and still in full screen.
+- Unit `test/source-popout-acceptance.mjs` covers:
+  - the rules, GREEN on the real `SourcePopout` steps (the LKM-444 fixture) and RED on the stranded state
+  - every receipt failure, including refusals
+  - the host steps' route and banned shortcuts
+  - the opt-in selection
+  - the command and launcher guards, which all stop before a build
+- Not run here: any native run (worker budget 0). GREEN and RED on the merged SHA are the operator's. Limits:
+  - The build is the checkout's `out/native`, not a separate copy.
+  - In full screen, the red button lives in AppKit's title-bar window. Its on-screen state is recorded, not assumed.
+  - Transition timing has not been exercised on a display.
+
 ## 2026-11-03 — LKM-452 Dreamer acceptance: a guarded window-server route for the save panel
 
 - Decision b2543e30: the remote `NSSavePanel` gets real window-server keys. No manual operator step is added, and the harness never saves or cancels the panel programmatically.

@@ -342,6 +342,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-skills-imports.ts` | test | — | smoke fixture (folder, GitHub and recommendation imports) |
 | `src/native/smoke-source-editor.ts` | test | — | smoke fixture |
 | `src/native/smoke-source-popout.ts` | test | — | smoke fixture |
+| `src/native/smoke-source-popout-acceptance.ts` | test | — | opt-in pop-out full-screen close acceptance fixture (evidence and cleanup in the artifacts folder, LKM-456) |
 | `src/native/smoke-source-syntax.ts` | test | — | smoke fixture |
 | `src/native/smoke-source-wrap.ts` | test | — | smoke fixture |
 | `src/native/smoke-changes-panel.ts` | test | — | Changes list smoke (LKM-366) |

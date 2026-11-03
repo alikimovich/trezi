@@ -47,6 +47,8 @@ export function parseSmokeGroups(argv: readonly string[]): Set<NativeSmokeGroup>
     throw new Error(`${DREAMER_ACCEPTANCE_FLAG} needs the settings group in --only`)
   if (argv.includes(CHAT_RECOVERY_ACCEPTANCE_FLAG) && !names.includes('chat'))
     throw new Error(`${CHAT_RECOVERY_ACCEPTANCE_FLAG} needs the chat group in --only`)
+  if (argv.includes(SOURCE_POPOUT_ACCEPTANCE_FLAG) && !names.includes('core'))
+    throw new Error(`${SOURCE_POPOUT_ACCEPTANCE_FLAG} needs the core group in --only`)
   return new Set(names as NativeSmokeGroup[])
 }
 
@@ -122,6 +124,8 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   dreamer: ['settings'],
   // LKM-447: opt-in, pushed only with --dreamer-acceptance (selectDreamerAcceptance).
   'dreamer-export-primary': ['settings'],
+  // LKM-456: opt-in, pushed only with --source-popout-acceptance (selectSourcePopoutAcceptance).
+  'fullscreen-popout-close-native': ['core'],
   'skills-settings': ['settings'],
   'browser-setup': ['settings'],
   'security-session': ['settings'],
@@ -204,26 +208,69 @@ export function selectDreamerAcceptance<T extends { name: string }>(
 export const CHAT_RECOVERY_ACCEPTANCE_FLAG = '--chat-recovery-acceptance'
 export const CHAT_RECOVERY_ACCEPTANCE_CHECK = 'chat-recovery-flow-native'
 
-/** With the flag, only the prelude and the chat recovery acceptance run (the flag's check
- *  must be among `checks`); without it the selection is unchanged. */
+/** LKM-456: the opt-in LKM-444 full-screen pop-out close acceptance with posted pointer and
+ *  keyboard input (`bun run acceptance:source-popout`, docs/TESTING.md). */
+export const SOURCE_POPOUT_ACCEPTANCE_FLAG = '--source-popout-acceptance'
+export const SOURCE_POPOUT_ACCEPTANCE_CHECK = 'fullscreen-popout-close-native'
+
+/** Shared body of the opt-in acceptance selectors: with the flag, only the prelude and the
+ *  flag's check run (the check must be among `checks`); without it the selection is
+ *  unchanged. An acceptance runs alone: not with --live, the Dreamer acceptance or another
+ *  opt-in acceptance. */
+function selectOptInAcceptance<T extends { name: string }>(
+  checks: T[],
+  argv: readonly string[],
+  log: (line: string) => void,
+  flag: string,
+  check: string,
+  title: string
+): T[] {
+  if (!argv.includes(flag)) return checks
+  if (argv.includes('--live')) throw new Error(`${flag} cannot run with --live`)
+  for (const other of [
+    DREAMER_ACCEPTANCE_FLAG,
+    CHAT_RECOVERY_ACCEPTANCE_FLAG,
+    SOURCE_POPOUT_ACCEPTANCE_FLAG
+  ])
+    if (other !== flag && argv.includes(other)) throw new Error(`${flag} cannot run with ${other}`)
+  const prelude: readonly string[] = SMOKE_PRELUDE
+  const picked = checks.filter(({ name }) => prelude.includes(name) || name === check)
+  if (!picked.some(({ name }) => name === check))
+    throw new Error(`${flag}: the ${check} check was not selected`)
+  log(
+    `${title} (${flag}): running ${picked.map((c) => c.name).join(', ')}; not full-suite acceptance.`
+  )
+  return picked
+}
+
+/** With the flag, only the prelude and the chat recovery acceptance run. */
 export function selectChatRecoveryAcceptance<T extends { name: string }>(
   checks: T[],
   argv: readonly string[],
   log: (line: string) => void = console.log
 ): T[] {
-  const flag = CHAT_RECOVERY_ACCEPTANCE_FLAG
-  if (!argv.includes(flag)) return checks
-  if (argv.includes('--live')) throw new Error(`${flag} cannot run with --live`)
-  if (argv.includes(DREAMER_ACCEPTANCE_FLAG))
-    throw new Error(`${flag} cannot run with ${DREAMER_ACCEPTANCE_FLAG}`)
-  const prelude: readonly string[] = SMOKE_PRELUDE
-  const picked = checks.filter(
-    ({ name }) => prelude.includes(name) || name === CHAT_RECOVERY_ACCEPTANCE_CHECK
+  return selectOptInAcceptance(
+    checks,
+    argv,
+    log,
+    CHAT_RECOVERY_ACCEPTANCE_FLAG,
+    CHAT_RECOVERY_ACCEPTANCE_CHECK,
+    'CHAT RECOVERY ACCEPTANCE'
   )
-  if (!picked.some(({ name }) => name === CHAT_RECOVERY_ACCEPTANCE_CHECK))
-    throw new Error(`${flag}: the ${CHAT_RECOVERY_ACCEPTANCE_CHECK} check was not selected`)
-  log(
-    `CHAT RECOVERY ACCEPTANCE (${flag}): running ${picked.map((c) => c.name).join(', ')}; not full-suite acceptance.`
+}
+
+/** With the flag, only the prelude and the pop-out acceptance run. */
+export function selectSourcePopoutAcceptance<T extends { name: string }>(
+  checks: T[],
+  argv: readonly string[],
+  log: (line: string) => void = console.log
+): T[] {
+  return selectOptInAcceptance(
+    checks,
+    argv,
+    log,
+    SOURCE_POPOUT_ACCEPTANCE_FLAG,
+    SOURCE_POPOUT_ACCEPTANCE_CHECK,
+    'SOURCE POP-OUT ACCEPTANCE'
   )
-  return picked
 }

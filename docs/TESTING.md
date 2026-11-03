@@ -53,6 +53,70 @@ are in `docs/DREAMER.md` ("Acceptance on the shipping code").
 `bun run acceptance:chat-recovery` (LKM-453) is the same kind of opt-in foreground check
 for the LKM-446 chat recovery card; see "Chat recovery acceptance" below.
 
+### Pop-out full-screen close acceptance
+
+`bun run acceptance:source-popout` (LKM-456, for LKM-444) is an opt-in foreground
+check named `fullscreen-popout-close-native`. It is not part of any tier. Run it only
+while holding the shared desktop lock, on a clean checkout. The runner
+(`scripts/source-popout-acceptance.mjs`) refuses these with exit 2 and posts nothing:
+- a dirty tree
+- `TREZI_NATIVE_BACKGROUND_TEST=1`
+- another test Trezi
+- a held runner lock
+
+It builds the checkout's test profile and launches
+`bun run dev:native --test --only=core --source-popout-acceptance`. That run uses a
+disposable profile and the synthetic smoke project, and runs only the prelude and the
+check.
+
+- **Cases** (`src/native/smoke-source-popout-acceptance.ts`):
+  - Closing the editor by the editor ×, the red close button and ⌘W, both windowed and
+    in full screen.
+  - Docking, windowed and in full screen.
+  - Closing and docking during the enter and exit transitions.
+  - Three close and reopen rounds.
+  - Negative controls: a windowed pop-out, and a docked editor closed while the main
+    window is in full screen.
+
+  Each case asserts every lifecycle check of the `source-popout` smoke
+  (`src/native/source-popout-acceptance.ts`). It also checks that the draft and the
+  selection are kept, and probes the main window through input: a click on the
+  composer, a typed key, then Delete. Entering full screen, typing the draft and
+  reopening are setup, not proof.
+- **Input:** the host steps (`src/native/SourcePopoutAcceptance.swift`) post
+  window-targeted mouse down/up and key down/up events with `NSApp.postEvent`. AppKit
+  dispatches them through `sendEvent`, hit-testing and menu key equivalents. Every
+  receipt labels them as programmatic, not OS or HID hardware input.
+- **Preflight:** before posting, each step checks that the app is active, that no
+  modal or sheet is up, that the target window is visible and key, and that the point
+  hit-tests to the intended control. Any failure refuses the step with a precise
+  receipt and posts nothing. The route is in-process, so no Accessibility or Input
+  Monitoring grant is requested and no system setting changes.
+- **Evidence:** the run writes to `test/artifacts/native/source-popout-acceptance/`:
+  - `evidence.json`: build SHA, every step's state before and after, receipts and
+    probes
+  - SHA-named PNGs
+  - `cleanup.json`
+
+  The runner then copies them, with `run.json`, into a new read-only folder:
+  `test/artifacts/native/fullscreen-popout-close/<sha12>-<mode>-<start>/`. A run is
+  MET only if all of these hold:
+  - the stamped build SHA is HEAD, with no local changes
+  - cleanup left no full-screen window and the main window windowed
+  - GREEN passed, or RED failed as designed
+- **RED:** `--red=legacy-order-out` arms the first full-screen editor-× close, in the
+  test profile only. That close's hide skips `SourcePopout` and orders the full-screen
+  window out at once, as `sourceState` did before LKM-444. RED is met only if the step
+  fails on the lifecycle assertions and records the pop-out off screen while still in
+  full screen. Cleanup leaves full screen and restores the presenter.
+- **Limits:**
+  - The build is the checkout's `out/native`, not a separate copy.
+  - In full screen, the red close button lives in AppKit's title-bar window. Its
+    on-screen state is recorded rather than assumed.
+  - `test/source-popout-acceptance.mjs` (unit tier) checks the rules, the RED
+    detection, the host steps' route and the command's guards without a desktop. The
+    native run itself is an operator step.
+
 ### Focused verification (LOCAL-TEST-AUDIT)
 
 Use exact registered test names with `--filter`; inspect the selection with `--list`

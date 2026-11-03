@@ -280,6 +280,7 @@ export const UNIT = [
   'composer-queue-header',
   'sidebar-menu-capture',
   'source-popout',
+  'source-popout-acceptance',
   'sidebar-marquee-resume',
   'menu-shortcut-audit',
   'tw-classes',

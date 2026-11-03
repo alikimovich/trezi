@@ -43,9 +43,12 @@ import {
   DREAMER_ACCEPTANCE_CHECK,
   DREAMER_ACCEPTANCE_FLAG,
   parseSmokeGroups,
+  SOURCE_POPOUT_ACCEPTANCE_CHECK,
+  SOURCE_POPOUT_ACCEPTANCE_FLAG,
   selectChatRecoveryAcceptance,
   selectDreamerAcceptance,
-  selectSmokeChecks
+  selectSmokeChecks,
+  selectSourcePopoutAcceptance
 } from './smoke-groups'
 import { checkIncidentRow } from './smoke-incident'
 import { checkSelectionInput, preparePreviewInput } from './smoke-input'
@@ -97,6 +100,10 @@ import { checkSidebarStatus, restoreSidebarStatus } from './smoke-sidebar-status
 import { checkSkillsSettings, restoreSkillsSettings } from './smoke-skills'
 import { checkSourceEditor } from './smoke-source-editor'
 import { checkSourcePopout, cleanupSourcePopout } from './smoke-source-popout'
+import {
+  checkSourcePopoutAcceptance,
+  cleanupSourcePopoutAcceptance
+} from './smoke-source-popout-acceptance'
 import { checkSourceStamps } from './smoke-source-stamp'
 import { checkSourceSyntax, restoreSourceSyntax } from './smoke-source-syntax'
 import { checkSourceWrap, restoreSourceWrap } from './smoke-source-wrap'
@@ -1829,14 +1836,28 @@ export async function runNativeCoreSmoke(
         await checkChatRecoveryAcceptance(host, artifacts)
       }
     })
+  // LKM-456: the opt-in LKM-444 pop-out acceptance (docs/TESTING.md); its own cleanup recovers.
+  if (process.argv.includes(SOURCE_POPOUT_ACCEPTANCE_FLAG))
+    checks.push({
+      name: SOURCE_POPOUT_ACCEPTANCE_CHECK,
+      dependsOn: ['open-project'],
+      run: () =>
+        checkSourcePopoutAcceptance(host, fixture, artifacts, inspect, (source) =>
+          invoke('source:popout', fixture, source)
+        ),
+      cleanup: () => cleanupSourcePopoutAcceptance(host, fixture, artifacts)
+    })
   let hostClosed = false
   void host.closed.then(() => {
     hostClosed = true
   })
   // `--only` filters which named checks run; failure collection is unchanged.
   const selected = selectSmokeChecks(checks, parseSmokeGroups(process.argv))
-  const optedIn = selectChatRecoveryAcceptance(selected, process.argv)
-  const results = await runSmokeChecks(selectDreamerAcceptance(optedIn, process.argv), {
+  const optIn = selectSourcePopoutAcceptance(
+    selectChatRecoveryAcceptance(selectDreamerAcceptance(selected, process.argv), process.argv),
+    process.argv
+  )
+  const results = await runSmokeChecks(optIn, {
     capture: (name) => captureSmokeFailure(host, artifacts, name),
     restore: () => restoreSmokeState(host, firstProject),
     deadline: Number(process.env.TREZI_NATIVE_SMOKE_DEADLINE_MS) || undefined,

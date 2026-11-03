@@ -30,7 +30,9 @@ if (process.platform !== 'darwin') {
     // LKM-447: the opt-in Dreamer acceptance's host steps.
     'src/native/DreamerAcceptance.swift',
     // LKM-453: the opt-in chat recovery acceptance's host steps.
-    'src/native/ChatRecoveryAcceptance.swift'
+    'src/native/ChatRecoveryAcceptance.swift',
+    // LKM-456: the opt-in fullscreen-popout-close-native acceptance's host steps.
+    'src/native/SourcePopoutAcceptance.swift'
   ]
 
   const script = readFileSync(join(root, 'scripts/build-native.mjs'), 'utf8')

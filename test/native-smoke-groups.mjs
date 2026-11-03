@@ -18,6 +18,7 @@ import {
   parseSmokeGroups,
   SMOKE_CHECK_GROUPS,
   SMOKE_PRELUDE,
+  SOURCE_POPOUT_ACCEPTANCE_CHECK,
   selectChatRecoveryAcceptance,
   selectDreamerAcceptance,
   selectSmokeChecks,
@@ -93,17 +94,21 @@ for (const { name } of names)
 // The opt-in checks are pushed onto the list under their flag, so the pattern skips them.
 for (const name of Object.keys(SMOKE_CHECK_GROUPS))
   assert.ok(
-    [OPT_IN_LIVE, DREAMER_ACCEPTANCE_CHECK, CHAT_RECOVERY_ACCEPTANCE_CHECK].includes(name) ||
-      names.some((check) => check.name === name),
+    [
+      OPT_IN_LIVE,
+      DREAMER_ACCEPTANCE_CHECK,
+      CHAT_RECOVERY_ACCEPTANCE_CHECK,
+      SOURCE_POPOUT_ACCEPTANCE_CHECK
+    ].includes(name) || names.some((check) => check.name === name),
     `Group map names a real check: ${name}`
   )
-for (const name of [OPT_IN_LIVE, DREAMER_ACCEPTANCE_CHECK, CHAT_RECOVERY_ACCEPTANCE_CHECK])
-  assert.match(
-    source,
-    new RegExp(
-      `checks\\.push\\(\\{\\n\\s*name: (?:'${name}'|DREAMER_ACCEPTANCE_CHECK|CHAT_RECOVERY_ACCEPTANCE_CHECK),`
-    )
-  )
+for (const pushed of [
+  `'${OPT_IN_LIVE}'`,
+  'DREAMER_ACCEPTANCE_CHECK',
+  'CHAT_RECOVERY_ACCEPTANCE_CHECK',
+  'SOURCE_POPOUT_ACCEPTANCE_CHECK'
+])
+  assert.match(source, new RegExp(`checks\\.push\\(\\{\\n\\s*name: ${pushed},`))
 const listed = names.map((check) => check.name)
 assert.deepEqual(
   selectSmokeChecks(names, parseSmokeGroups(['--only=selection']), () => {}).map((c) => c.name),
