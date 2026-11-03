@@ -112,6 +112,21 @@ export function swiftCompile(args, output, { cwd = root, timeout = 400_000 } = {
   }
 }
 
+/** The macOS platform's compiler plugins (SwiftUIMacros, which expands `@State`). The
+ *  swiftc driver passes this folder to the frontend; a bare `-frontend` run does not. */
+let platformPlugins
+function platformPluginArgs() {
+  if (platformPlugins === undefined) {
+    const platform =
+      process.platform === 'darwin'
+        ? spawnSync(xcrun, ['--show-sdk-platform-path'], { encoding: 'utf8' }).stdout.trim()
+        : ''
+    const dir = platform ? join(platform, 'Developer/usr/lib/swift/host/plugins') : ''
+    platformPlugins = dir && existsSync(dir) ? ['-plugin-path', dir] : []
+  }
+  return platformPlugins
+}
+
 /** One uncached `swiftc -frontend` run in the swiftc lane with the shared module cache,
  *  for a test that reads a compile's diagnostics. Returns spawnSync's result. */
 export function swiftFrontend(args, { cwd = root, timeout = 400_000 } = {}) {
@@ -120,7 +135,14 @@ export function swiftFrontend(args, { cwd = root, timeout = 400_000 } = {}) {
   try {
     return spawnSync(
       compiler[0],
-      [...compiler.slice(1), '-frontend', ...args, '-module-cache-path', MODULE_CACHE],
+      [
+        ...compiler.slice(1),
+        '-frontend',
+        ...platformPluginArgs(),
+        ...args,
+        '-module-cache-path',
+        MODULE_CACHE
+      ],
       { cwd, encoding: 'utf8', timeout, maxBuffer: 64 * 1024 * 1024 }
     )
   } finally {

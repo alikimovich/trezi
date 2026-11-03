@@ -12,9 +12,9 @@ import type { NativeSheetField, NativeSheetSection, NativeSheetState } from '../
 
 /**
  * LKM-202: the Dreamer's review window as a sectioned sheet. An Overview pane (filter,
- * report, Send / Copy / Export) and one pane per proposal: editable title, problem,
- * proposal and acceptance criteria, whether it is selected and its evidence, each with
- * Open chat. Pure: the controller presents and persists.
+ * report, Copy / Export…, Export… the default) and one pane per proposal: editable
+ * title, problem, proposal and acceptance criteria, whether it is in the export and its
+ * evidence, each with Open chat. Pure: the controller presents and persists.
  */
 
 /** The last run as the review window shows it, kept in preferences between launches. */
@@ -24,7 +24,6 @@ export interface DreamerResult {
   selected: string[]
   model: string | null
   fallback?: string
-  sent?: { at: string; tasks: string[] }
 }
 
 const SYMBOLS: Record<DreamerCategory, string> = {
@@ -46,7 +45,7 @@ export function reviewSections(result: DreamerResult, filter: string): NativeShe
       id: OVERVIEW,
       label: 'Overview',
       symbol: 'moon.stars',
-      detail: 'Edit any proposal in the sidebar, then send the selected ones to Agent OS.'
+      detail: 'Edit any proposal in the sidebar, then export the selected ones as a redacted ZIP.'
     },
     ...visible(result, filter).map((p) => ({
       id: `p:${p.id}`,
@@ -87,12 +86,7 @@ export const selectedText = (result: DreamerResult) =>
  */
 const includeField = (id: string, epoch: number) => `include${epoch}:${id}`
 
-export function reviewFields(
-  result: DreamerResult,
-  filter: string,
-  target: string,
-  epoch = 0
-): NativeSheetField[] {
+export function reviewFields(result: DreamerResult, filter: string, epoch = 0): NativeSheetField[] {
   const { file } = result
   const counts = (category: DreamerCategory) =>
     file.proposals.filter((p) => p.category === category).length
@@ -143,24 +137,15 @@ export function reviewFields(
       label: 'Report',
       kind: 'readonly',
       value: file.summary ?? ''
-    },
-    { id: 'target', section: OVERVIEW, label: 'Agent OS', kind: 'readonly', value: target }
+    }
   ]
-  if (result.sent)
-    fields.push({
-      id: 'sent',
-      section: OVERVIEW,
-      label: 'Last sent',
-      kind: 'readonly',
-      value: `${new Date(result.sent.at).toLocaleString()} · ${result.sent.tasks.join(', ') || 'no task ids returned'}`
-    })
   for (const p of file.proposals) {
     const section = `p:${p.id}`
     fields.push(
       {
         id: includeField(p.id, epoch),
         section,
-        label: 'Send to Agent OS',
+        label: 'Include in export',
         kind: 'choice',
         value: result.selected.includes(p.id) ? 'yes' : 'no',
         choices: [
@@ -218,8 +203,8 @@ export function reviewActions(result: DreamerResult): NativeSheetState['actions'
     { id: 'select-all', label: 'Select All', section: OVERVIEW },
     { id: 'select-none', label: 'Select None', section: OVERVIEW },
     { id: 'copy-json', label: 'Copy as JSON', section: OVERVIEW },
-    { id: 'export', label: 'Export…', section: OVERVIEW },
-    { id: 'send', label: 'Send to Agent OS', primary: true, section: OVERVIEW }
+    // The only primary action: the window's default button (Return).
+    { id: 'export', label: 'Export…', primary: true, section: OVERVIEW }
   ]
   for (const p of result.file.proposals)
     p.evidence.forEach((e, n) => {

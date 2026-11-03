@@ -2,17 +2,7 @@ import type { DreamerEstimate, DreamerRun } from '../main/dreamer'
 import { productLog } from '../main/product-log'
 import { type DreamerFile, type DreamerScope, evidenceSession } from '../shared/dreamer'
 import type { NativeSheetAction, NativeSheetField } from '../shared/native-sheet'
-import {
-  type AgentOsTarget,
-  DEFAULT_AGENT_OS_URL,
-  DREAMER_PROJECT_KEY,
-  DREAMER_START_KEY,
-  DREAMER_TOKEN_KEY,
-  DREAMER_URL_KEY,
-  exportDreamerReport,
-  redactDeep,
-  sendToAgentOs
-} from './dreamer-export'
+import { exportDreamerReport, redactDeep } from './dreamer-export'
 import {
   applyReviewValues,
   type DreamerResult,
@@ -48,7 +38,6 @@ export interface DreamerHost {
   openChat(session: string): void
   /** A chat is running or sending: the weekly run waits. */
   busy(): boolean
-  fetch?: (url: string, init: RequestInit) => Promise<Response>
 }
 
 const tokens = (n: number) => (n >= 1000 ? `about ${Math.round(n / 1000)}k` : `about ${n}`)
@@ -90,20 +79,6 @@ export class NativeDreamerController {
     if (text.length > RESULT_CHARS) return
     void this.preferences.set(DREAMER_LAST_KEY, text).catch(() => {})
   }
-  target(): AgentOsTarget {
-    return {
-      url: this.preferences.get(DREAMER_URL_KEY) || DEFAULT_AGENT_OS_URL,
-      project: this.preferences.get(DREAMER_PROJECT_KEY) ?? '',
-      token: this.preferences.get(DREAMER_TOKEN_KEY) ?? undefined,
-      start: this.preferences.get(DREAMER_START_KEY) === 'on'
-    }
-  }
-  private targetText() {
-    const target = this.target()
-    return target.project
-      ? `${target.url} · project ${target.project}${target.start ? ' · starts the tasks' : ''}`
-      : `${target.url} · set the project ID in Settings → Dreamer`
-  }
 
   /** Trezi → Run Dreamer…: scope, time range and the estimated size, then the run. */
   async run() {
@@ -132,7 +107,7 @@ export class NativeDreamerController {
       {
         title: 'Run Dreamer',
         detail:
-          'The Dreamer reads your saved chats and Trezi’s log on this Mac, sends a redacted summary to your selected model (it never edits code) and proposes improvements. Nothing leaves this Mac until you export or send it.',
+          'The Dreamer reads your saved chats and Trezi’s log on this Mac, sends a redacted summary to your selected model (it never edits code) and proposes improvements. Nothing leaves this Mac until you export it.',
         fields: [
           {
             id: 'scope',
@@ -221,7 +196,7 @@ export class NativeDreamerController {
         detail: '',
         sections: reviewSections(result, this.filter),
         section,
-        fields: reviewFields(result, this.filter, this.targetText(), this.epoch),
+        fields: reviewFields(result, this.filter, this.epoch),
         actions: reviewActions(result),
         autosave: true
       },
@@ -232,7 +207,7 @@ export class NativeDreamerController {
     const sheet = this.sheets.current
     if (!sheet) return
     sheet.state.sections = reviewSections(result, this.filter)
-    sheet.state.fields = reviewFields(result, this.filter, this.targetText(), this.epoch)
+    sheet.state.fields = reviewFields(result, this.filter, this.epoch)
     this.sheets.refresh()
   }
   private async handle(result: DreamerResult, action: NativeSheetAction) {
@@ -267,30 +242,6 @@ export class NativeDreamerController {
     if (action.action === 'export') {
       const dest = await this.save(selectedFile(result), result)
       return say(dest ? `Exported the report to ${dest}.` : '')
-    }
-    if (action.action === 'send') {
-      if (!result.selected.length) throw new Error('Select at least one proposal to send.')
-      const file = selectedFile(result)
-      const sent = await sendToAgentOs(this.target(), file, this.host.fetch)
-      productLog.info('dreamer', sent.ok ? 'Proposals sent' : 'Proposals not sent', {
-        proposals: file.proposals.length,
-        tasks: sent.tasks.length
-      })
-      if (sent.ok) {
-        result.sent = { at: new Date().toISOString(), tasks: sent.tasks }
-        this.persist()
-        if (current()) this.rerender(result)
-        return say(
-          `Sent ${plural(file.proposals.length, 'proposal')} to Agent OS.${sent.tasks.length ? ` Created ${sent.tasks.join(', ')}.` : ''}`
-        )
-      }
-      // A failed send keeps the work: the report is saved instead.
-      say(`Not sent: ${sent.error} Choose where to save the report instead.`)
-      this.sheets.refresh()
-      const dest = await this.save(file, result)
-      return say(
-        `Not sent: ${sent.error} ${dest ? `Exported the report to ${dest} instead.` : 'Export cancelled.'}`
-      )
     }
   }
   private async save(file: DreamerFile, result: DreamerResult) {
