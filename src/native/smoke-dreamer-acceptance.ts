@@ -22,7 +22,8 @@ import {
   DREAMER_ACCEPTANCE_RED_MODES,
   DREAMER_WIDTHS,
   type FooterMeasure,
-  footerProblems
+  footerProblems,
+  stepLog
 } from './dreamer-acceptance'
 import type { NativeDreamerController } from './dreamer-controller'
 import type { PreferenceEntry } from './preferences'
@@ -56,8 +57,6 @@ export async function checkDreamerAcceptance(
   // biome-ignore lint/suspicious/noExplicitAny: host step payloads are untyped JSON
   const step = (op: string, extra: Record<string, unknown> = {}): Promise<any> =>
     host.request('dreamerAcceptance', { op, ...extra })
-  const sheet = (check: (state: any) => boolean, timeout = 10000) =>
-    inspectUntil((method) => host.request(method), 'sheetInspect', check, undefined, timeout)
   const evidence: Record<string, unknown> = {
     check: 'dreamer-export-primary',
     build: buildStamp(),
@@ -65,10 +64,34 @@ export async function checkDreamerAcceptance(
     startedAt: new Date().toISOString(),
     captures: {},
     widths: {},
-    exports: []
+    exports: [],
+    steps: []
   }
   const record = () =>
     writeFileSync(join(dir, 'evidence.json'), `${JSON.stringify(evidence, null, 2)}\n`)
+  // LKM-452: every input and every wait that can fail is written to `steps` first; a failed
+  // wait adds the save panel and sheet as they were then, before `finally` dismisses them.
+  const log = stepLog((steps) => {
+    evidence.steps = steps
+    record()
+  })
+  const hostState = async () => ({
+    savePanel: await step('savePanel').catch((error) => String(error)),
+    sheet: await host.request('sheetInspect').catch((error) => String(error))
+  })
+  const until = (
+    label: string,
+    check: () => any,
+    timeout = 10000,
+    describe?: () => Promise<unknown>
+  ) => log.wait(label, () => waitFor(check, label, timeout, describe), hostState)
+  const sheet = (label: string, check: (state: any) => boolean, timeout = 10000) =>
+    log.wait(
+      label,
+      () =>
+        inspectUntil((method) => host.request(method), 'sheetInspect', check, undefined, timeout),
+      hostState
+    )
 
   const requests: string[] = []
   // A local stand-in at the old Agent OS URL: nothing may reach it.
@@ -100,7 +123,9 @@ export async function checkDreamerAcceptance(
     if (red === 'stub-save-panel') dreamer.host.pickExport = async () => join(out, 'stub.zip')
 
     evidence.menu = await step('menu')
+    log.note('menu', { result: evidence.menu })
     const overview = await sheet(
+      'Dreamer Proposals open on Overview',
       (s) => s.visible && s.title === 'Dreamer Proposals' && s.section === 'overview'
     )
     evidence.overview = overview
@@ -115,10 +140,14 @@ export async function checkDreamerAcceptance(
     // The footer in the foreground at both widths: measured, captured, then judged.
     for (const [name, width] of Object.entries(DREAMER_WIDTHS)) {
       await step('prepare', { width })
-      const measure: FooterMeasure = await waitFor(async () => {
-        const m = await step('measure')
-        return m.foreground && Math.abs(m.width - width) <= 1 && m.buttons.length > 0 && m
-      }, `Dreamer window ${width} pt wide in the foreground`)
+      log.note('prepare', { width })
+      const measure: FooterMeasure = await until(
+        `Dreamer window ${width} pt wide in the foreground`,
+        async () => {
+          const m = await step('measure')
+          return m.foreground && Math.abs(m.width - width) <= 1 && m.buttons.length > 0 && m
+        }
+      )
       const png = `dreamer-${name}-${width}.png`
       writeFileSync(
         join(dir, png),
@@ -136,35 +165,50 @@ export async function checkDreamerAcceptance(
       folder: string,
       button: 'save' | 'cancel'
     ) => {
+      // Recorded at once and filled in as it goes, so a timeout still leaves this export.
+      const entry: Record<string, unknown> = { trigger, button, closed: false }
+      ;(evidence.exports as unknown[]).push(entry)
       await step('prepare')
-      await waitFor(
-        async () => (await step('measure')).foreground,
-        'Dreamer window in the foreground'
+      log.note('prepare', { trigger, button })
+      await until(
+        'Dreamer window in the foreground',
+        async () => (await step('measure')).foreground
       )
       const input =
         trigger === 'click'
           ? await step('click', { action: 'export' })
           : await step('key', { key: 'return' })
-      const panel = await waitFor(
+      entry.input = input
+      log.note(`export ${trigger}`, { input })
+      const panel = await until(
+        `real NSSavePanel opened by ${trigger === 'click' ? 'an Export… click' : 'Return'}`,
         async () => {
           const p = await step('savePanel')
           return p.open && p.visible && p
         },
-        `real NSSavePanel opened by ${trigger === 'click' ? 'an Export… click' : 'Return'}`,
         10000,
         async () => ({ sheet: await host.request('sheetInspect') })
       )
+      entry.panel = panel
+      log.note('save panel opened', { panel })
       assert.equal(panel.attached, true, 'the save panel is a sheet on the Dreamer window')
       assert.match(panel.name, /^Dreamer Report \d{4}-\d{2}-\d{2}\.zip$/)
-      await step('saveTo', { directory: folder })
-      await waitFor(async () => {
+      log.note('saveTo', { panel: await step('saveTo', { directory: folder }) })
+      await until('save panel in the temp folder', async () => {
         const p = await step('savePanel')
         return p.directory && realpathSync(p.directory) === realpathSync(folder)
-      }, 'save panel in the temp folder')
+      })
       const press = await step('savePress', { button })
-      await waitFor(async () => !(await step('savePanel')).open, 'save panel closed')
-      const entry: Record<string, unknown> = { trigger, button, input, panel, press }
-      ;(evidence.exports as unknown[]).push(entry)
+      entry.press = press
+      // The route (local click or remote window-server key), the preflight and focus guard,
+      // the button pressed and the panel then. A refused route sent nothing: fail now, with
+      // the access receipt, instead of waiting for a panel that cannot close.
+      if (press.receipt) evidence.access = press.receipt
+      log.note(`savePress ${button}`, { press })
+      if (!press.sent)
+        throw new Error(`save panel ${button} not sent (${press.route} route): ${press.refused}`)
+      await until('save panel closed', async () => !(await step('savePanel')).open)
+      entry.closed = true
       return { name: panel.name as string, entry }
     }
 
@@ -172,6 +216,7 @@ export async function checkDreamerAcceptance(
       const folder = mkdtempSync(join(out, `${trigger}-`))
       const { name, entry } = await exportVia(trigger, folder, 'save')
       const done = await sheet(
+        `export message for the ${trigger} export`,
         (s) => !s.busy && s.message.includes(`${basename(folder)}/${name}`),
         20000
       )
@@ -206,7 +251,10 @@ export async function checkDreamerAcceptance(
     const folder = mkdtempSync(join(out, 'cancel-'))
     const before = readdirSync(out).sort()
     const { entry } = await exportVia('click', folder, 'cancel')
-    const cancelled = await sheet((s) => !s.busy && s.visible && s.message === '')
+    const cancelled = await sheet(
+      'no message after Cancel',
+      (s) => !s.busy && s.visible && s.message === ''
+    )
     entry.message = cancelled.message
     assert.deepEqual(readdirSync(folder), [], 'a cancelled export writes nothing')
     assert.deepEqual(readdirSync(out).sort(), before, 'a cancelled export writes nothing')
@@ -214,7 +262,8 @@ export async function checkDreamerAcceptance(
     evidence.requests = requests
     assert.equal(requests.length, 0, 'no request reaches the Agent OS stand-in')
     await host.request('sheetPerform', { action: 'closeWindow' })
-    await sheet((s) => !s.visible)
+    log.note('closeWindow')
+    await sheet('Dreamer window closed', (s) => !s.visible)
     evidence.outcome = 'pass'
   } catch (error) {
     evidence.outcome = 'fail'
