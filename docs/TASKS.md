@@ -53,6 +53,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Unit `chat-recovery-acceptance` (rules GREEN/RED, report redaction, render gate, and a Swift fixture of the real card: locator, derived disabled frames, posted click and Space), plus `native-smoke-groups` selection and launcher guards.
 - [ ] Operator: `bun run acceptance:chat-recovery` GREEN and `--red=delay-busy` RED under the shared desktop lock on the merged SHA. `chat-recovery-flow-native` is not passed until then.
 
+## Chat recovery acceptance: busy card buttons (LKM-458)
+
+- [x] Diagnose the a2c03fbb GREEN refusal: a whole-row action match against a busy card that has lost Copy support report and the copy glyph (`docs/PROGRESS.md`).
+- [x] Per-chat stored rows, leading-action prefix match, anchored at the conversation's end and checked against live proxies and the spinner. The unit fixture uses the real controller's busy cards, reproduces the old refusal for an unmeasured chat, and clicks each derived centre.
+- [x] `step-NN-<name>` PNG/JSON evidence before every press, fallible wait and refusal. A keyboard route that sends no request fails with its own diagnosis.
+- [ ] Operator: GREEN and `--red=delay-busy` RED on the merged SHA, including whether the foreground Space reaches Resolve with Full Keyboard Access off.
+
 ## Dreamer acceptance on the shipping code (LKM-447)
 
 - [x] Opt-in `dreamer-export-primary` check (`--dreamer-acceptance`, settings group, prelude only): real menu, 780 and 680 pt foreground captures, footer clip/overlap/default checks, no Agent OS copy.
