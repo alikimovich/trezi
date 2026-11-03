@@ -31,36 +31,26 @@ if (process.argv.includes('--help')) {
 }
 const args = process.argv.slice(2)
 for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--chat-recovery-acceptance') continue
   if (args[i] === '--project' && args[i + 1]) {
     i++
     continue
   }
-  if (
-    [
-      '--test',
-      '--live',
-      '--dreamer-acceptance',
-      '--chat-recovery-acceptance',
-      '--source-popout-acceptance'
-    ].includes(args[i]) ||
-    args[i] === '--only' ||
-    args[i].startsWith('--only=')
-  )
-    continue
+  if (['--test', '--live', '--dreamer-acceptance', '--source-popout-acceptance'].includes(args[i]) || args[i] === '--only' || args[i].startsWith('--only=')) continue
   console.error(
     `Unknown native argument: ${args[i]}. Use --project /path/to/repo; Trezi manages its dev server.`
   )
   process.exit(1)
 }
-for (const flag of [
-  '--dreamer-acceptance',
-  '--chat-recovery-acceptance',
-  '--source-popout-acceptance'
-])
+for (const flag of ['--dreamer-acceptance', '--source-popout-acceptance'])
   if (args.includes(flag) && !args.includes('--test')) {
     console.error(`${flag} is a native smoke check and requires --test.`)
     process.exit(1)
   }
+if (args.includes('--chat-recovery-acceptance') && !args.includes('--test')) {
+  console.error('--chat-recovery-acceptance is a native smoke check and requires --test.')
+  process.exit(1)
+}
 // Fail before the build: a typo in a group name should not cost a full build.
 if (args.some(arg => arg === '--only' || arg.startsWith('--only='))) {
   if (!args.includes('--test')) {

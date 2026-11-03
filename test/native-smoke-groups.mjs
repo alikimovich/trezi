@@ -11,7 +11,6 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
   CHAT_RECOVERY_ACCEPTANCE_CHECK,
-  CHAT_RECOVERY_ACCEPTANCE_FLAG,
   DREAMER_ACCEPTANCE_CHECK,
   DREAMER_ACCEPTANCE_FLAG,
   NATIVE_SMOKE_GROUPS,
@@ -19,7 +18,6 @@ import {
   SMOKE_CHECK_GROUPS,
   SMOKE_PRELUDE,
   SOURCE_POPOUT_ACCEPTANCE_CHECK,
-  selectChatRecoveryAcceptance,
   selectDreamerAcceptance,
   selectSmokeChecks,
   smokeLauncherTimeoutMs
@@ -92,20 +90,20 @@ assert.ok(
 for (const { name } of names)
   assert.ok(SMOKE_PRELUDE.includes(name) || SMOKE_CHECK_GROUPS[name], `Check ${name} needs a group`)
 // The opt-in checks are pushed onto the list under their flag, so the pattern skips them.
-for (const name of Object.keys(SMOKE_CHECK_GROUPS))
+for (const name of Object.keys(SMOKE_CHECK_GROUPS).filter(
+  (key) => key !== CHAT_RECOVERY_ACCEPTANCE_CHECK
+))
   assert.ok(
-    [
-      OPT_IN_LIVE,
-      DREAMER_ACCEPTANCE_CHECK,
-      CHAT_RECOVERY_ACCEPTANCE_CHECK,
-      SOURCE_POPOUT_ACCEPTANCE_CHECK
-    ].includes(name) || names.some((check) => check.name === name),
+    [OPT_IN_LIVE, DREAMER_ACCEPTANCE_CHECK, SOURCE_POPOUT_ACCEPTANCE_CHECK].includes(name) ||
+      names.some((check) => check.name === name),
     `Group map names a real check: ${name}`
   )
+// LKM-453: the chat recovery acceptance is opt-in too; test/chat-recovery-selection.mjs
+// covers its selector and flag guards.
+assert.deepEqual(SMOKE_CHECK_GROUPS[CHAT_RECOVERY_ACCEPTANCE_CHECK], ['chat'])
 for (const pushed of [
   `'${OPT_IN_LIVE}'`,
   'DREAMER_ACCEPTANCE_CHECK',
-  'CHAT_RECOVERY_ACCEPTANCE_CHECK',
   'SOURCE_POPOUT_ACCEPTANCE_CHECK'
 ])
   assert.match(source, new RegExp(`checks\\.push\\(\\{\\n\\s*name: ${pushed},`))
@@ -230,57 +228,6 @@ console.log(
   'Dreamer acceptance selection: prelude plus dreamer-export-primary only; bad combinations fail.'
 )
 
-// LKM-453: --chat-recovery-acceptance runs the prelude and its one opt-in check, nothing else.
-const recoveryOptIn = [
-  ...names,
-  { name: CHAT_RECOVERY_ACCEPTANCE_CHECK, dependsOn: ['chat-ready'] }
-]
-const recoveryArgv = ['--test', '--only=chat', CHAT_RECOVERY_ACCEPTANCE_FLAG]
-const recoveryNotices = []
-assert.deepEqual(
-  selectChatRecoveryAcceptance(
-    selectSmokeChecks(recoveryOptIn, parseSmokeGroups(recoveryArgv), () => {}),
-    recoveryArgv,
-    (line) => recoveryNotices.push(line)
-  ).map((c) => c.name),
-  ['startup', 'open-project', 'chat-ready', 'final-shell', CHAT_RECOVERY_ACCEPTANCE_CHECK]
-)
-assert.match(recoveryNotices.join(), /^CHAT RECOVERY ACCEPTANCE .*not full-suite acceptance/)
-assert.equal(
-  selectChatRecoveryAcceptance(names, ['--test'], () => {}),
-  names,
-  'No flag: unchanged'
-)
-assert.equal(
-  selectDreamerAcceptance(recoveryOptIn, recoveryArgv, () => {}),
-  recoveryOptIn,
-  'The Dreamer selection ignores the chat recovery flag'
-)
-assert.throws(
-  () => parseSmokeGroups(['--only=settings', CHAT_RECOVERY_ACCEPTANCE_FLAG]),
-  /--chat-recovery-acceptance needs the chat group/
-)
-assert.throws(
-  () => selectChatRecoveryAcceptance(names, recoveryArgv, () => {}),
-  /chat-recovery-flow-native check was not selected/
-)
-assert.throws(
-  () => selectChatRecoveryAcceptance(recoveryOptIn, [...recoveryArgv, '--live'], () => {}),
-  /cannot run with --live/
-)
-assert.throws(
-  () =>
-    selectChatRecoveryAcceptance(
-      recoveryOptIn,
-      [...recoveryArgv, DREAMER_ACCEPTANCE_FLAG],
-      () => {}
-    ),
-  /cannot run with --dreamer-acceptance/
-)
-console.log(
-  'Chat recovery acceptance selection: prelude plus chat-recovery-flow-native only; bad combinations fail.'
-)
-
 if (process.platform === 'darwin') {
   const cwd = fileURLToPath(new URL('../', import.meta.url))
   const dev = (...args) =>
@@ -303,18 +250,10 @@ if (process.platform === 'darwin') {
   assert.equal(acceptanceGroup.status, 1)
   assert.match(acceptanceGroup.stderr, /needs the settings group/)
   assert.doesNotMatch(acceptanceGroup.stdout, /Building/)
-  const recoveryWithoutTest = dev(CHAT_RECOVERY_ACCEPTANCE_FLAG)
-  assert.equal(recoveryWithoutTest.status, 1)
-  assert.match(recoveryWithoutTest.stderr, /--chat-recovery-acceptance .*requires --test/)
-  const recoveryGroup = dev('--test', '--only=settings', CHAT_RECOVERY_ACCEPTANCE_FLAG)
-  assert.equal(recoveryGroup.status, 1)
-  assert.match(recoveryGroup.stderr, /needs the chat group/)
-  assert.doesNotMatch(recoveryGroup.stdout, /Building/)
   const help = dev('--help')
   assert.equal(help.status, 0)
   assert.match(help.stdout, /--only=group,group/)
   assert.match(help.stdout, /--dreamer-acceptance/)
-  assert.match(help.stdout, /--chat-recovery-acceptance/)
   assert.ok(
     all.every((group) => help.stdout.includes(group)),
     'Help lists every group'

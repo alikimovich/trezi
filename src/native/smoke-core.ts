@@ -1827,15 +1827,6 @@ export async function runNativeCoreSmoke(
           await host.request('sheetPerform', { action: 'closeWindow' })
       }
     })
-  // LKM-453: the opt-in chat recovery acceptance (docs/TESTING.md); its own check cleans up.
-  if (process.argv.includes(CHAT_RECOVERY_ACCEPTANCE_FLAG))
-    checks.push({
-      name: CHAT_RECOVERY_ACCEPTANCE_CHECK,
-      dependsOn: ['chat-ready'],
-      run: async () => {
-        await checkChatRecoveryAcceptance(host, artifacts)
-      }
-    })
   // LKM-456: the opt-in LKM-444 pop-out acceptance (docs/TESTING.md); its own cleanup recovers.
   if (process.argv.includes(SOURCE_POPOUT_ACCEPTANCE_FLAG))
     checks.push({
@@ -1847,14 +1838,27 @@ export async function runNativeCoreSmoke(
         ),
       cleanup: () => cleanupSourcePopoutAcceptance(host, fixture, artifacts)
     })
+  // LKM-453: the opt-in chat recovery acceptance (docs/TESTING.md); its own check cleans up.
+  if (process.argv.includes(CHAT_RECOVERY_ACCEPTANCE_FLAG))
+    checks.push({
+      name: CHAT_RECOVERY_ACCEPTANCE_CHECK,
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkChatRecoveryAcceptance(host, artifacts)
+      }
+    })
   let hostClosed = false
   void host.closed.then(() => {
     hostClosed = true
   })
   // `--only` filters which named checks run; failure collection is unchanged.
-  const selected = selectSmokeChecks(checks, parseSmokeGroups(process.argv))
+  // The chat recovery acceptance narrows the selection first and rejects any other opt-in.
+  const selected = selectChatRecoveryAcceptance(
+    selectSmokeChecks(checks, parseSmokeGroups(process.argv)),
+    process.argv
+  )
   const optIn = selectSourcePopoutAcceptance(
-    selectChatRecoveryAcceptance(selectDreamerAcceptance(selected, process.argv), process.argv),
+    selectDreamerAcceptance(selected, process.argv),
     process.argv
   )
   const results = await runSmokeChecks(optIn, {

@@ -125,6 +125,7 @@ export const UNIT = [
   'native-chat-bottom-marker',
   'native-chat-send-follow',
   'chat-recovery-acceptance',
+  'chat-recovery-selection',
   'native-chat-parallel-stream',
   'native-smoke-wait',
   'native-smoke-shared-chat',
