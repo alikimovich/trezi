@@ -2,6 +2,14 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-02 — LKM-446 chat recovery flow (implementation in progress)
+
+- Red first: `test/stop-recovery-ui.mjs` failed when a deferred Retry left its button labelled Retry; `test/integration-gate.mjs` failed when a web chat with command receipts did not arrange any browser check.
+- Recovery actions now set a chat-scoped busy state before IPC; the card renders Retry/Resolve progress through native `ProgressView`, disables conflicting actions, and clears on a settled request. A still-held or failed result remains on that card with a report action. The report is written privately, read back before the action appears, and includes bounded chat logs, IDs, revisions, gate evidence and replay failures without transcript or source.
+- A verified turn whose normal byte writer parks a deletion uses the repository owner's checked patch path. `test/chat-landing-recovery.mjs` adds a deletion-plus-edit case. Claude workspace guidance no longer names the absent `prepare_conflict_resolution` tool. Replay records failures, checks current receipts before replaying, and supplies a browser check when a web chat has none.
+- Focused `stop-recovery-ui`, `integration-gate`, `chat-auto-resolve`, and `chat-recovery-report` tests pass. The first manager quick run found the auto-resolve error-propagation regression (fixed), lint formatting (fixed), and two Swift toolchain failures outside the edited files. Native acceptance remains for the operator after merge.
+- The `chat` native smoke fixture now holds a real Retry request open while it inspects the native card's busy flag, disabled actions and changed label; a second action must not reach the backend, and a still-held reply must not start a model turn. It has not run in this worker's session (native-call limit zero).
+
 ## 2026-11-02 — LKM-442 code copy: pointing hand and "Copied to clipboard"
 
 - Investigation: the report says hovering copies, but the shipped trigger is a single click on inline code or anywhere on a fenced block's background (LKM-431, `ChatTextView.mouseDown`, `copy(_:at:)`, `src/native/ChatTextView.swift`). Hover never copied and the ticket forbids changing the mechanism, so the trigger and the copied text are untouched and "hover-copy" is read as that click. The existing feedback is `ChatCopiedToast` in the same file; it is reused, not replaced.

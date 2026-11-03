@@ -8,23 +8,97 @@ import type { NativeChatController } from './chat-controller'
 import { loginAction } from './chat-login'
 import { editQueued, sendBlock } from './chat-queue'
 import { recoveryAction } from './chat-recovery'
+import { writeRecoveryReport } from './chat-recovery-report'
 import { assistant, begin, type Chat, placeUi, type Submission } from './chat-state'
 import { landingFixPrompt } from './landing-check'
 
+const RECOVERY_REQUEST_MS = 120_000
+let recoveryRequestMs = RECOVERY_REQUEST_MS
+/** A short deterministic deadline for the deferred-request fixture. */
+export function setRecoveryRequestDeadlineForTests(ms: number | null) {
+  recoveryRequestMs = ms ?? RECOVERY_REQUEST_MS
+}
+
 /** Resolve for a chat whose changes are held: the agent fixes the conflict markers in a turn. */
 export async function resolveHeld(controller: NativeChatController, chat: Chat) {
-  if (chat.isRunning || chat.sending) return
-  chat.paused = false
-  const result = await controller.services.invoke('agent:resolve-conflict', chat.chat)
-  if (!result.ok) throw new Error(result.error ?? 'Unable to resolve changes.')
-  if (result.prompt && result.conflicted.length)
-    await controller.run(chat, {
-      id: crypto.randomUUID(),
-      text: result.prompt,
-      attachments: [],
-      selection: null,
-      turn: {}
-    })
+  return recoveryRequest(controller, chat, 'resolve', async () => {
+    chat.paused = false
+    const result = await controller.services.invoke('agent:resolve-conflict', chat.chat)
+    if (!result.ok) throw new Error(result.error ?? 'Unable to resolve changes.')
+    if (result.prompt && result.conflicted.length)
+      await controller.run(chat, {
+        id: crypto.randomUUID(),
+        text: result.prompt,
+        attachments: [],
+        selection: null,
+        turn: {}
+      })
+    else if (chat.isolation === 'parked')
+      chat.recoveryProblem = result.error ?? 'The changes are still held. Review the reason below.'
+  })
+}
+
+async function recoveryRequest(
+  controller: NativeChatController,
+  chat: Chat,
+  kind: NonNullable<Chat['recovery']>,
+  request: () => Promise<void>
+) {
+  if (chat.isRunning || chat.sending || chat.recovery) return
+  chat.recovery = kind
+  chat.recoveryProblem = undefined
+  chat.recoveryReport = undefined
+  chat.recoverySettled = undefined
+  chat.recoveryOutcome = undefined
+  chat.recoveryId = crypto.randomUUID()
+  chat.recoveryStartedAt = Date.now()
+  controller.changed(chat)
+  try {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      await Promise.race([
+        request(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  'The recovery request did not answer within two minutes. The changes remain held.'
+                )
+              ),
+            recoveryRequestMs
+          )
+        })
+      ])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+    if (
+      !chat.recoveryProblem &&
+      !chat.isRunning &&
+      chat.recoverySettled &&
+      chat.recoverySettled !== 'parked'
+    )
+      chat.recoveryOutcome =
+        kind === 'discard'
+          ? 'Held changes discarded.'
+          : chat.recoverySettled === 'merged'
+            ? 'Changes applied to the project.'
+            : 'No changes remained to apply.'
+    if (chat.recoveryProblem)
+      chat.recoveryReport = await writeRecoveryReport(chat, kind, chat.recoveryProblem)
+  } catch (error) {
+    chat.recoveryProblem = `Problem: ${error instanceof Error ? error.message : String(error)}`
+    try {
+      chat.recoveryReport = await writeRecoveryReport(chat, kind, chat.recoveryProblem)
+    } catch {
+      chat.recoveryProblem += ' The support report could not be written.'
+    }
+    if (kind === 'resolve') throw error
+  } finally {
+    chat.recovery = undefined
+    controller.changed(chat)
+  }
 }
 
 /** Card actions call application services directly; shell effects only refresh web panels. */
@@ -34,6 +108,35 @@ export async function cardAction(
   action: NativeChatAction
 ) {
   const { invoke, effect } = controller.services
+  if (action.action === 'recovery-outcome-dismiss') {
+    chat.recoveryOutcome = undefined
+    return
+  }
+  if (action.action === 'recovery-report') {
+    if (chat.recoveryReport) {
+      const result = await invoke('recovery:copy-report', chat.chat)
+      if (!result.ok)
+        chat.recoveryProblem = `Problem: ${result.error ?? 'Could not copy the report.'}`
+    }
+    return
+  }
+  // Handle these before the general asynchronous card dispatcher. A double click
+  // cannot reach the backend while the first request is still in flight.
+  if (action.action === 'resolve') return resolveHeld(controller, chat).catch(() => {})
+  if (action.action === 'discard')
+    return recoveryRequest(controller, chat, 'discard', async () => {
+      chat.paused = false
+      await invoke('agent:discard-conflict', chat.chat)
+    })
+  if (action.action === 'landing-retry')
+    return recoveryRequest(controller, chat, 'retry', async () => {
+      chat.paused = false
+      const result = await invoke('agent:retry-landing', chat.chat)
+      if (!result.ok) throw new Error(result.error ?? 'Unable to retry the landing.')
+      if (result.state === 'parked' && chat.isolation === 'parked')
+        chat.recoveryProblem =
+          result.error ?? 'The changes are still held. Review the reason below.'
+    })
   if (await recoveryAction(controller, chat, action.action, action.id)) return
   switch (action.action) {
     case 'error-dismiss':
@@ -173,22 +276,6 @@ export async function cardAction(
     }
     // Resolve, Discard and Retry are the user's way out: the queue follows once the held
     // changes land or go (the isolation event drains it, LKM-169).
-    case 'resolve':
-      await resolveHeld(controller, chat)
-      break
-    case 'discard':
-      if (chat.isRunning || chat.sending) return
-      chat.paused = false
-      await invoke('agent:discard-conflict', chat.chat)
-      break
-    case 'landing-retry': {
-      // The outcome arrives as an isolation event: merged, or this card with the reason.
-      if (chat.isRunning || chat.sending) return
-      chat.paused = false
-      const result = await invoke('agent:retry-landing', chat.chat)
-      if (!result.ok) throw new Error(result.error ?? 'Unable to retry the landing.')
-      break
-    }
     case 'setup-dismiss':
       if (chat.setup) return
       if (chat.context) chat.context.setup.dismissed = true

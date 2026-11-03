@@ -181,6 +181,22 @@ try {
   assert.equal(verdict.need, 'browser')
   assert.equal(verdict.reason, 'unchecked')
   assert.match(verdict.message, /preview_verify in its private browser/)
+  const missingBrowser = []
+  setCheckReplayer(async (recipe) => {
+    missingBrowser.push(recipe)
+    return true
+  })
+  await replayChecks(scope)
+  assert.ok(
+    missingBrowser.some((recipe) => recipe.kind === 'browser'),
+    'arranges a missing browser check'
+  )
+  assert.deepEqual(
+    missingBrowser.find((recipe) => recipe.kind === 'browser').args.checks,
+    [{ kind: 'visible', selector: 'body' }, { kind: 'noConsoleErrors' }],
+    'the automatic browser run makes real assertions'
+  )
+  setCheckReplayer(null)
   const browser = (agent, generation, verified = true) => ({
     id: newReceiptId(),
     createdAt: new Date().toISOString(),

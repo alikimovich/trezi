@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Chat recovery flow (LKM-446)
+
+- [x] Add red regressions for immediate Retry state and missing browser checks; use the owner's gated patch path for checked deletions.
+- [x] Scope Retry, Resolve and Discard busy state to their chat; produce a readable redacted support report for a failed or still-held request.
+- [ ] Native foreground acceptance after merge, including deferred requests, pointer and keyboard, still-held outcome, and multi-chat clearing.
+- [ ] Confirm obsolete checked-page recipe retirement and final outcome wording against a real held session.
+
 ## Code block copy: pointer cursor and "Copied to clipboard" (LKM-442)
 
 - [x] The copy trigger is unchanged: a single click on code (LKM-431), not a hover. The existing `native-chat-code-click` click, drag, link and cleanup checks are untouched and pass.

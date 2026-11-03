@@ -101,6 +101,14 @@ export interface Chat extends NativeChatMirror {
   autoResolved?: 'tried' | 'failed'
   /** LKM-165: why the last landing failed; its work is held until Retry or Resolve. */
   landingError?: string
+  /** A chat-scoped recovery request, distinct from an agent turn. */
+  recovery?: 'retry' | 'resolve' | 'discard'
+  recoveryProblem?: string
+  recoveryId?: string
+  recoveryStartedAt?: number
+  recoveryReport?: string
+  recoverySettled?: 'merged' | 'isolated' | 'parked'
+  recoveryOutcome?: string
   /** LKM-406: the product decision holding this chat's work, and the branch that keeps it. */
   decision?: { question: string; branch?: string }
   /** LKM-406: what the service-owned peer feed says of this chat's turn now. */
@@ -176,6 +184,7 @@ export function clearSentDraft(chat: Chat, revision = chat.revision) {
 }
 /** A turn starts thinking: its step timer and liveness start now. */
 export function begin(chat: Chat, now = Date.now()) {
+  chat.recoveryOutcome = undefined
   chat.phase = 'thinking'
   chat.operation = undefined
   chat.activityDetail = ''
@@ -450,6 +459,9 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
       chat.peerWork = event.lines.length ? event.lines : undefined
       break
     case 'isolation': {
+      if (chat.recovery)
+        chat.recoverySettled =
+          event.state === 'merged' ? 'merged' : event.state === 'parked' ? 'parked' : 'isolated'
       chat.isolation = event.state === 'parked' ? 'parked' : 'isolated'
       chat.isolationFiles = event.files
       const last = [...chat.messages].reverse().find((message) => message.role === 'assistant')

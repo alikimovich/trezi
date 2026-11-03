@@ -99,7 +99,10 @@ export const SESSION_TOOLS: readonly SessionTool[] = [
 
 // A landing Retry runs the session's passing checks again through the same tools.
 setCheckReplayer(async (recipe, scope) => {
-  if (recipe.kind === 'command') return !('error' in (await runCommandCheck(recipe.check, scope)))
+  if (recipe.kind === 'command') {
+    const result = await runCommandCheck(recipe.check, scope)
+    return 'verified' in result && result.verified
+  }
   return !(await runPreviewVerify(recipe.args, scope)).isError
 })
 

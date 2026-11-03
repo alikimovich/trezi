@@ -5,7 +5,7 @@
 // and source owners (test/repository-owner.mjs, suites list).
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -102,6 +102,17 @@ try {
   assert.match(settled.guidance, /Never describe earlier changes as pending/)
   await releaseChat(sw.key)
 
+  // A checked cumulative batch with deletions uses the owner's gated patch path.
+  const deleted = await fixture()
+  rmSync(join(deleted.cwd, OTHER))
+  writeFileSync(join(deleted.cwd, FILE), 'export const bar = 3\n')
+  await passCheck(deleted.key, deleted.cwd)
+  await afterTurn(deleted.key, 'Remove baz and update bar', [], 'success')
+  assert.equal(events.at(-1).state, 'merged', 'deletions land with the rest of the checked batch')
+  assert.equal(existsSync(join(deleted.root, OTHER)), false)
+  assert.equal(read(deleted.root), 'export const bar = 3\n')
+  await releaseChat(deleted.key)
+
   // The stuck chat: a failed Codex turn's hold goes stale under a live edit, so the
   // next successful turn parks as a conflict. Resolve's turn must be allowed and land.
   const stuck = await fixture()
@@ -161,6 +172,7 @@ try {
   assert.equal(state.state, 'failed')
   assert.equal(state.lastLanding.outcome, 'failed')
   assert.match(state.guidance, /Do not say the changes are pending/)
+  assert.doesNotMatch(state.guidance, /prepare_conflict_resolution/)
   assert.equal(read(failed.root), 'export const bar = 0\n')
   rmSync(lock)
   const retried = await retryLanding(failed.key)

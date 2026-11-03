@@ -1065,7 +1065,9 @@ export class NativeChatController {
         await this.services.invoke('planning:cancel', chat.chat)
         return
       }
-      if (!(await this.start.action(this, chat, action))) await cardAction(this, chat, action)
+      if (['resolve', 'discard', 'landing-retry'].includes(action.action))
+        await cardAction(this, chat, action)
+      else if (!(await this.start.action(this, chat, action))) await cardAction(this, chat, action)
     } catch (error) {
       this.fail(chat, error)
     }

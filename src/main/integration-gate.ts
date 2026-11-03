@@ -287,6 +287,10 @@ export type CheckReplayer = (
   scope: GateScope
 ) => Promise<boolean>
 let replayer: CheckReplayer | null = null
+const replayFailures = new Map<string, string[]>()
+/** Bounded reasons from the last replay attempt, scoped to one chat's receipts. */
+export const lastReplayFailures = (scope: GateScope): readonly string[] =>
+  replayFailures.get(sessionOf(scope)) ?? []
 export function setCheckReplayer(next: CheckReplayer | null): void {
   replayer = next
 }
@@ -298,16 +302,47 @@ export function setCheckReplayer(next: CheckReplayer | null): void {
  */
 export async function replayChecks(scope: GateScope): Promise<number> {
   if (!replayer) return 0
-  const passed = newest(
-    items(evidenceOf(sessionOf(scope))).filter(
-      (item) => item.verified || item.reason === 'runtime-changed'
-    )
-  )
+  const session = sessionOf(scope)
+  const latest = newest(items(evidenceOf(session)))
+  const passed = latest.filter((item) => item.verified || item.reason === 'runtime-changed')
+  const failures: string[] = []
+  replayFailures.set(session, failures)
+  const needed = await privateRuntimeKind(scope.root)
+  // A web chat with command checks only needs fresh private-browser evidence too.
+  // An existing browser recipe is always replayed on its own route and assertions.
+  if (needed === 'web' && !latest.some((item) => item.kind === 'browser'))
+    passed.push({
+      key: 'browser /',
+      id: 'automatic-browser',
+      at: '',
+      kind: 'browser',
+      verified: false,
+      reason: null,
+      recipe: {
+        kind: 'browser',
+        args: {
+          path: '/',
+          screenshot: false,
+          checks: [{ kind: 'visible', selector: 'body' }, { kind: 'noConsoleErrors' }]
+        }
+      },
+      tree: null
+    })
   let ran = 0
   for (const item of passed) {
     if (!item.recipe) continue
-    await replayer(item.recipe, scope).catch(() => false)
+    let ok = false
+    try {
+      ok = await replayer(item.recipe, scope)
+    } catch (error) {
+      failures.push(
+        `${item.key}: ${error instanceof Error ? error.message : String(error)}`.slice(0, 500)
+      )
+    }
+    if (!ok && !failures.some((failure) => failure.startsWith(`${item.key}:`)))
+      failures.push(`${item.key}: the check did not pass`)
     ran++
   }
+  replayFailures.set(session, failures.slice(-8))
   return ran
 }

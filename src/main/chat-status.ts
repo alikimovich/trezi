@@ -107,7 +107,7 @@ export function agentWorkspaceState(sessionKey: string): {
       ...last,
       guidance: st.interrupted
         ? 'An earlier stopped or failed turn’s changes are held, not applied. Edits in this turn build on them, and Trezi tries to land everything when this turn completes.'
-        : 'Trezi refused to land this cumulative batch safely; the project does not have these changes. Call prepare_conflict_resolution before editing or giving the user terminal instructions.'
+        : 'Trezi held this cumulative batch safely; the project does not have these changes. Use the chat card’s Retry or Resolve action. Do not claim the changes landed. If a product choice is needed, ask one concrete question and wait for the user.'
     }
   }
   return {

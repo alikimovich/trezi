@@ -20,6 +20,7 @@ import {
 import { agentWorkspaceState } from './chat-status'
 import { LandingEnded, LandingGuard } from './chat-watchdog'
 import {
+  applyParked,
   canReconcileText,
   conflictMarkerFiles,
   createChatWorktree,
@@ -407,6 +408,26 @@ async function landBatch(
     } catch {
       /* preserve the recovery branch and surface the fallback */
     }
+  }
+  // The normal byte writer deliberately refuses deletions and binary files. A
+  // checked, unchanged candidate may still land through the repository owner's
+  // gated patch path, which handles those exact-tree changes atomically.
+  if (
+    terminal === 'success' &&
+    outcome.outcome === 'parked' &&
+    verdict?.ok &&
+    !(await conflictMarkerFiles(st.wt, outcome.files)).length
+  ) {
+    const applied = await applyParked(st.liveRoot, st.wt, verdict.candidate)
+    if (applied.ok)
+      outcome = {
+        ...outcome,
+        outcome: 'merged',
+        files: applied.files,
+        edits: [],
+        newBase: applied.newBase
+      }
+    else if (applied.hold) outcome = { ...outcome, outcome: 'held', hold: applied.hold }
   }
   logLanding(sessionKey, st.wt.branch, outcome, terminal, reconcileFiles)
   const at = Date.now()

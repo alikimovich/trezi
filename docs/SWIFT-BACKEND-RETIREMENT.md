@@ -269,6 +269,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/main/browser-setup-cleanup.ts` | helper | PlatformOwner | After a Check Again whose `close` failed: SIGKILL of only the headless-shell processes whose command line names that check's own `tzab-` private folder (matched from the `/bin/ps` read), and removal of that folder only when none is left; the agent-browser daemon is never signalled (LOCAL-WEBKIT-4). Retires with `browser-setup.ts` |
 | `src/main/worktrees.ts` | helper | RepositoryOwner | Git reads (a branch's diff, chat refs) |
 | `src/native/log-support.ts` | helper | PlatformOwner | Export Logs… zip (`ditto`) of a temporary folder and a `sw_vers` read (LKM-168) |
+| `src/native/chat-recovery-report.ts` | helper | PlatformOwner | A private 0600 support report in a random system temporary folder for one chat recovery attempt (LKM-446); no target or profile write |
 | `src/native/dreamer-export.ts` | helper | PlatformOwner | Export Dreamer Report… zip (`ditto`) of a temporary folder (LKM-202) |
 | `src/native/smoke-agent-interact.ts` | test | — | smoke fixture |
 | `src/native/smoke-managed-agent-browser.ts` | test | — | managed Chromium focus fixture |

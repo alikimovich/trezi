@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+
+- Held chat changes with deletions can land through the checked repository path; Retry and Resolve show immediate progress, and recovery failures offer a chat-scoped support report (LKM-446).
+
 ## [0.13.4] - 2026-11-02
 
 ### Changed

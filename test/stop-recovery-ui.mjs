@@ -4,6 +4,7 @@
 // reverts byte-exact, keeps, finishes) is test/stop-recovery.mjs.
 import assert from 'node:assert/strict'
 import { liveCheckoutEdit } from '../src/main/live-write-guard.ts'
+import { setRecoveryRequestDeadlineForTests } from '../src/native/chat-actions.ts'
 import { NativeChatController } from '../src/native/chat-controller.ts'
 import { DevErrorReader, touchedFile } from '../src/shared/dev-error.ts'
 import { projectRelative } from '../src/shared/project-path.ts'
@@ -384,12 +385,62 @@ emit({
 })
 assert.match(card('conflict').detail, /couldn’t apply them to the project: index\.lock exists/)
 assert.match(card('conflict').detail, /src\/a\.tsx/)
+let finishRetry
+answers['agent:retry-landing'] = new Promise((resolve) => {
+  finishRetry = resolve
+})
+const pendingRetry = act('landing-retry', 'conflict')
+assert.equal(card('conflict').actions[1].label, 'Retrying…', 'busy before IPC settles')
+assert.equal(
+  card('conflict').actions.every((action) => action.disabled),
+  true
+)
+await act('landing-retry', 'conflict')
+await act('discard', 'conflict')
+assert.equal(calls.filter((call) => call[0] === 'agent:retry-landing').length, 1)
+assert.equal(calls.filter((call) => call[0] === 'agent:discard-conflict').length, 0)
+finishRetry({ ok: true, state: 'parked' })
+await pendingRetry
+assert.equal(card('conflict').actions[1].label, 'Retry')
 await act('landing-retry', 'conflict')
 await tick()
 assert.deepEqual(calls.at(-1), ['agent:retry-landing', 'a'])
 emit({ type: 'isolation', state: 'merged', files: ['src/a.tsx'], group: 'chat:w:3' })
 assert.equal(card('conflict'), undefined, 'a landed retry clears the card')
 assert.equal(chat.landingError, undefined)
+emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
+let finishLanding
+answers['agent:retry-landing'] = new Promise((resolve) => {
+  finishLanding = resolve
+})
+const settledRetry = act('landing-retry', 'conflict')
+emit({ type: 'isolation', state: 'merged', files: ['src/a.tsx'] })
+finishLanding({ ok: true, state: 'isolated' })
+await settledRetry
+assert.equal(card('recovery-outcome').detail, 'Changes applied to the project.')
+await act('recovery-outcome-dismiss', 'recovery-outcome')
+assert.equal(card('recovery-outcome'), undefined)
+emit({
+  type: 'isolation',
+  state: 'parked',
+  files: ['src/a.tsx'],
+  reason: 'failed',
+  error: 'checked source changed'
+})
+answers['agent:resolve-conflict'] = { ok: false, error: 'The checked source changed.' }
+await act('resolve', 'conflict')
+assert.match(card('conflict').detail, /Problem: The checked source changed/)
+assert.equal(card('error'), undefined, 'one recovery outcome stays on its own card')
+assert.ok(card('conflict').actions.some((action) => action.action === 'recovery-report'))
+await act('recovery-report', 'conflict')
+assert.deepEqual(calls.at(-1), ['recovery:copy-report', 'a'])
+setRecoveryRequestDeadlineForTests(1)
+answers['agent:retry-landing'] = new Promise(() => {})
+await act('landing-retry', 'conflict')
+assert.equal(card('conflict').busy, false, 'a timed-out request clears the native activity')
+assert.match(card('conflict').detail, /Problem: The recovery request did not answer/)
+assert.ok(card('conflict').actions.some((action) => action.action === 'recovery-report'))
+setRecoveryRequestDeadlineForTests(null)
 console.log(
   'STOP RECOVERY UI OK — guard, relative sources, dev-server errors, post-Stop and preview-error cards, queue'
 )

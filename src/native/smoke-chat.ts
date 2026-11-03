@@ -36,6 +36,8 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
   let turn = ''
   let noTerminalStop = false
   let reset: unknown
+  let retryResponse: Promise<unknown> | null = null
+  let retryCalls = 0
   // The actual agent:send RPC and its provider event hook own the log lines.
   // Only the provider's outbound send is stubbed; no paid provider call occurs.
   const provider = stubAgentSendForSmoke(state.chat, (...args) => {
@@ -43,6 +45,10 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
   })
   const send = (event: object) => provider.emit(event as AgentEvent)
   nativeChat.services.invoke = async (channel, ...args) => {
+    if (channel === 'agent:retry-landing' && retryResponse) {
+      retryCalls++
+      return retryResponse
+    }
     if (channel === 'agent:send') turn = String(args[4])
     if (noTerminalStop && channel === 'agent:interrupt') return undefined
     if (noTerminalStop && channel === 'agent:turn-state') return { turn, running: false }
@@ -389,6 +395,30 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     } finally {
       await host.request('dividerPerform', { delta: 120 })
     }
+    // The real native action reaches a deferred backend request. Its card must show
+    // activity before any isolation event and a second press must not send again.
+    let finishRetry: (value: unknown) => void = () => {}
+    retryResponse = new Promise((resolve) => {
+      finishRetry = resolve
+    })
+    await host.request('chatPerform', { action: 'landing-retry', card: 'conflict' })
+    const busy = await wait((value) =>
+      value.cardStates.some((card: any) => card.id === 'conflict' && card.busy === true)
+    )
+    const busyCard = busy.cardStates.find((card: any) => card.id === 'conflict')
+    if (!busyCard.actions.includes('Retrying…') || !busyCard.disabled.every(Boolean))
+      throw new Error(`Retry was not visibly busy before its reply: ${JSON.stringify(busyCard)}`)
+    await host.request('chatPerform', { action: 'landing-retry', card: 'conflict' })
+    if (retryCalls !== 1) throw new Error(`Retry double click sent ${retryCalls} requests`)
+    finishRetry({ ok: true, state: 'parked' })
+    await wait((value) =>
+      value.cardStates.some(
+        (card: any) =>
+          card.id === 'conflict' && card.busy === false && card.actions.includes('Retry')
+      )
+    )
+    if (sent.length !== 1) throw new Error('A held Retry started an agent turn')
+    retryResponse = null
     send({
       type: 'isolation',
       state: 'merged',
