@@ -68,10 +68,16 @@ await action('rename', { name: 'renamed.ts' })
 assert.equal(states.at(-1).source, 'renamed.ts')
 assert.equal(states.at(-1).text, 'newer draft')
 await action('popout')
+const revealed = states.at(-1).reveal
 await action('hide')
 await controller.open('/fixture')
 assert.equal(states.at(-1).popped, true)
 assert.equal(states.at(-1).text, 'newer draft')
+// LKM-444: reopening without a location does not reveal again, so the host keeps the selection.
+assert.equal(states.at(-1).reveal, revealed, 'reopen keeps the caret')
+await action('dock')
+assert.equal(states.at(-1).text, 'newer draft')
+assert.equal(states.at(-1).reveal, revealed, 'dock keeps the caret')
 await controller.open('/other', 'b.ts')
 assert.equal(controller.session('/fixture').state.text, 'newer draft')
 console.log(
