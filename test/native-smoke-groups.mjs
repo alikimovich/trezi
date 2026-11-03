@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
+  CHAT_RECOVERY_ACCEPTANCE_CHECK,
   DREAMER_ACCEPTANCE_CHECK,
   DREAMER_ACCEPTANCE_FLAG,
   MARKUP_ACCEPTANCE_CHECK,
@@ -94,7 +95,9 @@ assert.ok(
 for (const { name } of names)
   assert.ok(SMOKE_PRELUDE.includes(name) || SMOKE_CHECK_GROUPS[name], `Check ${name} needs a group`)
 // The opt-in checks are pushed onto the list under their flag, so the pattern skips them.
-for (const name of Object.keys(SMOKE_CHECK_GROUPS))
+for (const name of Object.keys(SMOKE_CHECK_GROUPS).filter(
+  (key) => key !== CHAT_RECOVERY_ACCEPTANCE_CHECK
+))
   assert.ok(
     [
       OPT_IN_LIVE,
@@ -104,6 +107,9 @@ for (const name of Object.keys(SMOKE_CHECK_GROUPS))
     ].includes(name) || names.some((check) => check.name === name),
     `Group map names a real check: ${name}`
   )
+// LKM-453: the chat recovery acceptance is opt-in too; test/chat-recovery-selection.mjs
+// covers its selector and flag guards.
+assert.deepEqual(SMOKE_CHECK_GROUPS[CHAT_RECOVERY_ACCEPTANCE_CHECK], ['chat'])
 for (const pushed of [
   `'${OPT_IN_LIVE}'`,
   'DREAMER_ACCEPTANCE_CHECK',

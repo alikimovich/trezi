@@ -1,0 +1,352 @@
+import { copyFileSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { stubAgentSendForSmoke } from '../main/agent'
+import type { AgentEvent } from '../shared/api'
+import { buildStamp } from './app-version'
+import type { NativeBridge } from './bridge'
+import {
+  BUSY_MARKER,
+  BUSY_WITHIN_MS,
+  busyProblems,
+  CHAT_RECOVERY_RED_MODES,
+  delayRenders,
+  failureProblems,
+  idleProblems,
+  PLANTED,
+  type RecoveryKind,
+  type RecoveryMeasure,
+  reportProblems,
+  stillHeldProblems
+} from './chat-recovery-acceptance'
+import { readableRecoveryReport } from './chat-recovery-report'
+import { nativeChat } from './chat-runtime'
+import { CHAT_RECOVERY_ACCEPTANCE_CHECK } from './smoke-groups'
+import { cleanSharedChat } from './smoke-shared-chat'
+import { waitFor } from './smoke-wait'
+
+/**
+ * LKM-453: the LKM-446 recovery flow on the shipping chat, opt-in
+ * (`--chat-recovery-acceptance`; the operator command is `bun run acceptance:chat-recovery`,
+ * docs/TESTING.md "Chat recovery acceptance"). The disposable `--test` profile's shared chat,
+ * the provider stub of the native smoke and synthetic isolation events; Retry and Resolve
+ * pressed on the real conflict card with a click or focus plus Space
+ * (src/native/ChatRecoveryAcceptance.swift). Each recovery request is held at the backend
+ * seam (`services.invoke`) until the card's busy state has been measured and captured, and a
+ * second click, Discard and the other recovery were tried on it. Outcomes: still held, clean,
+ * agent handover, failure with its written report, a second chat kept apart, terminal clear.
+ * Evidence: test/artifacts/native/chat-recovery-acceptance/.
+ */
+export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts: string) {
+  if (process.env.TREZI_NATIVE_BACKGROUND_TEST === '1')
+    throw new Error(
+      'The chat recovery acceptance needs the foreground; unset TREZI_NATIVE_BACKGROUND_TEST'
+    )
+  const red = process.env.TREZI_CHAT_RECOVERY_ACCEPTANCE_RED || ''
+  if (red && !(CHAT_RECOVERY_RED_MODES as readonly string[]).includes(red))
+    throw new Error(`Unknown TREZI_CHAT_RECOVERY_ACCEPTANCE_RED: ${red}`)
+  const dir = join(artifacts, 'chat-recovery-acceptance')
+  rmSync(dir, { recursive: true, force: true })
+  mkdirSync(dir, { recursive: true })
+  const build = buildStamp()
+  const sha = process.env.TREZI_ACCEPTANCE_SOURCE_SHA || build?.sha || null
+  // biome-ignore lint/suspicious/noExplicitAny: host step payloads are untyped JSON
+  const step = (op: string, extra: Record<string, unknown> = {}): Promise<any> =>
+    host.request('chatRecoveryAcceptance', { op, card: 'conflict', ...extra })
+  const measure = (card = 'conflict'): Promise<RecoveryMeasure> => step('measure', { card })
+  const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+  const evidence: Record<string, unknown> & {
+    outcomes: Record<string, unknown>
+    captures: Record<string, string[]>
+  } = {
+    ticket: 'LKM-453',
+    check: CHAT_RECOVERY_ACCEPTANCE_CHECK,
+    sha,
+    build,
+    red: red || null,
+    profile: 'disposable --test profile (start-native removes it)',
+    startedAt: new Date().toISOString(),
+    outcomes: {},
+    captures: {}
+  }
+  const record = () =>
+    writeFileSync(join(dir, 'evidence.json'), `${JSON.stringify(evidence, null, 2)}\n`)
+
+  const shown = await waitFor(async () => {
+    const state = await host.request('chatInspect')
+    return state.visible && state.chat ? state : null
+  }, 'the shared chat is shown')
+  const chat: string = shown.chat
+  const other = `native-recovery-acceptance-${crypto.randomUUID()}`
+  const files = ['src/recovery-fixture.ts']
+  const sent: unknown[][] = []
+  const provider = stubAgentSendForSmoke(chat, (...args) => {
+    sent.push(args)
+  })
+  const send = (event: object) => provider.emit(event as AgentEvent)
+  const calls = { retry: 0, resolve: 0, discard: 0 }
+  let held: { kind: RecoveryKind; chat: string; release: (value: unknown) => void } | null = null
+  const originalInvoke = nativeChat.services.invoke
+  // The deferred boundary: the owner's reply is withheld until the fixture releases it.
+  nativeChat.services.invoke = async (channel, ...args) => {
+    if (channel === 'agent:discard-conflict') {
+      calls.discard++
+      return { ok: false, error: 'The recovery acceptance never discards.' }
+    }
+    const kind =
+      channel === 'agent:retry-landing'
+        ? 'retry'
+        : channel === 'agent:resolve-conflict'
+          ? 'resolve'
+          : null
+    if (!kind) return originalInvoke(channel, ...args)
+    calls[kind]++
+    return new Promise((release) => {
+      held = { kind, chat: String(args[0]), release }
+    })
+  }
+  // Arm before the input: recoveryRequest renders busy before it calls services.invoke.
+  // The RED card can therefore show its busy state only after the reply is released.
+  let suppressBusy = false
+  const gate = red === 'delay-busy' ? delayRenders(nativeChat.services, () => suppressBusy) : null
+  const release = (value: unknown) => {
+    const request = held
+    held = null
+    suppressBusy = false
+    gate?.flush()
+    request?.release(value)
+  }
+  const controller = (key: string) => {
+    const c = nativeChat.get(key)
+    return {
+      isolation: c.isolation ?? null,
+      recovery: c.recovery ?? null,
+      problem: c.recoveryProblem ?? null,
+      report: !!c.recoveryReport,
+      outcome: c.recoveryOutcome ?? null,
+      running: c.isRunning
+    }
+  }
+  const capture = async (name: string, extra: Record<string, unknown> = {}) => {
+    const png = join(dir, `${name}.png`)
+    writeFileSync(png, Buffer.from((await host.request('captureVisibleShell')).png, 'base64'))
+    const json = join(dir, `${name}.json`)
+    const state = {
+      sha,
+      outcome: name,
+      at: new Date().toISOString(),
+      measure: await measure(),
+      chat: controller(chat),
+      otherChat: controller(other),
+      calls: { ...calls },
+      agentTurns: sent.length,
+      held: held ? (held as { kind: string }).kind : null,
+      ...extra
+    }
+    writeFileSync(json, `${JSON.stringify(state, null, 2)}\n`)
+    // Relative names keep the manifest valid after the command copies this run to its
+    // immutable SHA-keyed directory.
+    evidence.captures[name] = [`${name}.png`, `${name}.json`]
+    record()
+    return state
+  }
+  const parked = async (key = chat) => {
+    nativeChat.event({ type: 'isolation', projectKey: key, state: 'parked', files })
+    if (key !== chat) return
+    // The parked card's Problem, its written report and so its whole action row.
+    await waitFor(async () => {
+      const m = await measure()
+      return !m.problem && m.actions.includes('Copy support report') && !idleProblems(m).length
+    }, 'the parked card is drawn with its report')
+  }
+  /** Presses `label` with real input while its request is held: busy within the bound, before any reply. */
+  const pressHeld = async (kind: RecoveryKind, label: string, input: 'pointer' | 'keyboard') => {
+    const before = await measure()
+    const problems = idleProblems(before)
+    if (problems.length) throw new Error(`${label}: the card was not ready: ${problems.join('; ')}`)
+    const count = calls[kind]
+    if (gate) suppressBusy = true
+    const posted = await step(input === 'pointer' ? 'click' : 'key', { label })
+    const started = Date.now()
+    let last: RecoveryMeasure = before
+    let busyAfter = -1
+    while (Date.now() - started < BUSY_WITHIN_MS) {
+      last = await measure()
+      if (held && !busyProblems(last, kind).length) {
+        busyAfter = Date.now() - started
+        break
+      }
+      await delay(25)
+    }
+    if (busyAfter < 0)
+      throw new Error(
+        `${label}: ${BUSY_MARKER} — not shown within ${BUSY_WITHIN_MS} ms while the request was ${held ? 'held' : 'not yet reached'}: ${busyProblems(last, kind).join('; ')}`
+      )
+    const request = held as { kind: RecoveryKind; chat: string } | null
+    if (calls[kind] !== count + 1 || request?.kind !== kind || request.chat !== chat)
+      throw new Error(`${label}: the request held at the boundary is not this chat's one ${kind}`)
+    if (nativeChat.get(other).recovery) throw new Error(`${label}: the other chat became busy`)
+    if (input === 'keyboard') await step('blur')
+    return { input: posted, busyAfterMs: busyAfter, boundMs: BUSY_WITHIN_MS, busy: last }
+  }
+  /** A click on a held card that must change nothing: no request, still busy. */
+  const blocked = async (kind: RecoveryKind, label: string) => {
+    const counts = { ...calls }
+    const posted = await step('click', { label })
+    await delay(400)
+    const after = await measure()
+    if (JSON.stringify(calls) !== JSON.stringify(counts))
+      throw new Error(`${label} on the busy card sent a request: ${JSON.stringify(calls)}`)
+    const problems = busyProblems(after, kind)
+    if (problems.length || nativeChat.get(chat).recovery !== kind)
+      throw new Error(`${label} on the busy card changed it: ${problems.join('; ')}`)
+    return { label, input: posted, requests: { ...calls } }
+  }
+  const settle = async (label: string, check: (m: RecoveryMeasure) => string[], card?: string) =>
+    waitFor(
+      async () => {
+        const m = await measure(card)
+        return check(m).length ? null : m
+      },
+      label,
+      10000,
+      async () => check(await measure(card))
+    )
+
+  let reset: unknown
+  try {
+    const prepared = await step('prepare')
+    if (!prepared.foreground) throw new Error('The chat window did not come to the foreground')
+    evidence.keyboardNavigation = prepared.keyboardNavigation
+    // A turn in the transcript, so the conversation (not the start screen) holds the card.
+    await host.request('composerPerform', { text: 'Change the heading for the recovery check.' })
+    await waitFor(async () => (await host.request('composerInspect')).enabled, 'composer ready')
+    await host.request('composerPerform', { action: 'send' })
+    await waitFor(() => sent.length === 1, 'the fixture turn reached the provider stub')
+    send({ type: 'delta', text: 'Changed the heading.' })
+    send({ type: 'done' })
+    await waitFor(() => !nativeChat.get(chat).isRunning, 'the fixture turn ended')
+    // A second chat with its own held changes and Problem, set up by events, not input.
+    nativeChat.get(other)
+    await parked(other)
+    await waitFor(() => !!nativeChat.get(other).recoveryReport, "the other chat's report")
+    await parked()
+    const turns = sent.length
+
+    // 1. Retry by pointer, held: busy before the reply; a second click, Discard and Resolve change nothing.
+    const retry = await pressHeld('retry', 'Retry', 'pointer')
+    const heldShot = await capture('held-busy', { press: retry })
+    const tries = [
+      await blocked('retry', 'Retrying…'),
+      await blocked('retry', 'Discard'),
+      await blocked('retry', 'Resolve')
+    ]
+    await capture('held-blocked', { tries })
+    release({ ok: true, state: 'parked' })
+    await settle('Retry settles still held', stillHeldProblems)
+    if (sent.length !== turns) throw new Error('A still-held Retry started an agent turn')
+    evidence.outcomes['held-busy'] = { busyAfterMs: retry.busyAfterMs, at: heldShot.at, tries }
+    evidence.outcomes['still-held'] = await capture('still-held')
+
+    // 2. Resolve by pointer that lands cleanly: one outcome line, no agent turn.
+    const clean = await pressHeld('resolve', 'Resolve', 'pointer')
+    nativeChat.event({ type: 'isolation', projectKey: chat, state: 'merged', files: [] })
+    release({ ok: true, conflicted: [], prompt: null })
+    const outcome = await waitFor(async () => {
+      const m = await measure('recovery-outcome')
+      return m.present && !m.cards.includes('conflict') && !m.cards.includes('error') ? m : null
+    }, 'a clean Resolve shows its outcome')
+    if (outcome.detail !== 'Changes applied to the project.' || sent.length !== turns)
+      throw new Error(`A clean Resolve did not settle in one outcome: ${outcome.detail}`)
+    if (nativeChat.get(chat).recovery) throw new Error('A clean Resolve left the chat busy')
+    evidence.outcomes.clean = await capture('clean', { press: clean, outcome: outcome.detail })
+
+    // 3. Resolve by keyboard that hands over to one agent turn.
+    await parked()
+    const handover = await pressHeld('resolve', 'Resolve', 'keyboard')
+    release({ ok: true, conflicted: files, prompt: 'Resolve the recovery fixture conflict.' })
+    await waitFor(
+      () => sent.length === turns + 1 && nativeChat.get(chat).isRunning,
+      'one agent turn'
+    )
+    if (nativeChat.get(chat).recovery) throw new Error('The handover kept the request busy')
+    evidence.outcomes.handover = await capture('handover', { press: handover })
+    send({ type: 'done' })
+    await waitFor(() => !nativeChat.get(chat).isRunning, 'the handover turn ended')
+
+    // 4. Retry by pointer that fails: the same card states the Problem; its report is written.
+    await parked()
+    const failing = await pressHeld('retry', 'Retry', 'pointer')
+    release({ ok: false, error: `Fixture recovery failed ${PLANTED.key} token=${PLANTED.token}` })
+    await settle('a failed Retry states its Problem', (m) =>
+      failureProblems(m).concat(
+        /Fixture recovery failed/.test(m.detail) ? [] : ['not this failure']
+      )
+    )
+    const path = nativeChat.get(chat).recoveryReport
+    const content = readableRecoveryReport(chat)
+    const mode = path ? statSync(path).mode & 0o777 : null
+    const report = reportProblems(content, mode, { chat, others: [other] })
+    if (report.length) throw new Error(`The support report: ${report.join('; ')}`)
+    if (path) copyFileSync(path, join(dir, 'failure-report.json'))
+    evidence.outcomes.failure = await capture('failure', {
+      press: failing,
+      report: { mode: '600', kept: 'failure-report.json', bytes: content?.length }
+    })
+
+    // 5. Two chats: the other chat's Problem and report are its own and were never busy.
+    const otherPath = nativeChat.get(other).recoveryReport
+    const otherMode = otherPath ? statSync(otherPath).mode & 0o777 : null
+    // Its reason holds no secret, so there is nothing for the redaction to replace.
+    const crossed = reportProblems(readableRecoveryReport(other), otherMode, {
+      chat: other,
+      others: [chat]
+    }).filter((problem) => !/redacted nothing/.test(problem))
+    if (crossed.length || !nativeChat.get(other).recoveryProblem)
+      throw new Error(`The other chat's recovery: ${crossed.join('; ') || 'no Problem'}`)
+    evidence.outcomes.isolation = await capture('isolation', {
+      setup: 'the other chat was parked by an isolation event (programmatic, not input)',
+      otherReport: 'names only the other chat'
+    })
+
+    // 6. The changes land: this chat's card, Problem and report clear; the other chat keeps its own.
+    nativeChat.event({ type: 'isolation', projectKey: chat, state: 'merged', files })
+    const cleared = await waitFor(async () => {
+      const m = await measure()
+      return !m.present && !m.cards.includes('error') ? m : null
+    }, 'the landed changes clear the card')
+    const after = controller(chat)
+    if (after.problem || after.report || after.recovery)
+      throw new Error(`The terminal event left recovery state: ${JSON.stringify(after)}`)
+    const kept = controller(other)
+    if (!kept.problem || !kept.report)
+      throw new Error("The terminal event cleared the other chat's")
+    evidence.outcomes['terminal-clear'] = await capture('terminal-clear', { cards: cleared.cards })
+    evidence.outcome = 'pass'
+  } catch (error) {
+    evidence.outcome = 'fail'
+    evidence.error = error instanceof Error ? error.message : String(error)
+    throw error
+  } finally {
+    evidence.finishedAt = new Date().toISOString()
+    record()
+    // A request still held (a failure above) ends as still held, so the chat is free again.
+    release({ ok: true, state: 'parked' })
+    gate?.restore()
+    nativeChat.services.invoke = originalInvoke
+    reset = await cleanSharedChat(
+      host,
+      {
+        state: () => originalInvoke('agent:turn-state', chat),
+        controller: () => nativeChat.get(chat)
+      },
+      () => send({ type: 'done' })
+    )
+    // A late agent:send must never reach a real provider: the stub stays when nothing was sent.
+    if (sent.length) provider.restore()
+  }
+  // A reset failure fails only a check that otherwise passed (as in smoke-chat.ts).
+  if (reset) throw reset
+  console.log(
+    `Chat recovery acceptance: every outcome captured on ${sha ?? 'an unstamped build'}; evidence in ${dir}.`
+  )
+}

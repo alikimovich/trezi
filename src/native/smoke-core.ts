@@ -20,6 +20,7 @@ import { checkBuildBadge, restoreBuildBadge } from './smoke-build-badge'
 import { checkChangesPanel, restoreChangesPanel } from './smoke-changes-panel'
 import { checkNativeChat } from './smoke-chat'
 import { captureChatGate, checkChatGate, restoreChatGate } from './smoke-chat-gate'
+import { checkChatRecoveryAcceptance } from './smoke-chat-recovery-acceptance'
 import { checkChatText } from './smoke-chat-text'
 import { checkChatUi } from './smoke-chat-ui'
 import { checkCodeLinkClick, restoreCodeLinkClick } from './smoke-code-link'
@@ -37,6 +38,8 @@ import {
 import { smokeFocusHooks } from './smoke-focus'
 import { checkGitUpdates } from './smoke-git-updates'
 import {
+  CHAT_RECOVERY_ACCEPTANCE_CHECK,
+  CHAT_RECOVERY_ACCEPTANCE_FLAG,
   DREAMER_ACCEPTANCE_CHECK,
   DREAMER_ACCEPTANCE_FLAG,
   MARKUP_ACCEPTANCE_CHECK,
@@ -44,6 +47,7 @@ import {
   parseSmokeGroups,
   SOURCE_POPOUT_ACCEPTANCE_CHECK,
   SOURCE_POPOUT_ACCEPTANCE_FLAG,
+  selectChatRecoveryAcceptance,
   selectDreamerAcceptance,
   selectMarkupAcceptance,
   selectSmokeChecks,
@@ -1845,12 +1849,25 @@ export async function runNativeCoreSmoke(
         ),
       cleanup: () => cleanupSourcePopoutAcceptance(host, fixture, artifacts)
     })
+  // LKM-453: the opt-in chat recovery acceptance (docs/TESTING.md); its own check cleans up.
+  if (process.argv.includes(CHAT_RECOVERY_ACCEPTANCE_FLAG))
+    checks.push({
+      name: CHAT_RECOVERY_ACCEPTANCE_CHECK,
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        await checkChatRecoveryAcceptance(host, artifacts)
+      }
+    })
   let hostClosed = false
   void host.closed.then(() => {
     hostClosed = true
   })
   // `--only` filters which named checks run; failure collection is unchanged.
-  const selected = selectSmokeChecks(checks, parseSmokeGroups(process.argv))
+  // The chat recovery acceptance narrows the selection first and rejects any other opt-in.
+  const selected = selectChatRecoveryAcceptance(
+    selectSmokeChecks(checks, parseSmokeGroups(process.argv)),
+    process.argv
+  )
   const optIn = selectSourcePopoutAcceptance(
     selectMarkupAcceptance(selectDreamerAcceptance(selected, process.argv), process.argv),
     process.argv
