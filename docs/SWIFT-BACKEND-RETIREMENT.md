@@ -298,6 +298,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-core.ts` | test | — | smoke fixture |
 | `src/native/smoke-device-frame.ts` | test | — | smoke fixture |
 | `src/native/smoke-dreamer.ts` | test | — | smoke fixture |
+| `src/native/smoke-dreamer-acceptance.ts` | test | — | opt-in Dreamer acceptance fixture (temp export folder, loopback legacy-URL stand-in, evidence in the artifacts folder, LKM-447) |
 | `src/native/smoke-editor-freshness.ts` | test | — | smoke fixture |
 | `src/native/smoke-fixture.ts` | test | — | `--test` project and failure capture |
 | `src/native/smoke-inspector-island.ts` | test | — | smoke fixture |

@@ -28,6 +28,7 @@ import { checkVisibleComposer } from './smoke-composer'
 import { checkComposerSend } from './smoke-composer-send'
 import { checkDeviceFrame, restoreDeviceFrame } from './smoke-device-frame'
 import { checkDreamerReview } from './smoke-dreamer'
+import { checkDreamerAcceptance } from './smoke-dreamer-acceptance'
 import {
   checkEditorFreshness,
   type FreshnessSmoke,
@@ -35,7 +36,13 @@ import {
 } from './smoke-editor-freshness'
 import { smokeFocusHooks } from './smoke-focus'
 import { checkGitUpdates } from './smoke-git-updates'
-import { parseSmokeGroups, selectSmokeChecks } from './smoke-groups'
+import {
+  DREAMER_ACCEPTANCE_CHECK,
+  DREAMER_ACCEPTANCE_FLAG,
+  parseSmokeGroups,
+  selectDreamerAcceptance,
+  selectSmokeChecks
+} from './smoke-groups'
 import { checkIncidentRow } from './smoke-incident'
 import { checkSelectionInput, preparePreviewInput } from './smoke-input'
 import {
@@ -1782,12 +1789,27 @@ export async function runNativeCoreSmoke(
         }
       }
     })
+  // LKM-447: the opt-in Dreamer acceptance (docs/DREAMER.md); its own check cleans up.
+  if (process.argv.includes(DREAMER_ACCEPTANCE_FLAG))
+    checks.push({
+      name: DREAMER_ACCEPTANCE_CHECK,
+      dependsOn: ['open-project'],
+      run: async () => {
+        assert.ok(nativeDreamer.current, 'Dreamer controller')
+        await checkDreamerAcceptance(host, nativeDreamer.current, artifacts)
+      },
+      cleanup: async () => {
+        if ((await host.request('sheetInspect')).visible)
+          await host.request('sheetPerform', { action: 'closeWindow' })
+      }
+    })
   let hostClosed = false
   void host.closed.then(() => {
     hostClosed = true
   })
   // `--only` filters which named checks run; failure collection is unchanged.
-  const results = await runSmokeChecks(selectSmokeChecks(checks, parseSmokeGroups(process.argv)), {
+  const selected = selectSmokeChecks(checks, parseSmokeGroups(process.argv))
+  const results = await runSmokeChecks(selectDreamerAcceptance(selected, process.argv), {
     capture: (name) => captureSmokeFailure(host, artifacts, name),
     restore: () => restoreSmokeState(host, firstProject),
     deadline: Number(process.env.TREZI_NATIVE_SMOKE_DEADLINE_MS) || undefined,

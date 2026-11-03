@@ -2,6 +2,35 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-02 — LKM-447 Dreamer acceptance: the shipping review through a real NSSavePanel, real input and 680 pt
+
+- Why: LKM-443 left the real save panel (save and cancel) and the 680 pt minimum width as operator checks. The `dreamer` smoke stubs `pickExport` and never resizes the window. This adds a harness only; no product, exporter or controller code changed.
+- Opt-in check `dreamer-export-primary` (`src/native/smoke-dreamer-acceptance.ts`) is pushed onto smoke-core's list only under `--dreamer-acceptance`. That flag needs `--test` and `--only=settings`. It refuses `--live` and runs only the prelude plus this check (`selectDreamerAcceptance`, `src/native/smoke-groups.ts`). No tier and no default run includes it, and the suite's groups and scheduler are unchanged.
+- Host broker `dreamerAcceptance` (`src/native/DreamerAcceptance.swift`, ephemeral profile only):
+  - opens the review through the real Trezi → Dreamer Proposals… menu item;
+  - sizes the window to 780 and 680 pt and brings it to the front;
+  - measures the footer buttons (from their `KeyViewProxy` frames), checking clip, overlap, hit-testing, row and the default button;
+  - posts real mouse and Return events with `NSApp.postEvent`;
+  - reads and drives the attached `NSSavePanel` (directory, Save, Cancel).
+- The pure rules live in `src/native/dreamer-acceptance.ts`. `footerProblems` covers clipped or overlapping actions, a primary other than Export…, Export… not rightmost, more than one row, and any Agent OS or Send label. `archiveProblems` requires exactly `Dreamer Report/{evidence.json, proposals.json, report.md}` with only the selected proposal, redacted (a planted token, an email and a home path).
+- What the check does:
+  - takes a foreground capture at each width;
+  - exports once by clicking Export… and once by pressing Return, each through the real panel into a temp folder, then unzips with `ditto` and checks the archive;
+  - presses Cancel in the panel and expects no file and no message;
+  - serves a local stand-in at the legacy Agent OS URL, with the legacy keys set, and expects it to receive zero requests.
+- Prefs, the Dreamer result and `pickExport` are restored in `finally`, and the temp folder is removed.
+- Operator entrypoint `bun run acceptance:dreamer` (`scripts/dreamer-acceptance.mjs`):
+  - refuses a background run, a non-macOS host and a second ephemeral `TreziHost`;
+  - takes the repository runner lock and launches `dev:native --test --only=settings --dreamer-acceptance`;
+  - writes `run.json` with the source SHA, branch, dirty flag, command, exit code, captures and verdict.
+- `--red=stub-save-panel` stubs `pickExport` and must fail with "real NSSavePanel opened". Command, lock, artifacts and cleanup are documented in `docs/DREAMER.md`.
+- Unit `test/dreamer-acceptance.mjs`:
+  - GREEN, plus 12 RED synthetic footers;
+  - archive rules on the real `exportDreamerReport` (all proposals, unredacted and extra-file cases fail);
+  - a source check that the RED stub is the only `pickExport` assignment besides the restore;
+  - a Swift fixture that builds the real `NativeSheets` review in an offscreen window. It is GREEN at 780 and 680. It is RED when a long label clips, and RED for the pre-LKM-443 send-primary actions (wrong primary, Agent OS label, clipped Copy as JSON).
+- `native-smoke-groups` covers the flag's selection and launcher guards. `host-warnings` guards the new Swift file.
+- Not run here: this worker had no native calls, so GREEN and RED on the shipping code wait for an operator run of `bun run acceptance:dreamer` under the shared desktop lock. `dreamer-export-primary` is not marked passed. AppKit does not report SwiftUI's default button to AX or to `defaultButtonCell` without an assistive client, so the default is proven by behaviour (Return opens the panel, `defaultAction` `export`). Either property is asserted only when it is reported.
 ## 2026-11-02 — LKM-449 native suite: the toolbar islands no longer stretch
 
 - Failure: `core/toolbar-address`, minimum stage, inside the resize. The block was 83 pt wide and ended 24 pt before the right groups, not 20. Its stored inset was 401 and the real one 397 (as in every green run). No toolbar code changed since the last green run (`01a19bee..8899067b` touches only the branch title, chat copy, sidebar capture and Dreamer). Runs 52 and 53 passed, so the failure is intermittent.
