@@ -359,9 +359,12 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
         true,
         composer.queuePaused === true
       )
+      // LKM-446: a park with no landing error is one Problem card; its reason is the held
+      // state and the files move to the card's full text (`fullDetail`, not in cardStates).
       if (
-        !card?.detail?.includes('project changed under them') ||
-        !card.detail.includes('src/native/fixture.ts') ||
+        !card?.detail?.startsWith('Problem:') ||
+        !card.detail.includes('still held') ||
+        !nativeChat.get(state.chat).isolationFiles?.includes('src/native/fixture.ts') ||
         !card.actions.includes('Resolve')
       )
         throw new Error(`Resolve card lacks reason or action: ${JSON.stringify(card)}`)
@@ -544,6 +547,11 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     )
       throw new Error('Support report was missing, crossed chats or exposed a secret')
     retryResponse = null
+    // The held problem ends here, as the park did before LKM-446's recovery steps: a parked chat
+    // queues the declined-merge message behind Resolve instead of sending it.
+    await waitFor(() => !nativeChat.get(state.chat).recovery, 'failed recovery request settled')
+    nativeChat.event({ type: 'isolation', projectKey: state.chat, state: 'merged', files: [] })
+    await wait((value) => !value.cards.includes('conflict'))
     const beforeMergeApproval = sent.length
     // LKM-281: the host-authored merge approval card, as the user sees it, and the denial
     // path. It runs last because answering sends the user's next message to the stubbed
