@@ -106,6 +106,7 @@ export const UNIT = [
   'preview-edit-lifecycle',
   'chat-attachments',
   'stop-recovery-ui',
+  'chat-recovery-report',
   'chat-stuck-turn',
   'chat-send-queue',
   'composer-queue-panel',

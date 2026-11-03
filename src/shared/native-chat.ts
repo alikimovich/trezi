@@ -63,6 +63,7 @@ export interface NativeChatCard {
   id: string
   title: string
   detail?: string
+  busy?: boolean
   /** The detail with full paths, for the tooltip and Copy, when `detail` is collapsed. */
   fullDetail?: string
   actions: { label: string; action: string; value?: string; disabled?: boolean }[]

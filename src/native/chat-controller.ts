@@ -26,7 +26,8 @@ import { cardAction } from './chat-actions'
 import { planAttachments } from './chat-attachments'
 import { autoResolve } from './chat-auto-resolve'
 import { menuQuery, withReferences } from './chat-island-refs'
-import { sendBlock } from './chat-queue'
+import { needsResolve, sendBlock } from './chat-queue'
+import { writeRecoveryReport } from './chat-recovery-report'
 import { chatThinking, matches, permissionModes, snapshot } from './chat-snapshot'
 import { HOME, StartFlow } from './chat-start'
 import {
@@ -538,6 +539,40 @@ export class NativeChatController {
     )
       chat.unreadAnswer = true
     reduce(chat, event)
+    if (event.type === 'isolation' && !chat.recovery) {
+      // Landed or discarded: the held problem and its report are history.
+      if (event.state !== 'parked') {
+        chat.recoveryProblem = undefined
+        chat.recoveryReport = undefined
+      } else if (
+        event.state === 'parked' &&
+        event.reason !== 'interrupted' &&
+        !event.decision &&
+        !(this.services.autoResolve && !chat.autoResolved && needsResolve(chat))
+      ) {
+        const reason =
+          event.error ?? 'The changes are still held after the checks and reconciliation.'
+        const id = crypto.randomUUID()
+        chat.recoveryId = id
+        chat.recoveryStartedAt = Date.now()
+        chat.recoveryProblem = `Problem: ${reason}`
+        chat.recoveryReport = undefined
+        void writeRecoveryReport(chat, 'turn-end landing', reason).then(
+          (path) => {
+            if (chat.recoveryId === id && chat.isolation === 'parked') {
+              chat.recoveryReport = path
+              this.changed(chat)
+            }
+          },
+          () => {
+            if (chat.recoveryId === id) {
+              chat.recoveryProblem += ' The support report could not be written.'
+              this.changed(chat)
+            }
+          }
+        )
+      }
+    }
     // A seat that refused a turn is signed out for the start screen too (LKM-232).
     const seat = chat.settings.provider
     if (event.type === 'error' && event.code === 'auth' && !chat.settings.connectionId)
@@ -1065,7 +1100,9 @@ export class NativeChatController {
         await this.services.invoke('planning:cancel', chat.chat)
         return
       }
-      if (!(await this.start.action(this, chat, action))) await cardAction(this, chat, action)
+      if (['resolve', 'discard', 'landing-retry'].includes(action.action))
+        await cardAction(this, chat, action)
+      else if (!(await this.start.action(this, chat, action))) await cardAction(this, chat, action)
     } catch (error) {
       this.fail(chat, error)
     }

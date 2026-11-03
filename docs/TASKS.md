@@ -10,6 +10,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Reopening without a location keeps the caret and selection (`editor-controller.ts`, `test/native-editor.mjs`).
 - [x] Unit `test/source-popout.mjs` (full, entering, exiting, re-shown, failed enter/exit, five rounds, windowed control) and the native `source-popout` smoke (`src/native/smoke-source-popout.ts`, group `core`): ×, red button and ⌘W from full screen, dock, hide while entering and leaving, three rounds, windowed close and dock, a docked editor in a full-screen main window, draft and selection after each.
 - [ ] Manager: the native `core` group on the merged SHA, `source-popout` with `source-popout.json` and its `source-popout-*.png` captures, plus the ticket's live foreground check.
+## Chat recovery flow (LKM-446)
+
+- [x] Add red regressions for immediate Retry state and missing browser checks; use the owner's gated patch path for checked deletions.
+- [x] Scope Retry, Resolve and Discard busy state to their chat; produce a readable redacted support report for a failed or still-held request.
+- [x] Retire deleted checked-page recipes with replacement evidence, surface turn-end Problem reports, and keep a timed-out request's mutation lock until IPC settles.
+- [x] Review repair: Resolve handover outside the request deadline, backend in-flight guard for Resolve/Discard/Retry, recorded replay failures on Retry, automatic browser check only when it can run, multi-chat terminal clearing.
+- [ ] Native foreground acceptance after merge, including deferred requests, pointer and keyboard, still-held outcome, and multi-chat clearing.
+- [ ] Confirm obsolete checked-page recipe retirement and final outcome wording against a real held session.
 ## Dreamer acceptance on the shipping code (LKM-447)
 
 - [x] Opt-in `dreamer-export-primary` check (`--dreamer-acceptance`, settings group, prelude only): real menu, 780 and 680 pt foreground captures, footer clip/overlap/default checks, no Agent OS copy.

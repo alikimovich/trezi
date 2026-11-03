@@ -2,6 +2,7 @@
 // come from the real lifecycle in test/peer-feedback.mjs; this pins their rendering.
 import assert from 'node:assert/strict'
 import { emitIsolation, initChatIsolation, states } from '../src/main/chat-state.ts'
+import { agentWorkspaceState } from '../src/main/chat-status.ts'
 import { showParkedChat } from '../src/main/parked-chat.ts'
 import { agentCard } from '../src/native/chat-agent-card.ts'
 import { decisionCard, peerCard, peerLine } from '../src/native/chat-peer-card.ts'
@@ -81,6 +82,12 @@ reduce(chat, {
 })
 const [held] = cards().filter((card) => card.id === 'conflict')
 assert.equal(held.title, 'Decision needed')
+assert.equal(cards().filter((card) => card.id === 'conflict').length, 1)
+assert.equal(
+  cards().filter((card) => card.id === 'error').length,
+  0,
+  'one question surface, no duplicate error'
+)
 assert.deepEqual(held.detail.split('\n').slice(0, 2), [
   question,
   'Nothing landed. This chat’s work is kept on trezi/chat-1.'
@@ -154,6 +161,8 @@ assert.equal(announced.length, 2, 'emitting never drops a hold: the same questio
 announced.length = 0
 // The end of a reconciliation re-shows the park once; the hold just announced it.
 states.set('chat-1', hold({ decisionShown: true }))
+assert.match(agentWorkspaceState('chat-1').guidance, /shown the one question on the decision card/)
+assert.doesNotMatch(agentWorkspaceState('chat-1').guidance, /Ask the user/)
 showParkedChat('chat-1')
 assert.equal(announced.length, 0, 'the repeat right after a hold is skipped')
 assert.equal(states.get('chat-1').decisionShown, false, 'and only that one')
@@ -189,6 +198,44 @@ states.clear()
     snapshot(asked, []).composer.queueNote,
     'Waiting — answer the decision or discard the held changes to send these'
   )
+}
+
+// A Retry or Resolve that ends still held: one concise Problem line on the one card, with
+// the report action, and neither a duplicate error card nor a card for the decision.
+{
+  const stillHeld = newChat('chat-3')
+  reduce(stillHeld, {
+    type: 'isolation',
+    state: 'parked',
+    files: ['page.txt'],
+    reason: 'failed',
+    error: 'the browser check did not pass'
+  })
+  for (const recovery of ['retry', 'resolve']) {
+    stillHeld.recovery = recovery
+    const busy = snapshot(stillHeld, []).cards.find((card) => card.id === 'conflict')
+    assert.equal(busy.busy, true, `${recovery} shows progress`)
+    assert.ok(
+      busy.actions.every((action) => action.disabled),
+      'and locks every action'
+    )
+    stillHeld.recovery = undefined
+    stillHeld.recoveryProblem =
+      'Problem: the changes are still held: the browser check did not pass'
+    stillHeld.recoveryReport = '/tmp/report'
+    const done = snapshot(stillHeld, []).cards
+    assert.equal(done.filter((card) => card.id === 'conflict').length, 1)
+    assert.equal(done.filter((card) => card.id === 'error').length, 0)
+    assert.equal(done.find((card) => card.id === 'conflict').busy, false)
+    assert.equal(done.find((card) => card.id === 'conflict').detail.split('\n').length, 1)
+    assert.ok(
+      done
+        .find((card) => card.id === 'conflict')
+        .actions.some((a) => a.action === 'recovery-report')
+    )
+    stillHeld.recoveryProblem = undefined
+    stillHeld.recoveryReport = undefined
+  }
 }
 
 // The rail: the same words on the comment's card, under what it is doing now.
