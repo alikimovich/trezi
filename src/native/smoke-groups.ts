@@ -43,6 +43,8 @@ export function parseSmokeGroups(argv: readonly string[]): Set<NativeSmokeGroup>
   // The live turn edits the heading text that the core group's text edit writes.
   if (argv.includes('--live') && !names.includes('core'))
     throw new Error('--live needs the core group in --only')
+  if (argv.includes(DREAMER_ACCEPTANCE_FLAG) && !names.includes('settings'))
+    throw new Error(`${DREAMER_ACCEPTANCE_FLAG} needs the settings group in --only`)
   return new Set(names as NativeSmokeGroup[])
 }
 
@@ -115,6 +117,8 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'build-badge': ['sidebar'],
   sheets: ['settings'],
   dreamer: ['settings'],
+  // LKM-447: opt-in, pushed only with --dreamer-acceptance (selectDreamerAcceptance).
+  'dreamer-export-primary': ['settings'],
   'skills-settings': ['settings'],
   'browser-setup': ['settings'],
   'security-session': ['settings'],
@@ -160,5 +164,32 @@ export function selectSmokeChecks<T extends { name: string }>(
     log(
       `NATIVE SMOKE FILTERED (--only=${[...groups].join(',')}): running ${picked.length} of ${checks.length} checks; the other groups did not run, so a pass below is not full-suite acceptance.`
     )
+  return picked
+}
+
+/** LKM-447: the opt-in Dreamer acceptance (`bun run acceptance:dreamer`, docs/DREAMER.md). */
+export const DREAMER_ACCEPTANCE_FLAG = '--dreamer-acceptance'
+export const DREAMER_ACCEPTANCE_CHECK = 'dreamer-export-primary'
+
+/** With the flag, only the prelude and the Dreamer acceptance run (the flag's check must be
+ *  among `checks`); without it the selection is unchanged. */
+export function selectDreamerAcceptance<T extends { name: string }>(
+  checks: T[],
+  argv: readonly string[],
+  log: (line: string) => void = console.log
+): T[] {
+  if (!argv.includes(DREAMER_ACCEPTANCE_FLAG)) return checks
+  if (argv.includes('--live')) throw new Error(`${DREAMER_ACCEPTANCE_FLAG} cannot run with --live`)
+  const prelude: readonly string[] = SMOKE_PRELUDE
+  const picked = checks.filter(
+    ({ name }) => prelude.includes(name) || name === DREAMER_ACCEPTANCE_CHECK
+  )
+  if (!picked.some(({ name }) => name === DREAMER_ACCEPTANCE_CHECK))
+    throw new Error(
+      `${DREAMER_ACCEPTANCE_FLAG}: the ${DREAMER_ACCEPTANCE_CHECK} check was not selected`
+    )
+  log(
+    `DREAMER ACCEPTANCE (${DREAMER_ACCEPTANCE_FLAG}): running ${picked.map((c) => c.name).join(', ')}; not full-suite acceptance.`
+  )
   return picked
 }

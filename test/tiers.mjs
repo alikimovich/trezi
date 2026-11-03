@@ -209,6 +209,7 @@ export const UNIT = [
   'product-log',
   'dreamer-digest',
   'dreamer-export',
+  'dreamer-acceptance',
   'publish-message',
   'publish-description',
   'commit-message',
@@ -400,6 +401,8 @@ export const UNIT_TIMEOUT_MS = {
   // LOCAL-WEBKIT-4: the same platform fixture compile, then scripted installs.
   'browser-tools-install': 240_000,
   'native-settings-layout': 240_000,
+  // LKM-447: a compile of the sheet sources and the Dreamer acceptance's host code.
+  'dreamer-acceptance': 240_000,
   'native-composer-layout': 240_000,
   // LKM-381: the same composer source compile, then one short sending delay.
   'composer-attach': 240_000,
