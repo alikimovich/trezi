@@ -13,6 +13,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Fixed
 
 - Closing or docking the popped-out code editor while it is in full screen no longer leaves a black, empty full-screen Space: the editor leaves full screen first and the main window comes back in front, and reopening the editor keeps its caret and selection (LKM-444).
+## [0.13.5] - 2026-11-02
+
+### Removed
+
+- Dreamer Proposals no longer has Send to Agent OS: Export… (a redacted zip of the selected proposals) is its default button, and Settings → Dreamer keeps only the weekly run; Agent OS settings saved earlier are left in place but no longer used (LKM-443).
 
 ## [0.13.4] - 2026-11-02
 

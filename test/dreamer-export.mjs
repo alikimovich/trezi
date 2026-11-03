@@ -1,31 +1,45 @@
 // LKM-202: Export Dreamer Report… writes a redacted zip (report.md, proposals.json,
-// evidence.json); Send to Agent OS posts the selected proposals to the configured
-// endpoint with the token, shows the created task ids, and falls back to the export
-// when the send fails; the weekly run waits while a chat is busy. A stub fetch and
-// stub sheets: no network, no window, files only in a temporary folder.
+// evidence.json); the weekly run waits while a chat is busy. LKM-443: the review window
+// has no Send to Agent OS (no action, no route, no Agent OS copy) and Export… is its only
+// primary action; editing, selection, Copy as JSON and Open Chat still work, a cancelled
+// export writes nothing, a failed one leaves no file, and nothing makes a network request
+// even with the old Agent OS settings saved. Stub sheets and a recording global fetch:
+// no network, no window, files only in a temporary folder.
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  DREAMER_LAST_KEY,
   DREAMER_LAST_RUN_KEY,
   DREAMER_SCHEDULE_KEY,
   NativeDreamerController
 } from '../src/native/dreamer-controller.ts'
-import {
-  DREAMER_PROJECT_KEY,
-  DREAMER_START_KEY,
-  DREAMER_TOKEN_KEY,
-  DREAMER_URL_KEY,
-  exportDreamerReport,
-  sendToAgentOs
-} from '../src/native/dreamer-export.ts'
+import * as dreamerExport from '../src/native/dreamer-export.ts'
+import { withDreamerPane } from '../src/native/settings-dreamer.ts'
 import { dreamerErrors } from '../src/shared/dreamer.ts'
 
+const { exportDreamerReport } = dreamerExport
 const HOME = homedir()
 const SECRET = 'ghp_abcdefghijklmnopqrstuvwxyz0123'
 const PRIVATE = /jane\.doe@example\.com|ghp_abc|\/Users\/[^/\s"]+/
+/** What an earlier version saved for Send to Agent OS: kept, never read or sent. */
+const LEGACY = {
+  'trezi:dreamer:agent-os-url': 'http://127.0.0.1:4317',
+  'trezi:dreamer:agent-os-project': 'trezi',
+  'trezi:dreamer:agent-os-token': 'tok',
+  'trezi:dreamer:agent-os-start': 'on'
+}
+const AGENT_OS = /Agent OS|\bsen[dt]\b|Not sent|instead/i
 
 const proposal = (id, extra = {}) => ({
   id,
@@ -58,10 +72,19 @@ const unzip = (zip) => {
   execFileSync('/usr/bin/ditto', ['-x', '-k', zip, out])
   const read = (name) => readFileSync(join(out, 'Dreamer Report', name), 'utf8')
   return {
+    names: readdirSync(join(out, 'Dreamer Report')).sort(),
     report: read('report.md'),
     proposals: read('proposals.json'),
     evidence: read('evidence.json')
   }
+}
+
+// Every fetch is recorded and refused: the Dreamer must make none.
+const requests = []
+const realFetch = globalThis.fetch
+globalThis.fetch = async (url) => {
+  requests.push(String(url))
+  throw new Error('no network in this test')
 }
 
 try {
@@ -70,8 +93,9 @@ try {
     const zip = join(scratch, 'Dreamer Report.zip')
     assert.deepEqual(await exportDreamerReport(zip, FILE, DIGEST, HOME), { proposals: 2 })
     const files = unzip(zip)
+    assert.deepEqual(files.names, ['evidence.json', 'proposals.json', 'report.md'])
     for (const [name, text] of Object.entries(files))
-      assert.doesNotMatch(text, PRIVATE, `${name} is redacted`)
+      if (name !== 'names') assert.doesNotMatch(text, PRIVATE, `${name} is redacted`)
     assert.match(files.report, /^# Dreamer report/)
     assert.match(files.report, /\[email\]/)
     const proposals = JSON.parse(files.proposals)
@@ -82,99 +106,33 @@ try {
     await exportDreamerReport(zip, FILE, null, HOME)
     assert.equal(unzip(zip).evidence.trim(), '{}')
     assert.equal(FILE.proposals[0].problem.includes(SECRET), true, 'the input is not changed')
+    // A destination that cannot be written rejects and leaves no file.
+    writeFileSync(join(scratch, 'a-file'), '')
+    const bad = join(scratch, 'a-file', 'Dreamer Report.zip')
+    await assert.rejects(exportDreamerReport(bad, FILE, DIGEST, HOME))
+    assert.equal(existsSync(bad), false)
+    // Only the export is left: Send to Agent OS and its settings are gone.
+    assert.deepEqual(Object.keys(dreamerExport).sort(), ['exportDreamerReport', 'redactDeep'])
     console.log('dreamer-export: zip PASS')
   }
 
-  // --- Send to Agent OS ---
-  const answer = (status, body) =>
-    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
-  const stub = (...responses) => {
-    const calls = []
-    const fetch = async (url, init) => {
-      calls.push({ url, headers: init.headers, body: JSON.parse(init.body) })
-      const next = responses.shift()
-      if (next instanceof Error) throw next
-      return next
-    }
-    return { calls, fetch }
-  }
+  // --- the review window: Export… only, no Send ---
   {
-    const target = { url: 'http://127.0.0.1:4317/', project: 'my proj', token: ' secret-token ' }
-    const ok = stub(answer(200, { created: [{ proposal: 'build', issue: 'AOS-7' }] }))
-    assert.deepEqual(await sendToAgentOs(target, FILE, ok.fetch, HOME), {
-      ok: true,
-      tasks: ['AOS-7']
-    })
-    // One POST to <base>/proposals with {projectId, file, start}; start is off by default.
-    assert.equal(ok.calls.length, 1)
-    assert.equal(ok.calls[0].url, 'http://127.0.0.1:4317/proposals')
-    assert.equal(ok.calls[0].headers.authorization, 'Bearer secret-token')
-    assert.deepEqual(Object.keys(ok.calls[0].body).sort(), ['file', 'projectId', 'start'])
-    assert.equal(ok.calls[0].body.projectId, 'my proj')
-    assert.equal(ok.calls[0].body.start, false)
-    assert.doesNotMatch(JSON.stringify(ok.calls[0].body), PRIVATE)
-    assert.deepEqual(dreamerErrors(ok.calls[0].body.file), [])
-    assert.equal(ok.calls[0].body.file.proposals.length, 2)
-
-    const started = stub(answer(200, { created: [{ issue: 'AOS-8', started: true }] }))
-    assert.deepEqual(
-      (await sendToAgentOs({ ...target, start: true }, FILE, started.fetch, HOME)).tasks,
-      ['AOS-8']
+    const prefs = new Map(Object.entries(LEGACY))
+    // A result saved by an earlier version, with the last send it recorded.
+    prefs.set(
+      DREAMER_LAST_KEY,
+      JSON.stringify({
+        file: FILE,
+        digest: DIGEST,
+        selected: ['tests'],
+        model: 'x',
+        sent: { at: '2026-10-07T10:00:00.000Z', tasks: ['AOS-9'] }
+      })
     )
-    assert.equal(started.calls[0].body.start, true)
-
-    // A 404 is an error like any other: no second route is tried.
-    const missing = stub(answer(404, { error: 'not found' }), answer(200, {}))
-    assert.deepEqual(await sendToAgentOs(target, FILE, missing.fetch, HOME), {
-      ok: false,
-      tasks: [],
-      error: 'Agent OS answered 404: not found'
-    })
-    assert.equal(missing.calls.length, 1)
-
-    const refused = stub(answer(400, { error: 'proposals[0].title too long' }))
-    assert.deepEqual(await sendToAgentOs(target, FILE, refused.fetch, HOME), {
-      ok: false,
-      tasks: [],
-      error: 'Agent OS answered 400: proposals[0].title too long'
-    })
-    const down = stub(new Error('connect ECONNREFUSED'))
-    const unreachable = (await sendToAgentOs(target, FILE, down.fetch, HOME)).error
-    assert.match(unreachable, /could not be reached \(connect ECONNREFUSED\)/)
-    assert.match(unreachable, /only on this Mac \(127\.0\.0\.1\)/)
-    assert.match(unreachable, /export the report/)
-    const none = stub()
-    assert.match(
-      (await sendToAgentOs({ ...target, url: 'not a url' }, FILE, none.fetch)).error,
-      /not valid/
-    )
-    assert.match(
-      (await sendToAgentOs({ ...target, url: 'file:///etc' }, FILE, none.fetch)).error,
-      /http:\/\/ or https:\/\//
-    )
-    assert.match(
-      (await sendToAgentOs({ ...target, project: ' ' }, FILE, none.fetch)).error,
-      /project ID/
-    )
-    assert.equal(none.calls.length, 0, 'nothing is sent without a valid target')
-    const open = stub(answer(200, {}))
-    await sendToAgentOs({ url: '', project: 'p' }, FILE, open.fetch, HOME)
-    assert.equal(open.calls[0].url, 'http://127.0.0.1:4317/proposals', 'the default URL')
-    assert.equal(open.calls[0].body.projectId, 'p')
-    assert.equal(open.calls[0].headers.authorization, undefined, 'no token, no header')
-    console.log('dreamer-export: send PASS')
-  }
-
-  // --- the review window's Send, with its export fallback ---
-  {
-    const prefs = new Map([
-      [DREAMER_URL_KEY, 'http://agent-os.test'],
-      [DREAMER_PROJECT_KEY, 'trezi'],
-      [DREAMER_TOKEN_KEY, 'tok']
-    ])
     const preferences = {
       get: (key) => prefs.get(key) ?? null,
-      set: async (key, value) => void prefs.set(key, value),
+      set: async (key, value) => void (value == null ? prefs.delete(key) : prefs.set(key, value)),
       apply: async (entries) => {
         for (const [key, value] of entries)
           value == null ? prefs.delete(key) : prefs.set(key, value)
@@ -200,85 +158,148 @@ try {
       }
     }
     const picked = []
-    const posts = []
-    let responses = []
+    let dest = null
+    const copied = []
+    const opened = []
     let busy = false
     const host = {
       pickExport: async (name) => {
         picked.push(name)
-        return join(scratch, 'fallback.zip')
+        return dest
       },
-      copyText: async () => {},
-      openChat: () => {},
-      busy: () => busy,
-      fetch: async (url, init) => {
-        posts.push({ url, body: JSON.parse(init.body) })
-        const next = responses.shift()
-        if (next instanceof Error) throw next
-        return next
-      }
+      copyText: async (text) => void copied.push(text),
+      openChat: (session) => void opened.push(session),
+      busy: () => busy
     }
     const dreamer = new NativeDreamerController(sheets, preferences, host)
-    dreamer.result = {
-      file: structuredClone(FILE),
-      digest: DIGEST,
-      selected: ['tests'],
-      model: 'x'
-    }
     dreamer.review()
-    const perform = async (action) => {
+    const state = () => sheets.current.state
+    const perform = async (action, values = {}) => {
       const sheet = sheets.current
-      await sheet.handle({ id: sheet.state.id, action, values: {} })
+      sheet.state.message = undefined
+      await sheet.handle({ id: sheet.state.id, action, values })
       return sheet.state.message
     }
 
-    responses = [answer(200, { created: [{ issue: 'AOS-9' }] })]
-    assert.equal(await perform('send'), 'Sent 1 proposal to Agent OS. Created AOS-9.')
-    assert.deepEqual(dreamer.result.sent.tasks, ['AOS-9'])
+    // No send action, Export… the only primary (the window's default button, Return).
+    assert.equal(state().title, 'Dreamer Proposals')
+    const ids = state().actions.map((a) => a.id)
+    assert.ok(!ids.includes('send'), 'no Send to Agent OS action')
+    assert.deepEqual(
+      ids.filter((id) => !id.startsWith('open:')),
+      ['select-all', 'select-none', 'copy-json', 'export']
+    )
+    const primary = state().actions.filter((a) => a.primary)
+    assert.deepEqual(primary, [
+      { id: 'export', label: 'Export…', primary: true, section: 'overview' }
+    ])
+    // No Agent OS target, setup text or last send; the wording is about export.
+    const overview = state().sections.find((s) => s.id === 'overview')
+    assert.equal(
+      overview.detail,
+      'Edit any proposal in the sidebar, then export the selected ones as a redacted ZIP.'
+    )
+    assert.deepEqual(
+      state()
+        .fields.filter((f) => f.section === 'overview')
+        .map((f) => f.id),
+      ['filter', 'selected', 'run', 'report']
+    )
+    const include = state().fields.find((f) => f.id === 'include0:build')
+    assert.equal(include.label, 'Include in export')
+    assert.deepEqual(
+      include.choices.map((c) => c.label),
+      ['Selected', 'Not selected']
+    )
+    const labels = JSON.stringify([
+      state().sections,
+      state().actions,
+      state().fields.map(({ label, help, choices }) => ({ label, help, choices }))
+    ])
+    assert.doesNotMatch(labels, AGENT_OS, 'no Agent OS or send wording')
+    // The old route is gone: a stray 'send' does nothing.
+    assert.equal(await perform('send'), undefined)
     assert.equal(picked.length, 0)
-    assert.equal(posts[0].url, 'http://agent-os.test/proposals')
-    assert.equal(posts[0].body.projectId, 'trezi')
-    assert.equal(posts[0].body.start, false, 'start is off by default')
-    assert.deepEqual(
-      posts[0].body.file.proposals.map((p) => p.id),
-      ['tests']
-    )
 
-    // Settings → Dreamer's "start them on import" reaches the body.
-    prefs.set(DREAMER_START_KEY, 'on')
-    responses = [answer(200, { created: [{ issue: 'AOS-10' }] })]
-    await perform('send')
-    assert.equal(posts[1].body.start, true)
-    prefs.delete(DREAMER_START_KEY)
-
-    // Unreachable: the message says Agent OS is this Mac's only, and the export is offered.
-    responses = [new Error('offline')]
-    const message = await perform('send')
-    assert.match(message, /^Not sent: Agent OS could not be reached \(offline\)\./)
-    assert.match(message, /only on this Mac \(127\.0\.0\.1\)/)
-
-    // Another HTTP error keeps its own message and also falls back to the export.
-    responses = [answer(400, { error: 'proposals[0].title too long' })]
-    const refused = await perform('send')
-    assert.match(refused, /^Not sent: Agent OS answered 400: proposals\[0\]\.title too long/)
-    assert.doesNotMatch(refused, /127\.0\.0\.1/)
-    assert.match(refused, /Exported the report to/)
-    picked.length = 0
-    responses = [new Error('offline')]
-    await perform('send')
-    assert.match(message, /Exported the report to .*fallback\.zip instead\./)
-    assert.match(picked[0], /^Dreamer Report \d{4}-\d{2}-\d{2}\.zip$/)
-    assert.ok(existsSync(join(scratch, 'fallback.zip')))
-    const fallback = unzip(join(scratch, 'fallback.zip'))
-    assert.deepEqual(
-      JSON.parse(fallback.proposals).proposals.map((p) => p.id),
-      ['tests'],
-      'the fallback exports what would have been sent'
-    )
-    assert.doesNotMatch(fallback.proposals, PRIVATE)
-
+    // Editing and selection are kept and saved.
+    await perform('save', {
+      filter: 'bug',
+      'title:build': '  Make the build green  ',
+      'problem:build': 'It fails.',
+      'acceptance:build': '- The build passes.\n\n[ ] No retries.',
+      'include0:build': 'yes',
+      'include0:tests': 'no'
+    })
+    assert.equal(dreamer.result.file.proposals[0].title, 'Make the build green')
+    assert.deepEqual(dreamer.result.file.proposals[0].acceptance, [
+      'The build passes.',
+      'No retries.'
+    ])
+    assert.deepEqual(dreamer.result.selected, ['build'])
+    assert.equal(state().fields.find((f) => f.id === 'selected').value, '1 of 2 proposals selected')
+    assert.equal(state().fields.find((f) => f.id === 'filter').value, 'bug')
+    assert.deepEqual(JSON.parse(prefs.get(DREAMER_LAST_KEY)).selected, ['build'])
+    await perform('select-all')
+    assert.deepEqual(dreamer.result.selected, ['build', 'tests'])
     await perform('select-none')
-    await assert.rejects(perform('send'), /Select at least one proposal/)
+    assert.deepEqual(dreamer.result.selected, [])
+    assert.ok(
+      state().fields.some((f) => f.id === 'include2:build'),
+      'Select None reseeds'
+    )
+    await perform('save', { 'include0:tests': 'yes', 'include2:build': 'yes' })
+    assert.deepEqual(dreamer.result.selected, ['build'], 'a stale epoch is ignored')
+
+    // Copy as JSON and Open Chat.
+    assert.equal(await perform('copy-json'), 'Copied 1 proposal as JSON.')
+    assert.deepEqual(
+      JSON.parse(copied[0]).proposals.map((p) => p.id),
+      ['build']
+    )
+    assert.doesNotMatch(copied[0], PRIVATE)
+    await perform('open:build:0')
+    assert.deepEqual(opened, ['s1'])
+
+    // Export…: the save panel, then a redacted zip of the selected proposals.
+    const out = join(scratch, 'out')
+    mkdirSync(out)
+    dest = join(out, 'Dreamer Report.zip')
+    const message = await perform('export')
+    assert.equal(message, `Exported the report to ${dest}.`)
+    assert.doesNotMatch(message, AGENT_OS)
+    assert.match(picked[0], /^Dreamer Report \d{4}-\d{2}-\d{2}\.zip$/)
+    const zip = unzip(dest)
+    assert.deepEqual(zip.names, ['evidence.json', 'proposals.json', 'report.md'])
+    const exported = JSON.parse(zip.proposals)
+    assert.deepEqual(
+      exported.proposals.map((p) => [p.id, p.title, p.problem]),
+      [['build', 'Make the build green', 'It fails.']]
+    )
+    assert.deepEqual(dreamerErrors(exported), [])
+    for (const text of [zip.report, zip.proposals, zip.evidence]) assert.doesNotMatch(text, PRIVATE)
+
+    // Cancel: no file, no message.
+    rmSync(dest)
+    dest = null
+    assert.equal(await perform('export'), '')
+    assert.equal(picked.length, 2)
+    assert.deepEqual(readdirSync(out), [], 'a cancelled export writes nothing')
+
+    // A failed export reports the error (the sheet shows it) and leaves no file.
+    dest = join(scratch, 'a-file', 'Dreamer Report.zip')
+    await assert.rejects(perform('export'))
+    assert.equal(existsSync(dest), false)
+
+    // Trezi → Export Dreamer Report…: the same zip, no send.
+    dest = join(out, 'menu.zip')
+    await dreamer.exportReport()
+    assert.match(toasts.at(-1), /^Exported 1 proposal to .*menu\.zip\.$/)
+    assert.ok(existsSync(dest))
+
+    // The old Agent OS settings were never read into a request and are not erased.
+    assert.deepEqual(requests, [], 'no Agent OS request')
+    for (const [key, value] of Object.entries(LEGACY)) assert.equal(prefs.get(key), value)
+    console.log('dreamer-export: review window export PASS')
 
     // The weekly run: off by default, waits while a chat is busy, then runs once a week.
     sheets.current = null
@@ -293,9 +314,43 @@ try {
     assert.equal(ran, 1)
     assert.match(toasts.at(-1), /The Dreamer found 2 proposals\./)
     assert.equal(await dreamer.tick(now), false, 'not again within the week')
-    console.log('dreamer-export: review send and weekly run PASS')
+    console.log('dreamer-export: weekly run PASS')
+
+    // Settings → Dreamer: only the weekly run; saving keeps the old Agent OS values.
+    let handled = 0
+    const settingsSheet = {
+      state: {
+        id: 'settings',
+        sections: [{ id: 'dreamer', label: 'Dreamer' }],
+        fields: [],
+        actions: []
+      },
+      handle: async () => void handled++
+    }
+    const settings = withDreamerPane(
+      { sheets: { current: settingsSheet, refresh() {} }, open: async () => {} },
+      preferences
+    )
+    await settings.open()
+    assert.deepEqual(
+      settingsSheet.state.fields.map((f) => [f.id, f.value]),
+      [['dreamerSchedule', 'weekly']]
+    )
+    assert.deepEqual(settingsSheet.state.actions, [])
+    assert.doesNotMatch(JSON.stringify(settingsSheet.state.fields), AGENT_OS)
+    await settingsSheet.handle({
+      id: 'settings',
+      action: 'save',
+      values: { dreamerSchedule: 'off' }
+    })
+    assert.equal(prefs.get(DREAMER_SCHEDULE_KEY), 'off')
+    assert.equal(handled, 1)
+    for (const [key, value] of Object.entries(LEGACY)) assert.equal(prefs.get(key), value)
+    assert.deepEqual(requests, [])
+    console.log('dreamer-export: settings PASS')
   }
 } finally {
+  globalThis.fetch = realFetch
   rmSync(scratch, { recursive: true, force: true })
 }
 console.log('DREAMER EXPORT OK')

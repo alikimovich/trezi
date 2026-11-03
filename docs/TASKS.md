@@ -11,6 +11,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Unit `test/source-popout.mjs` (full, entering, exiting, re-shown, failed enter/exit, five rounds, windowed control) and the native `source-popout` smoke (`src/native/smoke-source-popout.ts`, group `core`): ×, red button and ⌘W from full screen, dock, hide while entering and leaving, three rounds, windowed close and dock, a docked editor in a full-screen main window, draft and selection after each.
 - [ ] Manager: the native `core` group on the merged SHA, `source-popout` with `source-popout.json` and its `source-popout-*.png` captures, plus the ticket's live foreground check.
 
+## Dreamer Proposals: Export… the sole primary action (LKM-443)
+
+- [x] Send to Agent OS removed: no `send` action, no route in `NativeDreamerController.handle`, no `sendToAgentOs`, no `fetch` on the Dreamer host.
+- [x] Export… is the only `primary` action (the sectioned sheet's `.defaultAction`, Return); overview, subtitle and the per-proposal "Include in export" wording are about export; no Agent OS target, setup, last-sent or "Not sent… instead" text.
+- [x] Settings → Dreamer keeps only the weekly run; saved Agent OS values stay in preferences, unread and not erased.
+- [x] Unit `dreamer-export` (red on the previous code) covers no send, one primary, editing and selection, the redacted zip, cancel, errors and no fetch; the `dreamer` native smoke asserts `defaultAction` `export`, an exported zip, a cancel that writes nothing and no request.
+- [ ] Manager: the native `settings` group (`dreamer` smoke) on the merged SHA; operator: the real save panel (save and cancel) and the window at its minimum width.
 ## Code block copy: pointer cursor and "Copied to clipboard" (LKM-442)
 
 - [x] The copy trigger is unchanged: a single click on code (LKM-431), not a hover. The existing `native-chat-code-click` click, drag, link and cleanup checks are untouched and pass.

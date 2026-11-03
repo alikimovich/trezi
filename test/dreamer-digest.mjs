@@ -23,7 +23,6 @@ import {
   DREAMER_LIMITS,
   dreamerErrors,
   dreamerMarkdown,
-  dreamerTaskIds,
   normalizeProposal,
   uniqueIds
 } from '../src/shared/dreamer.ts'
@@ -310,15 +309,6 @@ const valid = (proposals) => ({ version: 1, generatedAt: new Date(NOW).toISOStri
   assert.match(markdown, /^# Dreamer report/)
   assert.match(markdown, /### Speed up Bash steps/)
   assert.match(markdown, /- \[ \] /)
-  assert.deepEqual(
-    dreamerTaskIds({ created: [{ proposal: 'a', issue: 'AOS-1' }, { issue: 'AOS-2' }] }),
-    ['AOS-1', 'AOS-2']
-  )
-  assert.deepEqual(dreamerTaskIds({ tasks: [{ id: 'T-1' }], taskIds: ['T-2', 'T-1'] }), [
-    'T-1',
-    'T-2'
-  ])
-  assert.deepEqual(dreamerTaskIds('nope'), [])
   console.log('dreamer-digest: version 1 format PASS')
 }
 

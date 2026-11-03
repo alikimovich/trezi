@@ -66,13 +66,6 @@ export interface DreamerFile {
   summary?: string
   proposals: DreamerProposal[]
 }
-/** Agent OS's answer to a send: one task per imported proposal. */
-export interface DreamerSendResult {
-  ok: boolean
-  tasks: string[]
-  error?: string
-}
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === 'object' && !Array.isArray(value)
 
@@ -278,27 +271,4 @@ export function dreamerMarkdown(file: DreamerFile): string {
       lines.push('**Acceptance.**', '', ...p.acceptance.map((a) => `- [ ] ${a}`), '')
   }
   return `${lines.join('\n').trimEnd()}\n`
-}
-
-/** The task ids in Agent OS's answer: `{created:[{issue}]}`, `{tasks:[{id}]}` or `{taskIds:[]}`. */
-export function dreamerTaskIds(body: unknown): string[] {
-  if (!isRecord(body)) return []
-  const out: string[] = []
-  for (const key of ['created', 'tasks', 'issues']) {
-    const list = body[key]
-    if (!Array.isArray(list)) continue
-    for (const item of list) {
-      if (typeof item === 'string') out.push(item)
-      else if (isRecord(item))
-        for (const field of ['identifier', 'issue', 'taskId', 'id'])
-          if (typeof item[field] === 'string') {
-            out.push(item[field] as string)
-            break
-          }
-    }
-  }
-  for (const key of ['taskIds', 'ids'])
-    if (Array.isArray(body[key]))
-      out.push(...((body[key] as unknown[]).filter((v) => typeof v === 'string') as string[]))
-  return [...new Set(out)]
 }
