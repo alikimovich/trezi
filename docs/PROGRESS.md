@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-03 — LKM-455 Mark up acceptance fixture
+
+- Added opt-in `bun run acceptance:markup` with a disposable project, repository runner lock, unique retained evidence directory, source SHA and dirty flag; it selects only the smoke prelude and `markup-toggle-overlay-native`.
+- The fixture reuses the LKM-448 toggle and geometry checks, seeds an existing draft and attachment, records every before/open/Cancel state and foreground PNG, and probes the neighboring toolbar icons in light and dark. Pointer events are posted through AppKit; keyboard focus and disabled setup are labelled synthetic. `--red=active-fill` gives the real segment a synthetic stuck accent after Cancel, captures it, and fails at the no-accent boundary.
+- Worker native GUI budget is zero. The operator's post-merge GREEN and RED, with PNG/JSON inspection and tested SHA, remain pending.
+- Review repair: the pressed probe now holds one press at a time (baseline capture, held capture, state read while held, release outside the segment, wait for the queue) and fails if the held crop equals the baseline, the segment shows an accent, an action ran, or a fallback release fired first. The shared-treatment check measures all eight segments (size, hit area, vertical centre, unique glyph from `ToolbarIslands.stateSymbols`/the shell symbol table, ink size/centre/coverage against a fresh `renderToolbarSymbol` at the new `ToolbarSymbolSpec`) instead of constants; selected steps assert the other state buttons are not accented; hover is labelled as a posted `mouseMoved` only. `toolbarSymbol` is split into a cached wrapper and `renderToolbarSymbol` (same bitmap, no behaviour change). The island hit probe also returns `hitBesideDetail` so a miss like native run 56's names the view it hit; the assertion is unchanged. Swift host sources typechecked with `swiftc -typecheck` (no errors in touched files); no GUI run.
 ## 2026-11-03 — LKM-456 LKM-444 native acceptance fixture: real foreground input, retained evidence
 
 - Why: LKM-444's live check needed one reproducible operator command whose input is not a callback, whose evidence names the exact source and survives the run, and which has a deliberate RED. Shipping behaviour is unchanged: `SourcePopout.swift` and `sourceState` are untouched.

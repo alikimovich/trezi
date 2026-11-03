@@ -1,6 +1,10 @@
 import AppKit
 import WebKit
 
+private var markupProbeEnabled: [String: Bool] = [:]
+private var markupProbeMarkupImage: NSImage?
+private weak var markupProbeResponder: NSResponder?
+
 /// LKM-391: Mark up in the host: the capture of the live preview and the seams the native
 /// smoke drives. Wiring only; the session is `PreviewMarkup`.
 extension Host {
@@ -71,7 +75,9 @@ extension Host {
             "frame":rect(island), "snapshot":rect(snapshot), "glass":overlay.island.glass,
             // The island takes its own points; the snapshot takes the rest, right beside it.
             "hitIsland":hit(island.midX, island.midY).map { $0 === overlay.island || $0.isDescendant(of: overlay.island) } ?? false,
-            "hitBeside":beside.allSatisfy { $0 === canvas }
+            "hitBeside":beside.allSatisfy { $0 === canvas },
+            // Above, below, left, right, snapshot corner: what each probe point hit (diagnosis only).
+            "hitBesideDetail":beside.map { $0.map { $0 === canvas ? "canvas" : "\(type(of: $0))" } ?? "nil" }
         ]
         let marks: [[String: Any]] = canvas.document.marks.map { mark in
             ["tool":mark.tool.rawValue, "points":mark.points.map { [$0.x, $0.y] }, "view":mark.points.map { point -> [CGFloat] in let p = mapping.toView(point); return [p.x, p.y] }]
@@ -199,4 +205,175 @@ extension Host {
         default: return ["error":"Unknown Mark up event"]
         }
     }
+}
+
+/// LKM-455 disposable-profile acceptance probe. It does not drive shipping actions.
+/// Hover and press enter through the AppKit event queue. Focus and disabled use labelled
+/// synthetic setup because those states have no natural route in the synthetic project.
+extension Host {
+    @MainActor func markupAcceptanceProbe(_ c: [String: Any]) async -> [String: Any] {
+        let phase = c["phase"] as? String ?? "", name = c["segment"] as? String ?? ""
+        if phase == "reset" {
+            for (key, enabled) in markupProbeEnabled { shell.toolbarItems[key]?.isEnabled = enabled }
+            markupProbeEnabled.removeAll()
+            if let image = markupProbeMarkupImage { shell.toolbarItems["markup"]?.image = image; markupProbeMarkupImage = nil }
+            for group in shell.toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }) { group.refresh() }
+            if let responder = markupProbeResponder { _ = window.makeFirstResponder(responder); markupProbeResponder = nil }
+            return ["ok":true]
+        }
+        if phase == "red-active-fill" {
+            guard let item = shell.toolbarItems["markup"], let image = item.image else { return ["error":"Mark up icon unavailable"] }
+            markupProbeMarkupImage = image
+            item.image = ToolbarIslands.markupImage(active: true)
+            for group in shell.toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }) { group.refresh() }
+            return ["route":"synthetic RED setup", "prominent":shell.segmentProminent("markup")]
+        }
+        guard let item = shell.toolbarItems[name], let anchor = shell.toolbarButtonAnchor(name),
+              let owner = anchor.view.window, let control = anchor.view as? NSSegmentedControl else { return ["error":"No visible toolbar segment \(name)"] }
+        NSApp.activate(ignoringOtherApps: true); owner.makeKeyAndOrderFront(nil)
+        guard NSApp.isActive, owner.isKeyWindow else { return ["error":"Toolbar is not foreground"] }
+        let point = anchor.view.convert(NSPoint(x: anchor.rect.midX, y: anchor.rect.midY), to: nil)
+        let hit = owner.contentView?.superview?.hitTest(point)
+        guard hit === anchor.view || hit?.isDescendant(of: anchor.view) == true else { return ["error":"Segment is not hit-testable"] }
+        func post(_ type: NSEvent.EventType, at location: NSPoint) -> Bool {
+            guard let event = NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: owner.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0) else { return false }
+            NSApp.postEvent(event, atStart: false); return true
+        }
+        let group = shell.toolbar.items.compactMap { $0 as? MomentaryToolbarGroup }
+            .first { $0.shown.contains { $0.itemIdentifier.rawValue == name } }
+        let segmentIndex = group?.shown.firstIndex { $0.itemIdentifier.rawValue == name } ?? 0
+        let glyph = ToolbarIslands.stateSymbols[name] ?? shell.symbols[name] ?? ""
+        let windowRect = anchor.view.convert(anchor.rect, to: nil)
+        /// What the segment shows and where it sits, read from the live control.
+        func measure(_ route: String) -> [String: Any] {
+            let image = control.image(forSegment: segmentIndex)
+            let rect = anchor.rect
+            var state: [String: Any] = ["route":route, "phase":phase, "segment":name,
+                "iconFamily":"SF Symbols", "glyph":glyph, "symbolWeight":Double(ToolbarSymbolSpec.weight.rawValue),
+                "imageWidth":image?.size.width ?? 0, "imageHeight":image?.size.height ?? 0,
+                "prominent":image.map { !$0.isTemplate } ?? false, "enabled":item.isEnabled, "label":item.label, "tooltip":item.toolTip ?? "",
+                "axLabel":item.image?.accessibilityDescription ?? "",
+                "frame":["x":rect.minX, "y":rect.minY, "width":rect.width, "height":rect.height],
+                "windowFrame":["x":windowRect.minX, "y":windowRect.minY, "width":windowRect.width, "height":windowRect.height, "midY":windowRect.midY],
+                "focused":owner.firstResponder === control, "hit":"\(type(of: hit!))"]
+            // Measured glyph ink against a fresh render of the same symbol at the shared spec.
+            if let ink = Host.inkStats(image) { state["ink"] = ink }
+            if let expected = Host.inkStats(renderToolbarSymbol(glyph, nil)) { state["expectedInk"] = expected }
+            return state
+        }
+        var route = "posted AppKit pointer"
+        switch phase {
+        case "idle": route = "no input (resting)"
+        case "hover":
+            // A posted mouseMoved reaches AppKit's event queue, but the tracking-area hover look
+            // follows the real cursor, so this capture may show the idle look.
+            route = "posted mouseMoved (tracking-area hover not guaranteed)"
+            guard post(.mouseMoved, at: point) else { return ["error":"Cannot post hover"] }
+        case "pressed":
+            return await pressedProbe(owner: owner, control: control, point: point, windowRect: windowRect, measure: measure, post: post)
+        case "focus":
+            markupProbeResponder = owner.firstResponder
+            guard owner.makeFirstResponder(control) else { return ["error":"Control cannot take keyboard focus"] }
+            route = "synthetic focus setup, posted key"
+            guard let event = NSEvent.keyEvent(with: .keyDown, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: owner.windowNumber, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53) else { return ["error":"Cannot post keyboard event"] }
+            NSApp.postEvent(event, atStart: false)
+        case "disabled":
+            markupProbeEnabled[name] = item.isEnabled
+            item.isEnabled = false
+            for group in shell.toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }) { group.refresh() }
+            route = "synthetic disabled setup"
+        default: return ["error":"Unknown acceptance phase"]
+        }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        return measure(route)
+    }
+
+    /// Mouse down on a segment, a baseline and a held capture, then a release that the probe
+    /// waits for, so one press never overlaps the next. The release lands outside the segment,
+    /// so no action runs. A fallback release (worker queue) only unblocks a tracking loop that
+    /// holds the main actor; if it fires first, the press was not observable and this fails.
+    @MainActor private func pressedProbe(owner: NSWindow, control: NSSegmentedControl, point: NSPoint, windowRect: NSRect,
+                                         measure: (String) -> [String: Any], post: (NSEvent.EventType, NSPoint) -> Bool) async -> [String: Any] {
+        let route = "posted AppKit pointer"
+        let outside = NSPoint(x: 2, y: 2), ownerNumber = owner.windowNumber
+        guard post(.mouseMoved, point) else { return ["error":"Cannot post pointer move"] }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        guard let baseline = try? await captureOwnWindow(owner), let baselinePNG = baseline["png"] as? String else { return ["error":"Baseline foreground capture failed"] }
+        let gate = MarkupReleaseGate()
+        guard post(.leftMouseDown, point) else { return ["error":"Cannot post mouse down"] }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 8.0) {
+            guard gate.fire(), let up = NSEvent.mouseEvent(with: .leftMouseUp, location: NSPoint(x: 2, y: 2), modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: ownerNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0) else { return }
+            NSApp.postEvent(up, atStart: false)
+        }
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        guard !gate.fired else { return ["error":"Press not observable: the tracking loop held the main actor until the fallback release"] }
+        let shot = try? await captureOwnWindow(owner)
+        var held = measure(route) // read while the button is down
+        let consumed = NSApp.nextEvent(matching: .any, until: .distantPast, inMode: .default, dequeue: false) == nil
+        guard gate.disarm() else { return ["error":"Press not observable: released by the fallback before the held capture finished"] }
+        guard let png = shot?["png"] as? String else { _ = post(.leftMouseUp, outside); return ["error":"Pressed foreground capture failed"] }
+        guard post(.leftMouseUp, outside) else { return ["error":"Cannot post mouse up"] }
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        var settled = false
+        for _ in 0..<20 where !settled {
+            settled = NSApp.nextEvent(matching: .any, until: .distantPast, inMode: .default, dequeue: false) == nil
+            if !settled { try? await Task.sleep(nanoseconds: 50_000_000) }
+        }
+        held["pressedPNG"] = png
+        held["downConsumed"] = consumed
+        held["released"] = settled
+        held["segmentPixelsChanged"] = Host.changedPixels(baselinePNG, png, in: windowRect, window: owner.frame.size)
+        return held
+    }
+
+    /// Pixels in a window-space rect (points, origin bottom-left) that differ between two captures.
+    private static func changedPixels(_ before: String, _ after: String, in rect: NSRect, window: NSSize) -> Int {
+        guard let a = Data(base64Encoded: before).flatMap({ NSBitmapImageRep(data: $0) }),
+              let b = Data(base64Encoded: after).flatMap({ NSBitmapImageRep(data: $0) }),
+              a.pixelsWide == b.pixelsWide, a.pixelsHigh == b.pixelsHigh, window.width > 0, window.height > 0 else { return -1 }
+        let sx = CGFloat(a.pixelsWide) / window.width, sy = CGFloat(a.pixelsHigh) / window.height
+        let x0 = max(0, Int(rect.minX * sx)), x1 = min(a.pixelsWide, Int((rect.maxX * sx).rounded(.up)))
+        let y0 = max(0, Int((window.height - rect.maxY) * sy)), y1 = min(a.pixelsHigh, Int(((window.height - rect.minY) * sy).rounded(.up)))
+        var changed = 0
+        for y in y0..<max(y0, y1) {
+            for x in x0..<max(x0, x1) {
+                guard let p = a.colorAt(x: x, y: y)?.usingColorSpace(.sRGB), let q = b.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                if abs(p.redComponent - q.redComponent) + abs(p.greenComponent - q.greenComponent) + abs(p.blueComponent - q.blueComponent) > 0.03 { changed += 1 }
+            }
+        }
+        return changed
+    }
+
+    /// The painted glyph of a segment image in a 40 px bitmap: ink size, centre and coverage.
+    private static func inkStats(_ image: NSImage?) -> [String: Any]? {
+        guard let image, let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 40, pixelsHigh: 40, bitsPerSample: 8, samplesPerPixel: 4,
+            hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+            let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return nil }
+        NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = context
+        image.draw(in: NSRect(x: 0, y: 0, width: 40, height: 40))
+        NSGraphicsContext.restoreGraphicsState()
+        var minX = 40, maxX = -1, minY = 40, maxY = -1
+        var coverage = 0.0
+        for y in 0..<40 {
+            for x in 0..<40 {
+                let alpha = Double(bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0)
+                coverage += alpha
+                if alpha > 0.1 { minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y) }
+            }
+        }
+        guard maxX >= 0 else { return ["width":0, "height":0, "centerX":0, "centerY":0, "coverage":0] }
+        return ["width":maxX - minX + 1, "height":maxY - minY + 1, "centerX":Double(minX + maxX + 1) / 2, "centerY":Double(minY + maxY + 1) / 2, "coverage":coverage]
+    }
+}
+
+/// Fires the fallback mouse-up of a held press at most once, unless the probe disarmed it first.
+private final class MarkupReleaseGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var state = 0 // 0 armed, 1 fired, 2 disarmed
+    func fire() -> Bool { lock.lock(); defer { lock.unlock() }; guard state == 0 else { return false }; state = 1; return true }
+    func disarm() -> Bool { lock.lock(); defer { lock.unlock() }; guard state == 0 else { return false }; state = 2; return true }
+    var fired: Bool { lock.lock(); defer { lock.unlock() }; return state == 1 }
 }
