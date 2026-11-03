@@ -305,6 +305,13 @@ extension Host {
                 do { reply(id, try await chatAcceptance(c)) }
                 catch { reply(id, error: error.localizedDescription) }
             }
+        case "chatRecoveryAcceptance":
+            // LKM-453: the opt-in chat recovery acceptance's foreground, geometry and input steps.
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            Task { @MainActor in
+                do { reply(id, try await chatRecoveryAcceptance(c)) }
+                catch { reply(id, error: error.localizedDescription) }
+            }
         case "chatInspect": reply(id, chat.inspect())
         case "chatIncidentRow":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }

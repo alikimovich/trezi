@@ -86,6 +86,8 @@ pointer gestures/animation timing, which must be reported as reduced coverage.
 Dreamer review window: real menu, real `NSSavePanel`, both widths. It runs under the
 shared desktop lock and is not part of any tier. Command, lock, artifacts and cleanup
 are in `docs/DREAMER.md` ("Acceptance on the shipping code").
+`bun run acceptance:chat-recovery` (LKM-453) is the same kind of opt-in foreground check
+for the LKM-446 chat recovery card; see "Chat recovery acceptance" below.
 
 ### Pop-out full-screen close acceptance
 
@@ -740,6 +742,91 @@ An unknown or empty group name fails before the build. `--live` requires `core`
 (the live turn edits the heading the core group writes). `native-runtime` only
 demands fresh sidebar evidence when `sidebar` ran. Acceptance still needs the
 full suite.
+
+### Chat recovery acceptance (LKM-453)
+
+An opt-in native check, `chat-recovery-flow-native`, drives the LKM-446 recovery card
+(Retry, Resolve, Discard on held changes) in the shipping chat. It is not part of any
+tier, and its pass is not full-suite acceptance.
+
+```sh
+bun run acceptance:chat-recovery                   # GREEN: must pass on the shipping code
+bun run acceptance:chat-recovery --red=delay-busy  # RED: must fail at the held busy state
+```
+
+- **Lock.** It is a desktop suite. Start it only while holding the manager's shared
+  desktop lock. `scripts/chat-recovery-acceptance.mjs` also takes this checkout's runner
+  lock (`test/artifacts/runs/.runner-lock`). It refuses to start in these cases:
+  - the checkout has uncommitted changes, so the source cannot be identified by one SHA;
+  - another test Trezi (`TreziHost … ephemeral`) is running;
+  - `TREZI_NATIVE_BACKGROUND_TEST=1` is set;
+  - the host is not macOS with swiftc.
+- **Run.** The script runs `bun run dev:native --test --only=chat --chat-recovery-acceptance`.
+  That is a disposable Trezi with its own profile, preferences, data and logs, which
+  start-native removes. The script forces ad hoc signing (`TREZI_SIGN_IDENTITY=-`) so the
+  build does not use the operator's login keychain. It runs only the smoke prelude and this check
+  (`selectChatRecoveryAcceptance` in `src/native/smoke-groups.ts`). The check refuses
+  `--live` and `--dreamer-acceptance`, and it needs the `chat` group.
+- **Seams.** The check is `src/native/smoke-chat-recovery-acceptance.ts`. Its host side is
+  `src/native/ChatRecoveryAcceptance.swift`, reachable only on an ephemeral profile.
+  - It uses the shared smoke chat with the smoke's provider stub, which never reaches a
+    real provider.
+  - Held changes come from synthetic isolation events.
+  - The owner's reply to `agent:retry-landing` and `agent:resolve-conflict` is withheld
+    at `services.invoke` until the check releases it. Discard is answered with an error
+    and must never be asked.
+  - Product code is not stubbed.
+- **Deferred boundary.** Each press waits for the card to be busy within 1 s, while the
+  request is still held:
+  - the busy label (Retrying…/Resolving…);
+  - a spinner (an `NSProgressIndicator` in the card);
+  - Retry, Resolve and Discard disabled.
+
+  The rules are in `busyProblems` (`src/native/chat-recovery-acceptance.ts`). Then a
+  second click on the busy label, a click on Discard and a click on the other recovery
+  must send no request and leave the card busy.
+- **Outcomes.** One PNG and one JSON each, in this order:
+  - `held-busy` and `held-blocked`;
+  - `still-held`: one line, at most 120 characters;
+  - `clean`: a merged Resolve with one outcome line and no agent turn;
+  - `handover`: a Resolve with conflicts, which starts exactly one agent turn;
+  - `failure`: the card states the Problem and offers Copy support report. The written
+    report must be 0600, readable JSON, name only this chat and have its planted fake
+    key and token redacted. It is kept as `failure-report.json`;
+  - `isolation`: a second chat's Problem and report are its own and it was never busy;
+  - `terminal-clear`: a landed event clears this chat's card, Problem and report, and
+    the other chat keeps its own.
+- **Input.** Clicks are mouse events posted to the app's event queue at the button's
+  centre. They pass the window's hit test, and need no Accessibility or Input Monitoring
+  permission, so no system prompt appears.
+  - The keyboard route (the handover Resolve) focuses the button's key-view proxy with
+    `makeFirstResponder`. That focusing is programmatic, and each JSON says so. The route
+    then posts a real Space key down and up.
+  - Space activating a SwiftUI button needs keyboard navigation (Full Keyboard Access).
+    The check records `NSApp.isFullKeyboardAccessEnabled` in `evidence.json` and never
+    changes it. With it off, the keyboard step fails and names the setting.
+  - A disabled SwiftUI button has no key-view proxy. On the busy card the disabled
+    buttons' frames are derived from the last all-enabled row, and the JSON marks each
+    as `frameSource`. The unit `chat-recovery-acceptance` checks that derivation against
+    the drawn frames.
+  - The second chat is set up by events, not input.
+- **Artifacts.** In `test/artifacts/native/chat-recovery-acceptance/`, cleared at the
+  start of each run: `evidence.json` (source sha, build stamp, outcomes, error), the
+  PNG/JSON pairs above and `failure-report.json`. The failure PNG shows the planted fake
+  secret in the card's reason, as the product does. Only the report is redacted.
+
+  The script copies them, with `run.json` (source sha, branch, dirty flag, mode, whether
+  the expectation was met, a sha256 per file), into
+  `test/artifacts/acceptance/chat-recovery-flow-native/<sha>/<green|red-delay-busy>-<time>-<run-id>/`
+  and makes every file read-only. A run counts only when `evidence.json` is fresh and
+  names the same sha.
+- **RED.** `--red=delay-busy` arms a render gate before each input and holds every chat render until the request is released
+  (`delayRenders`), so the busy state can only appear after the reply. Its `run.json` is
+  met only when the check fails at `busy state before the reply`. The unit test covers
+  the rule-level RED cases.
+- **Cleanup.** The check restores `services.invoke` and the render gate, releases any
+  held request as still held, and resets the shared chat. start-native removes the
+  disposable profile when the app quits.
 
 ## GitHub CI
 

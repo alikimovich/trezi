@@ -17,6 +17,22 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - Regression: unit `test/source-popout-acceptance.mjs` builds `test/fixtures/source-popout-hit/main.swift` with the real editor sources. Against the old point it fails: all three targets land at [500,366] on SourceTextView. It passes with the fix and checks every guard. Every original case and assertion is unchanged.
 - Not run here: any native run (worker budget 0). The corrected RED and GREEN on the merged SHA are the operator's.
 
+## 2026-11-03 — LKM-453 fixture repair during Codex handoff
+
+- The first manager quick check found the new offscreen card fixture failing: the report button's live frame shrinks when the busy label grows, and an offscreen window cannot dispatch Space as a foreground key window. The locator now trusts the enabled report button's live proxy and the unit fixture tears down the card before drawing its enabled comparison twin. The unit still checks event focus offscreen; the foreground operator fixture retains the strict Space-to-Resolve assertion.
+- The RED render gate now arms before the input event, since the recovery action publishes the busy card before it reaches `services.invoke`. The command forces ad hoc signing to avoid the login keychain, refuses a dirty checkout and gives each SHA-keyed retained run a unique folder.
+
+## 2026-11-03 — LKM-453 chat recovery acceptance fixture
+
+- Why: LKM-446 (PR #382) left `chat-recovery-flow-native` to the operator, and there was no self-contained command for it. This change adds that command, `bun run acceptance:chat-recovery` with `--red=delay-busy` (`docs/TESTING.md` "Chat recovery acceptance"). Only test, fixture and docs change; no shipping behaviour changes.
+- Seam: `src/native/smoke-chat-recovery-acceptance.ts` holds the owner's reply to `agent:retry-landing` and `agent:resolve-conflict` at `services.invoke`. The card's busy state is therefore measured before any reply. Rules live in `src/native/chat-recovery-acceptance.ts`. The host side, `src/native/ChatRecoveryAcceptance.swift`, is ephemeral only. It locates the card's buttons through their key-view proxies, posts window-targeted mouse and key events, and reads the spinner as the card's `NSProgressIndicator`.
+- Found while building it: a disabled SwiftUI button has no key-view proxy. The busy card's disabled buttons therefore get frames derived from the last all-enabled row, labelled `frameSource` in the JSON. The unit fixture checks the derivation against drawn twins with the same labels enabled (within 1.5 pt).
+- Input:
+  - In the unit fixture, a Space posted right after `makeFirstResponder` emitted nothing, so the keyboard route now waits 250 ms between the two.
+  - The route needs Full Keyboard Access. The check records that setting and never changes it.
+  - Focusing and setting up the second chat are programmatic, and the evidence says so.
+- Observation, unchanged: the card shows the failure reason as given, so the failure PNG shows the planted fake key. Only the written report is redacted, which is what LKM-446 specifies.
+- Not run here: any native suite (worker budget 0). GREEN and RED on the merged SHA are the operator's.
 ## 2026-11-03 — LKM-455 Mark up acceptance fixture
 
 - Added opt-in `bun run acceptance:markup` with a disposable project, repository runner lock, unique retained evidence directory, source SHA and dirty flag; it selects only the smoke prelude and `markup-toggle-overlay-native`.
