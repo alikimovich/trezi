@@ -32,6 +32,9 @@ extension Host {
             if ["key", "pointer", "button", "typeInstruction", "sendButton", "toolbarSegment"].contains(c["action"] as? String ?? "") {
                 Task { @MainActor in reply(id, await previewMarkupEvent(c)) }
             } else { reply(id, previewMarkupTest(c)) }
+        case "markupAcceptanceProbe":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            Task { @MainActor in reply(id, await markupAcceptanceProbe(c)) }
         case "layersInspect": reply(id, ["native":true, "visible":!layers.isHidden, "count":layers.nodes.count, "frame":NSStringFromRect(layers.frame), "selected":layers.selectedPath.map { $0 as Any } ?? NSNull()])
         case "layersIsland":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }

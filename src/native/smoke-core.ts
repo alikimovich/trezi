@@ -39,10 +39,13 @@ import { checkGitUpdates } from './smoke-git-updates'
 import {
   DREAMER_ACCEPTANCE_CHECK,
   DREAMER_ACCEPTANCE_FLAG,
+  MARKUP_ACCEPTANCE_CHECK,
+  MARKUP_ACCEPTANCE_FLAG,
   parseSmokeGroups,
   SOURCE_POPOUT_ACCEPTANCE_CHECK,
   SOURCE_POPOUT_ACCEPTANCE_FLAG,
   selectDreamerAcceptance,
+  selectMarkupAcceptance,
   selectSmokeChecks,
   selectSourcePopoutAcceptance
 } from './smoke-groups'
@@ -60,6 +63,7 @@ import { checkLandingChecks } from './smoke-landing-check'
 import { checkLayersIsland, type LayersSmoke, restoreLayersIsland } from './smoke-layers'
 import { checkLegacyProject } from './smoke-legacy-project'
 import { checkManagedAgentBrowser } from './smoke-managed-agent-browser'
+import { checkMarkupAcceptance } from './smoke-markup-acceptance'
 import { checkMixedOriginCompatible, checkMixedOriginIncompatible } from './smoke-mixed-origin'
 import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-islands'
 import { checkParallelStream, restoreParallelStream } from './smoke-parallel-stream'
@@ -1823,6 +1827,13 @@ export async function runNativeCoreSmoke(
           await host.request('sheetPerform', { action: 'closeWindow' })
       }
     })
+  if (process.argv.includes(MARKUP_ACCEPTANCE_FLAG))
+    checks.push({
+      name: MARKUP_ACCEPTANCE_CHECK,
+      dependsOn: ['chat-ready'],
+      run: () => checkMarkupAcceptance(host),
+      cleanup: () => restorePreviewMarkup(host, page)
+    })
   // LKM-456: the opt-in LKM-444 pop-out acceptance (docs/TESTING.md); its own cleanup recovers.
   if (process.argv.includes(SOURCE_POPOUT_ACCEPTANCE_FLAG))
     checks.push({
@@ -1841,7 +1852,7 @@ export async function runNativeCoreSmoke(
   // `--only` filters which named checks run; failure collection is unchanged.
   const selected = selectSmokeChecks(checks, parseSmokeGroups(process.argv))
   const optIn = selectSourcePopoutAcceptance(
-    selectDreamerAcceptance(selected, process.argv),
+    selectMarkupAcceptance(selectDreamerAcceptance(selected, process.argv), process.argv),
     process.argv
   )
   const results = await runSmokeChecks(optIn, {
