@@ -137,6 +137,75 @@ markup["activeEnabled"] = interactionControl.isEnabled(forSegment: markupIndex)
 markupItem.image = ToolbarIslands.markupImage(active: false); interaction.refresh()
 markup["restoredTemplate"] = interactionControl.image(forSegment: markupIndex)?.isTemplate == true
 target.clicks = []
+// LKM-448: Select, Slow Motion and Mark up show their on state one way. For each, idle and
+// active in light and dark: the same glyph at the same size and weight (same ink, same bounds),
+// template at rest, the accent colour while on.
+/// Opaque pixel count and their mean colour, drawn in an appearance.
+func paint(_ image: NSImage?, _ appearance: NSAppearance.Name) -> [String: Any] {
+    guard let image, let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 40, pixelsHigh: 40, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                                   colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0), let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return [:] }
+    var accent: [Double] = []
+    NSAppearance(named: appearance)!.performAsCurrentDrawingAppearance {
+        NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = context
+        image.draw(in: NSRect(x: 0, y: 0, width: 40, height: 40))
+        NSGraphicsContext.restoreGraphicsState()
+        let a = NSColor.controlAccentColor.usingColorSpace(.deviceRGB)!
+        accent = [a.redComponent, a.greenComponent, a.blueComponent].map { Double($0) }
+    }
+    // Ink and bounds count every opaque pixel; the colour only the solid ones, off the antialiased edge.
+    var count = 0, solid = 0, sum = [0.0, 0.0, 0.0], minX = 40, maxX = -1, minY = 40, maxY = -1
+    for x in 0..<40 { for y in 0..<40 {
+        guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), color.alphaComponent > 0.6 else { continue }
+        count += 1; minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+        guard color.alphaComponent > 0.97 else { continue }
+        solid += 1; sum[0] += color.redComponent; sum[1] += color.greenComponent; sum[2] += color.blueComponent
+    } }
+    let mean = sum.map { solid > 0 ? $0 / Double(solid) : 0 }
+    return ["ink": count, "bounds": [minX, minY, maxX, maxY], "accentDistance": zip(mean, accent).map { abs($0 - $1) }.max() ?? 1]
+}
+var states: [String: Any] = [:]
+for (key, _) in ToolbarIslands.stateSymbols {
+    let idle = ToolbarIslands.stateImage(key, key, active: false), active = ToolbarIslands.stateImage(key, key, active: true)
+    var entry: [String: Any] = ["idleTemplate": idle?.isTemplate ?? false, "activeTemplate": active?.isTemplate ?? true,
+                                "idleSize": [idle?.size.width ?? 0, idle?.size.height ?? 0], "activeSize": [active?.size.width ?? 0, active?.size.height ?? 0]]
+    for name in [NSAppearance.Name.aqua, .darkAqua] { entry[name == .aqua ? "light" : "dark"] = ["idle": paint(idle, name), "active": paint(active, name)] }
+    states[key] = entry
+}
+// A neighbour that has no on state, at the same optical size.
+states["neighbourSize"] = [toolbarSymbol("ruler", "overlay")?.size.width ?? 0, toolbarSymbol("ruler", "overlay")?.size.height ?? 0]
+// Pressed is the control's own highlight and leaves the glyph alone; active is the glyph, with no
+// highlight; and neither is left behind once it ends.
+let selectIndex = ToolbarIslands.interaction.firstIndex(of: "select-object")!
+let selectItem = interactionItems[selectIndex]
+// Momentary tracking: the pressed fill lasts only while the pointer is down, so no segment holds a
+// selection, and a state is never told by one.
+states["momentary"] = interactionControl.trackingMode == .momentary
+interactionControl.setSelected(true, forSegment: markupIndex)
+states["pressedGlyphTemplate"] = interactionControl.image(forSegment: markupIndex)?.isTemplate == true
+interactionControl.setSelected(false, forSegment: markupIndex)
+let speedItem = interactionItems[ToolbarIslands.interaction.firstIndex(of: "speed")!]
+for (item, key) in [(markupItem, "markup"), (selectItem, "select-object"), (speedItem, "speed")] {
+    item.image = ToolbarIslands.stateImage(key, key, active: true); interaction.refresh()
+    let index = interaction.shown.firstIndex { $0 === item }!
+    states["\(key)ActiveHighlight"] = interactionControl.isSelected(forSegment: index)
+    states["\(key)ActiveAccent"] = interaction.segmentImage(key)?.isTemplate == false
+    // A click on the active segment tracks momentarily and keeps no pressed fill.
+    _ = interaction.clickSegment(key)
+    states["\(key)AfterClickHighlight"] = interactionControl.isSelected(forSegment: index)
+    // Disabled while on: the plain glyph, like every disabled segment; enabled again, the accent.
+    item.isEnabled = false; interaction.refresh()
+    states["\(key)DisabledTemplate"] = interaction.segmentImage(key)?.isTemplate == true
+    item.isEnabled = true; interaction.refresh()
+    states["\(key)ReenabledAccent"] = interaction.segmentImage(key)?.isTemplate == false
+    item.image = ToolbarIslands.stateImage(key, key, active: false); interaction.refresh()
+    states["\(key)EndedTemplate"] = interaction.segmentImage(key)?.isTemplate == true
+    states["\(key)EndedHighlight"] = interactionControl.isSelected(forSegment: index)
+}
+markupItem.image = ToolbarIslands.markupImage(active: false); selectItem.image = toolbarSymbol("cursorarrow", "select-object")
+speedItem.image = toolbarSymbol("tortoise", "speed"); interaction.refresh()
+markup["cancelLabel"] = ToolbarIslands.markupToolTip(active: true)
+result["states"] = states
+target.clicks = []
 // The device button works from its island; the old one no longer has it.
 result["device"] = ["tools": tools.clickSegment("device"), "interaction": interaction.clickSegment("device"), "clicks": target.clicks] as [String: Any]
 target.clicks = []

@@ -24,7 +24,7 @@ final class PreviewMarkup {
     private(set) var session: String?
     private(set) var overlay: PreviewMarkupOverlay?
     private(set) var context: [String: Any] = [:]
-    private var area: NSRect?
+    private var area: NSRect?, page: NSRect?
     private weak var previousFocus: NSResponder?
 
     init(parent: NSView, emit: @escaping ([String: Any]) -> Void, refusal: @escaping () -> String?, capture: @escaping Capture,
@@ -71,6 +71,7 @@ final class PreviewMarkup {
         view.frame = area ?? parent.bounds
         // Above the floating islands and the page: the snapshot is all there is to click.
         parent.addSubview(view, positioned: .above, relativeTo: nil)
+        view.page = page
         overlay = view
         view.layoutSubtreeIfNeeded()
         // The overlay takes the keys, so preview shortcuts never reach the page.
@@ -86,10 +87,17 @@ final class PreviewMarkup {
     /// Discards everything; nothing was written, so nothing is left to clean.
     func cancel() {
         guard let token = session else { return }
-        let focus = previousFocus
+        // A capture still in flight has not taken the focus yet.
+        let focus = overlay == nil ? nil : previousFocus
         close()
         restoreFocus(focus)
         report(token, "cancelled")
+    }
+    /// LKM-448: Bun's Cancel for the top bar button, the same path as the overlay's. A token
+    /// this side no longer holds is answered as cancelled, so Bun never stays stuck on it.
+    func cancel(_ token: String) {
+        guard session == token else { report(token, "cancelled"); return }
+        cancel()
     }
     /// Bun's discard: the chat or project changed.
     func end(_ token: String) {
@@ -129,10 +137,13 @@ final class PreviewMarkup {
         overlay.undo()
         return true
     }
-    func place(area: NSRect) {
-        self.area = area
-        guard let overlay, overlay.frame != area else { return }
-        overlay.frame = area
+    /// `area` is what the overlay covers; `page` the live page's frame, both in the parent's
+    /// coordinates. LKM-448: the snapshot takes the page's frame, so nothing moves or resizes.
+    func place(area: NSRect, page: NSRect? = nil) {
+        self.area = area; self.page = page
+        guard let overlay, overlay.frame != area || overlay.page != page else { return }
+        overlay.frame = area; overlay.page = page
+        overlay.layoutSubtreeIfNeeded()
         changed()
     }
 }

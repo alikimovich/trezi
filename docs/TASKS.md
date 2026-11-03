@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Mark up: real toggle, floating island, no "…" entry (LKM-448)
+
+- [x] "…" (`ToolbarMore.moreActions`) has no Mark up entry; the interaction segment and Actions → Mark up keep it.
+- [x] The top bar segment toggles (`NativeMarkupController.toggle`): off it begins, on it sends `markupCancel`, the overlay's own guarded Cancel (no Add, attachment, message or dialog); a stale token is answered `cancelled`. The Actions entry only opens.
+- [x] The controls float in `PreviewMarkupIsland` at the top of the page, over the snapshot, which takes the WKWebView's exact frame (`place(area:page:)`): no row, inset or resize. The island alone takes clicks; the pen draws everywhere else.
+- [x] Select, Slow Motion and Mark up draw their on state with one helper (`ToolbarIslands.stateImage`): the same glyph, size and weight, accent when on, plain when disabled; the tooltip and VoiceOver say "Cancel Mark up" while on.
+- [x] Unit `markup-controller`, `preview-markup` and `toolbar-island-dividers` cover the toggle, the island geometry and hit-testing, token Cancel and the light/dark state matrix (red on 8899067b). The `toolbar-actions` smoke records enter → cancel → enter cycles with WKWebView/container frames and innerWidth/innerHeight/scrollY unchanged, at default and 850 pt, a resize while on, and light/dark; `toolbar-more` asserts the entry is gone.
+- [ ] Operator: `markup-toggle-overlay-native` (real pointer, disposable profile, 850 pt, resize while active, repeated cycles, light/dark state matrix) and the native `core` group on the merged SHA.
+
 ## Chat recovery flow (LKM-446)
 
 - [x] Add red regressions for immediate Retry state and missing browser checks; use the owner's gated patch path for checked deletions.
