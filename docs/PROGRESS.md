@@ -2,6 +2,16 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-03 — LKM-444 peer-feedback unit failure (flaky poll budget, not the branch)
+
+- The quick run reported `FAIL [unit] peer-feedback 129.8s`. That was not the suite limit (`UNIT_TIMEOUT_MS['peer-feedback']` is 300 s): the log shows one scenario failing, `overlap renders once per change, uncertain, and clears: Timed out waiting for the known overlap`, with every other scenario ok.
+- Cause: `wait` in `test/peer-feedback.mjs` polled 500 × 10 ms (about 5 s). In an eight-worker unit run the owner took longer than that to observe the two edits and upgrade the overlap to known (sibling scenarios in the same run took 8–12 s against 1–3 s alone). The branch does not touch `src/main` or `src/service`, so it is a load-dependent flake that origin/main shares.
+- Fix: `wait` now has a 30 s wall-clock budget. A condition that never holds still throws the same error; no assertion, scenario or suite timeout changed. Alone on this branch the suite passes in 38 s.
+
+## 2026-11-02 — LKM-444 CI compiler repair
+
+- GitHub run 41596027911 failed its app build and `host-warnings` on `SourcePopoutVerification.swift:40`: Swift could not typecheck the combined ⌘W menu lookup, action target check and identity comparison in reasonable time. Split it into a key-window guard, menu lookup and target identity guard, preserving the same ⌘W assertion and event path. Manager quick verification passes: typecheck, native typecheck, `host-warnings`, `source-popout`, `native-editor`, lint and 308 selected unit tests (3 skip). The full CI run also had unrelated `conversation-owner` and `browser-tools-install` failures; no code in those areas changed here. Native `core` and the foreground check remain pending on the merged revision.
+
 ## 2026-11-02 — LKM-444 code editor pop-out: closing it in full screen left a black Space
 
 - Cause (from the source, then the real class under scripted AppKit notifications): `Host.swift` `sourceState` ran `popout.orderOut(nil)` for a hide (popped, not visible) and for a dock, whatever the pop-out's full-screen state. The pop-out is titled and resizable, so AppKit gives it a full-screen button and its own Space. Ordering out a full-screen window does not leave full screen, so the Space stayed up, black, with the main window on another Space: the report's screenshot. All three close paths (the editor's ×, the red button and ⌘W, which reaches `performClose:` → `windowShouldClose` → `hide`) and Dock end in that order-out. A docked editor in a full-screen main window only toggles `isHidden` and was not involved; no backend hang was involved either. Not reproduced on a display here: this worker had no native calls.

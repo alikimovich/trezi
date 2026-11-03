@@ -37,8 +37,12 @@ extension Host {
             case "button": guard let button = popout.standardWindowButton(.closeButton) else { throw fail("No close button") }; button.performClick(nil)
             case "key":
                 // ⌘W reaches File → Close Window, whose performClose: must land on the pop-out.
-                guard popout.isKeyWindow, let item = NSApp.mainMenu?.items.flatMap({ $0.submenu?.items ?? [] }).first(where: { $0.keyEquivalent == "w" && $0.keyEquivalentModifierMask == .command }),
-                      let action = item.action, NSApp.target(forAction: action, to: item.target, from: item) as? NSWindow === popout else { throw fail("⌘W would not reach the pop-out: \(presenter.inspect())") }
+                guard popout.isKeyWindow else { throw fail("⌘W would not reach the pop-out: \(presenter.inspect())") }
+                let menuItems = NSApp.mainMenu?.items.flatMap { $0.submenu?.items ?? [] } ?? []
+                guard let item = menuItems.first(where: { $0.keyEquivalent == "w" && $0.keyEquivalentModifierMask == .command }),
+                      let action = item.action,
+                      let target = NSApp.target(forAction: action, to: item.target, from: item) as? NSWindow,
+                      target === popout else { throw fail("⌘W would not reach the pop-out: \(presenter.inspect())") }
                 guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: popout.windowNumber,
                                                    context: nil, characters: "w", charactersIgnoringModifiers: "w", isARepeat: false, keyCode: 13) else { throw fail("No key event") }
                 extra["handled"] = NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false

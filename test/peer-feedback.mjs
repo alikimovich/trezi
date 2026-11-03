@@ -75,8 +75,13 @@ registerAgentIpc(
   { handle: (name, fn) => handlers.set(name, fn) }
 )
 const invoke = (name, ...args) => handlers.get(name)({}, ...args)
+// A condition that never holds still fails, but the budget is wall-clock and sized for an
+// eight-worker unit run: the owner's observation of an edit took over 5 s there (the
+// whole scenario takes 2 s alone), which failed this poll with every assertion intact.
+const WAIT_BUDGET_MS = 30_000
 const wait = async (condition, what) => {
-  for (let i = 0; i < 500; i++) {
+  const deadline = Date.now() + WAIT_BUDGET_MS
+  while (Date.now() < deadline) {
     const value = await condition()
     if (value) return value
     await new Promise((r) => setTimeout(r, 10))
