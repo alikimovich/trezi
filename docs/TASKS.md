@@ -11,6 +11,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [ ] Follow-up, not in this ticket: offscreen, with the main thread blocked 0.4 s per loop, a new chat whose reply arrives at about 32 000 characters had no realized row for about 10 s (the `LazyVStack` document kept its old estimated height, and the settle realized 19 times without a frame). This is the likely trigger of LKM-354's blank column on a loaded host.
 - [ ] Manager: the full native suite on the merged SHA.
 
+## Chat recovery flow (LKM-446)
+
+- [x] Add red regressions for immediate Retry state and missing browser checks; use the owner's gated patch path for checked deletions.
+- [x] Scope Retry, Resolve and Discard busy state to their chat; produce a readable redacted support report for a failed or still-held request.
+- [x] Retire deleted checked-page recipes with replacement evidence, surface turn-end Problem reports, and keep a timed-out request's mutation lock until IPC settles.
+- [x] Review repair: Resolve handover outside the request deadline, backend in-flight guard for Resolve/Discard/Retry, recorded replay failures on Retry, automatic browser check only when it can run, multi-chat terminal clearing.
+- [ ] Native foreground acceptance after merge, including deferred requests, pointer and keyboard, still-held outcome, and multi-chat clearing.
+- [ ] Confirm obsolete checked-page recipe retirement and final outcome wording against a real held session.
 ## Dreamer acceptance on the shipping code (LKM-447)
 
 - [x] Opt-in `dreamer-export-primary` check (`--dreamer-acceptance`, settings group, prelude only): real menu, 780 and 680 pt foreground captures, footer clip/overlap/default checks, no Agent OS copy.

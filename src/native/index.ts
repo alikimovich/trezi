@@ -79,6 +79,7 @@ import { appVersion } from './app-version'
 import { NativeBridge, setBridge } from './bridge'
 import { NativeBuildStatusController, nativeBuildStatus } from './build-status-controller'
 import { agentAttention } from './chat-agent-card'
+import { readableRecoveryReport } from './chat-recovery-report'
 import { installNativeChat } from './chat-runtime'
 import { NativeContextController } from './context-controller'
 import { serviceConversation } from './conversation-service'
@@ -344,6 +345,12 @@ async function main() {
   )
   registerDreamerIpc({ sessions: dreamerSessions, completion: dreamerCompletion })
   registerGitRemoteIpc(ipcMain, projectHasRunningAgents)
+  ipcMain.handle('recovery:copy-report', async (_e, chat: string) => {
+    const report = readableRecoveryReport(chat)
+    if (!report) return { ok: false, error: 'The support report is no longer readable.' }
+    await host!.request('copyText', { text: report })
+    return { ok: true }
+  })
   ipcMain.handle('project:pick', () => {
     if (pickedRoot) {
       const first = pickedRoot
