@@ -10,13 +10,18 @@ import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
+  DREAMER_ACCEPTANCE_CHECK,
+  DREAMER_ACCEPTANCE_FLAG,
   NATIVE_SMOKE_GROUPS,
   parseSmokeGroups,
   SMOKE_CHECK_GROUPS,
   SMOKE_PRELUDE,
+  selectDreamerAcceptance,
   selectSmokeChecks,
   smokeLauncherTimeoutMs
 } from '../src/native/smoke-groups.ts'
+
+const OPT_IN_LIVE = 'live-provider'
 
 const all = [
   'core',
@@ -82,10 +87,17 @@ assert.ok(
 )
 for (const { name } of names)
   assert.ok(SMOKE_PRELUDE.includes(name) || SMOKE_CHECK_GROUPS[name], `Check ${name} needs a group`)
+// The opt-in checks are pushed onto the list under their flag, so the pattern skips them.
 for (const name of Object.keys(SMOKE_CHECK_GROUPS))
   assert.ok(
-    name === 'live-provider' || names.some((check) => check.name === name),
+    [OPT_IN_LIVE, DREAMER_ACCEPTANCE_CHECK].includes(name) ||
+      names.some((check) => check.name === name),
     `Group map names a real check: ${name}`
+  )
+for (const name of [OPT_IN_LIVE, DREAMER_ACCEPTANCE_CHECK])
+  assert.match(
+    source,
+    new RegExp(`checks\\.push\\(\\{\\n\\s*name: (?:'${name}'|DREAMER_ACCEPTANCE_CHECK),`)
   )
 const listed = names.map((check) => check.name)
 assert.deepEqual(
@@ -174,6 +186,40 @@ console.log(
   'Native smoke check selection: every check classified, prelude kept, dependencies satisfied for each group.'
 )
 
+// LKM-447: --dreamer-acceptance runs the prelude and its one opt-in check, nothing else.
+const optIn = [...names, { name: DREAMER_ACCEPTANCE_CHECK, dependsOn: ['open-project'] }]
+const acceptanceArgv = ['--test', '--only=settings', DREAMER_ACCEPTANCE_FLAG]
+const acceptanceNotices = []
+assert.deepEqual(
+  selectDreamerAcceptance(
+    selectSmokeChecks(optIn, parseSmokeGroups(acceptanceArgv), () => {}),
+    acceptanceArgv,
+    (line) => acceptanceNotices.push(line)
+  ).map((c) => c.name),
+  ['startup', 'open-project', 'chat-ready', 'final-shell', DREAMER_ACCEPTANCE_CHECK]
+)
+assert.match(acceptanceNotices.join(), /^DREAMER ACCEPTANCE .*not full-suite acceptance/)
+assert.equal(
+  selectDreamerAcceptance(names, ['--test'], () => {}),
+  names,
+  'No flag: unchanged'
+)
+assert.throws(
+  () => parseSmokeGroups(['--only=chat', DREAMER_ACCEPTANCE_FLAG]),
+  /--dreamer-acceptance needs the settings group/
+)
+assert.throws(
+  () => selectDreamerAcceptance(names, acceptanceArgv, () => {}),
+  /dreamer-export-primary check was not selected/
+)
+assert.throws(
+  () => selectDreamerAcceptance(optIn, [...acceptanceArgv, '--live'], () => {}),
+  /cannot run with --live/
+)
+console.log(
+  'Dreamer acceptance selection: prelude plus dreamer-export-primary only; bad combinations fail.'
+)
+
 if (process.platform === 'darwin') {
   const cwd = fileURLToPath(new URL('../', import.meta.url))
   const dev = (...args) =>
@@ -189,9 +235,17 @@ if (process.platform === 'darwin') {
   const withoutTest = dev('--only=core')
   assert.equal(withoutTest.status, 1)
   assert.match(withoutTest.stderr, /requires --test/)
+  const acceptanceWithoutTest = dev(DREAMER_ACCEPTANCE_FLAG)
+  assert.equal(acceptanceWithoutTest.status, 1)
+  assert.match(acceptanceWithoutTest.stderr, /--dreamer-acceptance .*requires --test/)
+  const acceptanceGroup = dev('--test', '--only=chat', DREAMER_ACCEPTANCE_FLAG)
+  assert.equal(acceptanceGroup.status, 1)
+  assert.match(acceptanceGroup.stderr, /needs the settings group/)
+  assert.doesNotMatch(acceptanceGroup.stdout, /Building/)
   const help = dev('--help')
   assert.equal(help.status, 0)
   assert.match(help.stdout, /--only=group,group/)
+  assert.match(help.stdout, /--dreamer-acceptance/)
   assert.ok(
     all.every((group) => help.stdout.includes(group)),
     'Help lists every group'

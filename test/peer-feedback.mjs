@@ -75,15 +75,23 @@ registerAgentIpc(
   { handle: (name, fn) => handlers.set(name, fn) }
 )
 const invoke = (name, ...args) => handlers.get(name)({}, ...args)
-// A condition that never holds still fails, but the budget is wall-clock and sized for an
-// eight-worker unit run: the owner's observation of an edit took over 5 s there (the
-// whole scenario takes 2 s alone), which failed this poll with every assertion intact.
+// The poll was 500 × 10 ms, an iteration count: each pass also awaits `condition()`, so
+// its real length depended on the host's load. It is now a wall-clock budget, and the
+// slowest wait of the run is reported, so a slower owner shows up in the numbers instead
+// of passing silently. A condition that never holds still fails with the same error.
+// 30 s is three times the slowest wait measured with 16 copies of this test on a busy host (9.8 s).
 const WAIT_BUDGET_MS = 30_000
-const wait = async (condition, what) => {
-  const deadline = Date.now() + WAIT_BUDGET_MS
+const slowest = { ms: 0, what: '' }
+const wait = async (condition, what, budget = WAIT_BUDGET_MS) => {
+  const started = performance.now()
+  const deadline = Date.now() + budget
   while (Date.now() < deadline) {
     const value = await condition()
-    if (value) return value
+    if (value) {
+      const ms = Math.round(performance.now() - started)
+      if (ms > slowest.ms) Object.assign(slowest, { ms, what })
+      return value
+    }
     await new Promise((r) => setTimeout(r, 10))
   }
   throw new Error(`Timed out waiting for ${what}`)
@@ -339,8 +347,12 @@ try {
       }
       await wait(() => shown(chat).length === 3, 'all three overlaps to show')
       await quiet()
-      const view = await swiftConversationOwner().peers(p.repo, peerTurn(chat.key))
-      assert.ok(view.rows.length < peers.length, 'the rows together exceed the owner cap')
+      // The overlaps show from the goals alone (uncertain); the fat rows reach the owner when
+      // each peer's observed files have been read, which a loaded host does after this point.
+      const view = await wait(async () => {
+        const read = await swiftConversationOwner().peers(p.repo, peerTurn(chat.key))
+        return read.rows.length < peers.length && read
+      }, 'the rows together to exceed the owner cap')
       measure('owner rows listed of 3', view.rows.length)
       measure('owner response bytes', Buffer.byteLength(JSON.stringify(view)))
       assert.equal(view.advisories.length, 3, 'and every overlap is still advised')
@@ -673,6 +685,13 @@ try {
   })
 
   bounded()
+  // Negative control: a wait on a condition that never holds still fails, with the same text.
+  const never = Date.now()
+  await assert.rejects(
+    wait(() => false, 'a condition that never holds', 150),
+    { message: 'Timed out waiting for a condition that never holds' }
+  )
+  assert.ok(Date.now() - never >= 150, 'and only once its budget has passed')
   assert.ok(
     (measured['peer-state event bytes'] ?? 0) <= 1536,
     `peer-state event ${measured['peer-state event bytes']} bytes`
@@ -681,6 +700,9 @@ try {
     `Measured on this run: ${Object.entries(measured)
       .map(([name, value]) => `${name}=${value}`)
       .join(', ')}`
+  )
+  console.log(
+    `Slowest wait on this run: ${slowest.ms} ms (${slowest.what}); budget ${WAIT_BUDGET_MS} ms`
   )
   if (failures.length)
     throw new Error(`${failures.length} scenario(s) failed: ${failures.join('; ')}`)

@@ -10,7 +10,7 @@ const rows = new Map<string, PeerWorkRow>()
 const turnByChat = new Map<string, string>()
 const workRootById = new Map<string, string>()
 const generations = new Map<string, symbol>()
-const pendingReads = new Map<string, Promise<string[]>>()
+const pendingReads = new Map<string, { read: Promise<string[]>; after?: Promise<string[]> }>()
 const asyncGit = promisify(execFile)
 /** Recent landings per canonical project: a landed row leaves the feed, its work does not. */
 const landedByProject = new Map<string, PeerLanded[]>()
@@ -78,8 +78,21 @@ export function peerObservedFiles(root: string, captured: string[], id: string):
   if (!base) return Promise.resolve([...captured, incomplete])
   const key = `${id}\0${root}\0${base}`
   const pending = pendingReads.get(key)
-  if (pending) return pending
-  const read = Promise.all([
+  if (!pending) return readObserved(root, captured, key, base) // The read in flight may have looked at the tree before this call's change, and a status
+  // event is not repeated: a caller that joined it would keep the old answer for good (under
+  // load, a late-landing edit never became a known overlap). One fresh read starts when it
+  // ends, shared by every call that arrives meanwhile, so reads stay bounded to two per key.
+  pending.after ??= pending.read.then(() => readObserved(root, captured, key, base))
+  return pending.after
+}
+
+function readObserved(
+  root: string,
+  captured: string[],
+  key: string,
+  base: string
+): Promise<string[]> {
+  const read: Promise<string[]> = Promise.all([
     asyncGit('git', ['-C', root, 'diff', base, '--name-only'], { encoding: 'utf8', timeout: 2000 }),
     asyncGit('git', ['-C', root, 'ls-files', '--others', '--exclude-standard'], {
       encoding: 'utf8',
@@ -90,8 +103,10 @@ export function peerObservedFiles(root: string, captured: string[], id: string):
       ...new Set([...changed.stdout.split('\n'), ...untracked.stdout.split('\n')].filter(Boolean))
     ])
     .catch(() => [...captured, incomplete])
-    .finally(() => pendingReads.delete(key))
-  pendingReads.set(key, read)
+    .finally(() => {
+      if (pendingReads.get(key)?.read === read) pendingReads.delete(key)
+    })
+  pendingReads.set(key, { read })
   return read
 }
 

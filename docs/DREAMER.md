@@ -194,7 +194,80 @@ streaming, sending or queued, and no sheet is open. A toast offers Review.
   and no Agent OS text; Export… with the controller's save panel stubbed writes a zip
   with the selected proposal, Cancel writes nothing, and a local stub at the old Agent
   OS URL gets no request (`dreamer-export.json`); a proposal pane. The real save panel
-  and the minimum window width are operator checks. Both panes are captured in the
+  and the minimum window width are covered by the opt-in acceptance below, not by this
+  check. Both panes are captured in the
   foreground with the test-only
   `captureVisibleSheet` host request (`captureSheet`'s cached display leaves a sectioned
   window's split view blank); `dreamer-review.json` records which capture was used.
+- `test/dreamer-acceptance.mjs` (unit): the acceptance's rules below, GREEN on the
+  shipping footer (measured at 780 and 680 pt by the acceptance's own host code in a
+  window that is never shown) and on the real exporter's zip, RED on a clipped, covered,
+  overlapping or off-row button, a second primary, Send to Agent OS, a wrong default
+  button, and an archive with extra files, unselected proposals or unredacted secrets.
+
+## Acceptance on the shipping code (LKM-447)
+
+An opt-in native check, `dreamer-export-primary`, drives the shipping review window the
+way a user does. Nothing in it stubs the product: it chooses Trezi → Dreamer Proposals…
+in the real menu, and Export… opens the real `NSSavePanel` (`pickLogExport`).
+
+```sh
+bun run acceptance:dreamer                        # GREEN: must pass
+bun run acceptance:dreamer --red=stub-save-panel  # RED: must fail at the save panel
+```
+
+- **Lock.** It is a desktop suite. Start it only while holding the manager's shared
+  desktop lock, never beside a native-suite run. The script also takes this checkout's
+  runner lock (`test/artifacts/runs/.runner-lock`). It refuses to start when another
+  test Trezi (`TreziHost … ephemeral`) is running, or with
+  `TREZI_NATIVE_BACKGROUND_TEST=1`: every step needs the foreground.
+- **Run.** `scripts/dreamer-acceptance.mjs` runs
+  `bun run dev:native --test --only=settings --dreamer-acceptance`. That launches a
+  disposable Trezi with its own profile, preferences, data and logs (start-native's
+  `trezi-native-` temp folder), which runs only the smoke prelude and this check
+  (`selectDreamerAcceptance` in `src/native/smoke-groups.ts`).
+- **Steps** (`src/native/smoke-dreamer-acceptance.ts`, host side
+  `src/native/DreamerAcceptance.swift`, test profile only):
+  1. A local stand-in at the old Agent OS URL, with the three legacy keys set.
+  2. The smoke fixture, with secrets planted in the selected proposal and a marker in
+     the other.
+  3. The menu opens the review window; `defaultAction` is `export`; there is no `send`
+     action and no Agent OS text.
+  4. At 780 pt (ordinary) and 680 pt (minimum), the window comes to the foreground.
+     The footer is measured where SwiftUI drew it and captured, then judged by
+     `footerProblems` (`src/native/dreamer-acceptance.ts`). The rules: one row, in
+     order, Export… the only primary and rightmost, every button inside the visible
+     window, hit-testable and at least its title's width plus 16 pt (a cut title gets
+     less), no overlaps, no Agent OS copy.
+  5. Export… is clicked, and separately Return is pressed. Each must open the real
+     save panel as a sheet with `Dreamer Report <date>.zip`. The panel is pointed at a
+     temp folder and its Save button is clicked. The zip is unzipped and judged by
+     `archiveProblems`: `Dreamer Report/{evidence.json, proposals.json, report.md}`,
+     only `speed-bash`, and every planted secret redacted.
+  6. Export… again, then the panel's Cancel: no file anywhere and an empty message.
+  7. Zero requests reached the stand-in. The window is closed.
+- **Input.** Clicks and keys are mouse and key events posted to the app's own event
+  queue, where the window server's input arrives. They pass through the window's hit
+  test and key-equivalent handling but need no Accessibility or Input Monitoring
+  permission, so no system prompt can appear.
+- **Default button.** SwiftUI's footer buttons are not `NSButton`s, and the app builds
+  no accessibility tree without an assistive client. So the host records AppKit's
+  default button and the accessibility default only when AppKit reports one, and then
+  requires it to be Export…. Return opening the save panel and `defaultAction` being
+  `export` are the behavioural proof.
+- **Artifacts.** In `test/artifacts/native/dreamer-acceptance/` (cleared at the start
+  of each run):
+  - `run.json`: source sha, branch and dirty flag; GREEN or RED and whether that
+    expectation was met; command, exit code and times.
+  - `evidence.json`: the build stamp; menu, sheet state and footer measures; each
+    export's input, panel, button, message and archive listing; requests.
+  - `dreamer-ordinary-780.png` and `dreamer-minimum-680.png`: foreground captures.
+- **Cleanup.** The check restores the controller's result, its save-panel host and the
+  three legacy preferences. It closes the stand-in and any open save panel, and removes
+  its temp folders. start-native removes the disposable profile when the app quits.
+  The installed Trezi, the real preferences and `~/Library/Logs/Trezi` are never
+  touched.
+- **RED.** `--red=stub-save-panel` replaces the save panel with a stub, so Export…
+  never opens it. `run.json` is met only when the check fails at
+  `real NSSavePanel opened`. The unit test above covers the layout and archive RED
+  cases.

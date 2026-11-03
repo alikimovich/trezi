@@ -26,7 +26,9 @@ if (process.platform !== 'darwin') {
     'src/native/SidebarMenuCapture.swift',
     // LKM-444: the code editor pop-out's full-screen-aware hide and its test hook.
     'src/native/SourcePopout.swift',
-    'src/native/SourcePopoutVerification.swift'
+    'src/native/SourcePopoutVerification.swift',
+    // LKM-447: the opt-in Dreamer acceptance's host steps.
+    'src/native/DreamerAcceptance.swift'
   ]
 
   const script = readFileSync(join(root, 'scripts/build-native.mjs'), 'utf8')

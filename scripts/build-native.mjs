@@ -218,6 +218,7 @@ const host = compile(
     join(root, 'src/native/SheetSections.swift'),
     join(root, 'src/native/SheetSidebar.swift'),
     join(root, 'src/native/SheetVerification.swift'),
+    join(root, 'src/native/DreamerAcceptance.swift'),
     join(root, 'src/native/SheetAlert.swift'),
     join(root, 'src/native/Toast.swift'),
     join(root, 'src/native/Activity.swift'),

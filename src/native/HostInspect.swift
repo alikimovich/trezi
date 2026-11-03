@@ -118,6 +118,11 @@ extension Host {
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             do { reply(id, try sheets.verifySettings(c)) }
             catch { reply(id, error: error.localizedDescription) }
+        case "dreamerAcceptance":
+            // LKM-447: the opt-in Dreamer acceptance's menu, geometry, input and save-panel steps.
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            do { reply(id, try sheets.dreamerAcceptance(c)) }
+            catch { reply(id, error: error.localizedDescription) }
         case "settingsMenu":
             // Trezi → Settings… as the menu bar has it; `perform` chooses it like a click or Command-, would.
             guard ephemeral, let app = NSApp.mainMenu?.items.first?.submenu, let index = app.items.firstIndex(where: { $0.representedObject as? String == "settings" }) else { reply(id, error: "Settings menu item unavailable"); return true }

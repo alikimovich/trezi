@@ -2,11 +2,15 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
-## 2026-11-03 — LKM-444 peer-feedback unit failure (flaky poll budget, not the branch)
+## 2026-11-03 — LKM-444 peer-feedback unit flake: a stale shared Git read (fixed in `peerObservedFiles`)
 
-- The quick run reported `FAIL [unit] peer-feedback 129.8s`. That was not the suite limit (`UNIT_TIMEOUT_MS['peer-feedback']` is 300 s): the log shows one scenario failing, `overlap renders once per change, uncertain, and clears: Timed out waiting for the known overlap`, with every other scenario ok.
-- Cause: `wait` in `test/peer-feedback.mjs` polled 500 × 10 ms (about 5 s). In an eight-worker unit run the owner took longer than that to observe the two edits and upgrade the overlap to known (sibling scenarios in the same run took 8–12 s against 1–3 s alone). The branch does not touch `src/main` or `src/service`, so it is a load-dependent flake that origin/main shares.
-- Fix: `wait` now has a 30 s wall-clock budget. A condition that never holds still throws the same error; no assertion, scenario or suite timeout changed. Alone on this branch the suite passes in 38 s.
+- Symptom: the quick unit run printed `FAIL [unit] peer-feedback 129.8s`. Not the suite limit (`UNIT_TIMEOUT_MS['peer-feedback']` is 300 s): one scenario failed, `overlap renders once per change, uncertain, and clears: Timed out waiting for the known overlap`; every other scenario was ok. The "Verification repair" bullet below records another `peer-feedback` failure under the parallel load; this entry is the one account of them.
+- Baseline, alone, `bun test/peer-feedback.mjs`: origin/main a8bebe7f (a `git archive` copy) 52.6 s, 36.8 s, 36.5 s, all pass; this branch before the fix 39.5 s, 39.1 s, 39.4 s, all pass. Alone there is no difference.
+- Load, 16 copies at once (load average about 35): with `wait` already widened to 30 s, 3 of 16 copies still failed the same scenario at 173 s. So it was not poll latency (slowest wait measured 8.4–9.4 s): the known overlap never arrived.
+- Cause: `peerObservedFiles` (`src/main/peer-work.ts`) handed a caller the Git read already in flight. A provider `status` event is not repeated, so when that read had started before the edit (a `git diff` that is slow on a loaded host), the later call kept the old answer for good and the overlap stayed uncertain. Now a call that arrives during a read starts one fresh read when it ends, shared by every call meanwhile (at most two reads per task and tree).
+- Red/green: `test/peer-observed-reads.mjs` (new, unit tier) puts a stand-in `git` on PATH that answers 400 ms after it looks at the tree. On the old code the late call returned `[]`, not `['a.txt']`; with the fix it passes, the burst shares one promise, and a read is one read again afterwards. Same-load comparison, 8 copies of origin/main against 8 of this branch at once: main 0/8 passed (`disjoint scopes run with no added wait` failed 8 times, `overlap renders once…` 2, `lines and waits do not depend on which rows fit the owner cap` 2); branch 7/8, the one failure being the next item. 16 copies of the branch afterwards: 16/16.
+- Test race: `lines and waits do not depend on which rows fit the owner cap` asserted the owner's byte cap right after the overlaps showed from goals alone, before the peers' observed files had reached the owner. It now `wait`s for the rows to exceed the cap (same condition, same assertions after it).
+- `wait` (`test/peer-feedback.mjs`): 500 × 10 ms was an iteration count whose length also depended on `condition()`. It is a 30 s wall-clock budget now (three times the slowest wait measured with 16 copies, 9.8 s) and every run prints `Slowest wait on this run` (about 1.7 s alone). The error text is unchanged, and a negative control checks that `wait(() => false, …, 150)` rejects with it after the budget. No assertion, scenario or suite timeout was lowered, skipped or raised. The full unit run (8 workers) was not run locally; CI runs it.
 
 ## 2026-11-02 — LKM-444 CI compiler repair
 
@@ -20,7 +24,37 @@ Newest first. Append a dated entry when you finish a chunk of work.
 - Unit `test/source-popout.mjs`: the real `SourcePopout` with a recording window. It covers full screen, entering, exiting, a show before the exit ends, a failed enter and a failed exit, five rounds and a windowed control. It asserts no order-out while in full screen, one toggle, the order-out right after `windowed`, and the main window keyed once. Red with `hide()` reduced to the old order-out: `full` reports `stranded: 1, toggles: 0`. `test/native-editor.mjs`: a reopen and a dock keep `reveal` (red on the old controller: `reopen keeps the caret`).
 - Native `source-popout` smoke (group `core`, `src/native/smoke-source-popout.ts`, hook `SourcePopoutVerification.swift`). It types a draft and sets a selection, then runs a windowed close and dock (the controls) and, in the foreground, each close path from full screen, a dock, a hide while entering and one while leaving, three rounds, and a docked editor hidden and shown in a full-screen main window. After each, the pop-out must be off screen and windowed with nothing pending and no stray full-screen window. The main window must be key on the active Space, take composer focus and hit-test. The draft and selection must be unchanged. It writes `source-popout.json` and `source-popout-{fullscreen,closed-*,docked,main-fullscreen-docked}.png`. A background run keeps only the windowed controls. Not run here; acceptance waits on the native `core` group and the ticket's live check on the merged SHA.
 
-- Verification repair: `test/host-warnings.mjs` failed on `ComposerQueue.swift` (SwiftUI's `@State` macro plugin not found), not on the new files. It runs `swiftc -frontend`, which skips the driver's plugin search, so the test now passes the platform's `host/plugins` folder with `-plugin-path`. It passes with `SourcePopout*.swift` guarded. `peer-feedback` timed out once under load and passed on the rerun. `swift-preview-build` ("swift build left no libTreziPreviewDependencies.dylib") still fails in this sandbox; it is in `src/swift-preview`, which this change does not touch, and is selected only because `package.json` changed.
+- Verification repair: `test/host-warnings.mjs` failed on `ComposerQueue.swift` (SwiftUI's `@State` macro plugin not found), not on the new files. It runs `swiftc -frontend`, which skips the driver's plugin search, so the test now passes the platform's `host/plugins` folder with `-plugin-path`. It passes with `SourcePopout*.swift` guarded. `peer-feedback` failed once under load and passed on the rerun (cause and fix: the 2026-11-03 entry above). `swift-preview-build` ("swift build left no libTreziPreviewDependencies.dylib") still fails in this sandbox; it is in `src/swift-preview`, which this change does not touch, and is selected only because `package.json` changed.
+
+## 2026-11-02 — LKM-447 Dreamer acceptance: the shipping review through a real NSSavePanel, real input and 680 pt
+
+- Why: LKM-443 left the real save panel (save and cancel) and the 680 pt minimum width as operator checks. The `dreamer` smoke stubs `pickExport` and never resizes the window. This adds a harness only; no product, exporter or controller code changed.
+- Opt-in check `dreamer-export-primary` (`src/native/smoke-dreamer-acceptance.ts`) is pushed onto smoke-core's list only under `--dreamer-acceptance`. That flag needs `--test` and `--only=settings`. It refuses `--live` and runs only the prelude plus this check (`selectDreamerAcceptance`, `src/native/smoke-groups.ts`). No tier and no default run includes it, and the suite's groups and scheduler are unchanged.
+- Host broker `dreamerAcceptance` (`src/native/DreamerAcceptance.swift`, ephemeral profile only):
+  - opens the review through the real Trezi → Dreamer Proposals… menu item;
+  - sizes the window to 780 and 680 pt and brings it to the front;
+  - measures the footer buttons (from their `KeyViewProxy` frames), checking clip, overlap, hit-testing, row and the default button;
+  - posts real mouse and Return events with `NSApp.postEvent`;
+  - reads and drives the attached `NSSavePanel` (directory, Save, Cancel).
+- The pure rules live in `src/native/dreamer-acceptance.ts`. `footerProblems` covers clipped or overlapping actions, a primary other than Export…, Export… not rightmost, more than one row, and any Agent OS or Send label. `archiveProblems` requires exactly `Dreamer Report/{evidence.json, proposals.json, report.md}` with only the selected proposal, redacted (a planted token, an email and a home path).
+- What the check does:
+  - takes a foreground capture at each width;
+  - exports once by clicking Export… and once by pressing Return, each through the real panel into a temp folder, then unzips with `ditto` and checks the archive;
+  - presses Cancel in the panel and expects no file and no message;
+  - serves a local stand-in at the legacy Agent OS URL, with the legacy keys set, and expects it to receive zero requests.
+- Prefs, the Dreamer result and `pickExport` are restored in `finally`, and the temp folder is removed.
+- Operator entrypoint `bun run acceptance:dreamer` (`scripts/dreamer-acceptance.mjs`):
+  - refuses a background run, a non-macOS host and a second ephemeral `TreziHost`;
+  - takes the repository runner lock and launches `dev:native --test --only=settings --dreamer-acceptance`;
+  - writes `run.json` with the source SHA, branch, dirty flag, command, exit code, captures and verdict.
+- `--red=stub-save-panel` stubs `pickExport` and must fail with "real NSSavePanel opened". Command, lock, artifacts and cleanup are documented in `docs/DREAMER.md`.
+- Unit `test/dreamer-acceptance.mjs`:
+  - GREEN, plus 12 RED synthetic footers;
+  - archive rules on the real `exportDreamerReport` (all proposals, unredacted and extra-file cases fail);
+  - a source check that the RED stub is the only `pickExport` assignment besides the restore;
+  - a Swift fixture that builds the real `NativeSheets` review in an offscreen window. It is GREEN at 780 and 680. It is RED when a long label clips, and RED for the pre-LKM-443 send-primary actions (wrong primary, Agent OS label, clipped Copy as JSON).
+- `native-smoke-groups` covers the flag's selection and launcher guards. `host-warnings` guards the new Swift file.
+- Not run here: this worker had no native calls, so GREEN and RED on the shipping code wait for an operator run of `bun run acceptance:dreamer` under the shared desktop lock. `dreamer-export-primary` is not marked passed. AppKit does not report SwiftUI's default button to AX or to `defaultButtonCell` without an assistive client, so the default is proven by behaviour (Return opens the panel, `defaultAction` `export`). Either property is asserted only when it is reported.
 ## 2026-11-02 — LKM-449 native suite: the toolbar islands no longer stretch
 
 - Failure: `core/toolbar-address`, minimum stage, inside the resize. The block was 83 pt wide and ended 24 pt before the right groups, not 20. Its stored inset was 401 and the real one 397 (as in every green run). No toolbar code changed since the last green run (`01a19bee..8899067b` touches only the branch title, chat copy, sidebar capture and Dreamer). Runs 52 and 53 passed, so the failure is intermittent.

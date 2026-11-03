@@ -1,0 +1,96 @@
+// LKM-444 follow-up: a status event is not repeated, so the Git read that answers it must
+// start after the change it reports. The read in flight may have looked at the tree
+// earlier; under load (a slow `git diff`) the old code handed the later call that stale
+// answer and a known overlap never rendered (test/peer-feedback.mjs, 3 of 16 loaded runs).
+// A stand-in `git` takes its snapshot when it starts and answers 400 ms later, which is
+// exactly a loaded host. No owner, no provider.
+import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { finishPeer, peerObservedFiles, startPeer } from '../src/main/peer-work.ts'
+
+const home = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-peer-reads-')))
+const realGit = execFileSync('/usr/bin/which', ['git'], { encoding: 'utf8' }).trim()
+const git = (cwd, ...args) => execFileSync(realGit, args, { cwd, encoding: 'utf8' }).trim()
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const repo = join(home, 'repo')
+mkdirSync(repo)
+git(repo, 'init', '-q')
+git(repo, 'config', 'user.email', 'fixture@trezi.test')
+git(repo, 'config', 'user.name', 'Trezi fixture')
+writeFileSync(join(repo, 'a.txt'), 'one\n')
+git(repo, 'add', '.')
+git(repo, 'commit', '-qm', 'base')
+const base = git(repo, 'rev-parse', 'HEAD')
+
+const log = join(home, 'git.log')
+const bin = join(home, 'bin')
+mkdirSync(bin)
+writeFileSync(
+  join(bin, 'git'),
+  `#!/bin/sh\necho "$@" >> '${log}'\nout=$('${realGit}' "$@")\nstatus=$?\nsleep 0.4\nprintf '%s\\n' "$out"\nexit $status\n`
+)
+chmodSync(join(bin, 'git'), 0o755)
+process.env.PATH = `${bin}:${process.env.PATH}`
+const reads = () =>
+  readFileSync(log, 'utf8')
+    .split('\n')
+    .filter((line) => / diff /.test(line)).length
+
+try {
+  await startPeer(
+    {
+      id: 'reader',
+      project: repo,
+      origin: 'background',
+      parent: '',
+      goal: 'edit a.txt',
+      intendedFiles: [],
+      observedFiles: [],
+      base,
+      phase: 'running'
+    },
+    undefined,
+    repo
+  )
+
+  // Control: a call with nothing in flight is one read and sees the tree as it is.
+  assert.deepEqual(await peerObservedFiles(repo, [], 'reader'), [], 'a clean tree observes nothing')
+  assert.equal(reads(), 1, 'a call with nothing in flight is one read')
+
+  // The change lands while a read that started before it is still answering.
+  const early = peerObservedFiles(repo, [], 'reader')
+  await pause(150)
+  writeFileSync(join(repo, 'a.txt'), 'one\ntwo\n')
+  const late = peerObservedFiles(repo, [], 'reader')
+  const alsoLate = peerObservedFiles(repo, [], 'reader')
+  assert.deepEqual(await early, [], 'the early read answers for the tree it saw')
+  assert.deepEqual(
+    await late,
+    ['a.txt'],
+    'a call made after the change is not answered by a read that began before it'
+  )
+  assert.equal(await alsoLate, await late, 'calls made meanwhile share the one fresh read')
+  assert.equal(late, alsoLate, 'and are the same promise: reads stay bounded to two per burst')
+  assert.equal(reads(), 3, 'one control read, the early read and one fresh read')
+
+  // After the burst the key is free again: the next call reads once.
+  assert.deepEqual(await peerObservedFiles(repo, [], 'reader'), ['a.txt'])
+  assert.equal(reads(), 4, 'a later call is one read again')
+  console.log('Peer observed reads: a late change is never answered by an earlier read')
+} finally {
+  finishPeer('reader')
+  rmSync(home, { recursive: true, force: true })
+}
+process.exit(0)
