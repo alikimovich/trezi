@@ -154,14 +154,15 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   assert.equal((await inspect()).frozen, opened.frozen, 'the snapshot does not follow the page')
   await step('frozen', 'seam only: fixture page style mutation simulates live content changing')
 
-  // Every tool, then undo and clear.
+  // Every tool, then undo and clear. Strokes start below the floating island (LKM-448), which
+  // takes its own clicks at the top of the snapshot.
   const { width, height } = opened.image
   const box = (x: number, y: number, w: number, h: number) => [
     [width * x, height * y],
     [width * (x + w), height * (y + h)]
   ]
-  await stroke('rectangle', box(0.1, 0.1, 0.3, 0.2))
-  await stroke('circle', box(0.5, 0.1, 0.2, 0.2))
+  await stroke('rectangle', box(0.1, 0.3, 0.3, 0.2))
+  await stroke('circle', box(0.5, 0.3, 0.2, 0.2))
   await stroke('arrow', box(0.2, 0.5, 0.3, 0.2))
   await stroke('pen', [
     [width * 0.6, height * 0.5],
@@ -200,7 +201,7 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   assert.equal((await inspect()).marks.length, 2, 'Undo button takes another mark')
   await button('Clear')
   assert.equal((await inspect()).marks.length, 0, 'Clear takes every mark')
-  await stroke('rectangle', box(0.1, 0.1, 0.3, 0.2))
+  await stroke('rectangle', box(0.1, 0.3, 0.3, 0.2))
   await stroke('arrow', box(0.4, 0.4, 0.3, 0.2))
 
   // Overlay resize, preview zoom and a narrow preview: marks stay in captured pixels and
@@ -242,7 +243,7 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
 
   // Cancel the same way.
   await open('cancel')
-  await stroke('circle', box(0.1, 0.1, 0.2, 0.2))
+  await stroke('circle', box(0.1, 0.3, 0.2, 0.2))
   await button('Cancel')
   await closed('cancel')
   await step('cancelled', 'real event route')
@@ -293,7 +294,7 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   const project = nativeWorkspace.state.activeKey
   assert.ok(project, 'the first project is active')
   await open('chat change')
-  await stroke('circle', box(0.1, 0.1, 0.2, 0.2))
+  await stroke('circle', box(0.1, 0.3, 0.2, 0.2))
   host.emit('shell-action', { action: 'new-chat', project })
   await waitFor(() => nativeChat.active !== chat, 'a new chat opens')
   await closed('chat change')
@@ -307,7 +308,7 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   mkdirSync(other, { recursive: true })
   writeFileSync(join(other, 'index.html'), '<h1>Other project</h1>')
   await open('project change')
-  await stroke('circle', box(0.1, 0.1, 0.2, 0.2))
+  await stroke('circle', box(0.1, 0.3, 0.2, 0.2))
   await nativeWorkspace.command({ type: 'open', root: other })
   await closed('project change')
   await step(
@@ -326,7 +327,7 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
 
   // Add: the composite joins the draft and the existing attachment; nothing is sent.
   await open('add')
-  await stroke('rectangle', box(0.1, 0.1, 0.3, 0.2))
+  await stroke('rectangle', box(0.1, 0.3, 0.3, 0.2))
   await stroke('arrow', box(0.4, 0.4, 0.3, 0.2))
   await step('before-add', 'real event route')
   await button('Add to chat')

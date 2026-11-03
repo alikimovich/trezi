@@ -63,27 +63,90 @@ private final class MarkupButton: NSButton {
     }
 }
 
+/// LKM-448: the Mark up controls as an island floating at the top of the preview, over the
+/// snapshot, in the look of the other islands there (`FloatingIsland`): a Liquid Glass edge
+/// from macOS 26 and an opaque face, so no mark or page pixel shows through a control. Its own
+/// frame takes the pointer; everywhere else the snapshot takes the pen.
+final class PreviewMarkupIsland: NSView {
+    static let cornerRadius: CGFloat = 22
+    /// Holds the controls: the glass's content view, or the blur's subview before macOS 26.
+    let face = MarkupIslandFace()
+    private(set) var glass = false
+    private var backdrop = NSView()
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        if #available(macOS 26.0, *) {
+            let effect = NSGlassEffectView(); effect.style = .regular
+            effect.cornerRadius = Self.cornerRadius; effect.contentView = face
+            backdrop = effect; glass = true
+        } else {
+            let effect = NSVisualEffectView(); effect.material = .popover
+            effect.blendingMode = .withinWindow; effect.state = .followsWindowActiveState
+            effect.wantsLayer = true; effect.layer?.cornerRadius = Self.cornerRadius; effect.layer?.masksToBounds = true
+            effect.addSubview(face); backdrop = effect
+        }
+        face.frame = backdrop.bounds; face.autoresizingMask = [.width, .height]
+        backdrop.frame = bounds; backdrop.autoresizingMask = [.width, .height]; addSubview(backdrop)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    /// The glass sizes its content view (and the holder around it, which clips hit-testing) in a
+    /// later layout pass; the controls are placed now, so the island lays it out with the frame:
+    /// a grown island (a wrapped row, an error) takes clicks on its new rows at once.
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        backdrop.frame = bounds
+        backdrop.needsLayout = true; backdrop.layoutSubtreeIfNeeded()
+        face.frame = face.superview?.bounds ?? bounds
+    }
+    override var isFlipped: Bool { true }
+    /// The whole island is the island's: a click on its padding never draws a mark.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isHidden, frame.contains(point) else { return nil }
+        let hit = super.hitTest(point)
+        return hit is NSControl ? hit : self
+    }
+    override func mouseDown(with event: NSEvent) { superview.map { window?.makeFirstResponder($0) } }
+}
+
+/// The island's opaque face, drawn in the current appearance.
+final class MarkupIslandFace: NSView {
+    override var isFlipped: Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.windowBackgroundColor.setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: PreviewMarkupIsland.cornerRadius, yRadius: PreviewMarkupIsland.cornerRadius).fill()
+    }
+}
+
 /// The opaque cover over the preview area while a session is open: the live page never shows
-/// through and takes no keys. Labels and roles sit on the buttons' cells (LKM-379).
+/// through and takes no keys. LKM-448: the snapshot sits exactly where the page was, at its
+/// size, and the controls float over it, so opening and closing moves and resizes nothing.
+/// Labels and roles sit on the buttons' cells (LKM-379).
 final class PreviewMarkupOverlay: NSView {
     private static let padding: CGFloat = 8, gap: CGFloat = 4, rowHeight: CGFloat = 28, toolWidth: CGFloat = 32
     private static let cancelWidth: CGFloat = 76, addWidth: CGFloat = 104
-    /// Below this the tools take a row of their own.
-    private static let oneRowWidth: CGFloat = 620
+    /// Room between the island and the preview's edges (`FloatingIsland.inset`).
+    static let inset: CGFloat = 10
+    /// The widest an island with an error gets, so the message wraps rather than spans the page.
+    private static let errorWidth: CGFloat = 480
     private static let status = "Snapshot of the preview"
 
     let canvas: PreviewMarkupCanvas
+    let island = PreviewMarkupIsland()
     private(set) var tool = MarkupTool.pen
     var onCancel: (() -> Void)?
     var onAdd: (() -> Void)?
     /// Bun has the image and has not answered yet.
     var adding = false { didSet { refresh() } }
     let animates = false
+    /// The live page's frame in the superview's coordinates; the snapshot takes exactly that.
+    /// Nil: the whole overlay.
+    var page: NSRect? { didSet { if page != oldValue { needsLayout = true } } }
     private var toolButtons: [(MarkupTool, NSButton)] = []
     private let undoButton = MarkupButton(), clearButton = MarkupButton(), cancelButton = MarkupButton(), addButton = MarkupButton()
     private let statusLabel = NSTextField(labelWithString: PreviewMarkupOverlay.status)
     private let errorLabel = NSTextField(wrappingLabelWithString: "")
-    private(set) var barFrame = NSRect.zero
+    /// The island's frame in this view.
+    var barFrame: NSRect { island.frame }
 
     var controls: [NSButton] { toolButtons.map(\.1) + [undoButton, clearButton, cancelButton, addButton] }
     var addEnabled: Bool { addButton.isEnabled }
@@ -110,7 +173,9 @@ final class PreviewMarkupOverlay: NSView {
         configure(addButton, label: "Add to chat", symbol: nil, hint: "Add the marked-up image to the message"); addButton.action = #selector(add)
         statusLabel.font = .systemFont(ofSize: 12); statusLabel.textColor = .secondaryLabelColor; statusLabel.lineBreakMode = .byTruncatingTail
         errorLabel.font = .systemFont(ofSize: 12); errorLabel.textColor = .systemRed; errorLabel.isHidden = true
-        addSubview(statusLabel); addSubview(errorLabel)
+        island.face.addSubview(statusLabel); island.face.addSubview(errorLabel)
+        // Above the snapshot: the island floats over it, and the snapshot keeps the page's frame.
+        addSubview(island)
         // Tab walks the bar and comes back: it never reaches the views under the overlay.
         var previous: NSView = self
         for control in controls { previous.nextKeyView = control; previous = control }
@@ -122,42 +187,59 @@ final class PreviewMarkupOverlay: NSView {
         button.bezelStyle = .rounded; button.target = self; button.toolTip = hint
         if let symbol { button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label); button.title = "" } else { button.title = label }
         button.cell?.setAccessibilityRole(role); button.cell?.setAccessibilityLabel(label)
-        addSubview(button)
+        island.face.addSubview(button)
     }
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
-    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors(); island.face.needsDisplay = true }
     private func updateColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance { layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor }
     }
     /// A click here never reaches what is behind.
     override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self) }
 
+    /// The snapshot's frame here: the live page's, so nothing moves or scales when Mark up opens.
+    var pageFrame: NSRect {
+        guard let page, let superview, page.width > 0, page.height > 0 else { return bounds }
+        let frame = convert(page, from: superview).intersection(bounds)
+        return frame.isNull || frame.isEmpty ? bounds : frame
+    }
     override func layout() {
         super.layout()
-        let padding = Self.padding, width = bounds.width, row = Self.rowHeight
+        let shown = pageFrame
+        canvas.frame = shown
+        // The island: one row when the tools, the status and the actions fit across the preview,
+        // then one row without the status, then the actions under the tools.
+        let padding = Self.padding, gap = Self.gap, row = Self.rowHeight
+        let room = max(0, shown.width - Self.inset * 2)
         let buttons = toolButtons.map(\.1) + [undoButton, clearButton]
-        let side = max(16, min(Self.toolWidth, (width - padding * 2 - Self.gap * CGFloat(buttons.count - 1)) / CGFloat(buttons.count)))
+        let count = CGFloat(buttons.count)
+        let tools = count * Self.toolWidth + (count - 1) * gap, actions = Self.cancelWidth + gap + Self.addWidth
+        let status = ceil(statusLabel.intrinsicContentSize.width) + padding
+        let bare = padding + tools + padding + actions + padding
+        let oneRow = room >= bare
+        var width = oneRow ? min(room, bare + status) : min(room, padding * 2 + max(tools, actions))
+        if errorShown { width = max(width, min(room, Self.errorWidth)) }
+        let side = max(16, min(Self.toolWidth, (width - padding * 2 - gap * (count - 1)) / count))
         for (index, button) in buttons.enumerated() {
-            button.frame = NSRect(x: padding + CGFloat(index) * (side + Self.gap), y: padding, width: side, height: row)
+            button.frame = NSRect(x: padding + CGFloat(index) * (side + gap), y: padding, width: side, height: row)
         }
-        let tools = padding + CGFloat(buttons.count) * (side + Self.gap)
-        let oneRow = width >= Self.oneRowWidth
-        let actions = oneRow ? padding : padding * 1.5 + row
-        addButton.frame = NSRect(x: width - padding - Self.addWidth, y: actions, width: Self.addWidth, height: row)
-        cancelButton.frame = NSRect(x: addButton.frame.minX - Self.gap - Self.cancelWidth, y: actions, width: Self.cancelWidth, height: row)
-        let left = oneRow ? tools + padding : padding, room = cancelButton.frame.minX - padding - left
-        statusLabel.frame = NSRect(x: left, y: actions + 6, width: max(0, room), height: 16)
-        statusLabel.isHidden = room < 120
-        var bottom = actions + row + padding
+        let top = oneRow ? padding : padding * 1.5 + row
+        addButton.frame = NSRect(x: width - padding - Self.addWidth, y: top, width: Self.addWidth, height: row)
+        cancelButton.frame = NSRect(x: addButton.frame.minX - gap - Self.cancelWidth, y: top, width: Self.cancelWidth, height: row)
+        let left = oneRow ? padding + count * (side + gap) - gap + padding : padding
+        let space = cancelButton.frame.minX - padding - left
+        statusLabel.frame = NSRect(x: left, y: top + 6, width: max(0, space), height: 16)
+        statusLabel.isHidden = space < 120
+        var bottom = top + row + padding
         if errorShown {
             let text = errorLabel.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: width - padding * 2, height: 200)).height ?? 16
             errorLabel.frame = NSRect(x: padding, y: bottom - padding / 2, width: width - padding * 2, height: text)
             bottom = errorLabel.frame.maxY + padding
         }
-        barFrame = NSRect(x: 0, y: 0, width: width, height: bottom)
-        canvas.frame = NSRect(x: 0, y: bottom, width: width, height: max(0, bounds.height - bottom))
+        // Centred at the top of the page, inside it, over the snapshot.
+        island.frame = backingAlignedRect(NSRect(x: shown.midX - width / 2, y: shown.minY + Self.inset, width: width, height: bottom), options: .alignAllEdgesNearest)
     }
     private func refresh() {
         let marks = canvas.document.marks.count

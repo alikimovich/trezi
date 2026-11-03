@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Changed
+
+- Mark up leaves the "…" menu (the top bar button and Actions → Mark up stay). A second click on the top bar button now cancels Mark up, its controls float in an island at the top of the preview without moving or resizing the page, and Select, Slow Motion and Mark up show their on state the same way (LKM-448).
+
 ## [0.13.7] - 2026-11-03
 
 ### Fixed

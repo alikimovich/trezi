@@ -4,9 +4,9 @@ import AppKit
 /// last item at the trailing edge. Its actions go to Bun as shell actions (`src/native/preview-refresh.ts`).
 extension NativeShell {
     /// LKM-276: a repo with a JS dev server and native roots switches which one it previews.
-    /// LKM-391: Mark up opens over the preview; here, in the Actions menu and (LKM-430) on its
-    /// own interaction segment, which every window width keeps.
-    static let moreActions = [("Mark up", "markup"), ("Reload Without Cache", "reload-hard"), ("Restart Dev Server (clean cache)", "restart-clean"),
+    /// LKM-448: Mark up is not here; it has its own interaction segment (LKM-430), which every
+    /// window width keeps, and the Actions menu entry.
+    static let moreActions = [("Reload Without Cache", "reload-hard"), ("Restart Dev Server (clean cache)", "restart-clean"),
                               ("Switch JS / Native Preview", "switch-preview")]
     func configureMore(_ item: NSMenuToolbarItem) {
         item.showsIndicator = false
@@ -43,19 +43,26 @@ extension NativeShell {
         addressLayout.moveRightGroups(hiding: hidden, by: moreShift + segment)
         item.isHidden = hidden
     }
-    /// LKM-430: the Mark up segment follows the overlay. A click while one is open reaches
-    /// `PreviewMarkup.begin`, which refuses a second session.
+    /// LKM-430: the Mark up segment follows the overlay. LKM-448: a click while one is open
+    /// cancels it (`NativeMarkupController.toggle`), so the segment says so to VoiceOver too.
     func updateMarkup(active: Bool) {
         guard active != markupActive else { return }
         markupActive = active
         toolbarItems["markup"]?.image = ToolbarIslands.markupImage(active: active)
+        toolbarItems["markup"]?.toolTip = ToolbarIslands.markupToolTip(active: active)
         for group in toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }) { group.refresh() }
     }
     func markupInspect() -> [String: Any] {
         let item = toolbarItems["markup"]
         return ["markupEnabled":item?.isEnabled ?? false, "markupActive":markupActive, "markupLabel":item?.label ?? "", "markupToolTip":item?.toolTip ?? "",
                 "markupHasImage":item?.image != nil, "markupProminent":item?.image.map { !$0.isTemplate } ?? false,
-                "markupAccessibility":item?.image?.accessibilityDescription ?? ""]
+                "markupAccessibility":item?.image?.accessibilityDescription ?? "", "markupSegmentProminent":segmentProminent("markup"),
+                "selectProminent":toolbarItems["select-object"]?.image.map { !$0.isTemplate } ?? false, "selectSegmentProminent":segmentProminent("select-object")]
+    }
+    /// LKM-448: whether the island's segment itself draws the accent glyph (what the user sees).
+    func segmentProminent(_ key: String) -> Bool {
+        guard let group = toolbar.items.first(where: { $0.itemIdentifier.rawValue == "interaction" }) as? MomentaryToolbarGroup else { return false }
+        return group.segmentImage(key).map { !$0.isTemplate } ?? false
     }
     /// Pipe checks pick an entry the way a click on it would.
     func performMore(_ item: NSMenuToolbarItem?, _ action: String) -> Bool {

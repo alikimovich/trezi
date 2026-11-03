@@ -104,10 +104,19 @@ if (process.platform !== 'darwin') {
 
   // Wiring the fixture cannot reach.
   const source = (name) => readFileSync(`src/native/${name}`, 'utf8')
-  assert.ok(source('ToolbarMore.swift').includes('("Mark up", "markup")'), 'the "…" entry')
+  // LKM-448: the "…" menu has no Mark up entry; the top bar segment and the Actions menu keep it.
+  const more = source('ToolbarMore.swift')
+  const moreActions = more.slice(
+    more.indexOf('static let moreActions'),
+    more.indexOf('func configureMore')
+  )
+  assert.ok(moreActions.includes('"reload-hard"'), 'the "…" list was found')
+  assert.ok(!/"markup"|Mark up/.test(moreActions), 'no "…" entry')
   assert.ok(source('HostMenus.swift').includes('("Mark up", "", "markup")'), 'the menu entry')
+  assert.match(source('ToolbarLayout.swift'), /"markup"/, 'the interaction segment')
   assert.match(source('PreviewCover.swift'), /markup\?\.overlay/, 'the page gets no hover under it')
-  assert.match(source('WorkspaceLayout.swift'), /markup\?\.place\(area: available\)/)
+  // The overlay learns the page's own frame: its snapshot sits exactly on it, the island over it.
+  assert.match(source('WorkspaceLayout.swift'), /markup\?\.place\(area: available, page: page\)/)
   assert.match(source('Host.swift'), /keyCode == 53[^\n]*markup\?\.escape\(\)/)
   assert.match(source('HostMenus.swift'), /markup\?\.undo\(\)/)
   // Preview history shortcuts must not navigate the live page under the overlay (⌘←/⌘→ and
