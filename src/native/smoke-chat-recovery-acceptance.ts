@@ -149,10 +149,46 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
     record()
     return state
   }
+  // LKM-458: evidence before every fallible wait or refusal, so a refused run keeps what it
+  // saw. Numbered flat files (the command hashes the run's top-level files): the card's
+  // measurement with its frame sources and stored row, the window, the layout geometry and
+  // the controllers. A failing capture is noted, never thrown over the real error.
+  const steps: { name: string; files: string[]; error?: string }[] = []
+  evidence.steps = steps
+  let otherShown = false
+  const checkpoint = async (name: string, extra: Record<string, unknown> = {}) => {
+    const base = `step-${String(steps.length + 1).padStart(2, '0')}-${name}`
+    const entry: (typeof steps)[number] = { name, files: [] }
+    steps.push(entry)
+    try {
+      const state = {
+        sha,
+        step: name,
+        at: new Date().toISOString(),
+        measure: await measure(),
+        geometry: await host.request('layoutInspect'),
+        chat: controller(chat),
+        otherChat: otherShown ? controller(other) : null,
+        calls: { ...calls },
+        agentTurns: sent.length,
+        held: held ? (held as { kind: string }).kind : null,
+        ...extra
+      }
+      writeFileSync(join(dir, `${base}.json`), `${JSON.stringify(state, null, 2)}\n`)
+      entry.files.push(`${base}.json`)
+      const png = (await host.request('captureVisibleShell')).png
+      writeFileSync(join(dir, `${base}.png`), Buffer.from(png, 'base64'))
+      entry.files.push(`${base}.png`)
+    } catch (error) {
+      entry.error = error instanceof Error ? error.message : String(error)
+    }
+    record()
+  }
   const parked = async (key = chat) => {
     nativeChat.event({ type: 'isolation', projectKey: key, state: 'parked', files })
     if (key !== chat) return
     // The parked card's Problem, its written report and so its whole action row.
+    await checkpoint('parked')
     await waitFor(async () => {
       const m = await measure()
       return !m.problem && m.actions.includes('Copy support report') && !idleProblems(m).length
@@ -160,6 +196,7 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
   }
   /** Presses `label` with real input while its request is held: busy within the bound, before any reply. */
   const pressHeld = async (kind: RecoveryKind, label: string, input: 'pointer' | 'keyboard') => {
+    await checkpoint(`press-${input}-${kind}`, { label })
     const before = await measure()
     const problems = idleProblems(before)
     if (problems.length) throw new Error(`${label}: the card was not ready: ${problems.join('; ')}`)
@@ -177,6 +214,21 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
       }
       await delay(25)
     }
+    // The keyboard route is diagnosed on its own: a Space that never reached the request is
+    // not a late busy state. Focus was programmatic; this names what the key step saw.
+    if (busyAfter < 0 && input === 'keyboard' && calls[kind] === count)
+      throw new Error(
+        `${label}: keyboard route — focus reached the key-view proxy programmatically, but the posted Space sent no ${kind} request within ${BUSY_WITHIN_MS} ms (${JSON.stringify(
+          {
+            keyboardNavigation: posted.keyboardNavigation,
+            proxyAcceptsFirstResponder: posted.proxyAcceptsFirstResponder,
+            focusedBeforeSpace: posted.focusedBeforeSpace,
+            firstResponderBeforeSpace: posted.firstResponderBeforeSpace,
+            foreground: posted.foreground,
+            firstResponderAfter: last.firstResponder
+          }
+        )}); the check never changes keyboard settings`
+      )
     if (busyAfter < 0)
       throw new Error(
         `${label}: ${BUSY_MARKER} — not shown within ${BUSY_WITHIN_MS} ms while the request was ${held ? 'held' : 'not yet reached'}: ${busyProblems(last, kind).join('; ')}`
@@ -190,6 +242,7 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
   }
   /** A click on a held card that must change nothing: no request, still busy. */
   const blocked = async (kind: RecoveryKind, label: string) => {
+    await checkpoint(`blocked-${kind}`, { label })
     const counts = { ...calls }
     const posted = await step('click', { label })
     await delay(400)
@@ -201,8 +254,9 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
       throw new Error(`${label} on the busy card changed it: ${problems.join('; ')}`)
     return { label, input: posted, requests: { ...calls } }
   }
-  const settle = async (label: string, check: (m: RecoveryMeasure) => string[], card?: string) =>
-    waitFor(
+  const settle = async (label: string, check: (m: RecoveryMeasure) => string[], card?: string) => {
+    await checkpoint('settle', { waitingFor: label })
+    return waitFor(
       async () => {
         const m = await measure(card)
         return check(m).length ? null : m
@@ -211,14 +265,17 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
       10000,
       async () => check(await measure(card))
     )
+  }
 
   let reset: unknown
   try {
+    await checkpoint('prepare')
     const prepared = await step('prepare')
     if (!prepared.foreground) throw new Error('The chat window did not come to the foreground')
     evidence.keyboardNavigation = prepared.keyboardNavigation
     // A turn in the transcript, so the conversation (not the start screen) holds the card.
     await host.request('composerPerform', { text: 'Change the heading for the recovery check.' })
+    await checkpoint('fixture-turn')
     await waitFor(async () => (await host.request('composerInspect')).enabled, 'composer ready')
     await host.request('composerPerform', { action: 'send' })
     await waitFor(() => sent.length === 1, 'the fixture turn reached the provider stub')
@@ -227,7 +284,9 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
     await waitFor(() => !nativeChat.get(chat).isRunning, 'the fixture turn ended')
     // A second chat with its own held changes and Problem, set up by events, not input.
     nativeChat.get(other)
+    otherShown = true
     await parked(other)
+    await checkpoint('other-parked')
     await waitFor(() => !!nativeChat.get(other).recoveryReport, "the other chat's report")
     await parked()
     const turns = sent.length
@@ -251,6 +310,7 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
     const clean = await pressHeld('resolve', 'Resolve', 'pointer')
     nativeChat.event({ type: 'isolation', projectKey: chat, state: 'merged', files: [] })
     release({ ok: true, conflicted: [], prompt: null })
+    await checkpoint('clean-released')
     const outcome = await waitFor(async () => {
       const m = await measure('recovery-outcome')
       return m.present && !m.cards.includes('conflict') && !m.cards.includes('error') ? m : null
@@ -264,6 +324,7 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
     await parked()
     const handover = await pressHeld('resolve', 'Resolve', 'keyboard')
     release({ ok: true, conflicted: files, prompt: 'Resolve the recovery fixture conflict.' })
+    await checkpoint('handover-released')
     await waitFor(
       () => sent.length === turns + 1 && nativeChat.get(chat).isRunning,
       'one agent turn'
@@ -271,6 +332,7 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
     if (nativeChat.get(chat).recovery) throw new Error('The handover kept the request busy')
     evidence.outcomes.handover = await capture('handover', { press: handover })
     send({ type: 'done' })
+    await checkpoint('handover-done')
     await waitFor(() => !nativeChat.get(chat).isRunning, 'the handover turn ended')
 
     // 4. Retry by pointer that fails: the same card states the Problem; its report is written.
@@ -310,6 +372,7 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
 
     // 6. The changes land: this chat's card, Problem and report clear; the other chat keeps its own.
     nativeChat.event({ type: 'isolation', projectKey: chat, state: 'merged', files })
+    await checkpoint('landed')
     const cleared = await waitFor(async () => {
       const m = await measure()
       return !m.present && !m.cards.includes('error') ? m : null
@@ -325,6 +388,8 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
   } catch (error) {
     evidence.outcome = 'fail'
     evidence.error = error instanceof Error ? error.message : String(error)
+    // The refusal as it stood, before `finally` releases a held request.
+    await checkpoint('refused', { error: evidence.error })
     throw error
   } finally {
     evidence.finishedAt = new Date().toISOString()

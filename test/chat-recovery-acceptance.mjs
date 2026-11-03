@@ -12,6 +12,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { redact } from '../src/main/product-log.ts'
+import { NativeChatController } from '../src/native/chat-controller.ts'
 import {
   BUSY_MARKER,
   busyProblems,
@@ -141,6 +142,108 @@ assert.deepEqual(shown, ['idle', 'still busy', 'settled'])
 gate.restore()
 assert.equal(services.render, original)
 
+// LKM-458: the cards the real chat controller draws while a recovery request is held, as
+// the acceptance meets them. The parked card states its Problem with a written report and
+// a copy glyph; the request clears both (chat-actions.ts `recoveryRequest`), so the busy
+// card drops the trailing Copy support report and the glyph. The a2c03fbb locator matched
+// the whole action list and refused this card at the first held Retry.
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+const renders = []
+const answers = {}
+const controller = new NativeChatController({
+  invoke: async (channel) => {
+    if (channel === 'agent:workspace-snapshot')
+      return {
+        projects: [
+          {
+            root: '/fixture/project',
+            chats: [
+              {
+                sessionKey: 'a',
+                record: { transcript: [] },
+                isRunning: false,
+                options: { provider: 'claude' }
+              }
+            ]
+          }
+        ]
+      }
+    if (channel === 'providers:choices') return []
+    return answers[channel] ?? { ok: true }
+  },
+  render: (state) => renders.push(structuredClone(state)),
+  effect: () => {}
+})
+await controller.command({
+  type: 'context',
+  context: {
+    chat: 'a',
+    root: '/fixture/project',
+    selection: null,
+    turn: {},
+    setup: { needed: false, dismissed: false, status: null },
+    tokens: { needed: false, dismissed: false },
+    notes: [],
+    spawns: []
+  }
+})
+const conflictCard = () => renders.at(-1).cards.find((c) => c.id === 'conflict')
+const park = async () => {
+  controller.event({
+    projectKey: 'a',
+    type: 'isolation',
+    state: 'parked',
+    files: ['src/recovery-fixture.ts']
+  })
+  for (
+    let i = 0;
+    i < 200 && !conflictCard()?.actions.some((a) => a.action === 'recovery-report');
+    i++
+  )
+    await tick()
+  return conflictCard()
+}
+const heldCard = async (action) => {
+  const channel = action === 'resolve' ? 'agent:resolve-conflict' : 'agent:retry-landing'
+  let release
+  answers[channel] = new Promise((resolve) => {
+    release = resolve
+  })
+  const pending = controller.action({ chat: 'a', action, id: 'conflict' })
+  const card = conflictCard()
+  release({ ok: true, state: 'parked', conflicted: [], prompt: null })
+  await pending
+  delete answers[channel]
+  return card
+}
+const parkedCard = await park()
+const busyRetry = await heldCard('landing-retry')
+await park()
+const busyResolve = await heldCard('resolve')
+assert.deepEqual(
+  parkedCard.actions.map((a) => a.action),
+  ['discard', 'landing-retry', 'resolve', 'recovery-report'],
+  'the parked card offers its report'
+)
+assert.ok(parkedCard.fullDetail, 'the parked card has the copy glyph')
+for (const [card, label] of [
+  [busyRetry, 'Retrying…'],
+  [busyResolve, 'Resolving…']
+]) {
+  assert.equal(card.busy, true)
+  assert.ok(card.actions.some((a) => a.label === label))
+  // The cause of the GREEN refusal: the held card's actions are the parked card's leading
+  // three, all disabled, and it has no glyph.
+  assert.deepEqual(
+    card.actions.map((a) => a.action),
+    ['discard', 'landing-retry', 'resolve']
+  )
+  assert.ok(card.actions.every((a) => a.disabled))
+  assert.equal(card.fullDetail, undefined)
+  assert.notEqual(card.title, parkedCard.title)
+}
+const realCards = JSON.stringify({ parked: parkedCard, busyRetry, busyResolve })
+
 if (process.platform !== 'darwin') {
   console.log('CHAT-RECOVERY-ACCEPTANCE PASS (rules); card locator SKIP — macOS AppKit required')
 } else {
@@ -188,7 +291,7 @@ if (process.platform !== 'darwin') {
       ['test/fixtures/chat-recovery-acceptance/main.swift', ...sources],
       { out: join(scratch, 'chat-recovery-acceptance') }
     )
-    const output = runFixture(binary, [], { timeout: 120_000 })
+    const output = runFixture(binary, [realCards], { timeout: 120_000 })
     const cases = Object.fromEntries(
       output
         .split('\n')
@@ -229,7 +332,44 @@ if (process.platform !== 'darwin') {
     assert.deepEqual(busyProblems(busyProblem, 'retry'), [], `busy Problem card: ${all}`)
     assert.deepEqual(busyProblem.copy, { found: true, emitted: ['recovery-report'] }, all)
     assert.deepEqual(busyProblem.click, { found: true, emitted: [] }, `busy Problem: ${all}`)
-    for (const name of ['busy-retry', 'busy-resolve', 'problem-busy']) {
+    // LKM-458 regression: the real controller's held cards after its parked Problem card,
+    // with the conversation short and scrolled to its pinned end. On a2c03fbb each one
+    // refused with the operator's GREEN failure; now every button is located, the held
+    // card is busy, and no click or Space gets through.
+    const refusal =
+      'The conflict card has disabled buttons (no key-view proxy) and no all-enabled row of the same actions at this width was measured first'
+    const real = [
+      ['real-retry', 'retry'],
+      ['real-resolve', 'resolve'],
+      ['real-retry-tall', 'retry']
+    ]
+    for (const [name, kind] of real) {
+      const held = cases[name]
+      assert.ok(held && cases[`${name}-parked`] && cases[`${name}-drawn`], `${name} ran: ${all}`)
+      assert.deepEqual(idleProblems(cases[`${name}-parked`]), [], `${name} parked: ${all}`)
+      assert.notEqual(held.problem, refusal, `${name}: the a2c03fbb refusal is back: ${all}`)
+      assert.deepEqual(busyProblems(held, kind), [], `${name}: ${all}`)
+      assert.deepEqual(
+        held.presses.map((p) => p.emitted),
+        [[], [], []],
+        `${name} presses: ${all}`
+      )
+      assert.deepEqual(held.key, { found: true, focusable: false }, `${name} key: ${all}`)
+      // Each derived centre, clicked on the same card drawn enabled, presses that button.
+      const drawn = cases[`${name}-drawn`]
+      assert.deepEqual(
+        drawn.derivedClicks,
+        drawn.derivedActions.map((action) => [action]),
+        `${name} derived clicks: ${all}`
+      )
+    }
+    // The scrolled conversation ends somewhere else than the short one.
+    assert.notEqual(cases['real-retry-tall'].end, cases['real-retry'].end, `tall end: ${all}`)
+    // Strict still: a row measured in another chat never stands in for this one.
+    assert.equal(cases['other-parked'].problem, null, `other chat: ${all}`)
+    assert.equal(cases.unmeasured.problem, refusal, `unmeasured chat: ${all}`)
+    assert.deepEqual(cases.unmeasured.buttons, [])
+    for (const name of ['busy-retry', 'busy-resolve', 'problem-busy', ...real.map(([n]) => n)]) {
       const derived = cases[name].buttons
       const drawn = cases[`${name}-drawn`].buttons
       assert.deepEqual(
@@ -240,7 +380,9 @@ if (process.platform !== 'darwin') {
       for (const [i, b] of derived.entries()) {
         assert.equal(
           b.frameSource,
-          b.disabled ? 'derived from the last all-enabled row' : 'key-view proxy',
+          b.disabled
+            ? "derived from this chat's last all-enabled row, anchored at the conversation's end"
+            : 'key-view proxy',
           `${name} ${b.label}: ${all}`
         )
         for (const [k, value] of b.frame.entries())

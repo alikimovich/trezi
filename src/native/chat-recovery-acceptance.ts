@@ -42,6 +42,7 @@ export interface RecoveryMeasure {
   reading: number[]
   cards: string[]
   foreground?: boolean
+  firstResponder?: string
 }
 
 export type RecoveryKind = 'retry' | 'resolve'
