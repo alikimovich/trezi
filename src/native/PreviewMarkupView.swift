@@ -147,6 +147,24 @@ final class PreviewMarkupOverlay: NSView {
     private let errorLabel = NSTextField(wrappingLabelWithString: "")
     /// The island's frame in this view.
     var barFrame: NSRect { island.frame }
+    /// LKM-451: how far the corner probe stays from the window's edges. A `.resizable` window with
+    /// a `minSize` (the Host's) has its theme frame claim the outermost ~4 pt of every edge, and a
+    /// diagonal zone ~16-20 pt deep at the rounded corners, before any content view: the page's
+    /// bottom edge is the window's, so a probe 2 pt inside the snapshot lands on NSThemeFrame. The
+    /// pen cannot draw there either (AppKit resizes the window), so that is not a point to prove.
+    static let edgeClear: CGFloat = 24
+    /// A point in window coordinates on the drawable page near its lower-left corner: 2 pt inside
+    /// the snapshot, pushed `edgeClear` in from the window's edges, never outside the snapshot.
+    func cornerProbe() -> NSPoint {
+        let snapshot = convert(canvas.frame, to: nil)
+        var near = NSPoint(x: snapshot.minX + 2, y: snapshot.minY + 2)
+        if let root = window?.contentView?.superview {
+            let edges = root.convert(root.bounds, to: nil)
+            near.x = max(near.x, edges.minX + Self.edgeClear)
+            near.y = max(near.y, edges.minY + Self.edgeClear)
+        }
+        return NSPoint(x: min(near.x, snapshot.maxX - 2), y: min(near.y, snapshot.maxY - 2))
+    }
 
     var controls: [NSButton] { toolButtons.map(\.1) + [undoButton, clearButton, cancelButton, addButton] }
     var addEnabled: Bool { addButton.isEnabled }

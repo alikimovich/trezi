@@ -66,6 +66,25 @@ export function markupToggleChecks(
       `${label}: the pen draws right beside it (hit: ${JSON.stringify(hitBesideDetail)})`
     )
   }
+  /** The island's raw inspect (snapshot, island, window, contentLayoutRect, probe points, what
+   *  each hit) and a window capture of the open overlay, written with the smoke's results. */
+  const record = async (open: State, name: string) => {
+    const { frame, snapshot, window, contentLayoutRect, root, probes, rawCorner, rawCornerHit } =
+      open.island
+    results.markupIsland ??= {}
+    results.markupIsland[name] = {
+      island: frame,
+      snapshot,
+      window,
+      contentLayoutRect,
+      root,
+      probes,
+      rawCorner,
+      rawCornerHit,
+      hits: open.island.hitBesideDetail
+    }
+    await shot(`markup-${name}-island`)
+  }
   const resting = async (label: string) => {
     const rest = await waitFor(async () => {
       const state = await shell()
@@ -122,6 +141,9 @@ export function markupToggleChecks(
       assert.equal(open.undoEnabled, false, `${label}: Cancel left no saved marks`)
       const during = await geometry()
       unchanged(during, before, `${label} open`)
+      // Kept before the assertions below, so a failing run still has the open overlay's geometry,
+      // probe points, hits and a picture (LKM-451).
+      await record(open, `${stage}-${round}`)
       island(open, during, label)
       await step?.(`${stage}-${round}-open`)
       await host.request('previewMarkupTest', { action: 'button', label: 'Pen' })
