@@ -99,8 +99,17 @@ export const SESSION_TOOLS: readonly SessionTool[] = [
 
 // A landing Retry runs the session's passing checks again through the same tools.
 setCheckReplayer(async (recipe, scope) => {
-  if (recipe.kind === 'command') return !('error' in (await runCommandCheck(recipe.check, scope)))
-  return !(await runPreviewVerify(recipe.args, scope)).isError
+  if (recipe.kind === 'command') {
+    const result = await runCommandCheck(recipe.check, scope)
+    return 'verified' in result && result.verified
+  }
+  const result = await runPreviewVerify(recipe.args, scope)
+  if (result.isError) {
+    // The tool's own reason reaches the recorded replay failure and the card.
+    const text = result.content.find((part) => part.type === 'text')
+    throw new Error(text?.type === 'text' ? text.text : 'preview_verify did not pass')
+  }
+  return true
 })
 
 /** Native host is the gate; tests may supply a deterministic clock/result. */
