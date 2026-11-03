@@ -10,6 +10,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Reopening without a location keeps the caret and selection (`editor-controller.ts`, `test/native-editor.mjs`).
 - [x] Unit `test/source-popout.mjs` (full, entering, exiting, re-shown, failed enter/exit, five rounds, windowed control) and the native `source-popout` smoke (`src/native/smoke-source-popout.ts`, group `core`): ×, red button and ⌘W from full screen, dock, hide while entering and leaving, three rounds, windowed close and dock, a docked editor in a full-screen main window, draft and selection after each.
 - [ ] Manager: the native `core` group on the merged SHA, `source-popout` with `source-popout.json` and its `source-popout-*.png` captures, plus the ticket's live foreground check.
+
 ## Chat recovery flow (LKM-446)
 
 - [x] Add red regressions for immediate Retry state and missing browser checks; use the owner's gated patch path for checked deletions.

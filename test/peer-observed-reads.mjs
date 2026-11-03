@@ -39,7 +39,7 @@ const bin = join(home, 'bin')
 mkdirSync(bin)
 writeFileSync(
   join(bin, 'git'),
-  `#!/bin/sh\necho "$@" >> '${log}'\nout=$('${realGit}' "$@")\nstatus=$?\nsleep 0.4\nprintf '%s\\n' "$out"\nexit $status\n`
+  `#!/bin/sh\necho "$@" >> '${log}'\n[ -e '${join(home, 'fail')}' ] && { sleep 0.4; exit 1; }\nout=$('${realGit}' "$@")\nstatus=$?\nsleep 0.4\nprintf '%s\\n' "$out"\nexit $status\n`
 )
 chmodSync(join(bin, 'git'), 0o755)
 process.env.PATH = `${bin}:${process.env.PATH}`
@@ -88,6 +88,18 @@ try {
   // After the burst the key is free again: the next call reads once.
   assert.deepEqual(await peerObservedFiles(repo, [], 'reader'), ['a.txt'])
   assert.equal(reads(), 4, 'a later call is one read again')
+
+  // When Git fails, the shared fresh read answers with what every one of its callers had
+  // captured (and the incomplete mark), not only the first caller's list.
+  writeFileSync(join(home, 'fail'), '')
+  const failing = peerObservedFiles(repo, ['x.txt'], 'reader')
+  const firstLate = peerObservedFiles(repo, ['y.txt'], 'reader')
+  const secondLate = peerObservedFiles(repo, ['z.txt'], 'reader')
+  assert.deepEqual(await failing, ['x.txt', '\0'], 'the failed read keeps its own captured files')
+  assert.equal(firstLate, secondLate, 'the late callers share one read')
+  const unknown = await firstLate
+  for (const path of ['y.txt', 'z.txt', '\0'])
+    assert.ok(unknown.includes(path), `the shared failed read keeps ${JSON.stringify(path)}`)
   console.log('Peer observed reads: a late change is never answered by an earlier read')
 } finally {
   finishPeer('reader')

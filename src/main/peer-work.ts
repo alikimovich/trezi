@@ -10,7 +10,10 @@ const rows = new Map<string, PeerWorkRow>()
 const turnByChat = new Map<string, string>()
 const workRootById = new Map<string, string>()
 const generations = new Map<string, symbol>()
-const pendingReads = new Map<string, { read: Promise<string[]>; after?: Promise<string[]> }>()
+const pendingReads = new Map<
+  string,
+  { read: Promise<string[]>; after?: Promise<string[]>; late?: Set<string> }
+>()
 const asyncGit = promisify(execFile)
 /** Recent landings per canonical project: a landed row leaves the feed, its work does not. */
 const landedByProject = new Map<string, PeerLanded[]>()
@@ -78,11 +81,16 @@ export function peerObservedFiles(root: string, captured: string[], id: string):
   if (!base) return Promise.resolve([...captured, incomplete])
   const key = `${id}\0${root}\0${base}`
   const pending = pendingReads.get(key)
-  if (!pending) return readObserved(root, captured, key, base) // The read in flight may have looked at the tree before this call's change, and a status
+  if (!pending) return readObserved(root, captured, key, base)
+  // The read in flight may have looked at the tree before this call's change, and a status
   // event is not repeated: a caller that joined it would keep the old answer for good (under
   // load, a late-landing edit never became a known overlap). One fresh read starts when it
   // ends, shared by every call that arrives meanwhile, so reads stay bounded to two per key.
-  pending.after ??= pending.read.then(() => readObserved(root, captured, key, base))
+  // If Git fails, that read answers with the files every one of those callers had captured.
+  const late = pending.late ?? new Set<string>()
+  pending.late = late
+  for (const path of captured) late.add(path)
+  pending.after ??= pending.read.then(() => readObserved(root, [...late], key, base))
   return pending.after
 }
 
