@@ -2,6 +2,21 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-03 — LKM-457 LKM-456 harness correction: the windowed close click point
+
+- Why: the operator's first RED on 031f5b02 (build 1278) refused its first step, `windowed-close-control`. The preflight read hitIsTarget=false, hitView=NSClipView at [500,366], with every focus predicate true and nothing posted. This is harness only: no shipping file changed, and it is not a close bug or an access denial.
+- Cause: `SourcePopoutAcceptance.swift` clicked the midpoint of the control's `visibleRect`. Since the macOS 14 SDK, `clipsToBounds` is false by default, and `visibleRect` is then the part of the window that the ancestors show, not the part of the view. A headless layout of the real `NativeSourceEditor` in a 1000×700 pop-out shows it. The 15×13 × at (965,8) in its header reports `visibleRect` (-975,-45,1000,732), which is the whole frame view, and so do its stack view and the editor. Its midpoint is the window centre, (500,366), over the code view. The Dock control and the red button had the same point. The hit test itself was right: the frame view takes window coordinates, and the flipped button and stack view convert correctly.
+- Fix (`src/native/ControlHitPoint.swift`, used by the preflight): the point is the centre of `bounds ∩ visibleRect`. The ×, Dock and red button now land at (982.5,680.5), (960.5,681.5) and (16,716), each on its control. These cases refuse with a receipt, and no point is guessed:
+  - a hidden control
+  - a zero-size control
+  - a clipped control (scrolled out of view)
+  - a control outside its window, or not in that window
+  - a point off the window's screen. Only AppKit's full-screen title-bar host records this instead, as LKM-456 documented.
+  Every focus predicate, the hit test and the rule that nothing is posted on a refusal are unchanged.
+- Evidence: each pointer receipt keeps `preflight.geometry`: frame, bounds, `visibleRect`, the shown bounds, the rect in the window, the window, frame view, content layout and screen rects, and the ancestor chain with flipped and clipping flags. A step about to fail (receipt, lifecycle, probe, dock, reopen) saves `failure-<step>.png` right before its assertion, after `evidence.json` is written. A capture error is recorded but never replaces the failure. There is no capture before the input, because a capture makes its window key.
+- Regression: unit `test/source-popout-acceptance.mjs` builds `test/fixtures/source-popout-hit/main.swift` with the real editor sources. Against the old point it fails: all three targets land at [500,366] on SourceTextView. It passes with the fix and checks every guard. Every original case and assertion is unchanged.
+- Not run here: any native run (worker budget 0). The corrected RED and GREEN on the merged SHA are the operator's.
+
 ## 2026-11-03 — LKM-455 Mark up acceptance fixture
 
 - Added opt-in `bun run acceptance:markup` with a disposable project, repository runner lock, unique retained evidence directory, source SHA and dirty flag; it selects only the smoke prelude and `markup-toggle-overlay-native`.

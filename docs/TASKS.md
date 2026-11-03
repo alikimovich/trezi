@@ -12,6 +12,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [ ] Manager: the native `core` group on the merged SHA, `source-popout` with `source-popout.json` and its `source-popout-*.png` captures, plus the ticket's live foreground check.
 - [x] LKM-456: the live foreground check `fullscreen-popout-close-native` as one operator command, `bun run acceptance:source-popout [--red=legacy-order-out]` (docs/TESTING.md, "Pop-out full-screen close acceptance"). Closes and docks go through posted mouse and key events (`src/native/SourcePopoutAcceptance.swift`) after a read-only preflight. Every `source-popout` lifecycle assertion is kept, plus an input probe of the main window. The run leaves SHA-stamped, read-only evidence. The RED (an order-out in full screen) lives in the test profile only. Unit `test/source-popout-acceptance.mjs`.
 - [ ] Operator (LKM-456): GREEN and the deliberate RED on the merged SHA under the shared desktop lock. Both runs must print MET, with their evidence folders under `test/artifacts/native/fullscreen-popout-close/`.
+- [x] LKM-457 (harness only): the first RED on 031f5b02 refused its first click, because the click point was the midpoint of `visibleRect`, which is the whole window for an unclipped view. The point is now the centre of the control's own bounds (`src/native/ControlHitPoint.swift`). Empty, clipped, hidden and off-screen layout refuse with the geometry in the receipt, and a failing step saves a PNG before its assertion. Unit fixture `test/fixtures/source-popout-hit/main.swift`.
+- [ ] Operator (LKM-457): the corrected RED and GREEN on the merged SHA, recorded against LKM-444's `fullscreen-popout-close-native`.
 
 ## Mark up: real toggle, floating island, no "…" entry (LKM-448)
 

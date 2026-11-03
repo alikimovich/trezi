@@ -228,6 +228,7 @@ const host = compile(
     join(root, 'src/native/SourcePopout.swift'),
     join(root, 'src/native/SourcePopoutVerification.swift'),
     join(root, 'src/native/SourcePopoutAcceptance.swift'),
+    join(root, 'src/native/ControlHitPoint.swift'),
     join(root, 'src/native/SourceSyntax.swift'),
     join(root, 'src/native/SourceSyntaxVerification.swift'),
     join(root, 'src/native/SourceWrap.swift'),
