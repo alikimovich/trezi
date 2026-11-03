@@ -9,7 +9,15 @@
 // suites (test/worktrees.mjs, test/chat-worktrees.mjs) on the Swift repository owner.
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { installAgentRuntimes } from '../src/main/agent-runtime.ts'
@@ -25,6 +33,7 @@ import {
   holdMessage,
   integrationGate,
   landingChecks,
+  lastReplayFailures,
   replayChecks,
   retainGateEvidence,
   setCheckReplayer
@@ -181,22 +190,6 @@ try {
   assert.equal(verdict.need, 'browser')
   assert.equal(verdict.reason, 'unchecked')
   assert.match(verdict.message, /preview_verify in its private browser/)
-  const missingBrowser = []
-  setCheckReplayer(async (recipe) => {
-    missingBrowser.push(recipe)
-    return true
-  })
-  await replayChecks(scope)
-  assert.ok(
-    missingBrowser.some((recipe) => recipe.kind === 'browser'),
-    'arranges a missing browser check'
-  )
-  assert.deepEqual(
-    missingBrowser.find((recipe) => recipe.kind === 'browser').args.checks,
-    [{ kind: 'visible', selector: 'body' }, { kind: 'noConsoleErrors' }],
-    'the automatic browser run makes real assertions'
-  )
-  setCheckReplayer(null)
   const browser = (agent, generation, verified = true) => ({
     id: newReceiptId(),
     createdAt: new Date().toISOString(),
@@ -217,6 +210,28 @@ try {
     ms: 1,
     recipe: { path: '/' }
   })
+  const missingBrowser = []
+  setCheckReplayer(async (recipe) => {
+    missingBrowser.push(recipe)
+    if (recipe.kind === 'browser') {
+      const receipt = browser(null, null)
+      receipt.source.tree = await candidateOf(root)
+      recordReceipt(session, receipt)
+    }
+    return true
+  })
+  await replayChecks(scope)
+  assert.ok(
+    missingBrowser.some((recipe) => recipe.kind === 'browser'),
+    'arranges a missing browser check'
+  )
+  assert.deepEqual(
+    missingBrowser.find((recipe) => recipe.kind === 'browser').args.checks,
+    [{ kind: 'visible', selector: 'body' }, { kind: 'noConsoleErrors' }],
+    'the automatic browser run makes real assertions'
+  )
+  assert.equal((await gate()).ok, true, 'automatic browser evidence passes on the exact tree')
+  setCheckReplayer(null)
   const now = await candidateOf(root)
   // Its private server has since stopped (or restarted): a server change.
   const stale = browser('agent-gate', 1)
@@ -243,6 +258,38 @@ try {
   verdict = await gate()
   assert.equal(verdict.ok, true, JSON.stringify(verdict))
   assert.equal(verdict.candidate, now)
+  // A checked page deliberately removed by this chat is superseded. The old
+  // route is never replayed, and a new browser pass on this exact tree is required.
+  mkdirSync(join(root, 'src/pages'), { recursive: true })
+  writeFileSync(join(root, 'src/pages/retired.tsx'), 'export default function Page() {}\n')
+  git(root, 'add', '-A')
+  git(root, 'commit', '-qm', 'checked route')
+  const oldRoute = browser(null, null)
+  oldRoute.recipe.path = '/retired'
+  oldRoute.source.tree = await candidateOf(root)
+  recordReceipt(session, oldRoute)
+  unlinkSync(join(root, 'src/pages/retired.tsx'))
+  write('retired tree\n')
+  assert.equal((await gate()).reason, 'unchecked')
+  const retiredReplay = []
+  setCheckReplayer(async (recipe) => {
+    retiredReplay.push(recipe.kind === 'browser' ? recipe.args.path : recipe.check)
+    if (recipe.kind === 'browser') {
+      const replacement = browser(null, null)
+      replacement.source.tree = await candidateOf(root)
+      recordReceipt(session, replacement)
+    }
+    if (recipe.kind === 'command') await runCommandCheck(recipe.check, scope)
+    return true
+  })
+  await replayChecks(scope)
+  assert.ok(retiredReplay.includes('/'), 'replacement browser check ran')
+  assert.ok(!retiredReplay.includes('/retired'), 'deleted route recipe was superseded')
+  assert.equal((await gate()).ok, true, 'replacement evidence proves the new tree')
+  setCheckReplayer(async (recipe) => recipe.kind !== 'browser')
+  await replayChecks(scope)
+  assert.match(lastReplayFailures(scope).join('\n'), /webkit \/: the check did not pass/)
+  setCheckReplayer(null)
   kind = 'none'
 
   // A closing session keeps what its receipts proved for its final landing.
@@ -257,7 +304,7 @@ try {
   const gated = await landingChecks(scope)
   assert.equal(gated.gated, true)
   assert.equal(gated.ready, false)
-  assert.equal(gated.sourceTree, now)
+  assert.equal(gated.sourceTree, await candidateOf(root))
   const unisolated = await landingChecks({ emitKey, root: live, liveRoot: live })
   assert.equal(unisolated.gated, false)
   assert.equal(unisolated.isolation, 'unavailable')

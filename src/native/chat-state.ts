@@ -103,6 +103,8 @@ export interface Chat extends NativeChatMirror {
   landingError?: string
   /** A chat-scoped recovery request, distinct from an agent turn. */
   recovery?: 'retry' | 'resolve' | 'discard'
+  /** A deadline can stop the spinner while the original IPC still owns the mutation. */
+  recoveryTimedOut?: boolean
   recoveryProblem?: string
   recoveryId?: string
   recoveryStartedAt?: number

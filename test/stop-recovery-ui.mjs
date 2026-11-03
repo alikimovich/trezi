@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import { liveCheckoutEdit } from '../src/main/live-write-guard.ts'
 import { setRecoveryRequestDeadlineForTests } from '../src/native/chat-actions.ts'
 import { NativeChatController } from '../src/native/chat-controller.ts'
+import { readableRecoveryReport } from '../src/native/chat-recovery-report.ts'
 import { DevErrorReader, touchedFile } from '../src/shared/dev-error.ts'
 import { projectRelative } from '../src/shared/project-path.ts'
 import { describeSelectionForPrompt } from '../src/shared/selection-context.ts'
@@ -369,10 +370,14 @@ emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
 assert.ok(card('conflict'))
 assert.equal(renders.at(-1).composer.queueCanSend, false)
 assert.match(renders.at(-1).composer.queueNote, /^Waiting for Resolve/)
-assert.match(card('conflict').title, /didn’t land/)
+assert.equal(card('conflict').title, 'Problem')
+await tick()
+assert.ok(card('conflict').actions.some((action) => action.action === 'recovery-report'))
+assert.match(readableRecoveryReport('a'), /turn-end landing/)
+assert.equal(card('error'), undefined, 'one card owns the turn-end problem')
 assert.deepEqual(
   card('conflict').actions.map((a) => a.action),
-  ['discard', 'landing-retry', 'resolve']
+  ['discard', 'landing-retry', 'resolve', 'recovery-report']
 )
 
 // LKM-165: a landing that failed says why and offers Retry; never "pending".
@@ -383,8 +388,9 @@ emit({
   reason: 'failed',
   error: 'index.lock exists'
 })
-assert.match(card('conflict').detail, /couldn’t apply them to the project: index\.lock exists/)
-assert.match(card('conflict').detail, /src\/a\.tsx/)
+assert.match(card('conflict').detail, /Problem: index\.lock exists/)
+assert.doesNotMatch(card('conflict').detail, /couldn’t apply them to the project/)
+assert.match(card('conflict').fullDetail, /src\/a\.tsx/)
 let finishRetry
 answers['agent:retry-landing'] = new Promise((resolve) => {
   finishRetry = resolve
@@ -435,11 +441,20 @@ assert.ok(card('conflict').actions.some((action) => action.action === 'recovery-
 await act('recovery-report', 'conflict')
 assert.deepEqual(calls.at(-1), ['recovery:copy-report', 'a'])
 setRecoveryRequestDeadlineForTests(1)
-answers['agent:retry-landing'] = new Promise(() => {})
+let finishTimedOut
+answers['agent:retry-landing'] = new Promise((resolve) => {
+  finishTimedOut = resolve
+})
 await act('landing-retry', 'conflict')
 assert.equal(card('conflict').busy, false, 'a timed-out request clears the native activity')
 assert.match(card('conflict').detail, /Problem: The recovery request did not answer/)
 assert.ok(card('conflict').actions.some((action) => action.action === 'recovery-report'))
+await act('discard', 'conflict')
+assert.equal(calls.filter((call) => call[0] === 'agent:discard-conflict').length, 0)
+assert.ok(card('conflict').actions.find((action) => action.action === 'discard').disabled)
+finishTimedOut({ ok: true, state: 'parked' })
+await tick()
+assert.equal(chat.recovery, undefined, 'the original IPC release unlocks mutations')
 setRecoveryRequestDeadlineForTests(null)
 console.log(
   'STOP RECOVERY UI OK — guard, relative sources, dev-server errors, post-Stop and preview-error cards, queue'

@@ -31,7 +31,12 @@ import {
 import { recordEdit } from './edit-history'
 import { editingOwner } from './editing-owner'
 import { isRepoRoot } from './git'
-import { dropGateEvidence, integrationGate, replayChecks } from './integration-gate'
+import {
+  dropGateEvidence,
+  integrationGate,
+  lastReplayFailures,
+  replayChecks
+} from './integration-gate'
 import { commitLiveTurn } from './live-commit'
 import { reconcileParkOnChain } from './park-reconcile'
 import { peerGateRefresh } from './peer-freshness'
@@ -384,6 +389,7 @@ async function landBatch(
   // LOCAL-WEBKIT-3: only the tree its checks passed on lands (`gatedTurn`).
   let { outcome, verdict } = await gatedTurn(sessionKey, st, described.text, terminal === 'success')
   let reconcileFiles: string[] | null = null
+  let replayFailure: string | undefined
   // Live drift: reconcile onto the live tree. A clean result is new source, so it lands
   // only once checks pass on it: the host runs the session's passing checks again on it
   // here, still inside the lease, and the owner lands it only if live has not moved since.
@@ -401,7 +407,9 @@ async function landBatch(
       const prep = await stageResolve(st.liveRoot, st.wt)
       await noteResolution(sessionKey, st, prep)
       if (prep.clean) {
-        await replayChecks(chatGateScope(sessionKey, st))
+        const scope = chatGateScope(sessionKey, st)
+        await replayChecks(scope)
+        replayFailure = lastReplayFailures(scope)[0]
         ;({ outcome, verdict } = await gatedTurn(sessionKey, st, described.text, true))
         combined = true
       } else reconcileFiles = prep.conflicted
@@ -464,7 +472,8 @@ async function landBatch(
         outcome.files,
         undefined,
         undefined,
-        st.interrupted ? 'interrupted' : undefined
+        st.interrupted ? 'interrupted' : replayFailure ? 'failed' : undefined,
+        replayFailure
       )
   } else if (outcome.newBase) {
     clearPark(st)

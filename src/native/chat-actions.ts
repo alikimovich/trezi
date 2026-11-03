@@ -25,6 +25,7 @@ export async function resolveHeld(controller: NativeChatController, chat: Chat) 
     chat.paused = false
     const result = await controller.services.invoke('agent:resolve-conflict', chat.chat)
     if (!result.ok) throw new Error(result.error ?? 'Unable to resolve changes.')
+    if (chat.recoveryTimedOut) return
     if (result.prompt && result.conflicted.length)
       await controller.run(chat, {
         id: crypto.randomUUID(),
@@ -46,28 +47,32 @@ async function recoveryRequest(
 ) {
   if (chat.isRunning || chat.sending || chat.recovery) return
   chat.recovery = kind
+  chat.recoveryTimedOut = false
   chat.recoveryProblem = undefined
   chat.recoveryReport = undefined
   chat.recoverySettled = undefined
   chat.recoveryOutcome = undefined
   chat.recoveryId = crypto.randomUUID()
+  const id = chat.recoveryId
   chat.recoveryStartedAt = Date.now()
   controller.changed(chat)
+  let requestPromise: Promise<void> | undefined
+  let timedOut = false
   try {
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
+      requestPromise = request()
       await Promise.race([
-        request(),
+        requestPromise,
         new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () =>
-              reject(
-                new Error(
-                  'The recovery request did not answer within two minutes. The changes remain held.'
-                )
-              ),
-            recoveryRequestMs
-          )
+          timer = setTimeout(() => {
+            timedOut = true
+            reject(
+              new Error(
+                'The recovery request did not answer within two minutes. The changes remain held.'
+              )
+            )
+          }, recoveryRequestMs)
         })
       ])
     } finally {
@@ -88,6 +93,7 @@ async function recoveryRequest(
     if (chat.recoveryProblem)
       chat.recoveryReport = await writeRecoveryReport(chat, kind, chat.recoveryProblem)
   } catch (error) {
+    chat.recoveryTimedOut = timedOut
     chat.recoveryProblem = `Problem: ${error instanceof Error ? error.message : String(error)}`
     try {
       chat.recoveryReport = await writeRecoveryReport(chat, kind, chat.recoveryProblem)
@@ -96,8 +102,23 @@ async function recoveryRequest(
     }
     if (kind === 'resolve') throw error
   } finally {
-    chat.recovery = undefined
-    controller.changed(chat)
+    if (chat.recoveryTimedOut && requestPromise) {
+      // The request can still mutate the owner after the visible deadline. Keep
+      // every card mutation locked until its actual IPC settles, without a spinner.
+      void requestPromise
+        .finally(() => {
+          if (chat.recoveryId === id) {
+            chat.recovery = undefined
+            chat.recoveryTimedOut = false
+            controller.changed(chat)
+          }
+        })
+        .catch(() => {})
+    } else {
+      chat.recovery = undefined
+      chat.recoveryTimedOut = false
+      controller.changed(chat)
+    }
   }
 }
 

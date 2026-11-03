@@ -207,15 +207,19 @@ export function snapshot(
   else if (chat.isolation === 'parked' && chat.stopped !== 'held')
     cards.push({
       id: 'conflict',
-      title: 'This turn’s changes didn’t land',
-      detail: [
-        ...(chat.recoveryProblem ? [chat.recoveryProblem] : []),
-        chat.landingError
-          ? `Trezi couldn’t apply them to the project: ${chat.landingError}`
-          : 'The project changed under them, so Trezi held them instead of overwriting.',
-        ...(chat.isolationFiles ?? [])
-      ].join('\n'),
-      busy: !!chat.recovery,
+      title: chat.recoveryProblem ? 'Problem' : 'This turn’s changes didn’t land',
+      detail:
+        chat.recoveryProblem ??
+        [
+          chat.landingError
+            ? `Trezi couldn’t apply them to the project: ${chat.landingError}`
+            : 'The project changed under them, so Trezi held them instead of overwriting.',
+          ...(chat.isolationFiles ?? [])
+        ].join('\n'),
+      ...(chat.recoveryProblem && chat.isolationFiles?.length
+        ? { fullDetail: chat.isolationFiles.join('\n') }
+        : {}),
+      busy: !!chat.recovery && !chat.recoveryTimedOut,
       actions: [
         { label: 'Discard', action: 'discard', disabled: chat.isRunning || !!chat.recovery },
         {

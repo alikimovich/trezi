@@ -21,7 +21,7 @@ export async function writeRecoveryReport(chat: Chat, requested: string, reason:
       )
     : null
   const lines = readLogs(productLogDirectory(), 30 * 60_000)
-    .filter((line) => line.includes(`chat=${chat.chat}`))
+    .filter((line) => line.split(' ').includes(`chat=${chat.chat}`))
     .slice(-80)
   const content = redact(
     JSON.stringify(

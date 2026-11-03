@@ -2,6 +2,12 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-03 — LKM-446 review repair
+
+- A deleted conventional page route now deliberately supersedes its old browser recipe. Retry replays the remaining checks and requires a replacement browser receipt on the current source tree; failed replays stay in the bounded recovery history. The integration gate regression covers replacement evidence and a recorded failed replay.
+- A turn-end parked or failed landing now shows one Problem reason on its card and writes a chat-scoped report before offering Copy support report. The existing `holdForDecision` path and decision card remain the single question surface; the card regression asserts no duplicate error.
+- A timed-out card request stops its spinner but keeps mutation actions locked until the original IPC settles. The deferred UI regression checks Discard stays blocked. The native chat fixture now covers deferred Resolve, clean completion without a model turn, agent handover, held and failed outcomes, report redaction and a second chat's unaffected state. Native foreground acceptance remains for the operator after merge.
+
 ## 2026-11-02 — LKM-446 chat recovery flow (implementation in progress)
 
 - Red first: `test/stop-recovery-ui.mjs` failed when a deferred Retry left its button labelled Retry; `test/integration-gate.mjs` failed when a web chat with command receipts did not arrange any browser check.

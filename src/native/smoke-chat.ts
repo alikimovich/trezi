@@ -4,6 +4,7 @@ import { stubAgentSendForSmoke } from '../main/agent'
 import { requestMergeApproval, takeMergeApproval } from '../main/merge-approval'
 import type { AgentEvent } from '../shared/api'
 import type { NativeBridge } from './bridge'
+import { readableRecoveryReport } from './chat-recovery-report'
 import { nativeChat } from './chat-runtime'
 import { serviceEvents } from './platform'
 import { checkPeerCards } from './smoke-chat-peer'
@@ -38,6 +39,8 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
   let reset: unknown
   let retryResponse: Promise<unknown> | null = null
   let retryCalls = 0
+  let resolveResponse: Promise<unknown> | null = null
+  let resolveCalls = 0
   // The actual agent:send RPC and its provider event hook own the log lines.
   // Only the provider's outbound send is stubbed; no paid provider call occurs.
   const provider = stubAgentSendForSmoke(state.chat, (...args) => {
@@ -48,6 +51,10 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     if (channel === 'agent:retry-landing' && retryResponse) {
       retryCalls++
       return retryResponse
+    }
+    if (channel === 'agent:resolve-conflict' && resolveResponse) {
+      resolveCalls++
+      return resolveResponse
     }
     if (channel === 'agent:send') turn = String(args[4])
     if (noTerminalStop && channel === 'agent:interrupt') return undefined
@@ -411,12 +418,18 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     await host.request('chatPerform', { action: 'landing-retry', card: 'conflict' })
     if (retryCalls !== 1) throw new Error(`Retry double click sent ${retryCalls} requests`)
     finishRetry({ ok: true, state: 'parked' })
-    await wait((value) =>
+    const stillHeld = await wait((value) =>
       value.cardStates.some(
         (card: any) =>
           card.id === 'conflict' && card.busy === false && card.actions.includes('Retry')
       )
     )
+    const heldCard = stillHeld.cardStates.find((card: any) => card.id === 'conflict')
+    if (
+      !heldCard.detail.includes('still held') ||
+      stillHeld.cardStates.some((card: any) => card.id === 'error')
+    )
+      throw new Error('A still-held Retry did not settle on its own card')
     if (sent.length !== 1) throw new Error('A held Retry started an agent turn')
     retryResponse = null
     send({
@@ -435,6 +448,103 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       throw new Error('Queued Resolve message did not send exactly once after the park cleared')
     send({ type: 'done' })
     await wait((current) => !current.activity)
+    // Exercise Resolve through the real Swift card with a deferred owner reply.
+    const otherChat = `native-recovery-other-${crypto.randomUUID()}`
+    nativeChat.get(otherChat)
+    nativeChat.event({
+      type: 'isolation',
+      projectKey: state.chat,
+      state: 'parked',
+      files: ['fixture.ts']
+    })
+    let finishResolve: (value: unknown) => void = () => {}
+    resolveResponse = new Promise((resolve) => {
+      finishResolve = resolve
+    })
+    const sendsBeforeClean = sent.length
+    await host.request('chatPerform', { action: 'resolve', card: 'conflict' })
+    const resolving = await wait((value) =>
+      value.cardStates.some((card: any) => card.id === 'conflict' && card.busy === true)
+    )
+    const resolvingCard = resolving.cardStates.find((card: any) => card.id === 'conflict')
+    if (!resolvingCard.actions.includes('Resolving…') || !resolvingCard.disabled.every(Boolean))
+      throw new Error(
+        `Resolve was not visibly busy before its reply: ${JSON.stringify(resolvingCard)}`
+      )
+    await host.request('chatPerform', { action: 'resolve', card: 'conflict' })
+    if (resolveCalls !== 1) throw new Error(`Resolve double click sent ${resolveCalls} requests`)
+    if (nativeChat.get(otherChat).recovery) throw new Error('Resolve leaked into another chat')
+    nativeChat.event({ type: 'isolation', projectKey: state.chat, state: 'merged', files: [] })
+    finishResolve({ ok: true, conflicted: [], prompt: null })
+    await wait((value) => value.cardStates.some((card: any) => card.id === 'recovery-outcome'))
+    if (
+      sent.length !== sendsBeforeClean ||
+      nativeChat.get(state.chat).recovery ||
+      nativeChat.get(otherChat).recovery
+    )
+      throw new Error('Clean Resolve started a model turn or left a chat busy')
+    resolveResponse = null
+    nativeChat.event({
+      type: 'isolation',
+      projectKey: state.chat,
+      state: 'parked',
+      files: ['fixture.ts']
+    })
+    let finishHandover: (value: unknown) => void = () => {}
+    resolveResponse = new Promise((resolve) => {
+      finishHandover = resolve
+    })
+    await host.request('chatPerform', { action: 'resolve', card: 'conflict' })
+    await wait((value) => value.cardStates.some((card: any) => card.id === 'conflict' && card.busy))
+    finishHandover({ ok: true, conflicted: ['fixture.ts'], prompt: 'Resolve fixture conflict.' })
+    await waitFor(
+      () => sent.length === sendsBeforeClean + 1,
+      'Resolve hands over to one agent turn'
+    )
+    if (Number(resolveCalls) !== 2)
+      throw new Error(`Resolve handover sent ${resolveCalls} requests`)
+    const handed = await wait(
+      (value) =>
+        value.activity &&
+        value.cardStates.some((card: any) => card.id === 'conflict' && card.busy === false)
+    )
+    if (!handed.activity || nativeChat.get(state.chat).recovery)
+      throw new Error('Agent handover retained the request busy state')
+    send({ type: 'done' })
+    await wait((value) => !value.activity)
+    resolveResponse = null
+    nativeChat.event({
+      type: 'isolation',
+      projectKey: state.chat,
+      state: 'parked',
+      files: ['fixture.ts']
+    })
+    retryResponse = Promise.resolve({
+      ok: false,
+      error: 'Fixture recovery failed sk-fixture-secret-1234567890'
+    })
+    await host.request('chatPerform', { action: 'landing-retry', card: 'conflict' })
+    const failedCard = await wait((value) =>
+      value.cardStates.some(
+        (card: any) => card.id === 'conflict' && card.actions.includes('Copy support report')
+      )
+    )
+    const problem = failedCard.cardStates.find((card: any) => card.id === 'conflict')
+    if (
+      !problem.detail.startsWith('Problem:') ||
+      failedCard.cardStates.some((card: any) => card.id === 'error')
+    )
+      throw new Error('Failed recovery did not settle in one Problem card')
+    const report = readableRecoveryReport(state.chat)
+    if (
+      !report ||
+      !report.includes(state.chat) ||
+      report.includes(otherChat) ||
+      report.includes('sk-fixture-secret-1234567890')
+    )
+      throw new Error('Support report was missing, crossed chats or exposed a secret')
+    retryResponse = null
+    const beforeMergeApproval = sent.length
     // LKM-281: the host-authored merge approval card, as the user sees it, and the denial
     // path. It runs last because answering sends the user's next message to the stubbed
     // provider, which the counts above would otherwise have to expect.
@@ -487,11 +597,14 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     const declined = takeMergeApproval(state.chat, mergeRoot, mergeTarget)
     if (declined !== 'none') throw new Error(`Declining a merge left an approval: ${declined}`)
     await waitFor(
-      () => sent.slice().length === 3,
+      () => sent.slice().length === beforeMergeApproval + 1,
       'declined merge reached the provider as a message'
     )
     const declinedText = 'Do not merge pull request #7 in github.com/fixture/app. Leave it open.'
-    if (typeof sent[2][0] !== 'string' || !sent[2][0].endsWith(declinedText))
+    if (
+      typeof sent[beforeMergeApproval][0] !== 'string' ||
+      !sent[beforeMergeApproval][0].endsWith(declinedText)
+    )
       throw new Error('The declined merge was not reported to the agent as a refusal')
     writeFileSync(
       join(dirname(screenshot), 'agent-merge-approval.json'),
@@ -513,7 +626,10 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     // Stopping, while the user's next message and draft remain in the composer.
     await host.request('composerPerform', { text: 'Stop fixture turn' })
     await host.request('composerPerform', { action: 'send' })
-    await waitFor(() => sent.slice().length === 4, 'stop fixture reached the provider')
+    await waitFor(
+      () => sent.slice().length === beforeMergeApproval + 2,
+      'stop fixture reached the provider'
+    )
     await host.request('composerPerform', { text: 'Keep queued message' })
     await host.request('composerPerform', { action: 'send' })
     await host.request('composerPerform', { text: 'Keep draft' })
@@ -523,7 +639,8 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     const stopped = await host.request('composerInspect')
     if (!stopped.queuePaused || stopped.queueCount !== 1 || stopped.text !== 'Keep draft')
       throw new Error(`Stop lost the paused queue or draft: ${JSON.stringify(stopped)}`)
-    if (sent.slice().length !== 4) throw new Error('Stop sent a queued message automatically')
+    if (sent.slice().length !== beforeMergeApproval + 2)
+      throw new Error('Stop sent a queued message automatically')
     writeFileSync(
       join(dirname(screenshot), 'chat-stop-queue.png'),
       Buffer.from((await host.request('captureVisibleShell')).png, 'base64')

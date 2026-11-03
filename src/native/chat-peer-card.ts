@@ -61,7 +61,7 @@ export function decisionCard(chat: Chat, decision: NonNullable<Chat['decision']>
       'Answer in this chat to continue, or discard the work.',
       ...(chat.isolationFiles ?? [])
     ].join('\n'),
-    busy: !!chat.recovery,
+    busy: !!chat.recovery && !chat.recoveryTimedOut,
     actions: [{ label: 'Discard', action: 'discard', disabled: chat.isRunning || !!chat.recovery }]
   }
 }

@@ -1,5 +1,8 @@
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { projectKey } from '../shared/projectKey'
 import { agentRuntime, privateRuntimeKind } from './agent-runtime'
+import { gitOut } from './chat-park'
 import { checksRunning } from './command-checks'
 import type { LandingHold } from './repository-owner'
 import { sourceSnapshot } from './source-snapshot'
@@ -191,6 +194,47 @@ function items(evidence: Evidence): Item[] {
 /** The newest item per check key, in order. */
 const newest = (list: Item[]) => [...new Map(list.map((item) => [item.key, item])).values()]
 
+/** Only a deleted conventional page file can retire its old route check. A failed
+ * check on an existing page remains a failure. The replacement still has to pass
+ * on the current tree before the gate can release anything. */
+async function retiredRoutes(scope: GateScope): Promise<Set<string>> {
+  try {
+    const live = (await gitOut(scope.liveRoot, ['rev-parse', 'HEAD'])).trim()
+    const base = (await gitOut(scope.root, ['merge-base', 'HEAD', live])).trim()
+    const deleted: string[] = []
+    for (const from of [base, 'HEAD'])
+      deleted.push(
+        ...(await gitOut(scope.root, ['diff', '--name-only', '--diff-filter=D', from]))
+          .split('\n')
+          .filter(Boolean)
+      )
+    const routes = new Set<string>()
+    for (const file of deleted) {
+      const match = file.match(/^(?:src\/)?(?:pages\/(.+)|app\/(.+)\/page)\.(?:[cm]?[jt]sx?|html)$/)
+      const page = match?.[1] ?? match?.[2]
+      if (!page || page.includes('[')) continue
+      const stems = [
+        `src/pages/${page}`,
+        `pages/${page}`,
+        `src/app/${page}/page`,
+        `app/${page}/page`
+      ]
+      if (
+        stems.some((stem) =>
+          ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'html'].some((ext) =>
+            existsSync(join(scope.root, `${stem}.${ext}`))
+          )
+        )
+      )
+        continue
+      routes.add(`/${page.replace(/\/index$/, '')}`)
+    }
+    return routes
+  } catch {
+    return new Set()
+  }
+}
+
 const NEED_TEXT = {
   browser: 'a passing preview_verify in its private browser',
   command: 'a passing run_checks check',
@@ -217,6 +261,8 @@ export async function integrationGate(scope: GateScope): Promise<GateVerdict> {
       'check-running',
       'a check is still running on this work; wait for it, then Retry.'
     )
+  // A failed check made on this tree still blocks, even if its route was later
+  // deleted. Only replay selection may supersede an old-tree recipe.
   const current = newest(items(evidence).filter((item) => item.tree === tree))
   const used = current.map((item) => ({
     id: item.id,
@@ -304,13 +350,17 @@ export async function replayChecks(scope: GateScope): Promise<number> {
   if (!replayer) return 0
   const session = sessionOf(scope)
   const latest = newest(items(evidenceOf(session)))
-  const passed = latest.filter((item) => item.verified || item.reason === 'runtime-changed')
+  const retired = await retiredRoutes(scope)
+  const active = latest.filter(
+    (item) => !(item.kind === 'browser' && retired.has(item.key.slice(item.key.indexOf(' ') + 1)))
+  )
+  const passed = active.filter((item) => item.verified || item.reason === 'runtime-changed')
   const failures: string[] = []
   replayFailures.set(session, failures)
   const needed = await privateRuntimeKind(scope.root)
   // A web chat with command checks only needs fresh private-browser evidence too.
   // An existing browser recipe is always replayed on its own route and assertions.
-  if (needed === 'web' && !latest.some((item) => item.kind === 'browser'))
+  if (needed === 'web' && !active.some((item) => item.kind === 'browser'))
     passed.push({
       key: 'browser /',
       id: 'automatic-browser',

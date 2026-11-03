@@ -7,6 +7,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 - [x] Add red regressions for immediate Retry state and missing browser checks; use the owner's gated patch path for checked deletions.
 - [x] Scope Retry, Resolve and Discard busy state to their chat; produce a readable redacted support report for a failed or still-held request.
+- [x] Retire deleted checked-page recipes with replacement evidence, surface turn-end Problem reports, and keep a timed-out request's mutation lock until IPC settles.
 - [ ] Native foreground acceptance after merge, including deferred requests, pointer and keyboard, still-held outcome, and multi-chat clearing.
 - [ ] Confirm obsolete checked-page recipe retirement and final outcome wording against a real held session.
 

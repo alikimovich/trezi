@@ -118,8 +118,8 @@ const noError = (h) => {
     h
       .last()
       .cards.find((c) => c.id === 'conflict')
-      ?.actions.at(-1).action,
-    'resolve'
+      ?.actions.some((action) => action.action === 'resolve'),
+    true
   )
   assert.equal(h.last().composer.sendLabel, 'Queue message')
   await h.say('Make the header blue')
