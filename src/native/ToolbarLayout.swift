@@ -143,6 +143,10 @@ final class MomentaryToolbarGroup: NSToolbarItemGroup {
         super.init(itemIdentifier: identifier)
         subitems = items; selectionMode = .momentary
         control.segmentStyle = .texturedRounded
+        // LKM-449: NSSegmentedControl hugs at 250, so NSToolbar could hand the island slack beside
+        // the flexible space (151 → 159 pt). The right-group inset measured from that frame was
+        // 4 pt too wide once "…" and slow motion hid, and the address block stopped 24 pt short.
+        control.setContentHuggingPriority(.required, for: .horizontal)
         view = control
         target = self; action = #selector(activate(_:))
         control.target = self; control.action = #selector(activate(_:))
