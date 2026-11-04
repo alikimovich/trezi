@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Shared async fixture bounds (LKM-505)
+
+- [x] Wait for the conversation owner's actual waiting event with a deadline; retain exactly one event and an unsent second provider, with delayed, missing and duplicate event regressions.
+- [x] Capture bounded final preview driver state, build output and progress before the unit runner's outer deadline; fail on error and never-ready states.
+- [x] Review repair: route driver startup failures through the same evidence path and cover startup, error and never-ready failures with a fast headless fixture.
+- [x] Review repair: assert the near-deadline build wait leaves the evidence/cleanup reserve and still fails with final state and log output.
+- [ ] Manager: independent fixture review, configured checks and PR-head CI with unit2 executed on the exact head.
+
 ## Native suite failure on main 17fbc17129bb (LKM-484)
 
 - [x] Embed New Chat as native AppKit glass content inside the chat title's custom toolbar item and preserve its existing segment behavior and visibility.

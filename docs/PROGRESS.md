@@ -5,6 +5,18 @@
 - The held-press probe now records semantic Select mode, overlay state and both accent images before down, while held and after the outside release. The matrix validates any completed Select or Mark up action and restores the resting state with the normal toolbar toggle before each step and after probe reset. Focus and disabled retain their labeled synthetic setup. A focused regression distinguishes active Select, focus without selection and a stale accent. The native GREEN/RED run remains for the reviewed merged SHA.
 - Independent review and the retained e12ac410 pressed Expand PNG showed that Code, Layers and viewport/layout changes could survive the earlier reset. The probe now records overlay panel, Code/source, Layers, viewport, expanded layout, speed and preview geometry at pre/held/post release. Each matrix step restores durable changes through the existing toolbar or speed-menu route and checks the exact resting semantics, preview geometry and page viewport before and after. The focused regression rejects a leftover Code panel and a misattributed action. Native GREEN/RED remains pending after the reviewed merge.
 - Exact-head CI compiled the host and caught two probe reads of `NativeShell.previewState`, which is private. The probe now takes Code and viewport values from the shell's existing inspection result, the same exposed values used by the acceptance fixture; no product state or access level changes. CI must compile this repair on the next PR head.
+## 2026-11-04 — LKM-505 deadline regression proof
+
+- Review found the fast preview-driver fixture did not assert the deadline reserve. Its near-deadline fake driver now records the build-wait budget with only 250 ms before the existing 15 s reserve, requires the bounded wait, and still checks failure plus final building state and log evidence. The real driver and its outer timeout are unchanged.
+
+## 2026-11-04 — LKM-505 preview diagnostic review repair
+
+- Independent review found that driver startup timed out outside the evidence catch, and no regression exercised the new failure path. The driver URL and readiness waits now share one bounded catch that records final state availability, driver output, exit status and the last progress stage before rethrowing. A fast fake-driver fixture covers success, no server, error and never-ready states; the real Swift target fixture still requires readiness.
+
+## 2026-11-04 — LKM-505 bounded async fixture failures
+
+- The live conversation fixture now waits for the actual waiting status with its existing deadline, then requires exactly one event while the second provider remains unsent. The event seam exercises a status delayed beyond 50 ms, a missing status and a duplicate; the later protocol scenarios remain intact.
+- The Swift target preview fixture reserves time inside the unchanged 300 s outer bound to collect a final bounded `/state` snapshot and driver build log tail on a slow, stuck or errored build. A terminal error and a never-ready driver still fail. The driver output is diagnostic evidence, not a readiness substitute.
 
 ## 2026-11-04 — LKM-484 CI worktree cleanup race
 

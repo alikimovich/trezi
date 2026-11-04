@@ -315,6 +315,7 @@ export const UNIT = [
   'versioning',
   'swift-preview',
   'swift-preview-graph',
+  'swift-preview-driver-wait',
   'swift-preview-target',
   'swift-preview-toolchain',
   'swift-preview-settings',
