@@ -74,11 +74,21 @@ extension NativeShell {
         // LKM-325: macOS 27 keeps an item hidden by `fitMore` in `visibleItems`; it is not drawn.
         var hidden = false
         if #available(macOS 15, *) { hidden = item?.isHidden ?? false }
-        return ["moreMenu":item?.menu.items.filter { !$0.isSeparatorItem }.map(\.title) ?? [], "moreEnabled":item?.isEnabled ?? false,
-                "moreVisible":!hidden && (toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "more" } ?? false),
-                "interactionSegments":(toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? [],
-                "toolSegments":(toolbar.items.first { $0.itemIdentifier.rawValue == "tools" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? []]
-            .merging(markupInspect()) { _, new in new }
+        let menuTitles: [String] = item?.menu.items.filter { !$0.isSeparatorItem }.map(\.title) ?? []
+        let enabled: Bool = item?.isEnabled ?? false
+        let visible: Bool = !hidden && (toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "more" } ?? false)
+        let interactionSegments: [String] = (toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? []
+        let viewportSegments: [String] = (toolbar.items.first { $0.itemIdentifier.rawValue == "viewport" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? []
+        let toolSegments: [String] = (toolbar.items.first { $0.itemIdentifier.rawValue == "tools" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? []
+        var result: [String: Any] = [:]
+        result["moreMenu"] = menuTitles
+        result["moreEnabled"] = enabled
+        result["moreVisible"] = visible
+        result["interactionSegments"] = interactionSegments
+        result["viewportSegments"] = viewportSegments
+        result["toolSegments"] = toolSegments
+        result.merge(markupInspect()) { _, new in new }
+        return result
     }
     /// LKM-319: dividers that draw inside each toolbar island (none on macOS 27).
     func islandInspect() -> [String: Any] {

@@ -10,7 +10,7 @@ const binary = swiftBuild('toolbar-island-dividers', [
   'src/native/ToolbarLayout.swift'
 ])
 const result = JSON.parse(runFixture(binary))
-const ISLANDS = ['interaction', 'tools']
+const ISLANDS = ['interaction', 'viewport', 'tools']
 // The boundary is darker than the bezel beside it by this much where a divider draws.
 const VISIBLE = 0.05
 
@@ -23,7 +23,8 @@ for (const stage of ['initial', 'narrow', 'restored', 'disabled']) {
     `a stock segmented control draws its dividers (the probe works): ${detail}`
   )
   assert.equal(state.interaction.segments, stage === 'narrow' ? 3 : 4, detail)
-  assert.equal(state.tools.segments, 4, detail)
+  assert.equal(state.viewport.segments, 2, detail)
+  assert.equal(state.tools.segments, 2, detail)
   for (const island of ISLANDS) {
     const { thinLayers, visibleDividers, contrast } = state[island]
     if (result.hidesDividers) {
@@ -68,10 +69,11 @@ for (const island of ISLANDS) {
   )
 }
 
-// LKM-430: the device switch is one button of the tools island; it left the interaction island.
+// LKM-467: the device switch is in the viewport island beside the address.
 const { device, markup } = result
 const at = JSON.stringify({ device, markup })
-assert.equal(device.tools, true, `the tools island clicks device: ${at}`)
+assert.equal(device.viewport, true, `the viewport island clicks device: ${at}`)
+assert.equal(device.tools, false, `the tools island no longer clicks device: ${at}`)
 assert.equal(device.interaction, false, `the interaction island no longer has it: ${at}`)
 assert.deepEqual(device.clicks, ['device'], `one click, one action: ${at}`)
 
@@ -168,9 +170,10 @@ assert.equal(states.pressedGlyphTemplate, true, `and leaves the glyph alone: ${s
 const source = (name) => readFileSync(`src/native/${name}`, 'utf8')
 const layout = source('ToolbarLayout.swift')
 assert.match(layout, /interaction = \["select-object", "overlay", "speed", "markup"\]/)
-assert.match(layout, /tools = \["code", "layers", "device", "expand"\]/)
+assert.match(layout, /viewport = \["device", "expand"\]/)
+assert.match(layout, /tools = \["code", "layers"\]/)
 const shell = source('Shell.swift')
-assert.match(shell, /key == "tools" \? ToolbarIslands\.tools : ToolbarIslands\.interaction/)
+assert.match(shell, /key == "viewport" \? ToolbarIslands\.viewport/)
 assert.ok(!/"expand"\]\s*:\s*\[/.test(shell), 'no second copy of the group lists')
 assert.equal(
   (shell.match(/"device", "overlay"/g) ?? []).length,

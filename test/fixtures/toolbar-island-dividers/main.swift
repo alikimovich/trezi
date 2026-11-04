@@ -23,25 +23,26 @@ func item(_ id: String) -> NSToolbarItem {
     item.target = target; item.action = #selector(Target.clicked(_:))
     return item
 }
-let interactionItems = ToolbarIslands.interaction.map(item), toolItems = ToolbarIslands.tools.map(item)
+let interactionItems = ToolbarIslands.interaction.map(item), viewportItems = ToolbarIslands.viewport.map(item), toolItems = ToolbarIslands.tools.map(item)
 let interaction = MomentaryToolbarGroup(identifier: NSToolbarItem.Identifier("interaction"), items: interactionItems)
+let viewport = MomentaryToolbarGroup(identifier: NSToolbarItem.Identifier("viewport"), items: viewportItems)
 let tools = MomentaryToolbarGroup(identifier: NSToolbarItem.Identifier("tools"), items: toolItems)
 let stock = NSSegmentedControl(images: [toolbarSymbol("cursorarrow")!, toolbarSymbol("iphone")!, toolbarSymbol("ruler")!], trackingMode: .momentary, target: nil, action: nil)
 stock.segmentStyle = .texturedRounded
 for index in 0..<3 { stock.setWidth(32, forSegment: index) }
 
-for view in [interaction.view!, tools.view!, stock] { view.translatesAutoresizingMaskIntoConstraints = true; canvas.addSubview(view) }
+for view in [interaction.view!, viewport.view!, tools.view!, stock] { view.translatesAutoresizingMaskIntoConstraints = true; canvas.addSubview(view) }
 /// Lays the controls out in a row at their own sizes (again after a segment is removed).
 func place() {
     var x: CGFloat = 10
-    for view in [interaction.view!, tools.view!, stock] {
+    for view in [interaction.view!, viewport.view!, tools.view!, stock] {
         let size = view.intrinsicContentSize
         view.frame = NSRect(x: x, y: 18, width: size.width, height: size.height); x += size.width + 20
     }
 }
 
 func controls() -> [String: NSSegmentedControl] {
-    ["interaction": interaction.view as! NSSegmentedControl, "tools": tools.view as! NSSegmentedControl, "stock": stock]
+    ["interaction": interaction.view as! NSSegmentedControl, "viewport": viewport.view as! NSSegmentedControl, "tools": tools.view as! NSSegmentedControl, "stock": stock]
 }
 func settle() {
     canvas.layoutSubtreeIfNeeded(); canvas.displayIfNeeded(); CATransaction.flush()
@@ -103,7 +104,7 @@ func stretch(_ group: MomentaryToolbarGroup) -> [String: Any] {
 }
 
 var result: [String: Any] = ["hidesDividers": IslandSegmentedControl.hidesDividers, "osMajor": ProcessInfo.processInfo.operatingSystemVersion.majorVersion]
-result["stretch"] = ["interaction": stretch(interaction), "tools": stretch(tools)]
+result["stretch"] = ["interaction": stretch(interaction), "viewport": stretch(viewport), "tools": stretch(tools)]
 result["initial"] = measure()
 // LKM-430: the pen glyph as the toolbar draws it, plain and active, and a click on each state.
 /// Opaque pixels of the image, drawn into a 40 pt bitmap.
@@ -207,7 +208,7 @@ markup["cancelLabel"] = ToolbarIslands.markupToolTip(active: true)
 result["states"] = states
 target.clicks = []
 // The device button works from its island; the old one no longer has it.
-result["device"] = ["tools": tools.clickSegment("device"), "interaction": interaction.clickSegment("device"), "clicks": target.clicks] as [String: Any]
+result["device"] = ["viewport": viewport.clickSegment("device"), "tools": tools.clickSegment("device"), "interaction": interaction.clickSegment("device"), "clicks": target.clicks] as [String: Any]
 target.clicks = []
 // LKM-213: a narrow window removes the slow-motion segment and a wider one restores it.
 // LKM-430: the segments after it still answer for themselves.
@@ -222,7 +223,7 @@ result["markup"] = markup
 window.appearance = NSAppearance(named: .darkAqua); result["dark"] = measure()
 // AppKit changes the inner layers by itself, with no layout of the parent: read straight after each change.
 func islands() -> [String: IslandSegmentedControl] {
-    ["interaction": interaction.view as! IslandSegmentedControl, "tools": tools.view as! IslandSegmentedControl]
+    ["interaction": interaction.view as! IslandSegmentedControl, "viewport": viewport.view as! IslandSegmentedControl, "tools": tools.view as! IslandSegmentedControl]
 }
 func immediate() -> [String: Int] { islands().mapValues { $0.visibleDividers + thinLayers($0) } }
 func thin(_ control: IslandSegmentedControl) -> [CALayer] {
@@ -238,7 +239,7 @@ var interactive: [String: Any] = [:]
 for control in islands().values { control.setSelected(true, forSegment: 0) }
 interactive["pressed"] = immediate()
 for control in islands().values { control.setSelected(false, forSegment: 0) }
-_ = interaction.clickSegment("overlay"); _ = tools.clickSegment("device")
+_ = interaction.clickSegment("overlay"); _ = viewport.clickSegment("device")
 interactive["clicked"] = immediate()
 // A divider shown again by the system, and a divider layer added to the hosted view's layer.
 for control in islands().values { for layer in thin(control) { layer.isHidden = false } }
