@@ -230,19 +230,46 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
   assert.equal(pendingRow.titleLoadingMode, 'deciphering')
   assert.equal(pendingTitle.chatTitleLoadingMode, 'deciphering')
   const loadingNormal = titleGeometry(pendingTitle, 'normal loading')
-  // Observe the rendered text after at least one 180 ms tick. Mode alone can report
-  // deciphering even if the timer has stopped changing the visible glyphs.
-  const firstGlyphs = pendingTitle.chatTitle
+  // Read the actual AppKit labels for this stable row ID and the selected header.
+  // The row's model title remains "New chat" while both displayed labels decipher.
+  const rowID = `chat:${gamma.activeSessionKey}`
+  const displayedRow = (state: {
+    sidebarChats: Array<{
+      id: string
+      selected: boolean
+      displayedText: string
+      titleLoadingMode: string
+    }>
+  }) => {
+    const row = state.sidebarChats.find((item) => item.id === rowID)
+    assert.ok(row?.selected, 'the sampled title belongs to the selected chat')
+    return row
+  }
+  const firstGlyphs = {
+    header: pendingTitle.chatTitle,
+    row: displayedRow(pendingTitle).displayedText
+  }
+  assert.notEqual(
+    firstGlyphs.row,
+    pendingRow.title,
+    'sidebar inspection reads the painted glyphs, not the model title'
+  )
   await pause(220)
-  let changedGlyphs = ''
+  let changedGlyphs = firstGlyphs
   await until(
     async () => {
       const sample = await host.request('shellInspect')
       assert.equal(sample.chatTitleLoadingMode, 'deciphering', 'title stays animated while pending')
-      changedGlyphs = sample.chatTitle
-      return changedGlyphs !== firstGlyphs
+      const row = displayedRow(sample)
+      assert.equal(
+        row.titleLoadingMode,
+        'deciphering',
+        'sidebar title stays animated while pending'
+      )
+      changedGlyphs = { header: sample.chatTitle, row: row.displayedText }
+      return changedGlyphs.header !== firstGlyphs.header && changedGlyphs.row !== firstGlyphs.row
     },
-    'pending title glyphs change after a timer tick',
+    'pending header and sidebar glyphs change after a timer tick',
     1200
   )
   await captureChatGate(host, artifacts, 'title-loading', true, false)
@@ -255,9 +282,22 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
     'still'
   )
   assert.equal(reducedTitle.chatTitle, '••••••••')
+  const reducedRow = displayedRow(reducedTitle)
+  assert.equal(
+    reducedRow.displayedText,
+    '••••••••',
+    'Reduce Motion gives the row a static placeholder'
+  )
   await pause(400)
   const reducedAfter = await host.request('shellInspect')
   assert.equal(reducedAfter.chatTitleLoadingMode, 'still', 'Reduce Motion stops the title timer')
+  const reducedRowAfter = displayedRow(reducedAfter)
+  assert.equal(reducedRowAfter.titleLoadingMode, 'still', 'Reduce Motion stops the row timer')
+  assert.equal(
+    reducedRowAfter.displayedText,
+    reducedRow.displayedText,
+    'Reduce Motion holds the sidebar glyphs across ticks'
+  )
   assert.equal(
     reducedAfter.chatTitle,
     reducedTitle.chatTitle,
@@ -269,8 +309,8 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
       {
         firstGlyphs,
         changedGlyphs,
-        reduced: reducedTitle.chatTitle,
-        reducedAfter: reducedAfter.chatTitle
+        reduced: { header: reducedTitle.chatTitle, row: reducedRow.displayedText },
+        reducedAfter: { header: reducedAfter.chatTitle, row: reducedRowAfter.displayedText }
       },
       null,
       2

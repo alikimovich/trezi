@@ -11,6 +11,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: gate the initial provider card on project readiness and assert absent-while-opening and present-when-ready states in `chat-gate`.
 - [x] Review repair: assert selected-row and header title geometry at normal and narrow widths through loading and resolution.
 - [x] Review repair: sample the visible header glyphs across animation ticks and assert they stop under Reduce Motion in the native `chat-gate` fixture.
+- [x] Review repair: expose the sidebar label's painted text in inspection and require selected-row motion and Reduce Motion stillness alongside the header.
 - [ ] Manager: independent review, CI and post-merge native sidebar acceptance on main.
 
 ## Native sidebar suite Restore capture (LKM-482)

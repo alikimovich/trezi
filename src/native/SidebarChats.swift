@@ -293,7 +293,7 @@ extension NativeShell {
                 guard let view, let superview = view.superview else { return nil }
                 return superview.convert(view.alignmentRect(forFrame: view.frame), to: nil).minX
             }
-            var item: [String: Any] = ["id": row.id, "kind": row.kind, "title": row.title, "project": row.project, "parent": parent?.id ?? "",
+            var item: [String: Any] = ["id": row.id, "kind": row.kind, "title": row.title, "displayedText": cell.title?.label.stringValue ?? cell.button?.title ?? "", "project": row.project, "parent": parent?.id ?? "",
                     "selected": outline.selectedRow == index, "selectable": outlineView(outline, shouldSelectItem: row),
                     "running": row.running, "thinking": row.thinking, "shimmer": cell.shimmer?.inspect() ?? ["mode": "none"],
                     "loadingTitle": row.loadingTitle, "titleLoadingMode": cell.loadingTitle?.mode ?? "off",

@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-485 review repair: observe sidebar glyphs
+
+- Independent review found that the animation fixture sampled the header but the sidebar inspect exposed only the model title, so a frozen sidebar could pass. Sidebar inspection now adds `displayedText` from the actual row label without changing `title` or row identity. The existing `chat-gate` interval check requires both the selected row and header strings to change while pending, and both to remain at the static placeholder under Reduce Motion. The same animation JSON records both pairs for the manager's post-merge native run.
+
 ## 2026-11-04 — LKM-485 review repair: prove changing and static glyphs
 
 - The `chat-gate` fixture previously checked the loader's mode and one rendered title, which could pass with frozen glyphs. It now samples the native header after a 180 ms animation tick and requires a changed visible string within a bounded interval while the mode stays deciphering. Under Reduce Motion it waits across two ticks and requires the static placeholder and still mode. It writes the sampled values to `chat-gate-title-animation.json` beside the existing loading and resolved captures. Native execution and image inspection remain with the manager after merge.
