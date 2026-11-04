@@ -130,7 +130,7 @@ extension NativeShell {
     }
 }
 
-/// The address block follows the host's width and reserves the adjacent viewport island.
+/// The address block follows the host's width, after the adjacent viewport island.
 /// Available width is computed from measured toolbar offsets during the resize pass.
 /// The right groups stay pinned to the window's trailing edge.
 struct ToolbarAddressLayout {
@@ -152,9 +152,9 @@ struct ToolbarAddressLayout {
     /// Whether `rightInset` comes from a pinned layout rather than a guess.
     var measured = false
     /// Block leading minus the chat header's trailing edge.
-    var chatOffset: CGFloat = 8
+    var chatOffset: CGFloat = 108
     /// Block leading without a chat header in the toolbar.
-    var leading: CGFloat = 90
+    var leading: CGFloat = 190
     /// Laid-out block width minus its width constraint.
     var extra: CGFloat = 0
     /// `rightInset` as measured while the speed and "…" items were showing (LKM-206); showing
@@ -198,13 +198,13 @@ struct ToolbarAddressLayout {
     /// The block's leading edge for a chat header ending at `chatTrailing` (nil: no chat header,
     /// the block starts at `slot`, by default the measured `leading`).
     func blockLeading(chatTrailing: CGFloat?, slot: CGFloat? = nil) -> CGFloat { chatTrailing.map { $0 + chatOffset } ?? slot ?? leading }
-    /// Reserve the viewport island and stop growing once the host fits.
+    /// The viewport island is already to the left of the address; stop growing once the host fits.
     func width(windowWidth: CGFloat, chatTrailing: CGFloat?, slot: CGFloat? = nil, preferred: CGFloat = Self.minimum) -> CGFloat {
-        min(preferred, max(Self.floor, windowWidth - rightInset - Self.gap - 100 - extra - blockLeading(chatTrailing: chatTrailing, slot: slot)))
+        min(preferred, max(Self.floor, windowWidth - rightInset - Self.gap - extra - blockLeading(chatTrailing: chatTrailing, slot: slot)))
     }
     /// The widest chat header starting at `chatLeading` that still leaves the block its preferred minimum.
     func chatLimit(windowWidth: CGFloat, chatLeading: CGFloat, addressPreferred: CGFloat = Self.minimum) -> CGFloat {
-        windowWidth - rightInset - Self.gap - 100 - extra - addressPreferred - chatOffset - chatLeading
+        windowWidth - rightInset - Self.gap - extra - addressPreferred - chatOffset - chatLeading
     }
     /// Frames (main-window coordinates, zero outside a window) and truncation state for the shell inspector.
     func inspect(block frame: NSRect, right rightFrame: NSRect, address: NSTextField, branch: NSPopUpButton) -> [String: Any] {

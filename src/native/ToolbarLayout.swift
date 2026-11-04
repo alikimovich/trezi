@@ -60,8 +60,8 @@ func toolbarAccentSymbol(_ name: String, _ label: String? = nil) -> NSImage? {
     return image
 }
 
-/// The preview toolbar's islands, in segment order. LKM-467 keeps viewport controls
-/// beside the address. LKM-448: the Actions menu entry
+/// The preview toolbar's islands, in segment order. LKM-476 keeps viewport controls
+/// immediately left of the address. LKM-448: the Actions menu entry
 /// stays; the "…" one is gone.
 enum ToolbarIslands {
     static let interaction = ["select-object", "overlay", "speed", "markup"]

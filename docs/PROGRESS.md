@@ -9,6 +9,15 @@
 - The selected project's shell already reserved chat width while opening, but `WorkspaceLayout` hid the chat and composer on `chatReady == false` and stretched the preview status over that width. The chat header used the same readiness gate. The layout now keeps the existing selected chat and its draft visible, with Opening or error confined to the preview; manual Hide still collapses the column.
 - The composer uses the existing project readiness gate to disable Send during opening and errors. Native Return and the Bun composer event route also reject early sends. The selected chat identity guard still prevents the previous project's transcript from appearing during a switch.
 - The `chat-gate` disposable-profile fixture now checks column, header, draft, disabled Send, no admitted message, failed-open persistence, manual Hide/Restore and retry readiness with capture/geometry receipts. Native GUI acceptance remains for the manager's post-merge run.
+## 2026-11-03 — LKM-476 pane-resize fixture follow-up
+
+- Independent review found that the toolbar fixtures checked New Chat against the header while resizing the sidebar and window, but did not check the actual chat pane boundary when the chat pane itself changed width. The existing preview-speed native fixture already changes it to 520 pt and restores it. It now records foreground PNGs and a JSON geometry receipt at both widths, then asserts New Chat ends 4 ± 1 pt inside `detailLeading + chatWidth`. The unit `preview-speed-placement` exercises that assertion against aligned and misplaced frames; native execution remains with the manager after merge.
+
+## 2026-11-03 — LKM-476 top bar placement follow-up
+
+- The existing New Chat button now uses the textured native toolbar bezel and sits 4 pt from the chat header's trailing edge; the title keeps its leading alignment and can use the space up to the button. Its guarded action, glyph, tooltip and momentary button remain.
+- The device and Expand Preview island moved as one group to immediately left of the address. Address sizing now accounts for that order, with the viewport in the measured chat-to-address offset rather than reserved again to the address's right.
+- The existing toolbar and sidebar native fixtures assert the order, non-overlap, button styling, trailing alignment, retained title/address and action routes at their selected widths. Foreground capture and native acceptance remain for the manager's post-merge run.
 
 ## 2026-11-03 — LKM-469 address editor follow-up
 

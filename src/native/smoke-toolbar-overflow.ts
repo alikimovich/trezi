@@ -169,6 +169,16 @@ export async function checkToolbarOverflow(host: NativeBridge, artifacts: string
           `sidebar width ${sidebar}`
         )
       )
+      const resized = await host.request('shellInspect')
+      if (resized.chatNewVisible) {
+        const [buttonX, , buttonWidth] = (resized.chatNewFrame.match(/-?\d+(?:\.\d+)?/g) ?? []).map(
+          Number
+        )
+        assert.ok(
+          Math.abs(buttonX + buttonWidth - (resized.chatHeaderTrailing - 4)) <= 1,
+          `sidebar ${sidebar}: New Chat follows the resized chat header`
+        )
+      }
       await flip(`sidebar-${sidebar}-expand`, true)
       await flip(`sidebar-${sidebar}-restore`, false)
       // At rest the block fills up to the gap again: offsets learned from a resizing split's
@@ -178,8 +188,8 @@ export async function checkToolbarOverflow(host: NativeBridge, artifacts: string
           const rest = await host.request('shellInspect')
           return (
             rest.addressWidth <= rest.addressFloor + 1 ||
-            (rest.viewportLeading >= rest.addressTrailing - 0.5 &&
-              rest.viewportTrailing < rest.rightGroupLeading)
+            (rest.viewportTrailing <= rest.addressLeading + 0.5 &&
+              rest.addressTrailing < rest.rightGroupLeading)
           )
         },
         `toolbar sidebar ${sidebar}: block ends 20 pt before the right groups at rest`,
