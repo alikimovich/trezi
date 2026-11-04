@@ -15,6 +15,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Extend the `chat-gate` disposable-profile fixture for opening, failed-open, retry and explicit Hide/Restore captures and assertions.
 - [x] Review follow-up: seed a synthetic selected transcript and assert its nonzero native count and rendered row through opening and failed opening at normal and narrow widths.
 - [ ] Manager: independent review, CI and native sidebar acceptance on the merged SHA.
+## Top bar New Chat glass and viewport order (LKM-476)
+
+- [x] Anchor the existing guarded New Chat control at the chat header's trailing edge and give it the textured native toolbar treatment.
+- [x] Move the device and Expand Preview island immediately left of the address; keep the host-based address sizing and existing control routes.
+- [x] Extend the toolbar and sidebar native fixtures for order, resize geometry, appearance and New Chat action.
+- [x] Review follow-up: assert New Chat's 4 pt inset from the actual pane boundary after the preview-speed fixture changes chat width to 520 pt and restores it, with foreground captures and a geometry receipt.
+- [ ] Manager: required CI, independent review and post-merge native acceptance on main.
 
 ## Native suite failure on main 743c0a82c263 (LKM-469)
 

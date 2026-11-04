@@ -24,7 +24,7 @@ const MINIMUM_WINDOW = 850
  * question and nothing can be sent: this check never fills a field or presses a default button.
  * The real Mark up segment takes a posted click, draws a generated stroke and cancels; LKM-448:
  * a second click on it cancels, a third enters again (`smoke-markup-toggle.ts`). The
- * device segment takes posted clicks in the viewport island beside the address and
+ * device segment takes posted clicks in the viewport island left of the address and
  * off and in full screen, and the viewport survives each of them, a resize and a project
  * switch.
  */

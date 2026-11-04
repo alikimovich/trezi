@@ -35,7 +35,7 @@ if (process.platform !== 'darwin') {
   assert.equal(none.y, page.y + 10)
 
   // The smoke's assertion fails the old corner and an off-centre badge.
-  const { badgeProblem } = await import('../src/native/smoke-preview-speed.ts')
+  const { badgeProblem, chatNewPaneProblem } = await import('../src/native/smoke-preview-speed.ts')
   const state = (frame) => ({ visible: true, frame, anchor: 'speed', anchorFrame: anchor, page })
   assert.equal(badgeProblem(state(under), 'speed'), undefined)
   const corner = { ...under, x: page.x + 10, y: page.y + page.height - under.height - 10 }
@@ -46,6 +46,26 @@ if (process.platform !== 'darwin') {
   // Hung correctly from a control that is itself down there: the corner alone fails it.
   const low = { x: corner.x, y: corner.y - gap - 36, width: corner.width, height: 36 }
   assert.match(badgeProblem({ ...state(corner), anchorFrame: low }, 'speed'), /corner/)
+
+  // The native fixture measures New Chat after a 520 pt pane resize and its restoration.
+  // A button merely at the toolbar header's edge can be short of the actual pane boundary.
+  const pane = {
+    chatNewVisible: true,
+    detailLeading: 300,
+    chatWidth: 520,
+    chatNewFrame: '{{784, 0}, {32, 32}}'
+  }
+  assert.equal(chatNewPaneProblem(pane, 520), undefined)
+  assert.equal(
+    chatNewPaneProblem({ ...pane, chatWidth: 440, chatNewFrame: '{{704, 0}, {32, 32}}' }, 440),
+    undefined
+  )
+  assert.match(
+    chatNewPaneProblem({ ...pane, chatNewFrame: '{{772, 0}, {32, 32}}' }, 520),
+    /inside the pane/
+  )
+  assert.match(chatNewPaneProblem({ ...pane, chatNewVisible: false }, 520), /hidden/)
+  assert.match(chatNewPaneProblem(pane, 440), /chat width/)
 
   // Every layout and every toolbar measure place it; the label and input stay as they were.
   const speed = readFileSync('src/native/PreviewSpeed.swift', 'utf8')
