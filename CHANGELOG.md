@@ -10,9 +10,12 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.13.15] - 2026-11-03
+
 ### Fixed
 
 - The preview address keeps the right toolbar controls aligned at the minimum window width (LKM-480).
+
 ## [0.13.14] - 2026-11-03
 
 ### Fixed
