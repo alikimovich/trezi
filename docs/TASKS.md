@@ -9,6 +9,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Defer the initial provider choice until both built-in sign-in checks confirm signed out; retain the authenticated and ready paths.
 - [x] Cover state changes in focused unit checks and loading-to-resolved captures in the disposable-profile `chat-gate` fixture.
 - [x] Review repair: gate the initial provider card on project readiness and assert absent-while-opening and present-when-ready states in `chat-gate`.
+- [x] Review repair: assert selected-row and header title geometry at normal and narrow widths through loading and resolution.
 - [ ] Manager: independent review, CI and post-merge native sidebar acceptance on main.
 
 ## Native sidebar suite Restore capture (LKM-482)

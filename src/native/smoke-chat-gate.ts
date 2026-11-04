@@ -176,6 +176,38 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
   )
   const gammaChat = nativeChat.get(gamma.activeSessionKey)
   await until(() => gammaChat.ready, 'selected chat initialized during opening')
+  const titleGeometry = (
+    state: {
+      sidebarChats: Array<{ id: string; selected: boolean; textOffset: number }>
+      chatTitleFrame: string
+    },
+    stage: string
+  ) => {
+    const row = state.sidebarChats.find((item) => item.id === `chat:${gamma.activeSessionKey}`)
+    assert.ok(row?.selected, `${stage}: the loading chat stays selected`)
+    assert.ok(Number.isFinite(row.textOffset), `${stage}: selected row has a measured text offset`)
+    const frame = (state.chatTitleFrame.match(/-?[\d.]+(?:e-?\d+)?/g) ?? []).map(Number)
+    assert.equal(frame.length, 4, `${stage}: selected header has a measured frame`)
+    assert.ok(frame.every(Number.isFinite), `${stage}: header frame is finite`)
+    return { offset: row.textOffset, frame }
+  }
+  const sameTitleGeometry = (
+    loading: ReturnType<typeof titleGeometry>,
+    resolved: ReturnType<typeof titleGeometry>,
+    stage: string
+  ) => {
+    assert.ok(Math.abs(loading.offset) < 1, `${stage}: loading row aligns with project title`)
+    assert.ok(Math.abs(resolved.offset) < 1, `${stage}: resolved row aligns with project title`)
+    assert.ok(
+      Math.abs(loading.offset - resolved.offset) <= 1,
+      `${stage}: row title keeps its leading edge`
+    )
+    for (const index of [0, 1, 2, 3])
+      assert.ok(
+        Math.abs(loading.frame[index] - resolved.frame[index]) <= 1,
+        `${stage}: header title keeps its x, y, width and height; loading ${loading.frame}, resolved ${resolved.frame}`
+      )
+  }
   // Hold the existing chat's title unknown while the project opens. This is a presentation
   // probe only: no record, title, or credential is written to the disposable profile.
   gammaChat.ready = false
@@ -197,6 +229,7 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
   assert.equal(pendingTitle.chatTitleAccessibility, 'Loading conversation')
   assert.equal(pendingRow.titleLoadingMode, 'deciphering')
   assert.equal(pendingTitle.chatTitleLoadingMode, 'deciphering')
+  const loadingNormal = titleGeometry(pendingTitle, 'normal loading')
   await captureChatGate(host, artifacts, 'title-loading', true, false)
   await host.request('shellPerform', { action: 'marquee-reduce-motion', row: 'on' })
   const reducedTitle = await host.request('shellInspect')
@@ -208,6 +241,10 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
   )
   assert.equal(reducedTitle.chatTitle, '••••••••')
   await host.request('shellPerform', { action: 'marquee-reduce-motion', row: 'off' })
+  assert.equal(await host.request('shellPerform', { action: 'window-width', row: '900' }), true)
+  const pendingNarrow = await host.request('shellInspect')
+  const loadingNarrow = titleGeometry(pendingNarrow, 'narrow loading')
+  await captureChatGate(host, artifacts, 'title-loading-narrow', true, false, null)
   gammaChat.ready = true
   gammaChat.title = 'Resolved chat'
   nativeChat.changed(gammaChat)
@@ -223,6 +260,14 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
     ).titleLoadingMode,
     'off'
   )
+  sameTitleGeometry(loadingNarrow, titleGeometry(resolvedTitle, 'narrow resolved'), '900 pt')
+  await captureChatGate(host, artifacts, 'title-resolved-narrow', true, false, null)
+  assert.equal(
+    await host.request('shellPerform', { action: 'window-width', row: String(normalWidth) }),
+    true
+  )
+  const resolvedNormal = await host.request('shellInspect')
+  sameTitleGeometry(loadingNormal, titleGeometry(resolvedNormal, 'normal resolved'), '1320 pt')
   await captureChatGate(host, artifacts, 'title-resolved', true, false)
   // The chat has hydrated, but the project remains opening. Simulate authoritative
   // signed-out metadata in memory to prove project readiness is a separate gate.

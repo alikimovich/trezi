@@ -290,7 +290,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             NSLayoutConstraint.activate([
                 chatHeaderWidth, chatHeader.widthAnchor.constraint(greaterThanOrEqualToConstant: 100), chatHeader.heightAnchor.constraint(equalToConstant: 32),
                 chatTitle.leadingAnchor.constraint(equalTo: chatHeader.leadingAnchor, constant: 4), chatTitle.centerYAnchor.constraint(equalTo: chatHeader.centerYAnchor),
-                chatTitle.trailingAnchor.constraint(lessThanOrEqualTo: chatNewButton.leadingAnchor, constant: -8),
+                chatTitle.trailingAnchor.constraint(equalTo: chatNewButton.leadingAnchor, constant: -8),
                 chatNewButton.trailingAnchor.constraint(equalTo: chatHeader.trailingAnchor, constant: -4),
                 chatNewButton.centerYAnchor.constraint(equalTo: chatHeader.centerYAnchor),
                 chatNewButton.widthAnchor.constraint(equalToConstant: 32), chatNewButton.heightAnchor.constraint(equalToConstant: 32)
