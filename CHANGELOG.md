@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+
+- Loading conversations show a redacted title in the sidebar and chat header; provider prompts wait for confirmed sign-out, while unavailable choices and failed readiness checks show accurate recovery messages (LKM-508).
+
 ## [0.13.17] - 2026-11-04
 
 ### Fixed

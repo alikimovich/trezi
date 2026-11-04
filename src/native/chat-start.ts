@@ -30,6 +30,8 @@ export interface StartWorkspace {
   recents(): { root: string; name: string }[]
   /** The workspace's own progress line ("Opening Site…"), empty when idle. */
   busy(): string
+  /** Project opening has completed and its chat metadata is authoritative. */
+  ready?(): boolean
   /** The model new projects open with; the no-project draft starts from it. */
   preferred(): ChatAgentSettings
 }
@@ -76,6 +78,10 @@ const sameModel = (a: ChatAgentSettings, b: ChatAgentSettings) =>
 export class StartFlow {
   /** Off in the smoke suite until a check opts in, so other groups keep their layout. */
   enabled = false
+  /** Model choices may arrive after seat sign-in checks; the chooser waits for this metadata. */
+  choicesLoaded = false
+  /** A completed choices request failed; unlike an in-flight request this must not spin. */
+  choicesError?: string
   /** The app-managed conversation that is planning a project before a repository exists. */
   planningKey: string | null = null
   /** The project chat to return to when New Project is cancelled. */
@@ -139,7 +145,7 @@ export class StartFlow {
       planning: chat.chat === this.planningKey,
       ready: selectable(chat, usable),
       heading: START_HEADING,
-      notice: centered ? this.notice(chat, usable, readiness) : undefined,
+      notice: centered ? this.notice(chat, usable, readiness, choices) : undefined,
       project: {
         title: home ? (this.draftTarget?.name ?? null) : (this.workspace?.project() ?? null),
         recents: (this.workspace?.recents() ?? []).slice(0, 8)
@@ -150,14 +156,32 @@ export class StartFlow {
   private notice(
     chat: Chat,
     usable: ProviderOption[],
-    readiness: ProviderReadinessMap
+    readiness: ProviderReadinessMap,
+    choices: ModelChoice[]
   ): NativeChatStart['notice'] {
     if (chat.error)
       return { text: chat.error, actions: [{ label: 'Dismiss', action: 'error-dismiss' }] }
     const busy = chat.chat === HOME ? (this.workspace?.busy() ?? '') : ''
     if (busy) return { text: busy, progress: true, actions: [] }
+    // A refresh retains the previous choices for other UI, but they cannot authorize
+    // a start notice until the current request settles.
+    if (this.choicesError) return { text: this.choicesError, actions: [] }
+    if (!this.choicesLoaded)
+      return { text: 'Checking provider sign-in…', progress: true, actions: [] }
+    const selectedAvailable = providerOptions(choices).some(
+      (option) => option.key === providerKeyFor(chat.settings)
+    )
     // No provider can answer: LKM-231's own sign-in card, here under the composer.
-    const start = usable.length ? null : startLoginCard(chat, readiness)
+    const start =
+      usable.length || !selectedAvailable
+        ? null
+        : startLoginCard(
+            chat,
+            readiness,
+            this.workspace?.ready?.() ?? true,
+            choices,
+            this.choicesLoaded
+          )
     if (start && !checking(readiness))
       return { text: start.detail ?? start.title, actions: start.actions }
     if (chat.signingIn || chat.signInMessage)
@@ -172,8 +196,8 @@ export class StartFlow {
         actions: [{ label: 'Cancel', action: 'start-cancel' }]
       }
     // The selected provider stopped answering while another still can: keep the draft.
-    const lost = usable.length > 0 && !selectable(chat, usable)
-    if (lost && !checking(readiness)) {
+    const lost = !selectable(chat, usable)
+    if (lost) {
       const provider = chat.settings.provider
       const seat =
         !chat.settings.connectionId && (provider === 'claude' || provider === 'codex')
@@ -183,6 +207,26 @@ export class StartFlow {
       const gemini = !chat.settings.connectionId && provider === 'gemini'
       const label = seat ? SEAT[seat] : gemini ? 'Gemini' : 'This connection'
       const other = usable[0]
+      const alternative = other
+        ? [{ label: `Use ${other.label}`, action: 'start-provider', value: other.key }]
+        : []
+      if (!selectedAvailable)
+        return {
+          text: `${label} is unavailable. Your draft is kept.`,
+          actions: alternative
+        }
+      const selectedReadiness = seat ? readiness[seat] : gemini ? readiness.gemini : undefined
+      if (selectedReadiness?.status === 'failed')
+        return {
+          text:
+            selectedReadiness.detail ??
+            'Unable to check provider sign-in. Check your connection and retry.',
+          actions: alternative
+        }
+      if (checking(readiness))
+        return other
+          ? undefined
+          : { text: 'Checking provider sign-in…', progress: true, actions: [] }
       return {
         text:
           gemini && !readiness.gemini
@@ -190,11 +234,29 @@ export class StartFlow {
             : `${label} is not signed in. Your draft is kept.`,
         actions: [
           ...(seat ? [{ label: `Sign in to ${SEAT[seat]}`, action: `sign-in-${seat}` }] : []),
-          { label: `Use ${other.label}`, action: 'start-provider', value: other.key }
+          ...alternative
         ]
       }
     }
-    if (!usable.length) return { text: 'Checking provider sign-in…', progress: true, actions: [] }
+    if (!usable.length) {
+      if (!checking(readiness) && this.choicesLoaded) {
+        const geminiListed = choices.some(
+          (choice) => choice.provider === 'gemini' && !choice.connectionId
+        )
+        const failed = [
+          readiness.claude,
+          readiness.codex,
+          ...(geminiListed ? [readiness.gemini] : [])
+        ].find((state) => state?.status === 'failed')
+        if (failed)
+          return {
+            text:
+              failed.detail ?? 'Unable to check provider sign-in. Check your connection and retry.',
+            actions: []
+          }
+      }
+      return { text: 'Checking provider sign-in…', progress: true, actions: [] }
+    }
     return undefined
   }
 
