@@ -27,6 +27,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { MODULE_CACHE, SWIFT_CACHE } from './helpers/swift-build.mjs'
+import { waitForPreviewDriver } from './helpers/swift-preview-driver-wait.mjs'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const FIXTURE = join(ROOT, 'test/fixtures/swift-multi-module')
@@ -283,45 +284,18 @@ driver.stderr.on('data', (chunk) => driverLog.push(String(chunk)))
 const base = `http://127.0.0.1:${port}`
 const driverState = async () =>
   (await fetch(`${base}/state`, { signal: AbortSignal.timeout(2_000) })).json()
-const driverEvidence = async (reason, lastState) => {
-  let finalState = lastState
-  try {
-    finalState = await driverState()
-  } catch (error) {
-    finalState = { unavailable: String(error) }
-  }
-  const evidence = {
-    reason,
-    elapsed: elapsed(),
-    progress: 'driver build',
-    driverExit: { code: driver.exitCode, signal: driver.signalCode },
-    state: finalState,
-    buildLogTail: driverLog.join('').slice(-12_000)
-  }
-  console.error(`swift-preview-target: driver evidence ${JSON.stringify(evidence)}`)
-  return evidence
-}
 try {
-  await until(() => driverLog.join('').includes(`Serving at ${base}`), 'driver URL', 20_000)
-  let lastState
-  let state
-  try {
-    state = await until(
-      async () => {
-        lastState = await driverState()
-        if (lastState.status === 'error' || lastState.status === 'failed') {
-          throw new Error(`Driver ${lastState.status}: ${lastState.message}`)
-        }
-        return lastState.status === 'ready' && lastState
-      },
-      'driver build',
-      Math.max(1, Math.min(180_000, outerDeadline - Date.now() - 15_000)),
-      'driver build'
-    )
-  } catch (error) {
-    await driverEvidence(String(error), lastState)
-    throw error
-  }
+  const state = await waitForPreviewDriver({
+    until,
+    readState: driverState,
+    readLog: () => driverLog.join(''),
+    serving: `Serving at ${base}`,
+    exit: () => ({ code: driver.exitCode, signal: driver.signalCode }),
+    elapsed,
+    emit: (evidence) =>
+      console.error(`swift-preview-target: driver evidence ${JSON.stringify(evidence)}`),
+    deadline: outerDeadline
+  })
   stage('driver graph and project info')
   assert.equal(state.manifest.treziPath, join(manifestDir, 'trezi-previews.json'))
   assert.equal(state.plan.target, 'Studio')

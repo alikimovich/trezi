@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-505 preview diagnostic review repair
+
+- Independent review found that driver startup timed out outside the evidence catch, and no regression exercised the new failure path. The driver URL and readiness waits now share one bounded catch that records final state availability, driver output, exit status and the last progress stage before rethrowing. A fast fake-driver fixture covers success, no server, error and never-ready states; the real Swift target fixture still requires readiness.
+
 ## 2026-11-04 — LKM-505 bounded async fixture failures
 
 - The live conversation fixture now waits for the actual waiting status with its existing deadline, then requires exactly one event while the second provider remains unsent. The event seam exercises a status delayed beyond 50 ms, a missing status and a duplicate; the later protocol scenarios remain intact.
