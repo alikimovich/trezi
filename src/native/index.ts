@@ -65,11 +65,7 @@ import { environmentChanges } from '../shared/environment-changes'
 import { parsePreferredModelState, resolvePreferredSettings } from '../shared/preferred-model'
 import * as channels from '../shared/preview-channels'
 import { projectKey } from '../shared/projectKey'
-import {
-  ACTIVITY_AUTO_OPEN_KEY,
-  activityAutoOpen,
-  NativeActivityController
-} from './activity-controller'
+import { NativeActivityController } from './activity-controller'
 import {
   reportConversationRecovery,
   reportRepositoryRecovery,
@@ -411,11 +407,9 @@ async function main() {
 
   let shellController: NativeShellController | undefined
   const renderShell = () => shellController?.render()
-  // LKM-152: the window opens by itself only as Settings → Show Activity automatically allows.
   const activityController = new NativeActivityController(
     (method, data) => host!.send(method, data),
-    (text) => displayText(text),
-    () => activityAutoOpen(preferences.get(ACTIVITY_AUTO_OPEN_KEY))
+    (text) => displayText(text)
   )
   host.on('activity-action', ({ action }) => activityController.action(action))
   host.on('menu', ({ action }) => {
