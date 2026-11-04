@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-485 review repair: prove changing and static glyphs
+
+- The `chat-gate` fixture previously checked the loader's mode and one rendered title, which could pass with frozen glyphs. It now samples the native header after a 180 ms animation tick and requires a changed visible string within a bounded interval while the mode stays deciphering. Under Reduce Motion it waits across two ticks and requires the static placeholder and still mode. It writes the sampled values to `chat-gate-title-animation.json` beside the existing loading and resolved captures. Native execution and image inspection remain with the manager after merge.
+
 ## 2026-11-04 — LKM-485 review repair: stable title geometry
 
 - Independent review found that the loading-to-resolved captures did not assert title placement. The header title now fills its existing slot up to New Chat, so changing glyphs or resolving the title cannot resize its frame. The `chat-gate` fixture compares the selected row's measured text offset and all four header frame values within 1 pt at 1320 pt and 900 pt, with loading and resolved PNGs at both widths. Native execution and capture inspection remain with the manager after merge.

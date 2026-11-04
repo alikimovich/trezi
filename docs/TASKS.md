@@ -10,6 +10,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Cover state changes in focused unit checks and loading-to-resolved captures in the disposable-profile `chat-gate` fixture.
 - [x] Review repair: gate the initial provider card on project readiness and assert absent-while-opening and present-when-ready states in `chat-gate`.
 - [x] Review repair: assert selected-row and header title geometry at normal and narrow widths through loading and resolution.
+- [x] Review repair: sample the visible header glyphs across animation ticks and assert they stop under Reduce Motion in the native `chat-gate` fixture.
 - [ ] Manager: independent review, CI and post-merge native sidebar acceptance on main.
 
 ## Native sidebar suite Restore capture (LKM-482)

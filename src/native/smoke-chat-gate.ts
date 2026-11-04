@@ -230,6 +230,21 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
   assert.equal(pendingRow.titleLoadingMode, 'deciphering')
   assert.equal(pendingTitle.chatTitleLoadingMode, 'deciphering')
   const loadingNormal = titleGeometry(pendingTitle, 'normal loading')
+  // Observe the rendered text after at least one 180 ms tick. Mode alone can report
+  // deciphering even if the timer has stopped changing the visible glyphs.
+  const firstGlyphs = pendingTitle.chatTitle
+  await pause(220)
+  let changedGlyphs = ''
+  await until(
+    async () => {
+      const sample = await host.request('shellInspect')
+      assert.equal(sample.chatTitleLoadingMode, 'deciphering', 'title stays animated while pending')
+      changedGlyphs = sample.chatTitle
+      return changedGlyphs !== firstGlyphs
+    },
+    'pending title glyphs change after a timer tick',
+    1200
+  )
   await captureChatGate(host, artifacts, 'title-loading', true, false)
   await host.request('shellPerform', { action: 'marquee-reduce-motion', row: 'on' })
   const reducedTitle = await host.request('shellInspect')
@@ -240,6 +255,27 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
     'still'
   )
   assert.equal(reducedTitle.chatTitle, '••••••••')
+  await pause(400)
+  const reducedAfter = await host.request('shellInspect')
+  assert.equal(reducedAfter.chatTitleLoadingMode, 'still', 'Reduce Motion stops the title timer')
+  assert.equal(
+    reducedAfter.chatTitle,
+    reducedTitle.chatTitle,
+    'Reduce Motion holds static glyphs across ticks'
+  )
+  writeFileSync(
+    join(artifacts, 'chat-gate-title-animation.json'),
+    JSON.stringify(
+      {
+        firstGlyphs,
+        changedGlyphs,
+        reduced: reducedTitle.chatTitle,
+        reducedAfter: reducedAfter.chatTitle
+      },
+      null,
+      2
+    )
+  )
   await host.request('shellPerform', { action: 'marquee-reduce-motion', row: 'off' })
   assert.equal(await host.request('shellPerform', { action: 'window-width', row: '900' }), true)
   const pendingNarrow = await host.request('shellInspect')
