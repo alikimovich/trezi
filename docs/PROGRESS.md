@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-481 New Chat painted glass
+
+- The LKM-476 capture showed a bare square-and-pencil despite `NSButton` textured flags. The neighboring native glass is painted by `IslandSegmentedControl`, so New Chat now uses a single momentary segment in its existing 32 pt chat-header position. The guarded action, glyph, tooltip and accessibility label stay on that control.
+- The disposable-profile toolbar fixture now retains foreground light/dark PNGs and geometry receipts for enabled and disabled states, compares its rendered glass with the adjacent device segment, and rejects the disabled action. Existing toolbar and sidebar fixtures continue to cover placement, resizing and enabled input. Native acceptance remains for the manager's post-merge run.
 ## 2026-11-03 — LKM-480 minimum-width toolbar inset
 
 - The `core/toolbar-address` failure measured a 16 pt gap at the 850 pt window minimum with the address at its 80 pt floor. The fixture accepts 16 pt as non-overlapping, but `ToolbarAddressLayout.measure` required 19 pt to record the right-group inset, leaving `rightInsetMeasured` false. Measurement now recognizes the 16 pt pinned gap while layout still targets 20 pt wherever width permits. Native confirmation is pending the manager's locked run.

@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { markupToggleChecks } from './smoke-markup-toggle'
+import { decodePng } from './smoke-png'
 import { assertIslandDividers, capture } from './smoke-toolbar'
 import { waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
@@ -14,6 +15,37 @@ type Focus = 'composer' | 'preview' | 'source'
 const INTERACTION = ['select-object', 'overlay', 'speed', 'markup']
 const TOOLS = ['code', 'layers']
 const MINIMUM_WINDOW = 850
+
+/** Read painted glass from the foreground PNG, using the capture's crop and the native frames.
+ * The left interior of each 32 pt control avoids its glyph; the point just left is bare toolbar.
+ * Compare with the device segment in the same image so appearance and wallpaper cancel out. */
+function glassInk(image: State, frame: string) {
+  const pixels = decodePng(Buffer.from(image.png, 'base64'))
+  const numbers = (value: string) => (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
+  const [x, y, width, height] = numbers(frame)
+  const [, , windowWidth, windowHeight] = numbers(image.geometry.window)
+  const [cropX, cropY] = numbers(image.geometry.crop)
+  const scale = Number(image.geometry.image.match(/^(\d+)x/)?.[1]) / windowWidth
+  assert.ok(
+    width >= 24 && height >= 24 && Number.isFinite(scale),
+    'glass pixels have measured native geometry'
+  )
+  const px = (offset: number) => Math.round((x + offset) * scale - cropX)
+  const py = (offset: number) => Math.round((windowHeight - y - offset) * scale - cropY)
+  const sample = (offset: number) => {
+    const sx = px(offset),
+      sy = py(height / 2)
+    assert.ok(
+      sx >= 0 && sx < pixels.width && sy >= 0 && sy < pixels.height,
+      'glass sample lies inside foreground PNG'
+    )
+    return pixels.rgb(sx, sy)
+  }
+  const inside = sample(5),
+    outside = sample(-5)
+  const brightness = (rgb: number[]) => rgb.reduce((sum, value) => sum + value, 0) / 3
+  return { inside, outside, lift: brightness(inside) - brightness(outside) }
+}
 
 /**
  * LKM-430: the three toolbar and menu changes on the running app.
@@ -178,6 +210,44 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
     }
 
     await islands('at rest')
+
+    // LKM-481: a bordered/style flag cannot prove the glass was painted in a custom toolbar
+    // view. Keep the actual foreground pixels and geometry for both enabled and disabled states.
+    for (const appearance of ['light', 'dark'] as const) {
+      await host.request('shellPerform', { action: 'window-appearance', row: appearance })
+      await pause(250)
+      try {
+        for (const enabled of [true, false]) {
+          await host.request('chatNewAppearanceTest', { enabled })
+          const state = await shell()
+          const image: State = await host.request('captureVisibleWindow')
+          const name = `toolbar-actions-chat-new-${appearance}-${enabled ? 'idle' : 'disabled'}`
+          writeFileSync(join(artifacts, `${name}.png`), Buffer.from(image.png, 'base64'))
+          const chat = glassInk(image, state.chatNewFrame)
+          const neighbor = glassInk(image, state.chatNewNeighborFrame)
+          results[name] = { state, geometry: image.geometry, chat, neighbor }
+          save()
+          assert.equal(state.chatNewEnabled, enabled, `${name}: enabled state`)
+          assert.ok(
+            Math.abs(neighbor.lift) >= 5,
+            `${name}: neighboring glass is visibly painted: ${JSON.stringify(neighbor)}`
+          )
+          assert.ok(
+            Math.abs(chat.lift) >= Math.max(3, Math.abs(neighbor.lift) * 0.4),
+            `${name}: New Chat paints glass like its neighbor: ${JSON.stringify({ chat, neighbor })}`
+          )
+          if (!enabled)
+            assert.equal(
+              await host.request('shellPerform', { action: 'header-new-chat' }),
+              false,
+              `${name}: disabled New Chat rejects input`
+            )
+        }
+      } finally {
+        await host.request('chatNewAppearanceTest', { enabled: true })
+        await host.request('shellPerform', { action: 'window-appearance', row: '' })
+      }
+    }
 
     // Send Feedback: the menu entry, then the keyboard from each input, closed and reopened.
     host.emit('menu', { action: 'feedback' })

@@ -10,6 +10,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+
+- New Chat now paints the same native glass as the neighboring toolbar controls in its idle and disabled states (LKM-481).
 ## [0.13.15] - 2026-11-03
 
 ### Fixed
