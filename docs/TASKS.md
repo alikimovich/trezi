@@ -13,6 +13,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: sample the visible header glyphs across animation ticks and assert they stop under Reduce Motion in the native `chat-gate` fixture.
 - [x] Review repair: expose the sidebar label's painted text in inspection and require selected-row motion and Reduce Motion stillness alongside the header.
 - [ ] Manager: independent review, CI and post-merge native sidebar acceptance on main.
+## Native suite failure on main 17fbc17129bb (LKM-484)
+
+- [x] Embed New Chat as native AppKit glass content inside the chat title's custom toolbar item and preserve its existing segment behavior and visibility.
+- [x] Retry the transient Git metadata read during the new-chat cleanup fixture while retaining its worktree removal assertion.
+- [ ] Manager: confirm the native core suite and required gates on this tree.
 
 ## Native sidebar suite Restore capture (LKM-482)
 

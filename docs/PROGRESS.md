@@ -21,6 +21,14 @@
 
 - The shell now marks only unknown titles in the selected project while conversation or project hydration is pending. AppKit renders fixed-width transient glyphs in those rows and the selected header; it stops the timer on resolution, error, row removal and window detach. Reduce Motion holds a static placeholder and accessibility reads “Loading conversation.” Cached titles and ready untitled chats retain their ordinary text.
 - The initial provider card waits for a ready chat and confirmed signed-out metadata for both built-in seats. Failed or checking metadata does not imply signed out. Focused unit state assertions and a disposable-profile `chat-gate` loading-to-resolved fixture cover the presentation; native capture acceptance remains for the manager after merge.
+## 2026-11-04 — LKM-484 CI worktree cleanup race
+
+- The native core capture passed with the new glass, but the manager's CI run failed in `chat-new-instant`: `git worktree list` read an entry while asynchronous chat cleanup removed its `commondir`. The fixture now retries only that transient Git read until its existing cleanup deadline and still fails other Git errors. A synthetic regression assertion covers the retry and error boundary; the real fixture continues to require every chat worktree to be removed.
+
+## 2026-11-03 — LKM-484 New Chat native core capture repair
+
+- The foreground light-mode capture on main showed the New Chat glyph without a capsule. Its segmented control is a child of the chat title's custom toolbar item, whereas the neighboring device segment belongs to an AppKit toolbar item group that paints its bezel.
+- The chat header now embeds its existing segment as the `contentView` of AppKit's `NSGlassEffectView` with regular glass on macOS 26+, with `NSVisualEffectView` for the older supported systems. The manager's dark capture showed the segment's second bezel darkening the sampled glass, so the segment cell is borderless and the native glass owns the surface. A borderless content segment passed the light/dark pixel checks but AppKit's alignment rect left its actual frame at 34 × 35 pt when constrained to 32 × 32 pt; this one segment now aligns by its full frame, while other toolbar groups retain system alignment. The later separate glass and dark tint did not meet the dark pixel check, so those changes were removed. The segment retains its glyph, accessibility role, tooltip, momentary action and enabled state; the glass follows its frame and visibility. The toolbar-actions fixture checks native glass ownership and identical glass/control frames alongside its foreground light/dark idle/disabled pixel and input checks.
 
 ## 2026-11-03 — LKM-482 sidebar Restore capture
 

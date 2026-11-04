@@ -123,6 +123,12 @@ final class ToolbarLayout {
 /// order and the bezel are the system's. macOS 26 and earlier keep their look.
 final class IslandSegmentedControl: NSSegmentedControl {
     static var hidesDividers: Bool { if #available(macOS 27.0, *) { return true } else { return false } }
+    /// New Chat sits over its own 32 pt glass view; its frame, not AppKit's inset
+    /// alignment rect, must meet that view's edges. Toolbar groups keep system alignment.
+    var alignsFullFrame = false
+    override var alignmentRectInsets: NSEdgeInsets {
+        alignsFullFrame ? NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0) : super.alignmentRectInsets
+    }
     override func layout() { super.layout(); hideDividers() }
     override func updateLayer() { super.updateLayer(); hideDividers() }
     override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); hideDividers() }

@@ -203,13 +203,39 @@ await until(() => providers.length === 1, 'project chat')
 assert.ok(await spareReady(repo), 'opening the project prewarms a spare')
 await releaseSpare(repo)
 delay = 3_000
-const worktrees = () =>
-  git('worktree', 'list', '--porcelain')
-    .split('\n')
-    .filter((line) => line.startsWith('worktree '))
+// Git can read a worktree entry just as the queued remover deletes its commondir.
+// Only that transient list failure retries; the cleanup deadline still catches a leak.
+const worktrees = (list = () => git('worktree', 'list', '--porcelain')) => {
+  let output
+  try {
+    output = list()
+  } catch (error) {
+    if (
+      /fatal: failed to read \.git\/worktrees\/[^/\s]+\/commondir: No such file or directory/.test(
+        String(error.stderr)
+      )
+    )
+      return null
+    throw error
+  }
+  return output.split('\n').filter((line) => line.startsWith('worktree '))
+}
+const removedDuringList = () => {
+  throw {
+    stderr: 'fatal: failed to read .git/worktrees/removed/commondir: No such file or directory'
+  }
+}
+assert.equal(worktrees(removedDuringList), null, 'a concurrently removed worktree retries')
+assert.throws(
+  () =>
+    worktrees(() => {
+      throw new Error('unexpected git failure')
+    }),
+  /unexpected git failure/
+)
 const onlyChatWorktrees = () => {
   const open = new Set(providers.map((p) => p.cwd))
-  return worktrees().every((line) => open.has(line.slice(9)) || line.slice(9) === repo)
+  return worktrees()?.every((line) => open.has(line.slice(9)) || line.slice(9) === repo) ?? false
 }
 
 // 0. LKM-211: the composer's timing, as the median of five new chats after a warm-up.
@@ -301,7 +327,7 @@ const unused = await spareReady(repo)
 assert.ok(unused && existsSync(unused.path))
 await workspace.close(key)
 await until(() => !existsSync(unused.path), 'unused spare removed on project close')
-await until(() => worktrees().length === 1, 'every chat worktree removed on close')
+await until(() => worktrees()?.length === 1, 'every chat worktree removed on close')
 assert.equal(await spareReady(repo), null)
 
 console.log(
