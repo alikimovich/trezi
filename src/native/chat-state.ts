@@ -97,7 +97,7 @@ export interface Chat extends NativeChatMirror {
   /** LKM-151: a stopped turn's work is on hold ('held', live never had it) or the user
    *  reverted it ('reverted', undoable until the next turn starts). */
   stopped?: 'held' | 'reverted'
-  /** The turn whose interrupted park owns the settled Stop card. */
+  /** The turn whose Stop settled, with or without an interrupted park. */
   stoppedTurn?: string
   /** LKM-225: the automatic Resolve of a drift park ran once ('tried'), then gave up ('failed'). */
   autoResolved?: 'tried' | 'failed'
@@ -339,14 +339,14 @@ function placeLiveChange(chat: Chat) {
 }
 /** A terminal event that cannot belong to the turn this chat is running (S11). */
 export function late(chat: Chat, event: AgentEvent) {
-  // Isolation events have no turn id. A second park for the same stopped turn
-  // cannot replace its settled hold with a landing failure; a new turn has a new id.
+  // Isolation events have no turn id. After Stop settles, a failed or decision
+  // park cannot revive that turn, even if no interrupted park arrived first.
   if (
     event.type === 'isolation' &&
     event.state === 'parked' &&
     event.reason !== 'interrupted' &&
-    chat.stopped === 'held' &&
     !chat.isRunning &&
+    chat.stoppedTurn != null &&
     chat.stoppedTurn === chat.turn
   )
     return true

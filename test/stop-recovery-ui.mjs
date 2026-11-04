@@ -210,8 +210,30 @@ await controller.composer({
   revision: 2
 })
 await controller.composer({ chat: 'a', action: 'send' })
+answers['agent:turn-state'] = { turn: chat.turn, running: false }
 await act('stop')
-emit({ type: 'done' })
+assert.equal(chat.stopping, false, 'turn-state settles Stop without a terminal event')
+assert.equal(chat.isRunning, false)
+assert.equal(chat.stopped, undefined, 'no interrupted park has claimed held work')
+assert.equal(chat.stoppedTurn, chat.turn, 'settled Stop remembers its turn')
+for (const parked of [
+  { reason: 'failed', error: 'late check failure' },
+  { decision: 'Keep ours?' }
+]) {
+  emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'], ...parked })
+  assert.equal(card('conflict'), undefined, 'late park cannot revive a settled Stop')
+  assert.equal(chat.recoveryReport, undefined)
+}
+assert.equal(card('stopped'), undefined, 'no hold is claimed without an interrupted park')
+assert.equal(
+  renders.at(-1).cards.some((c) => c.title === 'Problem' || c.title === 'Decision needed'),
+  false
+)
+assert.equal(renders.at(-1).composer.queuePaused, true)
+assert.match(renders.at(-1).composer.queueNote, /^Paused —/)
+assert.equal(renders.at(-1).composer.queueCanSend, true, 'Send now remains available')
+assert.equal(renders.at(-1).composer.queue[0].text, 'Then make it blue')
+delete answers['agent:turn-state']
 emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'], reason: 'interrupted' })
 await tick()
 assert.equal(chat.stopped, 'held')
@@ -580,6 +602,7 @@ controller.event({ projectKey: 'b', type: 'isolation', state: 'isolated' })
 assert.equal(heldCard(other), undefined, 'a discarded chat clears too')
 assert.equal(other.recoveryProblem, undefined)
 assert.equal(other.recoveryReport, undefined)
+
 console.log(
   'STOP RECOVERY UI OK — guard, relative sources, dev-server errors, post-Stop and preview-error cards, queue'
 )

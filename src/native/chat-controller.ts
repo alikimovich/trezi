@@ -954,6 +954,7 @@ export class NativeChatController {
         chat.turn === stoppedTurn &&
         chat.stopping
       ) {
+        chat.stoppedTurn = stoppedTurn
         finish(chat)
         this.changed(chat)
       }
