@@ -34,6 +34,12 @@ export const pick = (state: Toolbar) => ({
   chatHeaderWidth: state.chatHeaderWidth,
   chatHeaderAttached: state.chatHeaderAttached,
   chatHeaderTrailing: state.chatHeaderTrailing,
+  chatNewFrame: state.chatNewFrame,
+  chatTitleFrame: state.chatTitleFrame,
+  chatNewBordered: state.chatNewBordered,
+  chatNewTextured: state.chatNewTextured,
+  detailLeading: state.detailLeading,
+  chatWidth: state.chatWidth,
   measuredRightInset: state.rightInset,
   rightInsetMeasured: state.rightInsetMeasured,
   addressVisible: state.addressVisible,
@@ -137,10 +143,27 @@ export function assertToolbar(state: Toolbar, stage: string) {
     `Toolbar ${stage}: the address stays within its compact width range: ${detail}`
   )
   assert.ok(
-    state.viewportLeading >= state.addressTrailing - 0.5 &&
-      state.viewportTrailing <= state.rightGroupLeading - PINNED_GAP + 0.5,
-    `Toolbar ${stage}: address, viewport and interaction islands do not overlap: ${detail}`
+    state.viewportTrailing <= state.addressLeading + 0.5 &&
+      state.addressTrailing <= state.rightGroupLeading - PINNED_GAP + 0.5,
+    `Toolbar ${stage}: viewport island precedes the address without overlap: ${detail}`
   )
+  const order: string[] = state.toolbarItemOrder
+  assert.equal(
+    order.indexOf('viewport') + 1,
+    order.indexOf('address'),
+    `Toolbar ${stage}: viewport is immediately left of address: ${detail}`
+  )
+  if (state.chatNewVisible) {
+    const rect = (value: string) => (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
+    const [titleX, , titleWidth] = rect(state.chatTitleFrame)
+    const [buttonX, , buttonWidth] = rect(state.chatNewFrame)
+    assert.ok(
+      buttonWidth === 32 &&
+        buttonX >= titleX + titleWidth + 7 &&
+        Math.abs(buttonX + buttonWidth - (state.chatHeaderTrailing - 4)) <= 1,
+      `Toolbar ${stage}: New Chat stays on the chat header's trailing edge without clipping the title: ${detail}`
+    )
+  }
   assert.equal(
     state.addressTruncation,
     'tail',
@@ -176,7 +199,7 @@ export async function capture(host: NativeBridge, artifacts: string, name: strin
   return how
 }
 
-/** Minimum, default and wide window widths: the address and viewport island fit
+/** Minimum, default and wide window widths: the viewport island and address fit
  *  width, keeps its minimum, and the right groups stay pinned without overlap. Each
  *  resize is read synchronously inside the resize (`resizeSnapshot`) and again once
  *  settled; they must agree, so the width is final in the resize's own layout pass. */
@@ -239,7 +262,7 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
       `Toolbar ${name}: the "…" item shows only in windows of ${MORE_MINIMUM_WINDOW} pt or more (${width} pt)`
     )
     // LKM-213: slow motion leaves the interaction group in the same windows as "…".
-    // Mark up stays at every width, and the viewport controls stay beside the address.
+    // Mark up stays at every width, and the viewport controls stay left of the address.
     assert.deepEqual(
       settled.interactionSegments,
       ['select-object', 'overlay', ...(moreShown ? ['speed'] : []), 'markup'],
@@ -260,6 +283,10 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
     trailingInset ??= settled.publishTrailingInset
     assertPublishLast(settled, name, trailingInset as number)
     if (name === 'wide') {
+      assert.ok(
+        Math.abs(settled.chatHeaderTrailing - (settled.detailLeading + settled.chatWidth)) <= 3,
+        `Toolbar wide: New Chat follows the actual chat pane boundary: ${JSON.stringify(pick(settled))}`
+      )
       assert.ok(
         settled.addressTextRoom >= settled.addressHostWidth - 16,
         `Toolbar wide: scheme, host and port fit: ${JSON.stringify(pick(settled))}`
