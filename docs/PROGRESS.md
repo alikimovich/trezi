@@ -1,5 +1,17 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-469 address editor follow-up
+
+- Manager native verification passed 45 of 46 core checks, including `publish-progress`; `toolbar-address` still read the elided URL immediately after `address.selectText(nil)`. Ending a prior edit session did not help, so the prior explanation was incomplete. The `NSTextField` delegate restoration was too late for this synchronous focus path.
+- `PreviewAddressField` now restores the full URL directly when an editor begins and immediately after a fresh `selectText`, then selects all. It avoids resetting an editor that was already active. The full URL is stored alongside the resting label by `showAddress`; the roundtrip fixture still copies from the actual editor and observes the navigation event. Native confirmation is required on this revision.
+- Worker native verification on this source passed all 46 core checks, including `toolbar-address` and `publish-progress` (Agent OS `worker-verify-2.log`, 0 failed, 0 skipped). The manager's independent review and exact-head gate remain.
+
+## 2026-11-03 — LKM-469 native core suite repair
+
+- `toolbar-address` still required the wide block to exceed 180 pt after LKM-467 made it fit the host. At 1800 pt the host needs about 160 pt and the block correctly remains 180 pt; the assertion now checks that width against the preferred host or minimum width.
+- The address roundtrip fixture could inherit an active field editor from earlier toolbar checks. It now ends that edit session before selecting the address so the begin-edit delegate restores the full URL. The native run that found this captured an elided URL in the editor and navigation event.
+- At the 850 pt window minimum, the address is 80 pt and the branch control is 85 pt. The title cannot retain both the CI dot and ellipsis there; the control intentionally hides the dot, as recorded under LKM-440 in TASKS. The dot smoke now requires it to fit its slot and permits hiding only with a cut title in a control at most 90 pt wide. It still checks state, colour and fixed geometry through transitions. The first native run reached these two assertions; the manager's next native run must confirm the repairs.
+
 ## 2026-11-03 — LKM-467 CI build repair: More inspection
 
 - The next ad hoc TreziHost build reached a second Swift type-check timeout in `moreInspect()`. It now computes menu titles, visibility and each segment list as separately typed values, assigns the original inspection keys, then merges Mark up inspection. The toolbar action fixture also checks that the neighboring More menu remains enabled with its three actions. The exact-head CI build is needed to confirm the compiler repair; native GUI fixture execution remains with the manager.
