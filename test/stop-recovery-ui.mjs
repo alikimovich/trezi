@@ -216,6 +216,15 @@ emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'], reason: 'interr
 await tick()
 assert.equal(chat.stopped, 'held')
 assert.equal(card('conflict'), undefined, 'a stopped turn is not a conflict')
+emit({
+  type: 'isolation',
+  state: 'parked',
+  files: ['src/a.tsx'],
+  reason: 'failed',
+  error: 'late check failure'
+})
+assert.equal(chat.stopped, 'held', 'a late failed park cannot replace the settled Stop')
+assert.equal(card('conflict'), undefined, 'late failed park cannot revive a Problem')
 controller.event({ projectKey: 'a', type: 'error', turn: 'stale-turn', message: 'late failure' })
 assert.equal(card('conflict'), undefined, 'a late terminal callback cannot revive a Problem')
 assert.ok(card('stopped'), 'Stop retains its settled action after a late callback')

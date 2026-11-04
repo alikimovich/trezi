@@ -97,6 +97,8 @@ export interface Chat extends NativeChatMirror {
   /** LKM-151: a stopped turn's work is on hold ('held', live never had it) or the user
    *  reverted it ('reverted', undoable until the next turn starts). */
   stopped?: 'held' | 'reverted'
+  /** The turn whose interrupted park owns the settled Stop card. */
+  stoppedTurn?: string
   /** LKM-225: the automatic Resolve of a drift park ran once ('tried'), then gave up ('failed'). */
   autoResolved?: 'tried' | 'failed'
   /** LKM-165: why the last landing failed; its work is held until Retry or Resolve. */
@@ -337,6 +339,18 @@ function placeLiveChange(chat: Chat) {
 }
 /** A terminal event that cannot belong to the turn this chat is running (S11). */
 export function late(chat: Chat, event: AgentEvent) {
+  // Isolation events have no turn id. A second park for the same stopped turn
+  // cannot replace its settled hold with a landing failure; a new turn has a new id.
+  if (
+    event.type === 'isolation' &&
+    event.state === 'parked' &&
+    event.reason !== 'interrupted' &&
+    !event.decision &&
+    chat.stopped === 'held' &&
+    !chat.isRunning &&
+    chat.stoppedTurn === chat.turn
+  )
+    return true
   if (!['done', 'error', 'landing-finished', 'reconciliation-started'].includes(event.type))
     return false
   if (event.type === 'done' && event.stale) return true
@@ -474,6 +488,7 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
           : event.reason === 'reverted'
             ? 'reverted'
             : undefined
+      if (event.reason === 'interrupted') chat.stoppedTurn = chat.turn
       chat.landingError =
         event.reason === 'failed' ? (event.error ?? 'The landing failed.') : undefined
       chat.decision =

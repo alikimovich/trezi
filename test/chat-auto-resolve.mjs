@@ -139,6 +139,9 @@ function harness(autoResolve, { refuse = false } = {}) {
   h.controller.get('a').isRunning = true
   await h.emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
   assert.equal(h.resolves(), 0)
+  const ownedPark = h.frames.at(-1).cards.find((card) => card.id === 'conflict')
+  assert.equal(ownedPark?.title, 'Working on held changes…')
+  assert.equal(ownedPark?.detail, 'Trezi is working on the held changes.')
   h.controller.get('a').isRunning = false
   await h.emit({ type: 'done' })
   assert.equal(h.resolves(), 1)
