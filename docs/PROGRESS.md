@@ -1,5 +1,11 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-475 keep chat visible during project opening
+
+- The selected project's shell already reserved chat width while opening, but `WorkspaceLayout` hid the chat and composer on `chatReady == false` and stretched the preview status over that width. The chat header used the same readiness gate. The layout now keeps the existing selected chat and its draft visible, with Opening or error confined to the preview; manual Hide still collapses the column.
+- The composer uses the existing project readiness gate to disable Send during opening and errors. Native Return and the Bun composer event route also reject early sends. The selected chat identity guard still prevents the previous project's transcript from appearing during a switch.
+- The `chat-gate` disposable-profile fixture now checks column, header, draft, disabled Send, no admitted message, failed-open persistence, manual Hide/Restore and retry readiness with capture/geometry receipts. Native GUI acceptance remains for the manager's post-merge run.
+
 ## 2026-11-03 — LKM-469 address editor follow-up
 
 - Manager native verification passed 45 of 46 core checks, including `publish-progress`; `toolbar-address` still read the elided URL immediately after `address.selectText(nil)`. Ending a prior edit session did not help, so the prior explanation was incomplete. The `NSTextField` delegate restoration was too late for this synchronous focus path.

@@ -163,7 +163,7 @@ final class WorkspaceLayout {
         // composer in that gap.
         let selected = (shellState["selected"] as? String)?.dropFirst(5)
         let matching = selected.map { String($0) == state["chat"] as? String } ?? true
-        let visible = chatReady && matching && shown > 60 && host.canvas.bounds.height > 30
+        let visible = (shellState["project"] is String || planning) && matching && shown > 60 && host.canvas.bounds.height > 30
         state["visible"] = visible
         state["bounds"] = ["x":0.0, "y":0.0, "width":Double(full), "height":Double(host.canvas.bounds.height)]
         startComposer(&state, column: full)
@@ -179,18 +179,22 @@ final class WorkspaceLayout {
         let leading: CGFloat = shellState["project"] is String || planning ? width() * fraction : 0
         host.shell.setChatGeometry(leading)
         let state = nativeChatState()
-        let openingProject = shellState["project"] is String && !chatReady && !planning
         var placedState = state
-        if openingProject { placedState["composerVisible"] = false }
-        host.chat.place(placedState, composer: host.composer)
+        if shellState["project"] is String && !chatReady && !planning,
+           var composer = placedState["composer"] as? [String: Any] {
+            composer["enabled"] = false
+            composer["ready"] = false
+            placedState["composer"] = composer
+        }
         host.chat.isHidden = !(state["visible"] as? Bool ?? false)
-        host.composer.isHidden = openingProject || !(placedState["composerVisible"] as? Bool ?? !host.chat.isHidden)
+        host.chat.place(placedState, composer: host.composer)
+        host.composer.isHidden = !(placedState["composerVisible"] as? Bool ?? !host.chat.isHidden)
         host.chat.alphaValue = starting ? start.progress : 1
         host.chat.model.cat.show(!host.chat.isHidden)
         // Clip the disappearing column while retaining the text and glass layout. The
         // centered composer's column spans the window and narrows as it docks.
         host.chatColumn.frame = NSRect(x: 0, y: 0, width: starting ? bounds.width + (leading - bounds.width) * start.progress : leading, height: bounds.height)
-        host.chatColumn.isHidden = !starting && (leading < 1 || !chatReady)
+        host.chatColumn.isHidden = !starting && leading < 1
         host.chatColumn.composerOnly = starting && startState["home"] as? Bool == true
         placeStart(bounds)
         var dividerState = state
@@ -205,8 +209,8 @@ final class WorkspaceLayout {
         host.inspectorSlot.frame = NSRect(x: leading, y: 0, width: max(0, bounds.width - leading - right), height: max(0, bounds.height - bottom))
         host.inspectorSlot.fit()
         let available = host.canvas.convert(host.inspectorSlot.page, from: host.inspectorSlot)
-        // Opening and failed-open states cover the reserved, hidden chat column too.
-        host.previewStatus.frame = chatReady ? available : NSRect(x: 0, y: 0, width: available.maxX, height: available.height)
+        // Opening and failed-open states stay in the preview beside the chat.
+        host.previewStatus.frame = available
         // Shown rulers take a strip at the top and left of the area (LKM-205).
         let ruler = host.previewOverlay?.inset ?? 0
         let pageArea = NSRect(x: available.minX + ruler, y: available.minY + ruler, width: max(0, available.width - ruler), height: max(0, available.height - ruler))

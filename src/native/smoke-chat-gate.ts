@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
+import { nativeChat } from './chat-runtime'
 import { restoreSidebarFocus } from './smoke-sidebar'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -32,7 +33,8 @@ export async function captureChatGate(
   host: NativeBridge,
   artifacts: string,
   stage: string,
-  chat: boolean
+  chat: boolean,
+  ready = chat
 ) {
   if (!background()) await restoreSidebarFocus(host, `chat gate ${stage}`)
   const [layout, shell, view, composer] = await Promise.all(
@@ -47,7 +49,12 @@ export async function captureChatGate(
     chatReady: shell.chatReady,
     chatVisible: view.visible,
     composerVisible: composer.visible,
+    sendEnabled: composer.enabled,
+    draft: composer.text,
+    messageCount: view.messageCount,
     chatSession: view.chat,
+    chatTitle: shell.chatTitle,
+    selected: shell.selected,
     chatFrame: view.frame,
     chatHeaderContentVisible: shell.chatHeaderContentVisible,
     chatColumnHidden: layout.chatColumnHidden,
@@ -62,8 +69,8 @@ export async function captureChatGate(
       ? 'offscreen (TREZI_NATIVE_BACKGROUND_TEST=1: reduced coverage)'
       : 'foreground window'
   }
+  assert.equal(shell.chatReady, ready, `Chat gate ${stage}: readiness: ${JSON.stringify(state)}`)
   for (const [name, value] of [
-    ['chatReady', shell.chatReady],
     ['chat view', view.visible],
     ['composer', composer.visible],
     ['chat header', shell.chatHeaderContentVisible],
@@ -74,15 +81,24 @@ export async function captureChatGate(
       chat,
       `Chat gate ${stage}: ${name} must be ${chat ? 'shown' : 'hidden'}: ${JSON.stringify(state)}`
     )
-  if (nativeWorkspace.active && stage !== 'loaded') {
+  if (!ready) assert.equal(composer.enabled, false, `Chat gate ${stage}: Send stays disabled`)
+  if (chat) {
+    assert.equal(
+      shell.selected,
+      `chat:${view.chat}`,
+      `Chat gate ${stage}: selected chat owns column`
+    )
+    assert.ok(shell.chatTitle.length > 0, `Chat gate ${stage}: selected title is present`)
+  }
+  if (nativeWorkspace.active && !ready) {
     assert.equal(
       layout.statusHidden,
       false,
       `Chat gate ${stage}: the loading/error state must show`
     )
     assert.ok(
-      layout.status.startsWith('{{0, 0}'),
-      `Chat gate ${stage}: status must cover the reserved chat column: ${layout.status}`
+      layout.status.startsWith(`{{${layout.leading}, 0}`),
+      `Chat gate ${stage}: status belongs in the preview: ${layout.status}`
     )
     assert.equal(
       layout.previewHidden,
@@ -90,7 +106,7 @@ export async function captureChatGate(
       `Chat gate ${stage}: the last project's page must not cover the status`
     )
   }
-  if (stage === 'loaded')
+  if (stage === 'loaded' || stage === 'retry-ready')
     assert.equal(
       layout.previewHidden,
       false,
@@ -148,7 +164,14 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
     async () => (await host.request('chatInspect')).chat === gamma.activeSessionKey,
     'opening chat belongs to Gamma'
   )
-  const busy = await captureChatGate(host, artifacts, 'opening', false)
+  const gammaChat = nativeChat.get(gamma.activeSessionKey)
+  const previousMessages = gammaChat.messages.length
+  await host.request('composerPerform', { text: 'Draft while opening' })
+  await until(() => gammaChat.text === 'Draft while opening', 'opening draft reaches selected chat')
+  const busy = await captureChatGate(host, artifacts, 'opening', true, false)
+  assert.equal(busy.draft, 'Draft while opening', 'Opening keeps the selected draft')
+  await host.request('composerPerform', { action: 'send' })
+  await host.request('composerPerform', { key: 'Enter' })
   assert.equal(busy.statusView.kind, 'busy', 'The opening capture shows the loading state')
   assert.equal(
     await settled,
@@ -161,7 +184,23 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
       (await host.request('layoutInspect')).statusKind === 'error',
     'failed open'
   )
-  const failed = await captureChatGate(host, artifacts, 'failed-open', false)
+  const failed = await captureChatGate(host, artifacts, 'failed-open', true, false)
+  assert.equal(gammaChat.messages.length, previousMessages, 'Disabled Send admits no early message')
+  assert.equal(gammaChat.text, 'Draft while opening', 'Disabled Send keeps the draft')
+  assert.equal(gammaChat.isRunning, false, 'Disabled Send starts no provider turn')
+  assert.equal(failed.draft, busy.draft, 'Failed opening keeps the draft in the column')
+  assert.equal(await host.request('shellPerform', { action: 'expand' }), true)
+  await until(
+    async () => (await host.request('layoutInspect')).chatColumnHidden,
+    'manual Hide collapses chat'
+  )
+  await captureChatGate(host, artifacts, 'manually-hidden', false)
+  assert.equal(await host.request('shellPerform', { action: 'expand' }), true)
+  await until(
+    async () => !(await host.request('layoutInspect')).chatColumnHidden,
+    'manual Restore shows chat'
+  )
+  await captureChatGate(host, artifacts, 'restored-after-error', true, false)
   // The failure is recorded and marked unread without opening or focusing Activity.
   await until(
     async () => {
@@ -239,6 +278,9 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
       }
     }
   )
+  const ready = await captureChatGate(host, artifacts, 'retry-ready', true)
+  assert.equal(ready.draft, 'Draft while opening', 'Ready chat keeps its unsent draft')
+  assert.equal(ready.sendEnabled, true, 'Ready chat enables Send for the saved draft')
   // Switching back changes the chat identity before the preview is ready.
   const back = nativeWorkspace.command({ type: 'select', key: first.key })
   assert.notEqual(nativeWorkspace.state.loadedKey, first.key)
@@ -252,7 +294,7 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
   writeFileSync(
     join(artifacts, 'chat-gate.json'),
     JSON.stringify(
-      { loaded, opening: busy, failedOpen: failed, retried: true, switchedBack: true },
+      { loaded, opening: busy, failedOpen: failed, retryReady: ready, switchedBack: true },
       null,
       2
     )

@@ -222,7 +222,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             let target = detail + (previewState["chatWidth"] as? Double ?? 440)
             let leading = chatHeaderLeading(detail: detail, opening: opening)
             let width = min(max(100, target - leading), max(100, addressLayout.chatLimit(windowWidth: windowWidth, chatLeading: leading, addressPreferred: addressPreferredWidth)))
-            chatTitle.isHidden = !chatReady || chatHidden || width < 150
+            chatTitle.isHidden = currentProject == nil || chatHidden || width < 150
             chatNewButton.isHidden = chatTitle.isHidden
             if abs(chatHeaderWidth.constant - width) > 0.5 { chatHeaderWidth.constant = width }
             chatTrailing = leading + width
@@ -415,14 +415,14 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     func updateToolbar() {
         defer { for group in toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }) { group.refresh() } }
         for (key, item) in toolbarItems {
-            item.isEnabled = key == "chat" ? true : key == "code" ? currentProject != nil : key == "branch" ? previewState["branch"] is String : ready
+            item.isEnabled = key == "chat" ? true : key == "code" || key == "expand" ? currentProject != nil : key == "branch" ? previewState["branch"] is String : ready
         }
         chatTitle.stringValue = allRows.first(where: { $0.id == selectedID })?.title ?? "Chat"
         chatTitle.toolTip = chatTitle.stringValue
         if chatHeaderWidth != nil {
             alignChatHeader()
         }
-        chatTitle.isHidden = !chatReady || chatHidden || (chatHeaderWidth?.constant ?? 0) < 150
+        chatTitle.isHidden = currentProject == nil || chatHidden || (chatHeaderWidth?.constant ?? 0) < 150
         chatNewButton.isHidden = chatTitle.isHidden
         chatNewButton.isEnabled = chatReady && currentProject != nil
         address.isEnabled = ready
