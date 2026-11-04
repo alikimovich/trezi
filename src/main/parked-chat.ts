@@ -142,7 +142,8 @@ export async function discardParkedBranch(
  * Serialized on the chat's chain. `{ ok: false }` if the chat isn't parked.
  */
 export async function resolveParkedChat(
-  sessionKey: string
+  sessionKey: string,
+  recoveryId?: string
 ): Promise<{ ok: boolean; conflicted: string[]; error?: string }> {
   const st = states.get(sessionKey)
   if (!st) return { ok: false, conflicted: [], error: 'no-chat' }
@@ -175,7 +176,7 @@ export async function resolveParkedChat(
       const described = await turnMessage(sessionKey, st, 'resolve')
       const { outcome, verdict } = await gatedTurn(sessionKey, st, described.text, true)
       if (outcome.outcome === 'held') {
-        held = holdTurn(sessionKey, st, outcome, verdict)
+        held = holdTurn(sessionKey, st, outcome, verdict, [], undefined, recoveryId)
         return
       }
       if (outcome.outcome === 'merged') {
@@ -202,7 +203,15 @@ export async function resolveParkedChat(
       // trade-off as the modal's Apply.
       const res = await applyParked(st.liveRoot, st.wt, verdict?.candidate ?? null)
       if (res.hold) {
-        held = holdTurn(sessionKey, st, { ...outcome, hold: res.hold }, verdict)
+        held = holdTurn(
+          sessionKey,
+          st,
+          { ...outcome, hold: res.hold },
+          verdict,
+          [],
+          undefined,
+          recoveryId
+        )
         return
       }
       if (res.ok) {

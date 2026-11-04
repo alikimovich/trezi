@@ -343,18 +343,24 @@ function placeLiveChange(chat: Chat) {
 }
 /** A terminal event that cannot belong to the turn this chat is running (S11). */
 export function late(chat: Chat, event: AgentEvent) {
-  // Isolation events have no turn id. While Keep is pending, its returned result
-  // will settle the operation. Once settled, no old park can overwrite it; a new
-  // turn clears that authority before its own events can arrive.
+  // A stopped Keep's result owns its turn. During a new recovery request only a
+  // parked callback tagged by that request can supersede it; older Stop events
+  // have no request id. A fresh turn clears the Keep settlement separately.
   if (event.type === 'isolation' && event.state === 'parked') {
+    const ownedRecovery =
+      !!chat.recovery &&
+      !chat.recoveryTimedOut &&
+      !!event.recoveryId &&
+      event.recoveryId === chat.recoveryId
     if (
       chat.keepingStopped ||
-      (chat.settledStoppedKeep && chat.settledStoppedKeep.turn === chat.turn)
+      (chat.settledStoppedKeep && chat.settledStoppedKeep.turn === chat.turn && !ownedRecovery)
     )
       return true
     if (
       event.reason !== 'interrupted' &&
       !chat.isRunning &&
+      !ownedRecovery &&
       chat.stoppedTurn != null &&
       chat.stoppedTurn === chat.turn
     )

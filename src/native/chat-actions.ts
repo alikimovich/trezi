@@ -23,7 +23,11 @@ export function setRecoveryRequestDeadlineForTests(ms: number | null) {
 export async function resolveHeld(controller: NativeChatController, chat: Chat) {
   return recoveryRequest(controller, chat, 'resolve', async () => {
     chat.paused = false
-    const result = await controller.services.invoke('agent:resolve-conflict', chat.chat)
+    const result = await controller.services.invoke(
+      'agent:resolve-conflict',
+      chat.chat,
+      chat.recoveryId
+    )
     if (!result.ok) throw new Error(result.error ?? 'Unable to resolve changes.')
     if (chat.recoveryTimedOut) return
     if (result.prompt && result.conflicted.length) {
@@ -31,13 +35,17 @@ export async function resolveHeld(controller: NativeChatController, chat: Chat) 
       // The agent turn is not a request in flight: it starts after the request ends,
       // outside the deadline, and the running-turn lock takes over from the busy state.
       return () =>
-        controller.run(chat, {
-          id: crypto.randomUUID(),
-          text: prompt,
-          attachments: [],
-          selection: null,
-          turn: {}
-        })
+        controller.run(
+          chat,
+          {
+            id: crypto.randomUUID(),
+            text: prompt,
+            attachments: [],
+            selection: null,
+            turn: {}
+          },
+          'resolving'
+        )
     }
     if (chat.isolation === 'parked')
       chat.recoveryProblem = result.error ?? 'The changes are still held. Review the reason below.'

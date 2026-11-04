@@ -218,14 +218,16 @@ export function snapshot(
       !!chat.keepingStopped ||
       (chat.isRunning &&
         !chat.stopping &&
-        (!chat.landingError || (chat.phase === 'applying' && chat.operation === 'parking')))
+        (chat.operation === 'resolving' ||
+          !chat.landingError ||
+          (chat.phase === 'applying' && chat.operation === 'parking')))
     const status =
       chat.recovery === 'retry'
         ? 'Retrying the check…'
-        : chat.recovery === 'resolve' || chat.operation === 'resolving'
-          ? 'Resolving changes…'
-          : chat.isRunning && chat.phase !== 'applying'
-            ? 'Working on held changes…'
+        : chat.isRunning && chat.phase !== 'applying'
+          ? 'Working on held changes…'
+          : chat.recovery === 'resolve' || chat.operation === 'resolving'
+            ? 'Resolving changes…'
             : 'Checking changes…'
     cards.push({
       id: 'conflict',

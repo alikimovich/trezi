@@ -796,9 +796,10 @@ export class NativeChatController {
     }
     return held
   }
-  async run(chat: Chat, submission: Submission) {
+  async run(chat: Chat, submission: Submission, operation?: Chat['operation']) {
     chat.settledStoppedKeep = undefined
     begin(chat)
+    chat.operation = operation
     chat.stopping = false
     chat.sending = true
     chat.isRunning = true

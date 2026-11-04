@@ -2520,13 +2520,16 @@ export function registerAgentIpc(
   // return the conflicted files + a resolution PROMPT for the renderer to run as a normal
   // turn (its `afterTurn` merges + unparks). If they merged cleanly, `resolveParkedChat`
   // already committed + merged + unparked — nothing more to send (`conflicted: []`).
-  ipcMain.handle('agent:resolve-conflict', async (_e, sessionKey = activeKey) => {
-    if (!sessionKey) return { ok: false, conflicted: [] as string[], error: 'no-session' }
-    const res = await resolveParkedChat(sessionKey)
-    if (!res.ok || res.conflicted.length === 0) return { ...res, conflicted: res.conflicted }
-    const prompt = conflictResolutionPrompt(res.conflicted, parkedResolution(sessionKey))
-    return { ok: true, conflicted: res.conflicted, prompt }
-  })
+  ipcMain.handle(
+    'agent:resolve-conflict',
+    async (_e, sessionKey = activeKey, recoveryId?: string) => {
+      if (!sessionKey) return { ok: false, conflicted: [] as string[], error: 'no-session' }
+      const res = await resolveParkedChat(sessionKey, recoveryId)
+      if (!res.ok || res.conflicted.length === 0) return { ...res, conflicted: res.conflicted }
+      const prompt = conflictResolutionPrompt(res.conflicted, parkedResolution(sessionKey))
+      return { ok: true, conflicted: res.conflicted, prompt }
+    }
+  )
 
   // v9 conflict card — "Discard changes". Drop the active parked chat's unmerged work.
   ipcMain.handle('agent:discard-conflict', async (_e, sessionKey = activeKey) => {

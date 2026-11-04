@@ -263,11 +263,11 @@ async function exclusive<T>(
 }
 
 /** Resolve for a held chat, refused while a landing or another recovery runs. */
-export const resolveParkedChat = (sessionKey: string) =>
+export const resolveParkedChat = (sessionKey: string, recoveryId?: string) =>
   exclusive(
     sessionKey,
     (error) => ({ ok: false, conflicted: [] as string[], error }),
-    () => resolveHeldChat(sessionKey)
+    () => resolveHeldChat(sessionKey, recoveryId)
   )
 
 /** Discard for a held chat, refused while a landing or another recovery runs. */

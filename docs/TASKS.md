@@ -14,6 +14,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: distinguish explicit Keep settlements from old Stop callbacks; show genuine failed-check report and Retry, and retain Revert and Finish outcomes.
 - [x] Review repair: retain the explicit Keep settlement across all old parked callbacks, including interrupted; allow a fresh turn and user Retry to own later outcomes.
 - [x] Review repair: classify empty-file and rejected Keep failures through the terminal Problem, report, and Retry path before retaining the authoritative settlement.
+- [x] Review repair: distinguish old Stop callbacks from a new Resolve request during its active window with the initiating recovery request ID.
 - [ ] Manager: exact-head CI, independent review, and post-merge native acceptance on main.
 ## LKM-508 — Loading titles and provider readiness
 

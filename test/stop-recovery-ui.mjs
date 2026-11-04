@@ -169,7 +169,7 @@ const controller = new NativeChatController({
       }
     if (channel === 'providers:choices') return []
     const answer = answers[channel]
-    return typeof answer === 'function' ? answer() : (answer ?? { ok: true })
+    return typeof answer === 'function' ? answer(...args) : (answer ?? { ok: true })
   },
   render: (state) => renders.push(structuredClone(state)),
   effect: () => {}
@@ -368,6 +368,72 @@ for (const parked of stoppedGenerationParks) {
   assert.equal(chat.recoveryReport, failedKeepReport)
   assert.ok(card('conflict').actions.some((action) => action.action === 'landing-retry'))
 }
+// Resolve is a new user action on the failed hold. A failed staging check emits
+// its parked result before the owner returns, without starting an agent turn.
+let resolveStage
+answers['agent:resolve-conflict'] = (_chat, requestId) => {
+  const beforeOldPark = chat.version
+  oldPark({ reason: 'failed', error: 'late Stop callback' })
+  const afterOldPark = chat.version
+  emit({
+    type: 'isolation',
+    state: 'parked',
+    files: ['src/a.tsx'],
+    reason: 'failed',
+    error: 'Resolve staging check failed.',
+    recoveryId: requestId
+  })
+  resolveStage = {
+    requestId,
+    beforeOldPark,
+    afterOldPark,
+    landingError: chat.landingError,
+    title: card('conflict')?.title
+  }
+  return { ok: false, conflicted: [], error: 'Resolve staging check failed.' }
+}
+await act('resolve', 'conflict')
+assert.equal(resolveStage.afterOldPark, resolveStage.beforeOldPark, 'old Stop callback is rejected')
+assert.equal(resolveStage.requestId, chat.recoveryId, 'Resolve passes its admitted request id')
+assert.equal(
+  resolveStage.landingError,
+  'Resolve staging check failed.',
+  'new Resolve owns its staging failure instead of the stale Keep error'
+)
+assert.equal(resolveStage.title, 'Resolving changes…')
+assert.equal(card('conflict')?.title, 'Problem', 'failed Resolve staging settles honestly')
+assert.match(card('conflict').detail, /Resolve staging check failed/)
+assert.ok(chat.recoveryReport)
+assert.ok(card('conflict').actions.some((action) => action.action === 'landing-retry'))
+const resolveReport = chat.recoveryReport
+oldPark({ reason: 'failed', error: 'late Stop callback' })
+assert.equal(card('conflict')?.title, 'Problem', 'old Stop stays rejected after Resolve settles')
+assert.equal(chat.recoveryReport, resolveReport)
+// An overlapping Resolve returns a prompt; its subsequent turn owns the final
+// check and report, with the same user action boundary before the handover.
+answers['agent:resolve-conflict'] = {
+  ok: true,
+  prompt: 'Resolve the held changes',
+  conflicted: ['src/a.tsx']
+}
+await act('resolve', 'conflict')
+assert.equal(chat.isRunning, true, 'Resolve handed off to its agent turn')
+assert.equal(chat.landingError, 'Resolve staging check failed.')
+assert.equal(card('conflict')?.title, 'Working on held changes…', 'the admitted turn owns its hold')
+emit({ type: 'done' })
+emit({
+  type: 'isolation',
+  state: 'parked',
+  files: ['src/a.tsx'],
+  reason: 'failed',
+  error: 'The Resolve check still failed.'
+})
+await tick()
+assert.equal(card('conflict')?.title, 'Problem', 'the new failed check is terminal')
+assert.match(card('conflict').detail, /Resolve check still failed/)
+assert.ok(chat.recoveryReport)
+assert.ok(card('conflict').actions.some((action) => action.action === 'landing-retry'))
+delete answers['agent:resolve-conflict']
 answers['agent:retry-landing'] = () => {
   oldPark({ reason: 'failed', error: 'Retry still failed.' })
   return { ok: true, state: 'parked', error: 'Retry still failed.' }

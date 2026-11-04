@@ -115,7 +115,8 @@ export function emitIsolation(
   revertable?: boolean,
   reason?: 'interrupted' | 'reverted' | 'failed',
   error?: string,
-  decision?: string
+  decision?: string,
+  recoveryId?: string
 ): void {
   // Guard a destroyed webContents: this fires from async turn lifecycle hooks,
   // which can land after the renderer process is killed (OS display sleep).
@@ -131,6 +132,7 @@ export function emitIsolation(
     ...(reason ? { reason } : {}),
     ...(error ? { error } : {}),
     ...(decision ? { decision } : {}),
+    ...(recoveryId ? { recoveryId } : {}),
     projectKey: sessionKey
   } satisfies AgentEvent)
 }
