@@ -89,9 +89,24 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
     let chatHeader = ChatToolbarView()
     private let chatTitle = NSTextField(labelWithString: "Chat")
-    // The toolbar islands paint their own glass through this control; a standalone NSButton
-    // inside a custom toolbar item has no such material, even with a textured bezel.
+    // The toolbar islands receive AppKit's glass from their item groups. The title's custom
+    // item needs an explicit native glass view around its single action.
+    private let chatNewGlass: NSView = {
+        if #available(macOS 26.0, *) { return NSGlassEffectView() }
+        let effect = NSVisualEffectView()
+        effect.material = .popover
+        effect.blendingMode = .withinWindow
+        effect.state = .active
+        effect.wantsLayer = true
+        effect.layer?.cornerRadius = 16
+        effect.layer?.masksToBounds = true
+        return effect
+    }()
     private let chatNewButton = IslandSegmentedControl(images: [toolbarSymbol("square.and.pencil", "New Chat") ?? NSImage()], trackingMode: .momentary, target: nil, action: nil)
+    private var chatNewSystemGlass: Bool {
+        if #available(macOS 26.0, *), chatNewGlass is NSGlassEffectView { return true }
+        return chatNewGlass is NSVisualEffectView
+    }
     // Disposable-profile appearance fixture toggles only this control, then restores readiness.
     func testChatNewEnabled(_ enabled: Bool) { chatNewButton.isEnabled = enabled }
     /// The selected project's History section (`SidebarChats.swift`).
@@ -228,6 +243,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             let width = min(max(100, target - leading), max(100, addressLayout.chatLimit(windowWidth: windowWidth, chatLeading: leading, addressPreferred: addressPreferredWidth)))
             chatTitle.isHidden = currentProject == nil || chatHidden || width < 150
             chatNewButton.isHidden = chatTitle.isHidden
+            chatNewGlass.isHidden = chatNewButton.isHidden
             if abs(chatHeaderWidth.constant - width) > 0.5 { chatHeaderWidth.constant = width }
             chatTrailing = leading + width
             let formerChat = min(max(100, target - leading), max(100, windowWidth - leading - 500))
@@ -280,19 +296,34 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             chatTitle.lineBreakMode = .byTruncatingTail
             chatTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             chatTitle.translatesAutoresizingMaskIntoConstraints = false; chatHeader.addSubview(chatTitle)
+            if #available(macOS 26.0, *), let glass = chatNewGlass as? NSGlassEffectView {
+                glass.style = .regular
+                glass.cornerRadius = 16
+                glass.contentView = chatNewButton
+            } else {
+                chatNewGlass.addSubview(chatNewButton)
+            }
+            chatNewGlass.translatesAutoresizingMaskIntoConstraints = false; chatHeader.addSubview(chatNewGlass)
             chatNewButton.segmentStyle = .texturedRounded
+            // The glass view owns the bezel; a second segmented-cell bezel darkens its interior.
+            chatNewButton.cell?.isBordered = false
+            chatNewButton.alignsFullFrame = true
             chatNewButton.setWidth(32, forSegment: 0)
             chatNewButton.toolTip = "New Chat"; chatNewButton.setAccessibilityLabel("New Chat")
             chatNewButton.setAccessibilityRole(.button)
             chatNewButton.target = self; chatNewButton.action = #selector(headerNewChat(_:))
-            chatNewButton.translatesAutoresizingMaskIntoConstraints = false; chatHeader.addSubview(chatNewButton)
+            chatNewButton.translatesAutoresizingMaskIntoConstraints = false
             NSLayoutConstraint.activate([
                 chatHeaderWidth, chatHeader.widthAnchor.constraint(greaterThanOrEqualToConstant: 100), chatHeader.heightAnchor.constraint(equalToConstant: 32),
                 chatTitle.leadingAnchor.constraint(equalTo: chatHeader.leadingAnchor, constant: 4), chatTitle.centerYAnchor.constraint(equalTo: chatHeader.centerYAnchor),
                 chatTitle.trailingAnchor.constraint(lessThanOrEqualTo: chatNewButton.leadingAnchor, constant: -8),
-                chatNewButton.trailingAnchor.constraint(equalTo: chatHeader.trailingAnchor, constant: -4),
-                chatNewButton.centerYAnchor.constraint(equalTo: chatHeader.centerYAnchor),
-                chatNewButton.widthAnchor.constraint(equalToConstant: 32), chatNewButton.heightAnchor.constraint(equalToConstant: 32)
+                chatNewGlass.trailingAnchor.constraint(equalTo: chatHeader.trailingAnchor, constant: -4),
+                chatNewGlass.centerYAnchor.constraint(equalTo: chatHeader.centerYAnchor),
+                chatNewGlass.widthAnchor.constraint(equalToConstant: 32), chatNewGlass.heightAnchor.constraint(equalToConstant: 32),
+                chatNewButton.leadingAnchor.constraint(equalTo: chatNewGlass.leadingAnchor),
+                chatNewButton.trailingAnchor.constraint(equalTo: chatNewGlass.trailingAnchor),
+                chatNewButton.topAnchor.constraint(equalTo: chatNewGlass.topAnchor),
+                chatNewButton.bottomAnchor.constraint(equalTo: chatNewGlass.bottomAnchor)
             ])
             item.view = chatHeader; item.isBordered = false; item.visibilityPriority = .high
         } else if key == "address" {
@@ -429,6 +460,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
         chatTitle.isHidden = currentProject == nil || chatHidden || (chatHeaderWidth?.constant ?? 0) < 150
         chatNewButton.isHidden = chatTitle.isHidden
+        chatNewGlass.isHidden = chatNewButton.isHidden
         chatNewButton.isEnabled = chatReady && currentProject != nil
         address.isEnabled = ready
         if address.currentEditor() == nil { showAddress() }
@@ -668,6 +700,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         let chatInspect: [String: Any] = [
             "chatTitle":chatTitle.stringValue, "chatTitlePlain":toolbarItems["chat"]?.action == nil,
             "chatNewVisible":!chatNewButton.isHidden, "chatNewEnabled":chatNewButton.isEnabled,
+            "chatNewSystemGlass":chatNewSystemGlass,
+            "chatNewGlassFrame":NSStringFromRect(mainFrame(chatNewGlass) ?? .zero),
             "chatNewSegmented":chatNewButton.segmentCount == 1, "chatNewTextured":chatNewButton.segmentStyle == .texturedRounded,
             "chatNewMomentary":chatNewButton.trackingMode == .momentary,
             "chatNewButtonRole":chatNewButton.accessibilityRole() == .button,
