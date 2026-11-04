@@ -168,16 +168,20 @@ export class StartFlow {
     if (this.choicesError) return { text: this.choicesError, actions: [] }
     if (!this.choicesLoaded)
       return { text: 'Checking provider sign-in…', progress: true, actions: [] }
+    const selectedAvailable = providerOptions(choices).some(
+      (option) => option.key === providerKeyFor(chat.settings)
+    )
     // No provider can answer: LKM-231's own sign-in card, here under the composer.
-    const start = usable.length
-      ? null
-      : startLoginCard(
-          chat,
-          readiness,
-          this.workspace?.ready?.() ?? true,
-          choices,
-          this.choicesLoaded
-        )
+    const start =
+      usable.length || !selectedAvailable
+        ? null
+        : startLoginCard(
+            chat,
+            readiness,
+            this.workspace?.ready?.() ?? true,
+            choices,
+            this.choicesLoaded
+          )
     if (start && !checking(readiness))
       return { text: start.detail ?? start.title, actions: start.actions }
     if (chat.signingIn || chat.signInMessage)
@@ -192,7 +196,7 @@ export class StartFlow {
         actions: [{ label: 'Cancel', action: 'start-cancel' }]
       }
     // The selected provider stopped answering while another still can: keep the draft.
-    const lost = usable.length > 0 && !selectable(chat, usable)
+    const lost = !selectable(chat, usable)
     if (lost) {
       const provider = chat.settings.provider
       const seat =
@@ -203,15 +207,26 @@ export class StartFlow {
       const gemini = !chat.settings.connectionId && provider === 'gemini'
       const label = seat ? SEAT[seat] : gemini ? 'Gemini' : 'This connection'
       const other = usable[0]
+      const alternative = other
+        ? [{ label: `Use ${other.label}`, action: 'start-provider', value: other.key }]
+        : []
+      if (!selectedAvailable)
+        return {
+          text: `${label} is unavailable. Your draft is kept.`,
+          actions: alternative
+        }
       const selectedReadiness = seat ? readiness[seat] : gemini ? readiness.gemini : undefined
       if (selectedReadiness?.status === 'failed')
         return {
           text:
             selectedReadiness.detail ??
             'Unable to check provider sign-in. Check your connection and retry.',
-          actions: [{ label: `Use ${other.label}`, action: 'start-provider', value: other.key }]
+          actions: alternative
         }
-      if (checking(readiness)) return undefined
+      if (checking(readiness))
+        return other
+          ? undefined
+          : { text: 'Checking provider sign-in…', progress: true, actions: [] }
       return {
         text:
           gemini && !readiness.gemini
@@ -219,7 +234,7 @@ export class StartFlow {
             : `${label} is not signed in. Your draft is kept.`,
         actions: [
           ...(seat ? [{ label: `Sign in to ${SEAT[seat]}`, action: `sign-in-${seat}` }] : []),
-          { label: `Use ${other.label}`, action: 'start-provider', value: other.key }
+          ...alternative
         ]
       }
     }

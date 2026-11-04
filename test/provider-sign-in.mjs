@@ -380,6 +380,7 @@ const geminiChoice = {
   group: 'Gemini',
   label: 'Default'
 }
+chat.settings.provider = 'gemini'
 for (const status of ['ready', 'checking', 'failed']) {
   states.gemini = { status }
   assert.equal(
@@ -396,11 +397,14 @@ assert.equal(
 )
 states.gemini = readinessFromLogin(false)
 assert.equal(startLoginCard(chat, states, true, [geminiChoice], true)?.title, 'Choose a provider')
+chat.settings.connectionId = 'saved'
 assert.equal(
   startLoginCard(chat, states, true, [{ ...geminiChoice, connectionId: 'saved' }], true),
   null,
   'a saved connection does not require built-in sign-in'
 )
+delete chat.settings.connectionId
+chat.settings.provider = 'claude'
 delete states.gemini
 for (const pending of ['checking', 'failed']) {
   states.codex = { status: pending }
@@ -490,6 +494,70 @@ assert.deepEqual(
 selectedReadiness.claude = readinessFromLogin(true)
 assert.equal(selectedState().notice, undefined, 'successful readiness retry clears the notice')
 assert.equal(selectedState().ready, true, 'successful readiness retry restores send readiness')
+const missingConnection = newChat('')
+missingConnection.settings.provider = 'codex'
+missingConnection.settings.connectionId = 'deleted-connection'
+missingConnection.text = 'saved draft'
+const availableClaude = { claude: readinessFromLogin(true), codex: readinessFromLogin(true) }
+const missingConnectionState = flow.state(missingConnection, [seatChoice], availableClaude)
+assert.equal(
+  missingConnectionState.notice?.text,
+  'This connection is unavailable. Your draft is kept.',
+  'a deleted saved connection is unavailable, not signed out'
+)
+assert.deepEqual(
+  missingConnectionState.notice?.actions.map((action) => action.action),
+  ['start-provider'],
+  'a deleted connection can switch to a usable provider'
+)
+assert.equal(missingConnectionState.ready, false, 'a deleted connection cannot send')
+const missingBuiltin = newChat('')
+missingBuiltin.settings.provider = 'codex'
+const missingBuiltinState = flow.state(missingBuiltin, [seatChoice], availableClaude)
+assert.equal(
+  missingBuiltinState.notice?.text,
+  'Codex is unavailable. Your draft is kept.',
+  'a ready but unlisted built-in provider is unavailable, not signed out'
+)
+assert.deepEqual(
+  missingBuiltinState.notice?.actions.map((action) => action.action),
+  ['start-provider']
+)
+const noneReady = { claude: readinessFromLogin(false), codex: readinessFromLogin(false) }
+assert.equal(
+  flow.state(missingConnection, [seatChoice], noneReady).notice?.text,
+  'This connection is unavailable. Your draft is kept.',
+  'missing saved connection does not become a sign-in chooser when no alternative is ready'
+)
+assert.deepEqual(
+  flow.state(missingConnection, [seatChoice], noneReady).notice?.actions,
+  [],
+  'missing saved connection offers no false authentication action'
+)
+assert.equal(
+  startLoginCard(missingConnection, noneReady, true, [seatChoice], true),
+  null,
+  'snapshot start card does not offer sign-in for a deleted connection'
+)
+assert.equal(
+  startLoginCard(missingBuiltin, noneReady, true, [seatChoice], true),
+  null,
+  'snapshot start card does not offer sign-in for an absent built-in provider'
+)
+const signedOutNoAlternative = flow.state(selectedHome, [seatChoice], {
+  claude: readinessFromLogin(false),
+  codex: readinessFromLogin(true)
+}).notice
+assert.match(
+  signedOutNoAlternative?.text ?? '',
+  /Claude is not signed in/,
+  'a listed selected seat with confirmed sign-out does not spin when other choices are absent'
+)
+assert.deepEqual(
+  signedOutNoAlternative?.actions.map((action) => action.action),
+  ['sign-in-claude'],
+  'confirmed sign-out retains authentication without a usable alternative'
+)
 const choiceRequests = []
 let loginResult = null
 const choicesController = new NativeChatController({
@@ -505,7 +573,7 @@ choicesController.start.enabled = true
 choicesController.readiness.claude = readinessFromLogin(true)
 choicesController.readiness.codex = readinessFromLogin(false)
 const loadedChoices = choicesController.refreshChoices()
-choiceRequests[0].resolve([seatChoice])
+choiceRequests[0].resolve([seatChoice, codexChoice])
 await loadedChoices
 const cachedHome = choicesController.get('')
 cachedHome.settings.provider = 'codex'
@@ -539,7 +607,7 @@ assert.equal(
 )
 assert.deepEqual(
   choicesController.choices,
-  [seatChoice],
+  [seatChoice, codexChoice],
   'older metadata cannot replace cached choices'
 )
 assert.equal(

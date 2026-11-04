@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-508 review repair: selected choice availability
+
+- The centered notice had treated any unselectable provider as signed out, even when current choices no longer contained the saved connection or built-in seat. It now checks selected-choice existence separately from readiness: missing choices report unavailability and keep the draft, confirmed sign-out still offers authentication, failed checks show their recovery detail, and available ready choices restore send. The focused provider fixture covers missing saved and built-in choices, the no-alternative case and the existing refresh, failure and retry paths. Prior CI diagnostics were on superseded heads, including unrelated conversation-owner and rename-compat failures; exact-head CI remains required.
+- The same availability check now keeps the snapshot's initial chooser from appearing for a deleted connection or absent built-in provider. A listed, confirmed signed-out provider with no usable alternative shows its sign-in action instead of indefinite checking. The existing provider fixture asserts both consumers.
+
 ## 2026-11-04 — LKM-508 review repair: selected provider check failure
 
 - A failed readiness check for the selected provider was being presented as confirmed sign-out whenever another provider could answer. The centered notice now shows that check's settled recovery detail and offers the ready provider without a false sign-in action. Confirmed sign-out still offers sign-in, while a successful check retry restores send readiness. The provider fixture first reproduced the wrong message, then covers the settled report and retry through the controller; the previous choice-refresh and title lifecycle checks remain in place. Native GUI acceptance remains for the post-merge run.

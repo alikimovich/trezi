@@ -1,7 +1,7 @@
 import type { ModelChoice, ProviderErrorCode, ProviderLoginReport } from '../shared/api'
 import { agentOptionsFor } from '../shared/chat-settings'
 import type { NativeChatCard } from '../shared/native-chat'
-import { providerOptions } from '../shared/provider-choices'
+import { providerKeyFor, providerOptions } from '../shared/provider-choices'
 import type { BuiltinProvider, ProviderReadinessMap } from '../shared/provider-readiness'
 import type { NativeChatController } from './chat-controller'
 import type { Chat } from './chat-state'
@@ -49,6 +49,7 @@ export function startLoginCard(
     !projectReady ||
     !choicesLoaded ||
     (chat.chat !== '' && !chat.ready) ||
+    !options.some((option) => option.key === providerKeyFor(chat.settings)) ||
     options.some((option) => !!option.connectionId) ||
     (options.some((option) => option.provider === 'gemini') &&
       readiness.gemini?.status !== 'signed_out') ||
