@@ -63,7 +63,7 @@ final class SidebarChatCell: SourceListCell {
                                 title.trailingAnchor.constraint(lessThanOrEqualTo: detail.leadingAnchor, constant: -6)]
                 setAccessibilityLabel(row.detail.isEmpty ? row.title : "\(row.title), \(row.detail)")
             } else {
-                setAccessibilityLabel(row.running ? "\(row.title), Running" : row.unread ? "\(row.title), Unread answer" : row.title)
+                setAccessibilityLabel(row.title == "••••••••" ? "Loading conversation" : row.running ? "\(row.title), Running" : row.unread ? "\(row.title), Unread answer" : row.title)
                 let resting = title.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8)
                 constraints.append(resting); self.resting = resting
                 if canArchive {
@@ -90,7 +90,7 @@ final class SidebarChatCell: SourceListCell {
             dot.centerXAnchor.constraint(equalTo: slot.centerXAnchor), dot.centerYAnchor.constraint(equalTo: slot.centerYAnchor),
             dot.widthAnchor.constraint(equalToConstant: 6), dot.heightAnchor.constraint(equalToConstant: 6)
         ])
-        if row.thinking, let title { shimmer = SidebarTitleShimmer(label: title.label) }
+        if (row.thinking || row.loadingTitle), let title { shimmer = SidebarTitleShimmer(label: title.label) }
         tint()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }

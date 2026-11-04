@@ -15,6 +15,10 @@ export function installNativeStart(
     project: () => workspace.active?.name ?? null,
     recents: () => workspace.state.recents.map(({ root, name }) => ({ root, name })),
     busy: () => (workspace.state.status.kind === 'busy' ? workspace.state.status.label : ''),
+    ready: () =>
+      !workspace.active ||
+      (workspace.state.loadedKey === workspace.active.key &&
+        (workspace.state.status.kind === 'running' || workspace.state.status.kind === 'setup')),
     preferred: () => ({ ...workspace.preferred })
   }
   const fail = (error: unknown) => workspace.reportError(error)

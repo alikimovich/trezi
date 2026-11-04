@@ -94,6 +94,26 @@ export async function captureChatGate(
       `Chat gate ${stage}: selected chat owns column`
     )
     assert.ok(shell.chatTitle.length > 0, `Chat gate ${stage}: selected title is present`)
+    const selectedRow = shell.rows.find((row: { id: string }) => row.id === shell.selected)
+    assert.equal(
+      shell.chatTitle,
+      selectedRow?.title,
+      `Chat gate ${stage}: header follows selected row`
+    )
+    if (shell.chatTitle === '••••••••') {
+      assert.equal(
+        shell.chatTitleLabel,
+        'Loading conversation',
+        `Chat gate ${stage}: loading label`
+      )
+      assert.ok(
+        ['sweep', 'still', 'none'].includes(shell.chatTitleMode),
+        `Chat gate ${stage}: loading title mode`
+      )
+    } else {
+      assert.equal(shell.chatTitleLabel, shell.chatTitle, `Chat gate ${stage}: known title label`)
+      assert.equal(shell.chatTitleMode, 'none', `Chat gate ${stage}: known title stops animating`)
+    }
   }
   if (nativeWorkspace.active && !ready) {
     assert.equal(
@@ -156,19 +176,61 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
   const root = join(fixture, '../Folder Gamma')
   mkdirSync(root, { recursive: true })
   writeFileSync(join(root, 'index.html'), '<h1 id="gamma-project">Gamma project</h1>')
+  // Hold this new chat's real snapshot until the shell has rendered its unknown title.
+  // The dev-server open still proceeds, so this observes the ordinary loading path.
+  let releaseSnapshot = () => {}
+  const snapshotGate = new Promise<void>((resolve) => {
+    releaseSnapshot = resolve
+  })
+  const invoke = nativeChat.services.invoke
+  nativeChat.services.invoke = async (channel, ...args) => {
+    if (channel === 'agent:workspace-snapshot' && nativeWorkspace.active?.root === root)
+      await snapshotGate
+    return invoke(channel, ...args)
+  }
   // A custom command that runs a while and then fails gives a deterministic opening then failed-open state.
   const opening = nativeWorkspace.command({ type: 'open', root, command: 'sleep 15; exit 1' })
   const settled = opening.then(
     () => null,
     (error: unknown) => error
   )
-  await until(
-    async () =>
-      nativeWorkspace.state.status.kind === 'busy' &&
-      nativeWorkspace.active?.key !== first.key &&
-      (await host.request('layoutInspect')).statusKind === 'busy',
-    'opening state'
-  )
+  let loadingTitle: { title: string; label: string; mode: string }
+  try {
+    await until(
+      async () =>
+        nativeWorkspace.state.status.kind === 'busy' &&
+        nativeWorkspace.active?.key !== first.key &&
+        (await host.request('layoutInspect')).statusKind === 'busy',
+      'opening state'
+    )
+    await until(
+      async () => {
+        const shell = await host.request('shellInspect')
+        return (
+          shell.selected === `chat:${nativeWorkspace.active?.activeSessionKey}` &&
+          shell.chatTitle === '••••••••'
+        )
+      },
+      'unknown selected title during opening',
+      5000,
+      () => host.request('shellInspect')
+    )
+    const shell = await host.request('shellInspect')
+    assert.equal(shell.chatTitle, '••••••••', 'Unknown header title is redacted')
+    assert.equal(shell.chatTitleLabel, 'Loading conversation', 'Unknown header has stable label')
+    assert.ok(
+      ['sweep', 'still'].includes(shell.chatTitleMode),
+      'Unknown header has active or reduced-motion effect'
+    )
+    loadingTitle = {
+      title: shell.chatTitle,
+      label: shell.chatTitleLabel,
+      mode: shell.chatTitleMode
+    }
+  } finally {
+    nativeChat.services.invoke = invoke
+    releaseSnapshot()
+  }
   const gamma = nativeWorkspace.active!
   await until(
     async () => (await host.request('chatInspect')).chat === gamma.activeSessionKey,
@@ -176,6 +238,10 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
   )
   const gammaChat = nativeChat.get(gamma.activeSessionKey)
   await until(() => gammaChat.ready, 'selected chat initialized during opening')
+  await until(
+    async () => (await host.request('shellInspect')).chatTitleMode === 'none',
+    'loading header effect stopped after readiness'
+  )
   const transcriptID = 'chat-gate-existing-message'
   const transcriptText = 'An existing reply in this selected chat.'
   gammaChat.messages.push({
@@ -229,6 +295,11 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
     'failed open'
   )
   const failed = await captureChatGate(host, artifacts, 'failed-open', true, false)
+  assert.equal(
+    (await host.request('shellInspect')).chatTitleMode,
+    'none',
+    'Opening error keeps title effect stopped'
+  )
   assert.equal(
     failed.messageCount,
     previousMessages,
@@ -368,6 +439,7 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
     JSON.stringify(
       {
         loaded,
+        loadingTitle,
         opening: busy,
         openingNarrow: busyNarrow,
         failedOpen: failed,

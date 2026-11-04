@@ -75,12 +75,15 @@ export class NativeShellController {
       const chats = new Map(
         p.sessionKeys.map((key) => {
           const chat = this.chat.chats.get(key)
+          const knownTitle = chat?.title || chat?.messages.find((m) => m.role === 'user')?.text
+          const loadingTitle = !knownTitle && !chat?.ready
           const row: NativeShellRow = {
             id: `chat:${key}`,
             project: p.key,
             session: key,
             kind: 'chat',
-            title: chat?.title || title(chat?.messages.find((m) => m.role === 'user')?.text),
+            title: loadingTitle ? '••••••••' : title(knownTitle),
+            loadingTitle: loadingTitle && !chat?.error && ws.status.kind !== 'error',
             running: chat?.isRunning ?? false,
             thinking: chat ? chatThinking(chat) : false,
             unread: chat?.unreadAnswer ?? false

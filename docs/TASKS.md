@@ -3,6 +3,20 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-508 — Loading titles and provider readiness
+
+- [x] Show an accessible redacted loading title in the sidebar and selected header, with cached and untitled states preserved.
+- [x] Gate the initial provider chooser on confirmed sign-out and keep explicit login errors.
+- [x] Add focused title, readiness and Swift fixture assertions.
+- [x] Repair review findings for listed Gemini readiness and deterministic selected-header loading evidence.
+- [x] Stop unknown-title motion on conversation error, report terminal provider-check failure, and wait for authoritative choice metadata.
+- [x] Keep overlapping choice refreshes owned by the newest request and retain terminal metadata failure after dismissal until retry.
+- [x] Hold centered sign-in notices while cached choices refresh, and keep a settled metadata error visible through dismissal and new chat.
+- [x] Show the selected provider's failed readiness report instead of a false sign-out, while preserving ready-provider choice and successful retry.
+- [x] Distinguish a missing selected choice from confirmed sign-out in the centered notice, including deleted connections and absent built-in providers.
+- [x] Apply selected-choice authority to the snapshot chooser and settle confirmed sign-out when no alternative choice is usable.
+- [ ] Manager: obtain native acceptance on main after review and CI.
+
 ## Native suite failure on main 17fbc17129bb (LKM-484)
 
 - [x] Embed New Chat as native AppKit glass content inside the chat title's custom toolbar item and preserve its existing segment behavior and visibility.

@@ -43,6 +43,18 @@ final class SidebarTitleShimmer: NSObject {
         sweep()
     }
 
+    func stop() {
+        band.removeAnimation(forKey: "shimmer")
+        show("off")
+        label.alphaValue = 1
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        stop()
+    }
+
     private func show(_ next: String) {
         mode = next
         label.alphaValue = next == "still" ? Self.resting(emphasized: emphasized) : 1
