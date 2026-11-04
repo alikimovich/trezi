@@ -108,7 +108,7 @@ extension NativeShell {
     }
 }
 
-/// The address block has a host-sized cap and reserves the adjacent viewport island.
+/// The address block follows the host's width and reserves the adjacent viewport island.
 /// Available width is computed from measured toolbar offsets during the resize pass.
 /// The right groups stay pinned to the window's trailing edge.
 struct ToolbarAddressLayout {
@@ -176,8 +176,8 @@ struct ToolbarAddressLayout {
     /// The block's leading edge for a chat header ending at `chatTrailing` (nil: no chat header,
     /// the block starts at `slot`, by default the measured `leading`).
     func blockLeading(chatTrailing: CGFloat?, slot: CGFloat? = nil) -> CGFloat { chatTrailing.map { $0 + chatOffset } ?? slot ?? leading }
-    /// Reserve the viewport island and cap the block to the visible host's width.
-    func width(windowWidth: CGFloat, chatTrailing: CGFloat?, slot: CGFloat? = nil, preferred: CGFloat = 420) -> CGFloat {
+    /// Reserve the viewport island and stop growing once the host fits.
+    func width(windowWidth: CGFloat, chatTrailing: CGFloat?, slot: CGFloat? = nil, preferred: CGFloat = Self.minimum) -> CGFloat {
         min(preferred, max(Self.floor, windowWidth - rightInset - Self.gap - 100 - extra - blockLeading(chatTrailing: chatTrailing, slot: slot)))
     }
     /// The widest chat header starting at `chatLeading` that still leaves the block its preferred minimum.
@@ -195,7 +195,7 @@ struct ToolbarAddressLayout {
         return ["addressLeading":frame.minX, "addressTrailing":frame.maxX, "addressWidth":frame.width,
                 "rightGroupLeading":rightFrame.minX, "rightGroupWidth":rightFrame.width,
                 "addressGap":gap, "addressMinimum":minimum, "addressFloor":Self.floor, "addressFormerWidth":formerWidth, "rightInset":rightInset, "rightInsetMeasured":measured,
-                "addressTruncation":address.lineBreakMode == .byTruncatingMiddle ? "middle" : String(describing: address.lineBreakMode.rawValue),
+                "addressTruncation":address.lineBreakMode == .byTruncatingTail ? "tail" : String(describing: address.lineBreakMode.rawValue),
                 "branchTruncation":branch.cell?.lineBreakMode == .byTruncatingTail ? "tail" : String(describing: branch.cell?.lineBreakMode.rawValue ?? 0),
                 "addressTextWidth":textWidth, "addressTextRoom":textRoom, "addressTruncated":textWidth > textRoom + 0.5,
                 "branchTitleWidth":branchTitle, "branchTitleRoom":branchRoom, "branchTruncated":branchTitle > branchRoom + 0.5]

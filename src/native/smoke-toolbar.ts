@@ -17,6 +17,8 @@ type Toolbar = Record<string, any>
 
 const gapOf = (state: Toolbar) => state.rightGroupLeading - state.addressTrailing
 export const pick = (state: Toolbar) => ({
+  fullAddress: state.address,
+  renderedAddress: state.domain,
   windowWidth: state.windowWidth,
   addressLeading: state.addressLeading,
   addressTrailing: state.addressTrailing,
@@ -130,7 +132,8 @@ export function assertToolbar(state: Toolbar, stage: string) {
   )
   // The address keeps enough room for the host when space is available.
   assert.ok(
-    state.addressWidth >= state.addressFloor - 0.5 && state.addressWidth <= 420.5,
+    state.addressWidth >= state.addressFloor - 0.5 &&
+      state.addressWidth <= Math.max(state.addressMinimum, state.addressHostWidth) + 0.5,
     `Toolbar ${stage}: the address stays within its compact width range: ${detail}`
   )
   assert.ok(
@@ -140,8 +143,8 @@ export function assertToolbar(state: Toolbar, stage: string) {
   )
   assert.equal(
     state.addressTruncation,
-    'middle',
-    `Toolbar ${stage}: the URL truncates in the middle`
+    'tail',
+    `Toolbar ${stage}: the resting URL elides its path after the host`
   )
   assert.equal(state.branchTruncation, 'tail', `Toolbar ${stage}: the branch truncates at the tail`)
 }
@@ -301,6 +304,59 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
   assert.ok(
     hiddenInset !== undefined && shownInset !== undefined && hiddenInset < shownInset,
     `Toolbar minimum: without the "…" item the right groups are narrower (${hiddenInset} vs ${shownInset})`
+  )
+  const originalURL: string = (await host.request('shellInspect')).address
+  const longURL = `http://sub.t:7/${'long-path/'.repeat(35)}`
+  for (const [stage, width] of [
+    ['ordinary', 1320],
+    ['narrow', 950]
+  ] as const) {
+    assert.equal(
+      await host.request('shellPerform', { action: 'address-test-url', row: longURL }),
+      true
+    )
+    assert.equal(
+      await host.request('shellPerform', { action: 'window-width', row: String(width) }),
+      true
+    )
+    const state: Toolbar = await host.request('shellInspect')
+    assert.equal(
+      state.address,
+      longURL,
+      `${stage}: the full URL is kept for editing and navigation`
+    )
+    assert.ok(
+      state.domain.includes('sub.t:7'),
+      `${stage}: rendered address keeps the host and port: ${state.domain}`
+    )
+    assert.ok(
+      state.domain.endsWith('…'),
+      `${stage}: the path elides after the host: ${state.domain}`
+    )
+    assert.ok(
+      state.addressTextWidth <= state.addressTextRoom + 0.5,
+      `${stage}: the rendered host and port fit without further cell clipping: ${JSON.stringify(pick(state))}`
+    )
+    evidence[`longPath-${stage}`] = pick(state)
+  }
+  const longHost = `${'preview'.repeat(6)}.example.test:7443`
+  const hostURL = `http://${longHost}/${'path/'.repeat(30)}`
+  assert.equal(
+    await host.request('shellPerform', { action: 'address-test-url', row: hostURL }),
+    true
+  )
+  assert.equal(await host.request('shellPerform', { action: 'window-width', row: '1800' }), true)
+  const wideHost: Toolbar = await host.request('shellInspect')
+  assert.ok(wideHost.addressHostWidth > 420, 'the long host exceeds the former fixed cap')
+  assert.ok(wideHost.domain.includes(longHost), 'wide: the full long host and port render')
+  assert.ok(
+    wideHost.addressTextWidth <= wideHost.addressTextRoom + 0.5,
+    `wide: the long host fits without cell clipping: ${JSON.stringify(pick(wideHost))}`
+  )
+  evidence.longHost = pick(wideHost)
+  assert.equal(
+    await host.request('shellPerform', { action: 'address-test-url', row: originalURL }),
+    true
   )
   writeFileSync(join(artifacts, 'toolbar-address.json'), JSON.stringify(evidence, null, 2))
 }

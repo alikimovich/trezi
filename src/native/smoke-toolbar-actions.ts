@@ -79,11 +79,15 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
   }
   const expanded = async (open: boolean) => {
     if (((await host.request('layoutInspect')).fraction === 0) === open) return
-    await host.request('shellPerform', { action: 'expand' })
+    await click('expand')
     await waitFor(
       async () => ((await host.request('layoutInspect')).fraction === 0) === open,
       `Expand ${open}`
     )
+    results[`expand-${open}`] = {
+      route: 'posted toolbar segment',
+      fraction: (await host.request('layoutInspect')).fraction
+    }
   }
   const viewport = () => nativeWorkspace.active?.viewport
   /** A posted click on the segment itself, in whichever window holds the toolbar. */

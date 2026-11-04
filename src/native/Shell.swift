@@ -235,7 +235,10 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
         guard let addressWidth else { return }
         let width = addressLayout.width(windowWidth: windowWidth, chatTrailing: chatTrailing, slot: slot, preferred: addressPreferredWidth)
-        if abs(addressWidth.constant - width) > 0.5 { addressWidth.constant = width }
+        if abs(addressWidth.constant - width) > 0.5 {
+            addressWidth.constant = width
+            if address.currentEditor() == nil { showAddress() }
+        }
     }
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [.toggleSidebar, .sidebarTrackingSeparator, .flexibleSpace, .space] + items.map { NSToolbarItem.Identifier($0) }
@@ -289,12 +292,12 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             item.view = chatHeader; item.isBordered = false; item.visibilityPriority = .high
         } else if key == "address" {
             address.placeholderString = "Preview"; address.setAccessibilityLabel("Preview address")
-            address.font = .boldSystemFont(ofSize: NSFont.systemFontSize); address.lineBreakMode = .byTruncatingMiddle
+            address.font = .boldSystemFont(ofSize: NSFont.systemFontSize); address.lineBreakMode = .byTruncatingTail
             address.isBordered = false; address.drawsBackground = false
             address.delegate = self; address.target = self; address.action = #selector(navigateAddress(_:))
             branchMenu.isBordered = false; branchMenu.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
             branchMenu.setAccessibilityLabel("Branch"); branchMenu.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            // The URL keeps its host and path ends; a branch name keeps its start.
+            // The URL's resting text keeps its authority; a branch name keeps its start.
             branchMenu.cell?.lineBreakMode = .byTruncatingTail
             let header = addressHeader
             for view in [address, branchMenu] { header.addArrangedSubview(view) }
@@ -314,7 +317,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         return item
     }
     @objc func navigateAddress(_ sender: Any?) {
-        let value = address.stringValue
+        let value = address.currentEditor()?.string ?? address.stringValue
         window?.makeFirstResponder(nil)
         emit(["event":"shell-action", "action":"address", "value":value])
         showAddress()
@@ -326,11 +329,23 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             let name = $0.contains(":") && !$0.hasPrefix("[") ? "[\($0)]" : $0
             return (parts?.scheme.map { $0 + "://" } ?? "") + name + (parts?.port.map { ":\($0)" } ?? "") + "/"
         } ?? previewAddress
-        return (host as NSString).size(withAttributes: [.font: address.font ?? .boldSystemFont(ofSize: NSFont.systemFontSize)]).width + 16
+        return (host as NSString).size(withAttributes: [.font: address.font ?? .boldSystemFont(ofSize: NSFont.systemFontSize)]).width + 24
     }
-    var addressPreferredWidth: CGFloat { min(420, max(ToolbarAddressLayout.minimum, addressHostWidth)) }
+    var addressPreferredWidth: CGFloat { max(ToolbarAddressLayout.minimum, addressHostWidth) }
+    private func displayAddress(_ full: String) -> String {
+        let font = address.font ?? .boldSystemFont(ofSize: NSFont.systemFontSize)
+        let room = max(0, (addressWidth?.constant ?? ToolbarAddressLayout.minimum) - 8)
+        func fits(_ text: String) -> Bool { (text as NSString).size(withAttributes: [.font:font]).width <= room }
+        guard !fits(full), let scheme = full.range(of: "://") else { return full }
+        let start = scheme.upperBound
+        let end = full[start...].firstIndex(where: { "/?#".contains($0) }) ?? full.endIndex
+        let authority = String(full[..<end])
+        let hostOnly = String(full[start..<end])
+        let prefix = fits(authority + "…") ? authority : fits(hostOnly + "…") ? hostOnly : authority
+        return prefix + "…"
+    }
     private func showAddress() {
-        address.stringValue = previewAddress
+        address.stringValue = displayAddress(previewAddress)
         address.toolTip = previewAddress
     }
     func controlTextDidBeginEditing(_ notification: Notification) {
@@ -611,6 +626,10 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             .merging(sidebarChatsInspect()) { _, new in new }
     }
     func perform(_ action: String, id: String?) -> Bool {
+        if action == "address-test-url", let id {
+            previewState["previewURL"] = id
+            alignChatHeader(); showAddress(); return true
+        }
         if action == "window-width", let width = Double(id ?? ""), let window, width >= 850 && width <= 2000 {
             var frame = window.frame; frame.size.width = width; window.setFrame(frame, display: true)
             // Read before returning to the run loop: no deferred alignment has run yet.

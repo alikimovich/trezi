@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-467 review repair: host text and Expand click
+
+- Independent review found that middle truncation could hide the host behind a long path. The resting address now elides the path after the authority, omits the scheme if needed for the host and port, and restores the full URL on edit; the width no longer has a fixed 420 pt cap when a longer host has room. The toolbar fixture asserts rendered host and port, full stored URL and no further cell clipping at ordinary and narrow widths with a long synthetic path.
+- The toolbar actions fixture now clicks the Expand segment through AppKit and waits for the existing layout action. The LKM-467 changelog line is visibly separated from the released section under Unreleased. Native GUI acceptance remains deferred to the manager's post-merge run.
+
 ## 2026-11-03 — LKM-468 Activity visibility belongs to the user
 
 - `NativeActivityController` was the visibility owner. Its needs-action and saved Always policies opened Activity from background and startup reports; the Swift window then ordered itself front. Event appends now only record lines and update unread severity. Manual show and toggle still present and focus the window; events repaint an open feed without changing focus.
