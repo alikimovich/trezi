@@ -101,6 +101,8 @@ export interface Chat extends NativeChatMirror {
   stoppedTurn?: string
   /** An explicit Keep request owns the stopped hold until its IPC settles. */
   keepingStopped?: boolean
+  /** The stopped turn whose explicit Keep result is now authoritative. */
+  settledStoppedKeep?: { turn?: string }
   /** LKM-225: the automatic Resolve of a drift park ran once ('tried'), then gave up ('failed'). */
   autoResolved?: 'tried' | 'failed'
   /** LKM-165: why the last landing failed; its work is held until Retry or Resolve. */
@@ -341,17 +343,23 @@ function placeLiveChange(chat: Chat) {
 }
 /** A terminal event that cannot belong to the turn this chat is running (S11). */
 export function late(chat: Chat, event: AgentEvent) {
-  // Isolation events have no turn id. After Stop settles, a failed or decision
-  // park cannot revive that turn, even if no interrupted park arrived first.
-  if (
-    event.type === 'isolation' &&
-    event.state === 'parked' &&
-    event.reason !== 'interrupted' &&
-    !chat.isRunning &&
-    chat.stoppedTurn != null &&
-    chat.stoppedTurn === chat.turn
-  )
-    return true
+  // Isolation events have no turn id. While Keep is pending, its returned result
+  // will settle the operation. Once settled, no old park can overwrite it; a new
+  // turn clears that authority before its own events can arrive.
+  if (event.type === 'isolation' && event.state === 'parked') {
+    if (
+      chat.keepingStopped ||
+      (chat.settledStoppedKeep && chat.settledStoppedKeep.turn === chat.turn)
+    )
+      return true
+    if (
+      event.reason !== 'interrupted' &&
+      !chat.isRunning &&
+      chat.stoppedTurn != null &&
+      chat.stoppedTurn === chat.turn
+    )
+      return true
+  }
   if (!['done', 'error', 'landing-finished', 'reconciliation-started'].includes(event.type))
     return false
   if (event.type === 'done' && event.stale) return true

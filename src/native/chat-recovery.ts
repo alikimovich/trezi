@@ -143,11 +143,13 @@ export async function recoveryAction(
       return true
     }
     case 'stopped-keep': {
-      if (busy) return true
+      if (busy || chat.stopped !== 'held') return true
+      const keepTurn = chat.turn
       chat.keepingStopped = true
       controller.changed(chat)
       try {
         const result = await invoke('agent:keep-stopped', chat.chat)
+        if (chat.turn !== keepTurn || controller.chats.get(chat.chat) !== chat) return true
         // The owner result is authoritative even if an old Stop callback raced
         // this request, or this request's own isolation callback arrives later.
         const files = result.files ?? []
@@ -193,6 +195,7 @@ export async function recoveryAction(
         }
         if (!result.ok && !chat.landingError)
           throw new Error(result.error ?? 'Unable to keep this turn’s changes.')
+        chat.settledStoppedKeep = { turn: keepTurn }
       } finally {
         chat.keepingStopped = false
         controller.changed(chat)

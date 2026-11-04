@@ -12,6 +12,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: keep an older failed park visible during an unrelated turn and reject late decision parks for the settled Stop turn.
 - [x] Review repair: preserve Stop settled by turn-state without a terminal event against late failed or decision parks; retain its paused queue action.
 - [x] Review repair: distinguish explicit Keep settlements from old Stop callbacks; show genuine failed-check report and Retry, and retain Revert and Finish outcomes.
+- [x] Review repair: retain the explicit Keep settlement across all old parked callbacks, including interrupted; allow a fresh turn and user Retry to own later outcomes.
 - [ ] Manager: exact-head CI, independent review, and post-merge native acceptance on main.
 
 ## Native suite failure on main 17fbc17129bb (LKM-484)

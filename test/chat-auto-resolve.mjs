@@ -187,5 +187,23 @@ function harness(autoResolve, { refuse = false } = {}) {
   assert.equal(h.frames.at(-1).cards.find((card) => card.id === 'conflict')?.title, 'Problem')
 }
 
+// Keep owns its IPC until the owner result settles. A conflict callback during
+// that request cannot spend the chat's single automatic Resolve attempt.
+{
+  const h = harness(true)
+  await h.open()
+  h.controller.get('a').keepingStopped = true
+  h.controller.event(
+    { projectKey: 'a', type: 'isolation', state: 'parked', files: ['src/a.tsx'] },
+    true
+  )
+  await tick()
+  assert.equal(h.resolves(), 0)
+  assert.equal(h.controller.get('a').autoResolved, undefined)
+  h.controller.get('a').keepingStopped = false
+  await h.emit({ type: 'done' })
+  assert.equal(h.resolves(), 1)
+}
+
 console.log('chat-auto-resolve: OK')
 process.exit(0)

@@ -292,9 +292,40 @@ await act('stopped-revert')
 assert.deepEqual(calls.at(-1), ['agent:revert-stopped', 'a'])
 
 // Keep: the landed turn's group goes on the message, so its Revert is the real one.
+// Transition contract: the explicit Keep result settles this stopped turn. Its
+// stopped-generation parked callbacks (no reason, interrupted, reverted, failed,
+// or a decision) cannot replace that result, whether they arrive during the IPC
+// or after it. A new turn or user recovery action may still settle its own work.
+const stoppedGenerationParks = [
+  {},
+  { reason: 'interrupted' },
+  { reason: 'reverted' },
+  { reason: 'failed', error: 'late Stop check' },
+  { decision: 'Keep ours?' }
+]
+const oldPark = (parked) =>
+  emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'], ...parked })
+const freshHeldTurn = async () => {
+  await controller.run(chat, {
+    id: crypto.randomUUID(),
+    text: 'Continue after the settled Keep',
+    attachments: [],
+    selection: null,
+    turn: {}
+  })
+  assert.equal(chat.settledStoppedKeep, undefined, 'a fresh turn starts a new generation')
+  emit({ type: 'done' })
+  emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'], reason: 'interrupted' })
+  assert.ok(card('stopped'), 'the fresh turn can own its own interrupted hold')
+}
 emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'], reason: 'interrupted' })
 const keepFrames = renders.length
+const keepVersion = chat.version
 answers['agent:keep-stopped'] = () => {
+  oldPark({ reason: 'interrupted' })
+  assert.equal(card('stopped')?.title, 'Checking changes…', 'in-flight old hold stays quiet')
+  assert.equal(renders.at(-1).composer.queueCanSend, false, 'Send now waits for the Keep check')
+  assert.equal(chat.version, keepVersion, 'in-flight old park cannot mutate the hold')
   emit({
     type: 'isolation',
     state: 'parked',
@@ -328,7 +359,26 @@ assert.match(card('conflict').detail, /The stopped work did not pass its check/)
 assert.equal(card('error'), undefined, 'the failed Keep has one reportable card')
 assert.ok(chat.recoveryReport, 'the failed Keep has an actual support report')
 assert.ok(card('conflict').actions.some((action) => action.action === 'landing-retry'))
-emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'], reason: 'interrupted' })
+const failedKeepReport = chat.recoveryReport
+const failedKeepProblem = chat.recoveryProblem
+for (const parked of stoppedGenerationParks) {
+  oldPark(parked)
+  assert.equal(card('conflict')?.title, 'Problem', 'old park cannot replace failed Keep')
+  assert.equal(chat.recoveryProblem, failedKeepProblem)
+  assert.equal(chat.recoveryReport, failedKeepReport)
+  assert.ok(card('conflict').actions.some((action) => action.action === 'landing-retry'))
+}
+answers['agent:retry-landing'] = () => {
+  oldPark({ reason: 'failed', error: 'Retry still failed.' })
+  return { ok: true, state: 'parked', error: 'Retry still failed.' }
+}
+await act('landing-retry', 'conflict')
+await tick()
+assert.equal(card('conflict')?.title, 'Problem', 'a fresh Retry keeps its genuine failure visible')
+assert.match(card('conflict').detail, /Retry still failed/)
+assert.ok(chat.recoveryReport)
+delete answers['agent:retry-landing']
+await freshHeldTurn()
 answers['agent:keep-stopped'] = {
   ok: false,
   files: ['src/a.tsx'],
@@ -339,7 +389,7 @@ await tick()
 assert.equal(card('conflict')?.title, 'Problem', 'the owner result settles before its callback')
 assert.match(card('conflict').detail, /The delayed Keep check did not pass/)
 assert.ok(chat.recoveryReport)
-emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'], reason: 'interrupted' })
+await freshHeldTurn()
 delete answers['agent:keep-stopped']
 answers['agent:keep-stopped'] = () => {
   emit({
@@ -355,6 +405,13 @@ await act('stopped-keep')
 assert.deepEqual(calls.at(-1), ['agent:keep-stopped', 'a'])
 assert.equal(card('conflict'), undefined, 'the Keep result supersedes an older failed callback')
 assert.equal(chat.recoveryReport, undefined)
+for (const parked of stoppedGenerationParks) {
+  oldPark(parked)
+  assert.equal(card('stopped'), undefined, 'old park cannot restore held Stop after Keep')
+  assert.equal(card('conflict'), undefined, 'old park cannot replace successful Keep')
+  assert.equal(chat.landed?.group, 'chat:w:2')
+  assert.equal(chat.recoveryReport, undefined)
+}
 delete answers['agent:keep-stopped']
 emit({
   type: 'isolation',
@@ -530,6 +587,7 @@ assert.equal(card('conflict').title, 'Problem', 'a later turn does not own the f
 assert.equal(chat.recoveryReport, terminalReport, 'the earlier report remains available')
 assert.ok(card('conflict').actions.some((action) => action.action === 'recovery-report'))
 emit({ type: 'done' })
+const retriesBeforePending = calls.filter((call) => call[0] === 'agent:retry-landing').length
 let finishRetry
 answers['agent:retry-landing'] = new Promise((resolve) => {
   finishRetry = resolve
@@ -545,7 +603,10 @@ assert.equal(
 )
 await act('landing-retry', 'conflict')
 await act('discard', 'conflict')
-assert.equal(calls.filter((call) => call[0] === 'agent:retry-landing').length, 1)
+assert.equal(
+  calls.filter((call) => call[0] === 'agent:retry-landing').length,
+  retriesBeforePending + 1
+)
 assert.equal(calls.filter((call) => call[0] === 'agent:discard-conflict').length, 0)
 finishRetry({ ok: true, state: 'parked' })
 await pendingRetry
