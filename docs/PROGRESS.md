@@ -1,5 +1,11 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-478 ordinary private check recovery
+
+- The ordinary successful completion path reached `gatedTurn` before the existing `arrangeChecks` replay used by a manual Retry. On an unchecked web tree, that produced the screenshot's Problem card even though Trezi could arrange a private browser check. The screenshot alone did not establish the provider's terminal phase or check history; the source trace establishes this reachable completion path.
+- Successful ordinary completion now waits for an already running command check to write its receipt, then uses the existing bounded replay for an unchecked or runtime-changed exact tree before the gate and repository owner rejudge it. The chat chain serializes the attempt; checks run before the shared repository lease. Explicit `land_now`, failed turns, genuine failed receipts and decisions retain their existing paths. If no supported runner is available or replay fails, the terminal card gives the recorded reason rather than asking the user to request a check and Retry.
+- Focused fixtures cover missing browser evidence, stale command evidence, failed checks, Stop and receipt settlement. The existing disposable-profile `agent-integration` native fixture now also asserts ordinary stale browser recovery on an exact new tree with no held card. Native acceptance and the exact-head gates remain with the manager after merge; no native worker run is available for this ticket.
+
 ## 2026-11-03 — LKM-469 address editor follow-up
 
 - Manager native verification passed 45 of 46 core checks, including `publish-progress`; `toolbar-address` still read the elided URL immediately after `address.selectText(nil)`. Ending a prior edit session did not help, so the prior explanation was incomplete. The `NSTextField` delegate restoration was too late for this synchronous focus path.

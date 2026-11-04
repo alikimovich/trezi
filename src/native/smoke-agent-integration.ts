@@ -181,6 +181,7 @@ export async function checkAgentIntegration(
   const wtA = await open(A)
   const wtB = await open(B)
   const scopeA = { emitKey: A, root: wtA, liveRoot }
+  const scopeB = { emitKey: B, root: wtB, liveRoot }
   writeFileSync(join(wtA, 'index.html'), html('Gate', 'Gate by A draft'))
   writeFileSync(join(wtB, 'other.html'), html('Other', 'Other by B draft'))
   const verify = async (key: string, root: string, args: Record<string, unknown>) => {
@@ -341,6 +342,17 @@ export async function checkAgentIntegration(
     conflicted: prep.conflicted,
     user: user2
   }
+
+  // Ordinary completion owns stale private evidence without a card request. The
+  // existing /other.html recipe must be replayed on this exact new tree.
+  writeFileSync(join(wtB, 'recovery.txt'), 'ordinary completion\n')
+  assert.equal((await integrationGate(scopeB)).reason, 'unchecked')
+  await afterTurn(B, 'Add recovery note', [], 'success', false, true)
+  assert.equal(isolationSnapshot(B)?.state, 'isolated', 'no held Problem after recovery')
+  assert.equal(liveFile('recovery.txt'), 'ordinary completion\n')
+  const recoveredTree = git(project, 'rev-parse', 'HEAD^{tree}')
+  assert.equal((await integrationGate(scopeB)).candidate, recoveredTree)
+  evidence.ordinaryRecovery = { tree: recoveredTree, state: isolationSnapshot(B)?.state }
 
   // Each page still has only its own state.
   assert.equal((await agentMarkers(a)).cookie, 'trezi_agent_a=1')

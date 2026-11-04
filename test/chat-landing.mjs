@@ -8,6 +8,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { installAgentRuntimes } from '../src/main/agent-runtime.ts'
 import {
   adoptSession,
   afterTurn,
@@ -21,8 +22,11 @@ import {
 } from '../src/main/chat-isolation.ts'
 import { states } from '../src/main/chat-state.ts'
 import { revertGroup } from '../src/main/edit-history.ts'
+import { setCheckReplayer } from '../src/main/integration-gate.ts'
 import { keepStoppedTurn } from '../src/main/stopped-turn.ts'
-import { passCheck } from './helpers/gate-checks.mjs'
+import { newReceiptId, receiptSession, recordReceipt } from '../src/main/verification-receipts.ts'
+import { projectKey } from '../src/shared/projectKey.ts'
+import { candidateOf, passCheck, replayFixtureChecks } from './helpers/gate-checks.mjs'
 
 // No unpark outside `clearPark` (src/main/chat-park.ts).
 const mainDir = new URL('../src/main/', import.meta.url)
@@ -36,6 +40,13 @@ const git = (cwd, ...args) =>
   execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
 const events = []
 const records = new Map()
+let previewKind = 'none'
+await installAgentRuntimes({
+  detect: async () => ({ setupRequired: false, previewKind, framework: 'vite' }),
+  onAgentExit: () => {},
+  onAgentLog: () => {},
+  stopAgents: async () => 0
+})
 initChatIsolation({
   worktreesDir: () => join(dir, 'worktrees'),
   store: () => ({
@@ -158,6 +169,94 @@ try {
     'the finished turn reverts'
   )
   await releaseChat(done.key)
+
+  // An ordinary successful completion owns a missing private browser check and
+  // lands only after its receipt proves the exact current source.
+  previewKind = 'web'
+  const missing = await fixture()
+  writeFileSync(join(missing.cwd, FILE), 'export const bar = 1\n')
+  const recipes = []
+  setCheckReplayer(async (recipe, scope) => {
+    recipes.push(recipe.kind)
+    assert.equal(recipe.kind, 'browser')
+    const receipt = {
+      id: newReceiptId(),
+      createdAt: new Date().toISOString(),
+      engine: 'webkit',
+      engineDetail: 'fixture',
+      input: 'synthetic-dom',
+      coverage: { engine: 'webkit', os: 'macOS', emulated: {}, notCovered: [] },
+      runtime: {
+        kind: 'private',
+        agent: null,
+        root: scope.root,
+        url: 'http://127.0.0.1:1/',
+        generation: null
+      },
+      source: { snapshot: null, tree: await candidateOf(scope.root), head: null, dirty: 1 },
+      document: { url: 'http://127.0.0.1:1/', navigation: 1, startedAt: null },
+      viewport: { width: 800, height: 600, theme: 'light' },
+      steps: [],
+      checks: [],
+      artifacts: [],
+      checksPassed: true,
+      verified: true,
+      reason: null,
+      ms: 1,
+      recipe: { path: '/' }
+    }
+    recordReceipt(receiptSession(scope.emitKey, projectKey(scope.root)), receipt)
+    return true
+  })
+  await afterTurn(missing.key, 'Set bar to one', [], 'success', false, true)
+  assert.deepEqual(recipes, ['browser'], 'one existing private check, no provider continuation')
+  assert.equal(readFileSync(join(missing.root, FILE), 'utf8'), 'export const bar = 1\n')
+  assert.equal(isolationSnapshot(missing.key).state, 'isolated', 'terminal card cleared by landing')
+  await releaseChat(missing.key)
+
+  const unavailable = await fixture()
+  writeFileSync(join(unavailable.cwd, FILE), 'export const bar = 1\n')
+  setCheckReplayer(null)
+  await afterTurn(unavailable.key, 'Set bar to one', [], 'success', false, true)
+  assert.equal(readFileSync(join(unavailable.root, FILE), 'utf8'), 'export const bar = 0\n')
+  assert.match(isolationSnapshot(unavailable.key).error, /cannot arrange a browser check/)
+  assert.doesNotMatch(isolationSnapshot(unavailable.key).error, /ask the agent|then Retry/)
+  await releaseChat(unavailable.key)
+
+  // A stale command receipt is replayed on the new tree. A genuine failure on
+  // that tree is not replayed or autoapplied.
+  previewKind = 'none'
+  const stale = await fixture()
+  writeFileSync(join(stale.cwd, FILE), 'export const bar = 1\n')
+  await passCheck(stale.key, stale.cwd)
+  writeFileSync(join(stale.cwd, FILE), 'export const bar = 2\n')
+  const replays = replayFixtureChecks()
+  await afterTurn(stale.key, 'Set bar to two', [], 'success', false, true)
+  assert.equal(replays.length, 1)
+  assert.equal(readFileSync(join(stale.root, FILE), 'utf8'), 'export const bar = 2\n')
+  await releaseChat(stale.key)
+
+  const bad = await fixture()
+  writeFileSync(join(bad.cwd, FILE), 'export const bar = 2\n')
+  await passCheck(bad.key, bad.cwd, 'fixture-check', false)
+  const badReplays = replayFixtureChecks()
+  await afterTurn(bad.key, 'Set bar to two', [], 'success', false, true)
+  assert.equal(badReplays.length, 0)
+  assert.equal(readFileSync(join(bad.root, FILE), 'utf8'), 'export const bar = 0\n')
+  assert.match(isolationSnapshot(bad.key).error, /did not pass/)
+  await releaseChat(bad.key)
+
+  const stopped = await fixture()
+  writeFileSync(join(stopped.cwd, FILE), 'export const bar = 2\n')
+  const stopReplays = replayFixtureChecks()
+  await afterTurn(stopped.key, 'Set bar to two', [], 'failed', false, true)
+  assert.equal(stopReplays.length, 0, 'Stop does not arrange a new check')
+  assert.equal(readFileSync(join(stopped.root, FILE), 'utf8'), 'export const bar = 0\n')
+  await releaseChat(stopped.key)
+  setCheckReplayer(null)
+  // The intentionally held failure and Stop cases leave park records; the
+  // pre-existing Keep fixture below starts with an empty record store.
+  records.clear()
 
   // A kept stopped turn lands through the same step, leaving its park.
   const kept = await fixture()

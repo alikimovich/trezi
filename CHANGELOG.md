@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+
+- Finished chats arrange missing or stale private checks before landing and report when a check runner is unavailable without asking you to request a check and Retry (LKM-478).
+
 ## [0.13.12] - 2026-11-03
 
 ### Fixed

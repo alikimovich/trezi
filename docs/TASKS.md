@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Ordinary private check recovery (LKM-478)
+
+- [x] Trace the ordinary completion gate on `origin/main` and reuse the existing private check runner before exact-tree landing.
+- [x] Cover missing and stale evidence, failed checks, Stop, and terminal settlement with focused fixtures; add an ordinary recovery assertion to the disposable-profile native integration fixture.
+- [ ] Manager: independent review, configured CI and native acceptance on the merged source.
+
 ## Native suite failure on main 743c0a82c263 (LKM-469)
 
 - [x] `toolbar-address`: match wide block size to the host-based preferred width introduced in LKM-467.

@@ -28,12 +28,14 @@ import {
   stageResolve,
   syncFromLive
 } from './chat-worktrees'
+import { cancelChecks, waitForChecks } from './command-checks'
 import { recordEdit } from './edit-history'
 import { editingOwner } from './editing-owner'
 import { isRepoRoot } from './git'
 import {
   arrangeChecks,
   dropGateEvidence,
+  integrationGate,
   lastReplayFailures,
   replayChecks
 } from './integration-gate'
@@ -48,8 +50,10 @@ import { peerTurn } from './peer-work'
 import { previewEvidence } from './preview-evidence'
 import { liveHead } from './preview-identity'
 import { enqueueRepoWrite } from './repo-write-queue'
+import { sourceSnapshot } from './source-snapshot'
 import { logLanding, logLandingFailed } from './turn-log'
 import type { TurnTerminalOutcome } from './turn-terminal'
+import { receiptSession } from './verification-receipts'
 import { dependencyInstall } from './worktree-dependencies'
 import { reclaimWorktree, removeWorktree, retireWorktreeBranch } from './worktrees'
 
@@ -298,7 +302,8 @@ export function afterTurn(
   message: string,
   transcript: SessionTranscriptEntry[] = [],
   terminal: TurnTerminalOutcome = 'success',
-  reconcile = false
+  reconcile = false,
+  ordinaryCompletion = false
 ): Promise<string[] | null> {
   const st = states.get(sessionKey)
   if (!st) return Promise.resolve(null)
@@ -309,13 +314,35 @@ export function afterTurn(
   let admitted = false
   let cancelled = false
   let settled: 'pending' | 'ok' | 'failed' = 'pending'
-  const write = st.chain.then(() =>
-    enqueueRepoWrite(st.liveRoot, async () => {
+  const write = st.chain.then(async () => {
+    let recoveryFailure: string | undefined
+    const changed =
+      ordinaryCompletion && terminal === 'success' && !cancelled && !st.reclaimed
+        ? (await sourceSnapshot(st.wt.path)).tree !==
+          (await gitOut(st.wt.path, ['rev-parse', `${st.wt.baseSha}^{tree}`])).trim()
+        : false
+    if (changed && !cancelled && !st.decision) {
+      const scope = chatGateScope(sessionKey, st)
+      let verdict = await integrationGate(scope)
+      if (verdict.reason === 'check-running') {
+        const settled = await waitForChecks(receiptSession(sessionKey, projectKey(st.wt.path)))
+        if (!settled) recoveryFailure = 'the existing check did not finish within its limit.'
+        else verdict = await integrationGate(scope)
+      }
+      if (!cancelled && (verdict.reason === 'unchecked' || verdict.reason === 'runtime-changed')) {
+        const arranged = await arrangeChecks(scope, () => cancelled)
+        if (arranged.failures.length) recoveryFailure = arranged.failures.join('; ')
+        else if (!arranged.ran && (await integrationGate(scope)).reason === 'unchecked')
+          recoveryFailure = 'no supported private check was available.'
+      }
+    }
+    if (cancelled) return null
+    return enqueueRepoWrite(st.liveRoot, async () => {
       if (cancelled) return null
       admitted = true
       st.lastUsed = Date.now()
       if (st.reclaimed) return null
-      const batch = landBatch(sessionKey, st, message, turn, terminal, reconcile)
+      const batch = landBatch(sessionKey, st, message, turn, terminal, reconcile, recoveryFailure)
       batch.then(
         () => {
           settled = 'ok'
@@ -326,10 +353,11 @@ export function afterTurn(
       )
       return batch
     })
-  )
+  })
   const task = landings
-    .run(sessionKey, write, undefined, () => {
+    .run(sessionKey, write, ordinaryCompletion ? 16 * 60_000 : undefined, () => {
       cancelled = true
+      if (ordinaryCompletion) cancelChecks(receiptSession(sessionKey, projectKey(st.wt.path)))
     })
     .catch(async (error) => {
       if (!(error instanceof LandingEnded)) {
@@ -398,7 +426,8 @@ async function landBatch(
   message: string,
   turn: SessionTranscriptEntry[],
   terminal: TurnTerminalOutcome,
-  reconcile: boolean
+  reconcile: boolean,
+  recoveryFailure?: string
 ): Promise<string[] | null> {
   await settleReverted(st)
   const turnNo = ++st.turnNo
@@ -484,7 +513,7 @@ async function landBatch(
     const peers = landingPeers(gate, combined, verdict?.candidate ?? null)
     st.lastLanding = { outcome: 'merged', files: outcome.files, at, ...peers }
   } else if (outcome.outcome === 'held' && outcome.hold?.reason !== 'live-changed') {
-    holdTurn(sessionKey, st, outcome, verdict, turn)
+    holdTurn(sessionKey, st, outcome, verdict, turn, recoveryFailure)
   } else if (outcome.outcome === 'parked' || outcome.outcome === 'held') {
     // A stopped or failed turn holds its work (LKM-151); a drift park (live moved since
     // the fork point) stays a conflict even when a later turn on top of it is stopped.

@@ -26,7 +26,8 @@ import {
   cancelChecks,
   resolveCheck,
   runChecksTool,
-  runCommandCheck
+  runCommandCheck,
+  waitForChecks
 } from '../src/main/command-checks.ts'
 import {
   arrangeChecks,
@@ -167,14 +168,20 @@ try {
   assert.match((await runCommandCheck('pass', scope)).error, /changed the "prepass" script/)
   writeFileSync(join(root, 'package.json'), `${JSON.stringify(own, null, 2)}\n`)
 
+  const preflight = runCommandCheck('slow', scope)
+  cancelChecks(session)
+  assert.match((await preflight).error, /cancelled before it ran/)
+
   // A running check blocks; cancelled, its receipt is not a pass.
   const slow = runCommandCheck('slow', scope)
   const deadline = Date.now() + 5000
   while ((await gate()).reason !== 'check-running' && Date.now() < deadline)
     await new Promise((resolve) => setTimeout(resolve, 20))
   assert.equal((await gate()).reason, 'check-running')
+  const settledCheck = waitForChecks(session, 1000)
   cancelChecks(session)
   const cancelled = await slow
+  assert.equal(await settledCheck, true, 'the waiter sees the final receipt before settling')
   assert.equal(cancelled.cancelled, true)
   assert.equal(cancelled.reason, 'cancelled')
   assert.equal((await gate()).reason, 'check-failed')
@@ -250,6 +257,15 @@ try {
   })
   assert.equal(await replayChecks(scope), 2)
   assert.deepEqual(replayed.toSorted(), ['/', 'pass'])
+  let stoppedReplay = false
+  const bounded = []
+  setCheckReplayer(async (recipe) => {
+    bounded.push(recipe.kind)
+    stoppedReplay = true
+    return true
+  })
+  assert.equal(await replayChecks(scope, () => stoppedReplay), 1)
+  assert.equal(bounded.length, 1, 'Stop prevents the next replay check')
   setCheckReplayer(null)
   assert.equal(await replayChecks(scope), 0, 'no tools, no replay')
 

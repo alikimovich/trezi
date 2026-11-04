@@ -40,11 +40,40 @@ const SWIFT = { 'swift-build': 'build', 'swift-test': 'test' } as const
 
 /** Checks still running, per receipt session, so a landing never passes over one. */
 const running = new Map<string, Set<() => void>>()
+const pendingReceipts = new Map<string, number>()
+const preparing = new Map<string, Set<() => void>>()
+const checkSettled = new Map<string, Set<() => void>>()
 
-export const checksRunning = (session: string): boolean => (running.get(session)?.size ?? 0) > 0
+export const checksRunning = (session: string): boolean =>
+  (running.get(session)?.size ?? 0) > 0 || (pendingReceipts.get(session) ?? 0) > 0
+
+/** Wait for a check already owned by this session to write its final receipt. */
+export function waitForChecks(
+  session: string,
+  timeoutMs = CHECK_LIMITS.maxMs + 10_000
+): Promise<boolean> {
+  if (!checksRunning(session)) return Promise.resolve(true)
+  return new Promise((resolve) => {
+    const listeners = checkSettled.get(session) ?? new Set<() => void>()
+    const done = (settled: boolean) => {
+      clearTimeout(timer)
+      listeners.delete(check)
+      if (!listeners.size) checkSettled.delete(session)
+      resolve(settled)
+    }
+    const check = () => {
+      if (!checksRunning(session)) done(true)
+    }
+    const timer = setTimeout(() => done(false), timeoutMs)
+    listeners.add(check)
+    checkSettled.set(session, listeners)
+    check()
+  })
+}
 
 /** Ends the session's running checks; their receipts say `cancelled`. */
 export function cancelChecks(session: string): void {
+  for (const cancel of preparing.get(session) ?? []) cancel()
   for (const cancel of running.get(session) ?? []) cancel()
 }
 
@@ -108,10 +137,32 @@ export async function runCommandCheck(
   const command = resolveCheck(name, scope)
   if ('error' in command) return command
   const session = receiptSession(scope.emitKey, projectKey(scope.root))
+  pendingReceipts.set(session, (pendingReceipts.get(session) ?? 0) + 1)
+  const settled = () => {
+    const pending = (pendingReceipts.get(session) ?? 1) - 1
+    if (pending) pendingReceipts.set(session, pending)
+    else pendingReceipts.delete(session)
+    for (const listener of checkSettled.get(session) ?? []) listener()
+  }
   const started = Date.now()
+  let cancelledBeforeRun = false
+  const preparingSet = preparing.get(session) ?? new Set<() => void>()
+  const cancelPreparation = () => {
+    cancelledBeforeRun = true
+  }
+  preparingSet.add(cancelPreparation)
+  preparing.set(session, preparingSet)
   const before = await sourceSnapshot(scope.root).catch(() => null)
-  if (!before?.id)
+  preparingSet.delete(cancelPreparation)
+  if (!preparingSet.size) preparing.delete(session)
+  if (cancelledBeforeRun) {
+    settled()
+    return { error: `${name}: the check was cancelled before it ran.` }
+  }
+  if (!before?.id) {
+    settled()
     return { error: `${name}: Trezi could not read this checkout's exact source, so nothing ran.` }
+  }
   const outcome = await run(command, scope.root, Math.min(timeoutMs, CHECK_LIMITS.maxMs), session)
   const after = await sourceSnapshot(scope.root).catch(() => null)
   let reason: string | null = null
@@ -143,6 +194,7 @@ export async function runCommandCheck(
     ms: Date.now() - started
   }
   recordCommandReceipt(session, receipt)
+  settled()
   return receipt
 }
 
