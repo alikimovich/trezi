@@ -60,7 +60,7 @@ import {
 import { type PendingChat, PendingChats } from './chat-pending'
 import { chatRecordLookup } from './chat-record'
 import { dropSpares, prewarmSpare, releaseSpare } from './chat-spare'
-import { acceptOwnerTerminal, TurnTracker } from './chat-turns'
+import { acceptOwnerTerminal, dispatchCurrentRecovery, TurnTracker } from './chat-turns'
 import { answerChatUi, chatUiContext, chatUiDelivery, forgetChatUi, setChatUiHost } from './chat-ui'
 import { STALE_SEND_MS, STALE_STOP_MS, TurnWatchdog, WATCHDOG_INTERVAL_MS } from './chat-watchdog'
 import {
@@ -2127,6 +2127,12 @@ export function registerAgentIpc(
       }
       const id =
         typeof turnId === 'string' && turnId && turnId.length <= 128 ? turnId : randomUUID()
+      const recoveryIdentity = {
+        heldOperationId,
+        providerIncarnation: expectedIncarnation
+      }
+      if (heldOperationId && !expectedIncarnation)
+        throw new Error('The chat provider changed before this recovery turn began.')
       if (expectedIncarnation && sessionIncarnations.get(session) !== expectedIncarnation)
         throw new Error('The chat provider changed before this recovery turn began.')
       if (heldOperationId && currentHeldOperation(key)?.id !== heldOperationId)
@@ -2319,7 +2325,15 @@ export function registerAgentIpc(
         const restored = history.length ? '' : (restoredSummaries.get(key) ?? '')
         restoredSummaries.delete(key)
         if (restored) session.emit({ type: 'status', text: RESUME_NOTE })
-        session.send(handoffPrompt(history, seedPrompt(restored, body)), images)
+        dispatchCurrentRecovery(
+          recoveryIdentity,
+          () => ({
+            heldOperationId: currentHeldOperation(key)?.id,
+            providerIncarnation:
+              sessions.get(key) === session ? sessionIncarnations.get(session) : undefined
+          }),
+          () => session.send(handoffPrompt(history, seedPrompt(restored, body)), images)
+        )
         productLog.info('send-path', 'bun action=send stage=agent-handler-end', {
           chat: key,
           turn: id,

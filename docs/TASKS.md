@@ -5,6 +5,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 ## Chat Problem attention (LKM-486)
 
+- [x] Independent review repair: fence failed-park report completion against Stop and changed held source, and recheck held/provider identity immediately before provider dispatch.
 - [x] Bind held work to producer operation, source and incarnation; distinguish send admission from accepted owner terminal and settle only from actual landing or discard.
 - [x] Keep Stop and changed-source callbacks from reviving an old Problem or clearing the current held incident in the focused controller fixture.
 - [x] Correlate failed held attempts with their turn and recovery operation; keep an ordinary status until a report exists or recovery succeeds.

@@ -13,6 +13,20 @@ export async function acceptOwnerTerminal<
   return result
 }
 
+/** Final synchronous recovery identity check, immediately beside provider dispatch. */
+export function dispatchCurrentRecovery(
+  expected: { heldOperationId?: string; providerIncarnation?: string },
+  current: () => { heldOperationId?: string; providerIncarnation?: string },
+  dispatch: () => void
+): void {
+  const actual = current()
+  if (expected.providerIncarnation && actual.providerIncarnation !== expected.providerIncarnation)
+    throw new Error('The chat provider changed before this recovery turn began.')
+  if (expected.heldOperationId && actual.heldOperationId !== expected.heldOperationId)
+    throw new Error('The held work changed. Refresh this chat before retrying.')
+  dispatch()
+}
+
 /**
  * The provider adapter's half of turn identity (S11). Every provider honours "one
  * `done` per `send`" (an `error` may precede it, or end a dead session alone), and

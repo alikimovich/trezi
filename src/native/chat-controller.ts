@@ -62,6 +62,8 @@ export interface ChatServices {
   notice?: (settings: ChatAgentSettings) => string | undefined
   /** LKM-225: a drift park is resolved once automatically (off where tests need the card). */
   autoResolve?: boolean
+  /** Injectable report IO for the deferred completion fixture. */
+  writeRecoveryReport?: typeof writeRecoveryReport
 }
 export type SendAdmission =
   | { state: 'admitted'; incarnation?: string }
@@ -631,19 +633,37 @@ export class NativeChatController {
           }
         chat.recoveryProblem = `Problem: ${reason}`
         chat.recoveryReport = undefined
-        void writeRecoveryReport(chat, 'turn-end landing', reason).then(
+        const cancellation = chat.cancellation
+        const held = chat.heldOperation
+        const incident = chat.heldIncident
+        const current = () =>
+          this.chats.get(key) === chat &&
+          chat.cancellation === cancellation &&
+          !chat.stopping &&
+          chat.recoveryId === id &&
+          chat.isolation === 'parked' &&
+          chat.heldOperation?.id === held?.id &&
+          chat.heldOperation?.incarnation === held?.incarnation &&
+          chat.heldOperation?.source === held?.source &&
+          chat.heldIncident === incident
+        void (this.services.writeRecoveryReport ?? writeRecoveryReport)(
+          chat,
+          'turn-end landing',
+          reason,
+          current
+        ).then(
           (path) => {
-            if (path && chat.recoveryId === id && chat.isolation === 'parked') {
+            if (path && current()) {
               chat.recoveryReport = path
-              if (chat.heldIncident?.operation === id)
+              if (chat.heldIncident)
                 chat.heldIncident.attention = chat.isRunning ? 'owned' : 'terminal'
               this.changed(chat)
             }
           },
           () => {
-            if (chat.recoveryId === id) {
+            if (current()) {
               chat.recoveryProblem += ' The support report could not be written.'
-              if (chat.heldIncident?.operation === id)
+              if (chat.heldIncident)
                 chat.heldIncident.attention = chat.isRunning ? 'owned' : 'terminal'
               this.changed(chat)
             }

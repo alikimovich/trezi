@@ -2,7 +2,7 @@
 // own (the Resolve button's path), logged as one `conflict` incident: recovered when the
 // park clears, failed when it parks again. Off, the card waits for the user as before.
 import assert from 'node:assert/strict'
-import { acceptOwnerTerminal } from '../src/main/chat-turns.ts'
+import { acceptOwnerTerminal, dispatchCurrentRecovery } from '../src/main/chat-turns.ts'
 import { incidents } from '../src/main/self-heal/incidents.ts'
 import { cardAction } from '../src/native/chat-actions.ts'
 import { NativeChatController } from '../src/native/chat-controller.ts'
@@ -11,6 +11,8 @@ import { readableRecoveryReport } from '../src/native/chat-recovery-report.ts'
 const tick = (ms = 10) => new Promise((resolve) => setTimeout(resolve, ms))
 const records = []
 incidents.report = (record) => records.push(record)
+// Synthetic owner receipts; the fixture does not claim live provider or Git evidence.
+const held = { id: 'held-a', incarnation: 'inc-a', generation: 1, source: 'tree-a' }
 
 // Synthetic owner IO: a provider observation is not accepted terminal proof.
 {
@@ -36,8 +38,52 @@ incidents.report = (record) => records.push(record)
   assert.equal(emitted.length, 1, 'duplicate owner reply emits no second accepted terminal')
 }
 
-// Synthetic owner receipts; the fixture does not claim live provider or Git evidence.
-const held = { id: 'held-a', incarnation: 'inc-a', generation: 1, source: 'tree-a' }
+// Synthetic deferred preparation exercises the same final synchronous dispatch
+// branch used by agent:send. Either producer identity changing blocks the call.
+for (const changed of ['heldOperationId', 'providerIncarnation', null]) {
+  const expected = { heldOperationId: held.id, providerIncarnation: held.incarnation }
+  const current = { ...expected }
+  let release
+  const wait = new Promise((resolve) => {
+    release = resolve
+  })
+  let dispatched = 0
+  const sending = wait.then(() =>
+    dispatchCurrentRecovery(
+      expected,
+      () => current,
+      () => dispatched++
+    )
+  )
+  if (changed) current[changed] = `changed-${changed}`
+  release()
+  if (changed) await assert.rejects(sending, /changed/i)
+  else await sending
+  assert.equal(dispatched, changed ? 0 : 1, 'only the unchanged owner reaches provider dispatch')
+}
+
+// A delayed failed-park report cannot republish a Problem after Stop. The same
+// synthetic IO promise publishes once while the chat and held source still own it.
+for (const stopped of [true, false]) {
+  const h = harness(false, { deferReport: true })
+  await h.open()
+  await h.emit({ type: 'isolation', state: 'parked', reason: 'failed', files: ['src/a.tsx'] })
+  const chat = h.controller.get('a')
+  assert.equal(h.reportWrites(), 1)
+  if (stopped) await h.controller.stop(chat)
+  const renderCount = h.renders.length
+  h.completeReport('/tmp/synthetic-deferred-report.json')
+  await tick()
+  assert.equal(h.reportWrites(), 1, 'one report attempt for this held incident')
+  if (stopped) {
+    assert.equal(chat.recoveryReport, undefined)
+    assert.equal(h.renders.length, renderCount, 'late IO does not render after Stop')
+  } else {
+    assert.equal(chat.recoveryReport, '/tmp/synthetic-deferred-report.json')
+    assert.equal(h.renders.at(-1).cards.filter((card) => card.title === 'Problem').length, 1)
+  }
+}
+
 const settlement = (outcome, attemptId) => ({
   heldOperationId: held.id,
   incarnation: held.incarnation,
@@ -55,7 +101,8 @@ function harness(
     deferResolve = false,
     deferSend = false,
     rejectSend = false,
-    cancelSend = false
+    cancelSend = false,
+    deferReport = false
   } = {}
 ) {
   const calls = []
@@ -72,7 +119,21 @@ function harness(
         acknowledgeSend = resolve
       })
     : null
+  let completeReport
+  let reportWrites = 0
+  const pendingReport = deferReport
+    ? new Promise((resolve) => {
+        completeReport = resolve
+      })
+    : null
   const controller = new NativeChatController({
+    // Synthetic IO delay; the controller's real report-completion branch is exercised.
+    writeRecoveryReport: deferReport
+      ? () => {
+          reportWrites++
+          return pendingReport
+        }
+      : undefined,
     invoke: async (channel, ...args) => {
       calls.push([channel, ...args])
       if (channel === 'agent:workspace-snapshot')
@@ -125,6 +186,8 @@ function harness(
     renders,
     acknowledgeResolve,
     acknowledgeSend,
+    completeReport,
+    reportWrites: () => reportWrites,
     resolves: () => calls.filter((c) => c[0] === 'agent:resolve-conflict').length,
     sent: () => calls.filter((c) => c[0] === 'agent:send').map((c) => c[1]),
     emit: async (event) => {

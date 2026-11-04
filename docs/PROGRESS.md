@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-486 independent review await-boundary repair
+
+- A failed-park report now captures its chat object, cancellation epoch, held operation, source and chat incarnation before report IO. Completion publishes only while those facts still match, so Stop and later held work cannot reopen an old Problem. The existing report writer discards a stale private artifact.
+- Recovery sends now recheck their captured held operation and provider incarnation at the final synchronous provider-dispatch boundary after writer and preparation awaits. The focused fixture defers report and send preparation to cover Stop, stale identities and uninterrupted publication/dispatch; live provider and native acceptance remain manager gates.
+
 ## 2026-11-04 — LKM-486 held-work ownership contract
 
 - The main chat owner now mints a held operation for the actual parked source and chat incarnation. Resolve, Retry and Discard carry that operation through the existing IPC path; send admission and the accepted owner terminal carry separate turn and attempt facts. Only a matching producer settlement from landing, release or explicit discard can clear the native held incident. Stop and a newer source fence late acknowledgements and reports.
