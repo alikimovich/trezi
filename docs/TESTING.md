@@ -188,6 +188,17 @@ for this cleanup's preserved coverage and validation limits.
 
 ### Changed-file selection (LOCAL-TEST-CLEANUP-V2)
 
+For local iteration, `bun run check:feedback --base=origin/main` consumes this
+audited plan. It runs `bun run lint` first, then applicable typechecks, then the
+selected unit tests if the plan is SELECTED. A FULL plan runs static checks only:
+the reason and omitted broader checks appear in a final `FEEDBACK_RECEIPT` JSON
+line with `evidence: "partial"`. A failed check exits nonzero immediately. Invalid
+refs, merge bases and diffs fail without claiming a clean selection. This command
+does not replace required CI on the PR head, independent review, the exact-head
+gate, nightly native checks or explicit native acceptance and native-failure
+pre-merge verification. `node test/run.mjs unit`, `bun run test` and `bun run
+verify` keep their existing full behavior.
+
 `node test/run.mjs unit --changed=<base-ref>` diffs the working tree (staged,
 unstaged and untracked) against the merge base of `<base-ref>` and `HEAD`, prints a
 plan with a reason for every test, and runs only that plan. `--list` prints the
