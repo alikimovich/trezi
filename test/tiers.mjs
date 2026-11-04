@@ -168,6 +168,7 @@ export const UNIT = [
   'preview-markup',
   'preview-markup-routing',
   'markup-controller',
+  'markup-acceptance-state',
   'key-shortcuts',
   'menu-first-shortcuts',
   'agent-load-routing',
