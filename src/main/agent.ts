@@ -399,8 +399,8 @@ const reconciliation = new ReconciliationCoordinator({
   preparations: preparingTurns,
   currentSession: (key) => sessions.get(key),
   begin: () => {},
-  land: (key, message, transcript, terminal, reconcile) =>
-    afterTurn(key, message, transcript, terminal, reconcile, true),
+  land: (key, message, transcript, terminal, reconcile, turn) =>
+    afterTurn(key, message, transcript, terminal, reconcile, true, turn),
   resolutionContext: parkedResolution,
   showParked: showParkedChat,
   continued: (key, turn, run) => conversation().continueTurn(key, turn, run),
@@ -2520,13 +2520,16 @@ export function registerAgentIpc(
   // return the conflicted files + a resolution PROMPT for the renderer to run as a normal
   // turn (its `afterTurn` merges + unparks). If they merged cleanly, `resolveParkedChat`
   // already committed + merged + unparked — nothing more to send (`conflicted: []`).
-  ipcMain.handle('agent:resolve-conflict', async (_e, sessionKey = activeKey) => {
-    if (!sessionKey) return { ok: false, conflicted: [] as string[], error: 'no-session' }
-    const res = await resolveParkedChat(sessionKey)
-    if (!res.ok || res.conflicted.length === 0) return { ...res, conflicted: res.conflicted }
-    const prompt = conflictResolutionPrompt(res.conflicted, parkedResolution(sessionKey))
-    return { ok: true, conflicted: res.conflicted, prompt }
-  })
+  ipcMain.handle(
+    'agent:resolve-conflict',
+    async (_e, sessionKey = activeKey, recoveryId?: string) => {
+      if (!sessionKey) return { ok: false, conflicted: [] as string[], error: 'no-session' }
+      const res = await resolveParkedChat(sessionKey, recoveryId)
+      if (!res.ok || res.conflicted.length === 0) return { ...res, conflicted: res.conflicted }
+      const prompt = conflictResolutionPrompt(res.conflicted, parkedResolution(sessionKey))
+      return { ok: true, conflicted: res.conflicted, prompt }
+    }
+  )
 
   // v9 conflict card — "Discard changes". Drop the active parked chat's unmerged work.
   ipcMain.handle('agent:discard-conflict', async (_e, sessionKey = activeKey) => {
@@ -2536,9 +2539,9 @@ export function registerAgentIpc(
 
   // LKM-165 landing card — "Retry": land the held batch again; the outcome reaches the
   // chat as the usual isolation event.
-  ipcMain.handle('agent:retry-landing', async (_e, sessionKey = activeKey) =>
+  ipcMain.handle('agent:retry-landing', async (_e, sessionKey = activeKey, recoveryId?: string) =>
     sessionKey
-      ? retryLanding(sessionKey)
+      ? retryLanding(sessionKey, recoveryId)
       : { ok: false, state: 'isolated' as const, error: 'no-session' }
   )
 

@@ -210,39 +210,62 @@ export function snapshot(
   // LKM-165: an unlandable turn says so, with why and a way out — never "pending".
   if (chat.isolation === 'parked' && chat.stopped !== 'held' && chat.decision)
     cards.push(decisionCard(chat, chat.decision))
-  else if (chat.isolation === 'parked' && chat.stopped !== 'held')
+  else if (chat.isolation === 'parked' && chat.stopped !== 'held') {
+    // A running turn, check, or live recovery request still owns this park. Once
+    // that operation ends, the same card exposes its actual reason and report.
+    const owned =
+      (!!chat.recovery && !chat.recoveryTimedOut) ||
+      !!chat.keepingStopped ||
+      (chat.isRunning &&
+        !chat.stopping &&
+        (chat.operation === 'resolving' ||
+          !chat.landingError ||
+          (chat.phase === 'applying' && chat.operation === 'parking')))
+    const status =
+      chat.recovery === 'retry'
+        ? 'Retrying the check…'
+        : chat.isRunning && chat.phase !== 'applying'
+          ? 'Working on held changes…'
+          : chat.recovery === 'resolve' || chat.operation === 'resolving'
+            ? 'Resolving changes…'
+            : 'Checking changes…'
     cards.push({
       id: 'conflict',
-      title: chat.recoveryProblem ? 'Problem' : 'This turn’s changes didn’t land',
+      title: owned ? status : chat.recoveryProblem ? 'Problem' : 'This turn’s changes didn’t land',
       detail:
-        chat.recoveryProblem ??
+        (owned ? 'Trezi is working on the held changes.' : chat.recoveryProblem) ??
         [
           chat.landingError
             ? `Trezi couldn’t apply them to the project: ${chat.landingError}`
             : 'The project changed under them, so Trezi held them instead of overwriting.',
           ...(chat.isolationFiles ?? [])
         ].join('\n'),
-      ...(chat.recoveryProblem && chat.isolationFiles?.length
+      ...(!owned && chat.recoveryProblem && chat.isolationFiles?.length
         ? { fullDetail: chat.isolationFiles.join('\n') }
         : {}),
-      busy: !!chat.recovery && !chat.recoveryTimedOut,
+      busy: (!!chat.recovery && !chat.recoveryTimedOut) || !!chat.keepingStopped,
       actions: [
-        { label: 'Discard', action: 'discard', disabled: chat.isRunning || !!chat.recovery },
+        {
+          label: 'Discard',
+          action: 'discard',
+          disabled: chat.isRunning || !!chat.recovery || !!chat.keepingStopped
+        },
         {
           label: chat.recovery === 'retry' ? 'Retrying…' : 'Retry',
           action: 'landing-retry',
-          disabled: chat.isRunning || !!chat.recovery
+          disabled: chat.isRunning || !!chat.recovery || !!chat.keepingStopped
         },
         {
           label: chat.recovery === 'resolve' ? 'Resolving…' : 'Resolve',
           action: 'resolve',
-          disabled: chat.isRunning || !!chat.recovery
+          disabled: chat.isRunning || !!chat.recovery || !!chat.keepingStopped
         },
         ...(chat.recoveryReport
           ? [{ label: 'Copy support report', action: 'recovery-report' }]
           : [])
       ]
     })
+  }
   const peers = peerCard(chat.peerWork)
   if (peers) cards.push(peers)
   for (const p of chat.permissions)

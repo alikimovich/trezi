@@ -24,12 +24,16 @@ const fileList = (files?: string[]) => (files?.length ? `\n\n${files.join('\n')}
 
 export function recoveryCards(chat: Chat): NativeChatCard[] {
   const cards: NativeChatCard[] = []
-  const busy = chat.isRunning || chat.sending
+  const busy = chat.isRunning || chat.sending || !!chat.keepingStopped
   if (chat.stopped === 'held' && chat.isolation === 'parked')
     cards.push({
       id: 'stopped',
-      title: 'Stopped — this turn’s changes are on hold',
-      detail: `Your project still has the files it had before this turn. Nothing was applied.${fileList(chat.isolationFiles)}`,
+      title: chat.keepingStopped
+        ? 'Checking changes…'
+        : 'Stopped — this turn’s changes are on hold',
+      detail: chat.keepingStopped
+        ? 'Trezi is checking the held changes.'
+        : `Your project still has the files it had before this turn. Nothing was applied.${fileList(chat.isolationFiles)}`,
       actions: [
         { label: 'Revert this turn’s changes', action: 'stopped-revert', disabled: busy },
         { label: 'Keep changes', action: 'stopped-keep', disabled: busy },
@@ -116,7 +120,7 @@ export async function recoveryAction(
   id?: string
 ): Promise<boolean> {
   const { invoke } = controller.services
-  const busy = chat.isRunning || chat.sending
+  const busy = chat.isRunning || chat.sending || !!chat.keepingStopped
   const follow = (text: string) =>
     controller.run(chat, {
       id: crypto.randomUUID(),
@@ -139,9 +143,70 @@ export async function recoveryAction(
       return true
     }
     case 'stopped-keep': {
-      if (busy) return true
-      const result = await invoke('agent:keep-stopped', chat.chat)
-      if (!result.ok) throw new Error(result.error ?? 'Unable to keep this turn’s changes.')
+      if (busy || chat.stopped !== 'held') return true
+      const keepTurn = chat.turn
+      chat.keepingStopped = true
+      controller.changed(chat)
+      try {
+        // The owner can fail before it can list files. A rejected IPC is the
+        // same failed action, not an unowned chat error.
+        const result = await invoke('agent:keep-stopped', chat.chat).catch((error) => ({
+          ok: false,
+          files: [],
+          error: error instanceof Error ? error.message : String(error)
+        }))
+        if (chat.turn !== keepTurn || controller.chats.get(chat.chat) !== chat) return true
+        // The owner result is authoritative even if an old Stop callback raced
+        // this request, or this request's own isolation callback arrives later.
+        const files = result.files?.length
+          ? result.files
+          : result.ok
+            ? []
+            : (chat.isolationFiles ?? [])
+        const sameFiles = JSON.stringify(chat.isolationFiles ?? []) === JSON.stringify(files)
+        if (result.ok && result.conflict) {
+          if (chat.isolation !== 'parked' || chat.stopped || chat.landingError || !sameFiles)
+            controller.event(
+              { projectKey: chat.chat, type: 'isolation', state: 'parked', files },
+              true
+            )
+        } else if (result.ok && result.group) {
+          if (chat.isolation !== 'isolated' || chat.landed?.group !== result.group)
+            controller.event(
+              {
+                projectKey: chat.chat,
+                type: 'isolation',
+                state: 'merged',
+                files,
+                group: result.group
+              },
+              true
+            )
+        } else if (result.ok) {
+          if (chat.isolation !== 'isolated' || chat.stopped)
+            controller.event(
+              { projectKey: chat.chat, type: 'isolation', state: 'isolated', files },
+              true
+            )
+        } else {
+          const error = result.error ?? 'Unable to keep this turn’s changes.'
+          controller.event(
+            {
+              projectKey: chat.chat,
+              type: 'isolation',
+              state: 'parked',
+              files,
+              reason: 'failed',
+              error
+            },
+            true
+          )
+        }
+        chat.settledStoppedKeep = { turn: keepTurn }
+      } finally {
+        chat.keepingStopped = false
+        controller.changed(chat)
+      }
       return true
     }
     case 'stopped-finish':

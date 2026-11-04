@@ -383,6 +383,7 @@ export class NativeChatController {
         chat.title = migrateChatTitle(live.record.title)
         chat.isolation = live.isolation?.state ?? 'live'
         chat.stopped = live.isolation?.reason === 'interrupted' ? 'held' : undefined
+        chat.stoppedTurn = chat.stopped ? chat.turn : undefined
         chat.landingError =
           live.isolation?.reason === 'failed'
             ? (live.isolation.error ?? 'The landing failed.')
@@ -453,7 +454,7 @@ export class NativeChatController {
       this.services.effect({ type: 'focus' })
     } else await this.submit(chat, command.text)
   }
-  event(event: AgentEvent) {
+  event(event: AgentEvent, fromStoppedKeepResult = false) {
     if (event.sessionId) {
       this.services.effect({ type: 'spawn', event })
       // Detached agent output must never enter an interactive stream.
@@ -539,7 +540,7 @@ export class NativeChatController {
     if (!key || this.closed.has(key)) return
     const chat = this.get(key)
     // A late terminal (an earlier turn's, or one no send accounts for) completes nothing.
-    if (late(chat, event)) return
+    if (!fromStoppedKeepResult && late(chat, event)) return
     // A heartbeat racing the turn's end is not news (and must not flag review).
     if (event.type === 'progress' && !chat.isRunning) return
     const priorPhase = chat.phase
@@ -551,6 +552,13 @@ export class NativeChatController {
     )
       chat.unreadAnswer = true
     reduce(chat, event)
+    // Start an eligible resolve before publishing the parked snapshot. The request
+    // itself owns the incident until its IPC hands off to a turn or settles.
+    if (
+      this.services.autoResolve &&
+      (event.type === 'done' || event.type === 'landing-finished' || event.type === 'isolation')
+    )
+      autoResolve(this, chat, event.type === 'isolation' && event.state === 'parked')
     if (event.type === 'isolation' && !chat.recovery) {
       // Landed or discarded: the held problem and its report are history.
       if (event.state !== 'parked') {
@@ -642,13 +650,6 @@ export class NativeChatController {
       (event.type === 'isolation' && event.state !== 'parked')
     )
       queueMicrotask(() => void this.drain(chat))
-    if (
-      this.services.autoResolve &&
-      (event.type === 'done' || event.type === 'landing-finished' || event.type === 'isolation')
-    )
-      queueMicrotask(() =>
-        autoResolve(this, chat, event.type === 'isolation' && event.state === 'parked')
-      )
   }
   async composer(action: NativeComposerAction) {
     if (action.chat !== this.active) return
@@ -795,8 +796,10 @@ export class NativeChatController {
     }
     return held
   }
-  async run(chat: Chat, submission: Submission) {
+  async run(chat: Chat, submission: Submission, operation?: Chat['operation']) {
+    chat.settledStoppedKeep = undefined
     begin(chat)
+    chat.operation = operation
     chat.stopping = false
     chat.sending = true
     chat.isRunning = true
@@ -965,6 +968,7 @@ export class NativeChatController {
         chat.turn === stoppedTurn &&
         chat.stopping
       ) {
+        chat.stoppedTurn = stoppedTurn
         finish(chat)
         this.changed(chat)
       }
