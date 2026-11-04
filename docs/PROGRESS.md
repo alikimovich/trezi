@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-484 CI worktree cleanup race
+
+- The native core capture passed with the new glass, but the manager's CI run failed in `chat-new-instant`: `git worktree list` read an entry while asynchronous chat cleanup removed its `commondir`. The fixture now retries only that transient Git read until its existing cleanup deadline and still fails other Git errors. A synthetic regression assertion covers the retry and error boundary; the real fixture continues to require every chat worktree to be removed.
+
 ## 2026-11-03 — LKM-484 New Chat native core capture repair
 
 - The foreground light-mode capture on main showed the New Chat glyph without a capsule. Its segmented control is a child of the chat title's custom toolbar item, whereas the neighboring device segment belongs to an AppKit toolbar item group that paints its bezel.
