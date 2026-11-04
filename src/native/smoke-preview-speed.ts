@@ -57,6 +57,16 @@ function snapshot(dir: string, out: string[] = []): string[] {
 type Box = { x: number; y: number; width: number; height: number }
 // biome-ignore lint/suspicious/noExplicitAny: host inspection payloads are untyped JSON
 type Speed = Record<string, any>
+/** The chat-width smoke must compare with the pane, not only the toolbar header. */
+export function chatNewPaneProblem(shell: Speed, expectedWidth: number): string | undefined {
+  if (!shell.chatNewVisible) return 'New Chat is hidden'
+  if (shell.chatWidth !== expectedWidth)
+    return `chat width ${shell.chatWidth}, expected ${expectedWidth}`
+  const [buttonX, , buttonWidth] = (shell.chatNewFrame.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
+  const gap = shell.detailLeading + shell.chatWidth - buttonX - buttonWidth
+  if (!Number.isFinite(gap) || buttonWidth !== 32) return 'New Chat frame is not a 32 pt button'
+  if (Math.abs(gap - 4) > 1) return `New Chat is ${gap} pt inside the pane, expected 4 ± 1 pt`
+}
 /** Below this window width `fitMore` removes the slow-motion segment and "…" (ToolbarMore.swift). */
 const NARROW_WINDOW = 960
 /** The page's bottom-left corner, where the badge sat before LKM-385. */
@@ -120,6 +130,34 @@ async function checkBadgeFollows(
       `chat width ${width}`
     )
   }
+  const chatNewAtPane = async (name: string, width: number) => {
+    await waitFor(async () => {
+      const shell = await host.request('shellInspect')
+      return shell.chatWidth === width && shell.chatNewVisible && shell
+    }, `${name}: New Chat visible at chat width ${width}`)
+    const captureMode = await capture(host, artifacts, `preview-speed-chat-new-${name}`)
+    const shell: Speed = await host.request('shellInspect')
+    const [buttonX, , buttonWidth] = (shell.chatNewFrame.match(/-?\d+(?:\.\d+)?/g) ?? []).map(
+      Number
+    )
+    const paneTrailing = shell.detailLeading + shell.chatWidth
+    const gap = paneTrailing - (buttonX + buttonWidth)
+    evidence[`chat-new-${name}`] = {
+      capture: `toolbar-preview-speed-chat-new-${name}.png`,
+      captureMode,
+      chatNewFrame: shell.chatNewFrame,
+      detailLeading: shell.detailLeading,
+      chatWidth: shell.chatWidth,
+      paneTrailing,
+      gap
+    }
+    writeFileSync(join(artifacts, 'preview-speed-chat-new.json'), JSON.stringify(evidence, null, 2))
+    assert.equal(
+      chatNewPaneProblem(shell, width),
+      undefined,
+      `${name}: New Chat ends 4 pt inside the actual chat pane boundary: ${JSON.stringify(evidence[`chat-new-${name}`])}`
+    )
+  }
   const before = await overflow()
   const chat: number = (await host.request('layoutInspect')).width
   let expanded = false
@@ -138,7 +176,9 @@ async function checkBadgeFollows(
     }
     await chatWidth(520)
     await placed('chat-width')
+    await chatNewAtPane('520', 520)
     await chatWidth(chat)
+    await chatNewAtPane('restored', chat)
     await expand(true)
     expanded = true
     await placed('expanded')
