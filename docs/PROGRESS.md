@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-485 stop loading titles on conversation error
+
+- Independent review found that a failed conversation hydration leaves `chat.ready` false while the project can still be running, so unknown row and header titles kept deciphering. Shell row state now excludes chats with an error from `loadingTitle`; the existing shell-controller fixture asserts the error transition stops loading and that a still-pending chat can resume after the error clears. This changes only the transient title presentation, leaving error feedback and chat readiness guards intact.
+
 ## 2026-11-04 — LKM-485 loading-title lifecycle fixture proof
 
 - The existing standalone sidebar shimmer fixture now exercises a pending-title row alongside its shimmer cleanup checks. It asserts deciphering while attached, an off mode and unchanged visible text across timer ticks after detachment, release of the discarded row's `LoadingChatTitle`, and a fresh active loader on the replacement row. The existing fixture assertions remain intact; product code is unchanged.

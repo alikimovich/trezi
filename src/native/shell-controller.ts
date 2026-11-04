@@ -82,6 +82,7 @@ export class NativeShellController {
             status.kind !== 'error' &&
             status.kind !== 'idle' &&
             !knownTitle &&
+            !chat?.error &&
             (ws.loadedKey !== p.key || chat?.ready === false)
           const row: NativeShellRow = {
             id: `chat:${key}`,

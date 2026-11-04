@@ -80,6 +80,21 @@ chat.chats.get('a').title = ''
 shell.render()
 assert.equal(renders.at(-1).rows[0].children[0].loadingTitle, true)
 assert.equal(renders.at(-1).rows[0].children[0].title, 'New chat', 'glyphs never enter shell data')
+// A failed conversation hydration leaves ready false, but must stop the title animation.
+workspace.state.loadedKey = 'a'
+workspace.state.status = { kind: 'running' }
+chat.chats.get('a').ready = false
+chat.chats.get('a').error = 'Could not load conversation'
+shell.render()
+assert.equal(renders.at(-1).rows[0].children[0].loadingTitle, false, 'chat error stops loading')
+chat.chats.get('a').error = undefined
+shell.render()
+assert.equal(
+  renders.at(-1).rows[0].children[0].loadingTitle,
+  true,
+  'pending chat resumes after error clears'
+)
+workspace.state.loadedKey = null
 workspace.state.status = { kind: 'idle' }
 shell.render()
 assert.equal(renders.at(-1).rows[0].children[0].loadingTitle, false, 'cancel stops loading')
