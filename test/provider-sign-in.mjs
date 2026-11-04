@@ -331,6 +331,16 @@ states.codex = readinessFromLogin(null)
 assert.equal(states.codex.status, 'failed')
 assert.deepEqual(initialProviderReadiness().claude, { status: 'checking' }, 'restart checks again')
 const chat = newChat('fixture')
+chat.ready = true
+assert.equal(
+  startLoginCard(
+    chat,
+    { claude: { status: 'signed_out' }, codex: { status: 'signed_out' } },
+    false
+  ),
+  null,
+  'project opening suppresses the chooser'
+)
 chat.text = 'draft remains'
 chat.attachments = [
   {
@@ -342,6 +352,14 @@ chat.attachments = [
   }
 ]
 states.codex = readinessFromLogin(false)
+for (const pending of ['checking', 'failed']) {
+  states.codex = { status: pending }
+  assert.equal(startLoginCard(chat, states), null, `${pending} is not authoritative sign-out`)
+}
+states.codex = readinessFromLogin(false)
+chat.ready = false
+assert.equal(startLoginCard(chat, states), null, 'the project conversation is still loading')
+chat.ready = true
 assert.deepEqual(
   startLoginCard(chat, states)
     .actions.slice(0, 2)

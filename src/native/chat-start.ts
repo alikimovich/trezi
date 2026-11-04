@@ -30,6 +30,8 @@ export interface StartWorkspace {
   recents(): { root: string; name: string }[]
   /** The workspace's own progress line ("Opening Site…"), empty when idle. */
   busy(): string
+  /** Project opening has completed and its chat metadata is authoritative. */
+  ready?(): boolean
   /** The model new projects open with; the no-project draft starts from it. */
   preferred(): ChatAgentSettings
 }
@@ -157,7 +159,9 @@ export class StartFlow {
     const busy = chat.chat === HOME ? (this.workspace?.busy() ?? '') : ''
     if (busy) return { text: busy, progress: true, actions: [] }
     // No provider can answer: LKM-231's own sign-in card, here under the composer.
-    const start = usable.length ? null : startLoginCard(chat, readiness)
+    const start = usable.length
+      ? null
+      : startLoginCard(chat, readiness, this.workspace?.ready?.() ?? true)
     if (start && !checking(readiness))
       return { text: start.detail ?? start.title, actions: start.actions }
     if (chat.signingIn || chat.signInMessage)

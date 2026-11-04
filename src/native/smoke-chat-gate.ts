@@ -94,6 +94,26 @@ export async function captureChatGate(
       `Chat gate ${stage}: selected chat owns column`
     )
     assert.ok(shell.chatTitle.length > 0, `Chat gate ${stage}: selected title is present`)
+    const selectedRow = shell.rows.find((row: { id: string }) => row.id === shell.selected)
+    assert.equal(
+      shell.chatTitle,
+      selectedRow?.title,
+      `Chat gate ${stage}: header follows selected row`
+    )
+    if (shell.chatTitle === '••••••••') {
+      assert.equal(
+        shell.chatTitleLabel,
+        'Loading conversation',
+        `Chat gate ${stage}: loading label`
+      )
+      assert.ok(
+        ['sweep', 'still', 'none'].includes(shell.chatTitleMode),
+        `Chat gate ${stage}: loading title mode`
+      )
+    } else {
+      assert.equal(shell.chatTitleLabel, shell.chatTitle, `Chat gate ${stage}: known title label`)
+      assert.equal(shell.chatTitleMode, 'none', `Chat gate ${stage}: known title stops animating`)
+    }
   }
   if (nativeWorkspace.active && !ready) {
     assert.equal(

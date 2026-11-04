@@ -147,6 +147,11 @@ if (process.platform !== 'darwin') {
   const near = (actual, expected, label, slack = 0.51) =>
     assert.ok(Math.abs(actual - expected) <= slack, `${label}: ${actual}, expected ${expected}`)
   const { idle, thinking, waiting, unread, history } = report
+  assert.equal(report.loadingTitle.label, 'Loading conversation')
+  assert.equal(report.loadingTitle.mode, 'sweep')
+  assert.equal(report.loadingReduced.mode, 'still')
+  assert.equal(report.loadingStopped.shimmer.animated, false)
+  assert.equal(report.loadingStopped.alpha, 1)
 
   // State: only `thinking` shimmers; a waiting row stays Running without it.
   assert.equal(thinking.mode, 'sweep')

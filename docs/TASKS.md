@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-508 — Loading titles and provider readiness
+
+- [x] Show an accessible redacted loading title in the sidebar and selected header, with cached and untitled states preserved.
+- [x] Gate the initial provider chooser on confirmed sign-out and keep explicit login errors.
+- [x] Add focused title, readiness and Swift fixture assertions.
+- [ ] Manager: obtain native acceptance on main after review and CI.
+
 ## Native suite failure on main 17fbc17129bb (LKM-484)
 
 - [x] Embed New Chat as native AppKit glass content inside the chat title's custom toolbar item and preserve its existing segment behavior and visibility.

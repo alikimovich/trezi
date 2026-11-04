@@ -111,6 +111,21 @@ const project = (key) => {
   return renders.at(-1).rows.find((row) => row.project === key)
 }
 const nested = (key) => project(key).recent?.map((row) => row.session)
+const titleRow = (key) => project('alpha').children.find((row) => row.session === key)
+
+// Unknown metadata stays redacted through opening, while a cached title remains readable.
+alpha.sessionKeys = ['a']
+assert.deepEqual([titleRow('a').title, titleRow('a').loadingTitle], ['••••••••', true])
+chat.get('a').title = 'Cached title'
+assert.deepEqual([titleRow('a').title, titleRow('a').loadingTitle], ['Cached title', false])
+chat.get('a').title = ''
+workspace.state.status = { kind: 'error', message: 'Open failed' }
+assert.deepEqual([titleRow('a').title, titleRow('a').loadingTitle], ['••••••••', false])
+workspace.state.status = { kind: 'running' }
+chat.get('a').ready = true
+assert.deepEqual([titleRow('a').title, titleRow('a').loadingTitle], ['New chat', false])
+chat.get('a').ready = false
+alpha.sessionKeys = []
 
 // Counts: 0, 1, 5 and more than 5: every open chat is listed.
 assert.deepEqual(nested('alpha'), [])

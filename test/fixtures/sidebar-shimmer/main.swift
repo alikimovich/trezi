@@ -93,6 +93,15 @@ let idle = make([:]), thinking = make(["running": true, "thinking": true]), wait
 let unread = make(["unread": true]), history = make(["kind": "history", "detail": "3d", "thinking": false])
 report["idle"] = describe(idle); report["thinking"] = describe(thinking); report["waiting"] = describe(waiting)
 report["unread"] = describe(unread); report["history"] = describe(history)
+let loading = make(["loadingTitle": true], title: "••••••••")
+report["loadingTitle"] = describe(loading)
+SidebarMarqueeTitle.reduceMotionOverride = true
+loading.shimmer?.refresh()
+report["loadingReduced"] = describe(loading)
+SidebarMarqueeTitle.reduceMotionOverride = false
+loading.shimmer?.refresh()
+loading.shimmer?.stop()
+report["loadingStopped"] = describe(loading)
 
 // The sweep, its mask at several phases, and on a selected row.
 let shimmer = thinking.shimmer!

@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-508 Loading titles and provider readiness
+
+- Unknown conversation titles now use the existing native shimmer on a redacted placeholder in both sidebar rows and the selected header. Cached titles remain visible; a ready untitled chat shows New chat. The shimmer stops on error or readiness, and Reduce Motion holds the placeholder still. The initial provider chooser requires confirmed sign-out for both built-in seats and a ready conversation; explicit login-error cards retain their path. Focused row, sign-in and Swift fixture checks cover these transitions; native GUI acceptance follows the reviewed merge.
+
 ## 2026-11-04 — LKM-503 Mark up acceptance state contract
 
 - The held-press probe now records semantic Select mode, overlay state and both accent images before down, while held and after the outside release. The matrix validates any completed Select or Mark up action and restores the resting state with the normal toolbar toggle before each step and after probe reset. Focus and disabled retain their labeled synthetic setup. A focused regression distinguishes active Select, focus without selection and a stale accent. The native GREEN/RED run remains for the reviewed merged SHA.
