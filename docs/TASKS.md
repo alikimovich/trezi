@@ -13,6 +13,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: sample the visible header glyphs across animation ticks and assert they stop under Reduce Motion in the native `chat-gate` fixture.
 - [x] Review repair: expose the sidebar label's painted text in inspection and require selected-row motion and Reduce Motion stillness alongside the header.
 - [x] CI repair: keep both standalone sidebar fixture `NativeShell` contracts aligned with the selected header's optional loading-title member.
+- [x] Review repair: assert a detached loading row stops deciphering and a discarded row releases its loader in the existing sidebar shimmer fixture.
 - [ ] Manager: independent review, CI and post-merge native sidebar acceptance on main.
 ## Native suite failure on main 17fbc17129bb (LKM-484)
 

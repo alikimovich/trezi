@@ -147,6 +147,23 @@ autoreleasepool {
     old.removeFromSuperview()
 }
 report["released"] = gone == nil
+// A pending title leaves no deciphering timer behind when its row detaches. A replacement row
+// gets its own loader; the discarded row's loader must have been released.
+let loading = make(["loadingTitle": true], title: "New chat")
+report["loadingAttached"] = ["mode": loading.loadingTitle?.mode ?? "none", "text": loading.title?.label.stringValue ?? ""]
+loading.removeFromSuperview()
+let detachedTitle = loading.title?.label.stringValue ?? ""
+RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.4))
+report["loadingDetached"] = ["mode": loading.loadingTitle?.mode ?? "none", "before": detachedTitle,
+                              "after": loading.title?.label.stringValue ?? ""]
+weak var discardedLoading: LoadingChatTitle?
+autoreleasepool {
+    let old = make(["loadingTitle": true], title: "New chat")
+    discardedLoading = old.loadingTitle
+    old.removeFromSuperview()
+}
+let replacement = make(["loadingTitle": true], title: "New chat")
+report["loadingRebuilt"] = ["oldReleased": discardedLoading == nil, "newMode": replacement.loadingTitle?.mode ?? "none"]
 // The phase comes from the clock, so a rebuilt row carries on where it was.
 root.addSubview(thinking)
 let before = (thinking.shimmer?.band.animation(forKey: "shimmer") as? CABasicAnimation)?.timeOffset ?? -1

@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-485 loading-title lifecycle fixture proof
+
+- The existing standalone sidebar shimmer fixture now exercises a pending-title row alongside its shimmer cleanup checks. It asserts deciphering while attached, an off mode and unchanged visible text across timer ticks after detachment, release of the discarded row's `LoadingChatTitle`, and a fresh active loader on the replacement row. The existing fixture assertions remain intact; product code is unchanged.
+
 ## 2026-11-04 — LKM-485 standalone sidebar fixture contract repair
 
 - The standalone sidebar shimmer and marquee fixtures compile the shared `SidebarChats.swift` extension against minimal `NativeShell` stubs. That extension now refreshes the selected header's loading title when Reduce Motion changes, so both stubs declare the same optional `LoadingChatTitle` member as the real shell. The fixtures retain their existing behavior and assertions; this fixes the Swift compile contract behind the CI unit-shard failures without changing the app.
