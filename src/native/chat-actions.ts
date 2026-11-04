@@ -56,12 +56,16 @@ async function recoveryRequest(
   if (chat.isRunning || chat.sending || chat.recovery) return
   chat.recovery = kind
   chat.recoveryTimedOut = false
-  chat.recoveryProblem = undefined
-  chat.recoveryReport = undefined
+  // The prior failed attempt remains part of this incident until a real landing or
+  // discard settles it. Its card is shown as progress while the request owns it.
   chat.recoverySettled = undefined
   chat.recoveryOutcome = undefined
   chat.recoveryId = crypto.randomUUID()
   const id = chat.recoveryId
+  if (chat.heldIncident) {
+    chat.heldIncident.operation = id
+    chat.heldIncident.attention = 'owned'
+  }
   chat.recoveryStartedAt = Date.now()
   controller.changed(chat)
   let requestPromise: Promise<Handover | void> | undefined
@@ -88,19 +92,18 @@ async function recoveryRequest(
     } finally {
       if (timer) clearTimeout(timer)
     }
-    if (
-      !handover &&
-      !chat.recoveryProblem &&
-      !chat.isRunning &&
-      chat.recoverySettled &&
-      chat.recoverySettled !== 'parked'
-    )
+    if (!handover && !chat.isRunning && chat.recoverySettled && chat.recoverySettled !== 'parked') {
+      chat.heldIncident = undefined
+      chat.recoveryId = undefined
+      chat.recoveryProblem = undefined
+      chat.recoveryReport = undefined
       chat.recoveryOutcome =
         kind === 'discard'
           ? 'Held changes discarded.'
           : chat.recoverySettled === 'merged'
             ? 'Changes applied to the project.'
             : 'No changes remained to apply.'
+    }
     if (chat.recoveryProblem)
       chat.recoveryReport = await writeRecoveryReport(chat, kind, chat.recoveryProblem)
   } catch (error) {
@@ -111,6 +114,7 @@ async function recoveryRequest(
     } catch {
       chat.recoveryProblem += ' The support report could not be written.'
     }
+    if (chat.heldIncident) chat.heldIncident.attention = 'terminal'
     if (kind === 'resolve') throw error
   } finally {
     if (chat.recoveryTimedOut && requestPromise) {
@@ -129,7 +133,11 @@ async function recoveryRequest(
       chat.recovery = undefined
       chat.recoveryTimedOut = false
       // A handover starts its turn right away, which renders the running state itself.
-      if (!handover) controller.changed(chat)
+      if (!handover) {
+        if (chat.heldIncident && chat.isolation === 'parked')
+          chat.heldIncident.attention = 'terminal'
+        controller.changed(chat)
+      }
     }
   }
   if (handover) await handover()

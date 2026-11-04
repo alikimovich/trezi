@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-486 chat Problem attention
+
+- A failed held check now records its turn and recovery operation before the support report is written. While the agent or retry owns that incident, the chat shows a quiet held status without stale actions; a terminal Problem appears only after its report is ready or report writing fails. The prior failure and report remain until a merged or discarded isolation confirms recovery, and the per-chat operation ID rejects late report completions.
+- The controller claims automatic Resolve before rendering the parked state, closing the failure-to-recovery frame gap. Decision and approval cards retain priority. The focused chat fixture covers active failure through success, terminal failure, report readiness, no duplicate card, and decision visibility. Native chat acceptance remains for the manager after merge.
+
 ## 2026-11-03 — LKM-482 sidebar Restore capture
 
 - The native `chat-gate` fixture captured immediately after Restore made the chat column visible, while its 240 ms width animation was still running. The failed receipt showed a status origin of 354.6 pt with the expected final leading edge at 440 pt. The fixture now waits for the layout's final fraction before checking and capturing the restored error state; the opening and failed-open geometry assertions remain in place.

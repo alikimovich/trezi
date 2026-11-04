@@ -48,6 +48,7 @@ export function autoResolve(
     .catch(() => {
       chat.autoResolved = 'failed'
       report(chat, 'failed')
+      controller.changed(chat)
     })
     .finally(() => running.delete(chat.chat))
 }

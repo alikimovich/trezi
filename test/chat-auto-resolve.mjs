@@ -11,6 +11,7 @@ incidents.report = (record) => records.push(record)
 
 function harness(autoResolve, { refuse = false } = {}) {
   const calls = []
+  const renders = []
   const controller = new NativeChatController({
     invoke: async (channel, ...args) => {
       calls.push([channel, ...args])
@@ -36,12 +37,13 @@ function harness(autoResolve, { refuse = false } = {}) {
           : { ok: true, conflicted: ['src/a.tsx'], prompt: 'Resolve the markers.' }
       return { ok: true }
     },
-    render: () => {},
+    render: (state) => renders.push(structuredClone(state)),
     effect: () => {},
     autoResolve
   })
   return {
     controller,
+    renders,
     resolves: () => calls.filter((c) => c[0] === 'agent:resolve-conflict').length,
     sent: () => calls.filter((c) => c[0] === 'agent:send').map((c) => c[1]),
     emit: async (event) => {
@@ -112,6 +114,11 @@ function harness(autoResolve, { refuse = false } = {}) {
   assert.deepEqual(
     records.map((r) => r.outcome),
     ['failed']
+  )
+  assert.equal(
+    h.renders.at(-1)?.cards.find((card) => card.id === 'conflict')?.title,
+    'Problem',
+    'failed automatic recovery publishes its terminal card'
   )
 }
 

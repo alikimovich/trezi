@@ -106,6 +106,13 @@ export interface Chat extends NativeChatMirror {
   /** A deadline can stop the spinner while the original IPC still owns the mutation. */
   recoveryTimedOut?: boolean
   recoveryProblem?: string
+  /** A failed held attempt stays owned by this turn until its report and landing settle. */
+  heldIncident?: {
+    turn?: string
+    operation: string
+    gate: string
+    attention: 'recording' | 'owned' | 'terminal'
+  }
   recoveryId?: string
   recoveryStartedAt?: number
   recoveryReport?: string

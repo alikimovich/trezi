@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Chat Problem attention (LKM-486)
+
+- [x] Correlate failed held attempts with their turn and recovery operation; keep an ordinary status until a report exists or recovery succeeds.
+- [x] Keep user decisions visible and cover active failure, retry, terminal report and per-chat clearing in the focused chat fixture.
+- [ ] Manager: independent review, configured CI and post-merge native chat acceptance on main.
+
 ## Native sidebar suite Restore capture (LKM-482)
 
 - [x] Wait for the chat column's Restore animation to finish before asserting and capturing the preview status geometry.

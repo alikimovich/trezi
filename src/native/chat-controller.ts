@@ -542,6 +542,8 @@ export class NativeChatController {
     if (event.type === 'isolation' && !chat.recovery) {
       // Landed or discarded: the held problem and its report are history.
       if (event.state !== 'parked') {
+        chat.heldIncident = undefined
+        chat.recoveryId = undefined
         chat.recoveryProblem = undefined
         chat.recoveryReport = undefined
       } else if (
@@ -555,24 +557,44 @@ export class NativeChatController {
         const id = crypto.randomUUID()
         chat.recoveryId = id
         chat.recoveryStartedAt = Date.now()
+        if (event.reason === 'failed')
+          chat.heldIncident = {
+            turn: chat.turn,
+            operation: id,
+            gate: event.reason,
+            attention: 'recording'
+          }
         chat.recoveryProblem = `Problem: ${reason}`
         chat.recoveryReport = undefined
         void writeRecoveryReport(chat, 'turn-end landing', reason).then(
           (path) => {
             if (chat.recoveryId === id && chat.isolation === 'parked') {
               chat.recoveryReport = path
+              if (chat.heldIncident?.operation === id)
+                chat.heldIncident.attention = chat.isRunning ? 'owned' : 'terminal'
               this.changed(chat)
             }
           },
           () => {
             if (chat.recoveryId === id) {
               chat.recoveryProblem += ' The support report could not be written.'
+              if (chat.heldIncident?.operation === id)
+                chat.heldIncident.attention = chat.isRunning ? 'owned' : 'terminal'
               this.changed(chat)
             }
           }
         )
       }
     }
+    if (
+      (event.type === 'landing-finished' ||
+        event.type === 'error' ||
+        (event.type === 'done' && !event.landingPending)) &&
+      !chat.isRunning &&
+      chat.isolation === 'parked' &&
+      chat.heldIncident?.attention === 'owned'
+    )
+      chat.heldIncident.attention = chat.recoveryReport ? 'terminal' : 'recording'
     // A seat that refused a turn is signed out for the start screen too (LKM-232).
     const seat = chat.settings.provider
     if (event.type === 'error' && event.code === 'auth' && !chat.settings.connectionId)
@@ -615,6 +637,13 @@ export class NativeChatController {
       })
     }
     if (!chat.isRunning && key !== this.active && event.type !== 'model') chat.needsReview = true
+    // A bounded automatic Resolve takes ownership before this render. A microtask here
+    // exposed the parked Problem for one frame between the turn and its acknowledgement.
+    if (
+      this.services.autoResolve &&
+      (event.type === 'done' || event.type === 'landing-finished' || event.type === 'isolation')
+    )
+      autoResolve(this, chat, event.type === 'isolation' && event.state === 'parked')
     if (event.type === 'delta' && priorPhase === 'writing') {
       if (!this.streamUpdates.has(key))
         this.streamUpdates.set(
@@ -630,13 +659,6 @@ export class NativeChatController {
       (event.type === 'isolation' && event.state !== 'parked')
     )
       queueMicrotask(() => void this.drain(chat))
-    if (
-      this.services.autoResolve &&
-      (event.type === 'done' || event.type === 'landing-finished' || event.type === 'isolation')
-    )
-      queueMicrotask(() =>
-        autoResolve(this, chat, event.type === 'isolation' && event.state === 'parked')
-      )
   }
   async composer(action: NativeComposerAction) {
     if (action.chat !== this.active) return
@@ -785,6 +807,7 @@ export class NativeChatController {
   }
   async run(chat: Chat, submission: Submission) {
     begin(chat)
+    if (chat.heldIncident) chat.heldIncident.attention = 'owned'
     chat.stopping = false
     chat.sending = true
     chat.isRunning = true
