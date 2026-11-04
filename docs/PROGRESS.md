@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-482 sidebar Restore capture
+
+- The native `chat-gate` fixture captured immediately after Restore made the chat column visible, while its 240 ms width animation was still running. The failed receipt showed a status origin of 354.6 pt with the expected final leading edge at 440 pt. The fixture now waits for the layout's final fraction before checking and capturing the restored error state; the opening and failed-open geometry assertions remain in place.
+
 ## 2026-11-03 — LKM-481 New Chat painted glass
 
 - The LKM-476 capture showed a bare square-and-pencil despite `NSButton` textured flags. The neighboring native glass is painted by `IslandSegmentedControl`, so New Chat now uses a single momentary segment in its existing 32 pt chat-header position. The guarded action, glyph, tooltip and accessibility label stay on that control.
