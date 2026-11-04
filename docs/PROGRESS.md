@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-467 review repair: full address roundtrip fixture
+
+- The toolbar address fixture now puts a long same-origin URL in the resting field, saves `toolbar-long-path-roundtrip.png` and a JSON receipt, focuses the real editor, and asserts its full value and full selection. It copies that selection through AppKit to a private pasteboard, checks the copied string, submits through `navigateAddress`, observes the emitted `shell-action` value and waits for the preview URL before restoring the original address. The private pasteboard avoids reading or replacing the operator's clipboard. The probe is available only through the disposable-profile host inspect route. Native GUI acceptance still runs on main after merge.
+
 ## 2026-11-03 — LKM-467 review repair: host text and Expand click
 
 - Independent review found that middle truncation could hide the host behind a long path. The resting address now elides the path after the authority, omits the scheme if needed for the host and port, and restores the full URL on edit; the width no longer has a fixed 420 pt cap when a longer host has room. The toolbar fixture asserts rendered host and port, full stored URL and no further cell clipping at ordinary and narrow widths with a long synthetic path.

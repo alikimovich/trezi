@@ -193,6 +193,8 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
   )
   const defaultWidth = Math.round(initial.windowWidth)
   const evidence: Record<string, unknown> = {}
+  const record = () =>
+    writeFileSync(join(artifacts, 'toolbar-address.json'), JSON.stringify(evidence, null, 2))
   // The "…" item (LKM-197) leaves a window narrower than MORE_MINIMUM_WINDOW, which
   // shortens the right groups' inset by its width: each state keeps its own pinned inset.
   const pinnedInsets = new Map<boolean, number>()
@@ -354,11 +356,61 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
     `wide: the long host fits without cell clipping: ${JSON.stringify(pick(wideHost))}`
   )
   evidence.longHost = pick(wideHost)
+  const roundtripURL = new URL(`/${'long-path/'.repeat(35)}`, originalURL).href
+  assert.equal(
+    await host.request('shellPerform', { action: 'address-test-url', row: roundtripURL }),
+    true
+  )
+  assert.equal(await host.request('shellPerform', { action: 'window-width', row: '1320' }), true)
+  const roundtripBefore: Toolbar = await host.request('shellInspect')
+  assert.ok(roundtripBefore.domain.endsWith('…'), 'the roundtrip begins with an elided path')
+  const roundtripCapture = await capture(host, artifacts, 'long-path-roundtrip')
+  evidence.longPathRoundtrip = {
+    before: pick(roundtripBefore),
+    capture: 'toolbar-long-path-roundtrip.png',
+    captureMode: roundtripCapture
+  }
+  record()
+  const navigation = new Promise<{ action?: string; value?: string }>((resolve, reject) => {
+    const listener = (event: { action?: string; value?: string }) => {
+      if (event.action !== 'address') return
+      clearTimeout(timer)
+      host.off('shell-action', listener)
+      resolve(event)
+    }
+    const timer = setTimeout(() => {
+      host.off('shell-action', listener)
+      reject(new Error('Address submit did not emit a shell action'))
+    }, 5000)
+    host.on('shell-action', listener)
+  })
+  const roundtrip = await host.request('shellAddressRoundtrip')
+  const submitted = await navigation
+  evidence.longPathRoundtrip = {
+    ...(evidence.longPathRoundtrip as Record<string, unknown>),
+    roundtrip,
+    submitted
+  }
+  record()
+  assert.equal(roundtrip.error, undefined, `address editor opened: ${roundtrip.error}`)
+  assert.equal(roundtrip.editing, roundtripURL, 'editing restores the unelided URL')
+  assert.equal(roundtrip.selectedAll, true, 'the full editor URL is selected for Copy')
+  assert.equal(roundtrip.copied, roundtripURL, 'Copy writes the full URL to a private pasteboard')
+  assert.equal(submitted.value, roundtripURL, 'navigation receives the full URL from the editor')
+  await waitFor(
+    async () => (await host.request('shellInspect')).address === roundtripURL,
+    'the submitted full URL reaches the preview'
+  )
+  assert.equal(await host.request('shellPerform', { action: 'address', row: originalURL }), true)
+  await waitFor(
+    async () => (await host.request('shellInspect')).address === originalURL,
+    'the preview returns to its original URL'
+  )
   assert.equal(
     await host.request('shellPerform', { action: 'address-test-url', row: originalURL }),
     true
   )
-  writeFileSync(join(artifacts, 'toolbar-address.json'), JSON.stringify(evidence, null, 2))
+  record()
 }
 
 /** Cleanup: the default window width and the system appearance. */

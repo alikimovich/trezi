@@ -364,6 +364,22 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
         return false
     }
+    /// Disposable-profile fixture: focus the real field, copy its selection to a private
+    /// pasteboard, then submit through the same target as Return. The caller observes
+    /// the emitted shell action; no global clipboard contents are read or replaced.
+    func verifyAddressRoundtrip() -> [String: Any] {
+        guard window != nil, address.isEnabled else { return ["error":"Address is unavailable"] }
+        address.selectText(nil)
+        guard let editor = address.currentEditor() as? NSTextView else { return ["error":"Address editor did not open"] }
+        let editing = editor.string
+        editor.selectAll(nil)
+        let selectedAll = editor.selectedRange().length == (editing as NSString).length
+        let board = NSPasteboard.withUniqueName()
+        let copied = editor.writeSelection(to: board, types: editor.writablePasteboardTypes) ? board.string(forType: .string) : nil
+        board.releaseGlobally()
+        navigateAddress(nil)
+        return ["editing":editing, "copied":copied ?? NSNull(), "selectedAll":selectedAll]
+    }
     @objc func sidebarAction(_ button: NSButton) {
         let action = button.identifier?.rawValue ?? ""
         if action == "new-chat" {
