@@ -14,6 +14,19 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: distinguish explicit Keep settlements from old Stop callbacks; show genuine failed-check report and Retry, and retain Revert and Finish outcomes.
 - [x] Review repair: retain the explicit Keep settlement across all old parked callbacks, including interrupted; allow a fresh turn and user Retry to own later outcomes.
 - [ ] Manager: exact-head CI, independent review, and post-merge native acceptance on main.
+## LKM-508 — Loading titles and provider readiness
+
+- [x] Show an accessible redacted loading title in the sidebar and selected header, with cached and untitled states preserved.
+- [x] Gate the initial provider chooser on confirmed sign-out and keep explicit login errors.
+- [x] Add focused title, readiness and Swift fixture assertions.
+- [x] Repair review findings for listed Gemini readiness and deterministic selected-header loading evidence.
+- [x] Stop unknown-title motion on conversation error, report terminal provider-check failure, and wait for authoritative choice metadata.
+- [x] Keep overlapping choice refreshes owned by the newest request and retain terminal metadata failure after dismissal until retry.
+- [x] Hold centered sign-in notices while cached choices refresh, and keep a settled metadata error visible through dismissal and new chat.
+- [x] Show the selected provider's failed readiness report instead of a false sign-out, while preserving ready-provider choice and successful retry.
+- [x] Distinguish a missing selected choice from confirmed sign-out in the centered notice, including deleted connections and absent built-in providers.
+- [x] Apply selected-choice authority to the snapshot chooser and settle confirmed sign-out when no alternative choice is usable.
+- [ ] Manager: obtain native acceptance on main after review and CI.
 
 ## Native suite failure on main 17fbc17129bb (LKM-484)
 

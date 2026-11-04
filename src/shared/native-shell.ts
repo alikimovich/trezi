@@ -12,6 +12,8 @@ export interface NativeShellRow {
    *  while the turn waits for the user, stops or lands. */
   thinking?: boolean
   unread?: boolean
+  /** Title metadata is still loading and no cached title is available. */
+  loadingTitle?: boolean
   /** A history row's age ("3d"), shown at the row's trailing edge. */
   detail?: string
   /** Every chat of the project, open then closed. The selected project's sidebar row nests

@@ -14,7 +14,9 @@ import {
   codexManagedLogin,
   signInProvider
 } from '../src/main/provider-sign-in.ts'
+import { NativeChatController } from '../src/native/chat-controller.ts'
 import { loginAction, loginCard, startLoginCard } from '../src/native/chat-login.ts'
+import { StartFlow } from '../src/native/chat-start.ts'
 import { newChat, reduce } from '../src/native/chat-state.ts'
 import {
   anyProviderReady,
@@ -331,6 +333,25 @@ states.codex = readinessFromLogin(null)
 assert.equal(states.codex.status, 'failed')
 assert.deepEqual(initialProviderReadiness().claude, { status: 'checking' }, 'restart checks again')
 const chat = newChat('fixture')
+chat.ready = true
+const seatChoice = {
+  value: 'claude:default',
+  modelId: 'default',
+  provider: 'claude',
+  group: 'Claude',
+  label: 'Default'
+}
+assert.equal(
+  startLoginCard(
+    chat,
+    { claude: { status: 'signed_out' }, codex: { status: 'signed_out' } },
+    false,
+    [seatChoice],
+    true
+  ),
+  null,
+  'project opening suppresses the chooser'
+)
 chat.text = 'draft remains'
 chat.attachments = [
   {
@@ -342,11 +363,342 @@ chat.attachments = [
   }
 ]
 states.codex = readinessFromLogin(false)
+assert.equal(
+  startLoginCard(chat, states, true, [], false),
+  null,
+  'signed-out seats cannot open the chooser before choices arrive'
+)
+assert.equal(
+  startLoginCard(chat, states, true, [seatChoice], false),
+  null,
+  'cached choices remain non-authoritative during a refresh'
+)
+const geminiChoice = {
+  value: 'gemini:default',
+  modelId: 'default',
+  provider: 'gemini',
+  group: 'Gemini',
+  label: 'Default'
+}
+chat.settings.provider = 'gemini'
+for (const status of ['ready', 'checking', 'failed']) {
+  states.gemini = { status }
+  assert.equal(
+    startLoginCard(chat, states, true, [geminiChoice], true),
+    null,
+    `listed Gemini ${status} does not require the chooser`
+  )
+}
+delete states.gemini
+assert.equal(
+  startLoginCard(chat, states, true, [geminiChoice], true),
+  null,
+  'listed Gemini with unknown readiness suppresses the chooser'
+)
+states.gemini = readinessFromLogin(false)
+assert.equal(startLoginCard(chat, states, true, [geminiChoice], true)?.title, 'Choose a provider')
+chat.settings.connectionId = 'saved'
+assert.equal(
+  startLoginCard(chat, states, true, [{ ...geminiChoice, connectionId: 'saved' }], true),
+  null,
+  'a saved connection does not require built-in sign-in'
+)
+delete chat.settings.connectionId
+chat.settings.provider = 'claude'
+delete states.gemini
+for (const pending of ['checking', 'failed']) {
+  states.codex = { status: pending }
+  assert.equal(
+    startLoginCard(chat, states, true, [seatChoice], true),
+    null,
+    `${pending} is not authoritative sign-out`
+  )
+}
+states.codex = readinessFromLogin(false)
+chat.ready = false
+assert.equal(
+  startLoginCard(chat, states, true, [seatChoice], true),
+  null,
+  'the project conversation is still loading'
+)
+chat.ready = true
 assert.deepEqual(
-  startLoginCard(chat, states)
+  startLoginCard(chat, states, true, [seatChoice], true)
     .actions.slice(0, 2)
     .map((x) => x.action),
   ['sign-in-claude', 'sign-in-codex']
+)
+const flow = new StartFlow()
+flow.enabled = true
+const home = newChat('')
+const homeReadiness = {
+  claude: readinessFromLogin(false),
+  codex: readinessFromLogin(false)
+}
+assert.equal(
+  flow.state(home, [seatChoice], homeReadiness).notice?.text,
+  'Checking provider sign-in…',
+  'the centered start waits for choice metadata after seat checks finish'
+)
+flow.choicesLoaded = true
+assert.equal(
+  flow.state(home, [seatChoice], homeReadiness).notice?.text,
+  'Sign in to either provider to start chatting.',
+  'authoritative signed-out metadata shows the existing chooser'
+)
+homeReadiness.claude = readinessFromLogin(null)
+const failedNotice = flow.state(home, [seatChoice], homeReadiness).notice
+assert.equal(failedNotice?.text, homeReadiness.claude.detail, 'terminal provider error is visible')
+assert.equal(failedNotice?.progress, undefined, 'a failed check has no endless progress')
+const selectedHome = newChat('')
+selectedHome.settings.provider = 'claude'
+selectedHome.text = 'draft remains'
+const codexChoice = { ...seatChoice, value: 'codex:default', provider: 'codex', group: 'Codex' }
+const selectedChoices = [seatChoice, codexChoice]
+const selectedReadiness = {
+  claude: readinessFromLogin(null),
+  codex: readinessFromLogin(true)
+}
+const selectedState = () => flow.state(selectedHome, selectedChoices, selectedReadiness)
+assert.equal(
+  selectedState().notice?.text,
+  selectedReadiness.claude.detail,
+  'a failed selected provider reports its settled error when another provider is ready'
+)
+assert.deepEqual(
+  selectedState().notice?.actions.map((action) => action.action),
+  ['start-provider'],
+  'a failed readiness check offers the ready provider without a false sign-in action'
+)
+assert.equal(selectedState().ready, false, 'failed selected provider cannot send the draft')
+assert.equal(
+  flow.holds({ choices: selectedChoices, readiness: selectedReadiness }, selectedHome),
+  true,
+  'failed selected provider keeps the draft held'
+)
+selectedChoices.push(geminiChoice)
+selectedReadiness.gemini = { status: 'checking' }
+assert.equal(
+  selectedState().notice?.text,
+  selectedReadiness.claude.detail,
+  'an unrelated provider check does not conceal the selected provider failure'
+)
+selectedChoices.pop()
+delete selectedReadiness.gemini
+selectedReadiness.claude = readinessFromLogin(false)
+assert.deepEqual(
+  selectedState().notice?.actions.map((action) => action.action),
+  ['sign-in-claude', 'start-provider'],
+  'confirmed sign-out keeps the existing authentication action'
+)
+selectedReadiness.claude = readinessFromLogin(true)
+assert.equal(selectedState().notice, undefined, 'successful readiness retry clears the notice')
+assert.equal(selectedState().ready, true, 'successful readiness retry restores send readiness')
+const missingConnection = newChat('')
+missingConnection.settings.provider = 'codex'
+missingConnection.settings.connectionId = 'deleted-connection'
+missingConnection.text = 'saved draft'
+const availableClaude = { claude: readinessFromLogin(true), codex: readinessFromLogin(true) }
+const missingConnectionState = flow.state(missingConnection, [seatChoice], availableClaude)
+assert.equal(
+  missingConnectionState.notice?.text,
+  'This connection is unavailable. Your draft is kept.',
+  'a deleted saved connection is unavailable, not signed out'
+)
+assert.deepEqual(
+  missingConnectionState.notice?.actions.map((action) => action.action),
+  ['start-provider'],
+  'a deleted connection can switch to a usable provider'
+)
+assert.equal(missingConnectionState.ready, false, 'a deleted connection cannot send')
+const missingBuiltin = newChat('')
+missingBuiltin.settings.provider = 'codex'
+const missingBuiltinState = flow.state(missingBuiltin, [seatChoice], availableClaude)
+assert.equal(
+  missingBuiltinState.notice?.text,
+  'Codex is unavailable. Your draft is kept.',
+  'a ready but unlisted built-in provider is unavailable, not signed out'
+)
+assert.deepEqual(
+  missingBuiltinState.notice?.actions.map((action) => action.action),
+  ['start-provider']
+)
+const noneReady = { claude: readinessFromLogin(false), codex: readinessFromLogin(false) }
+assert.equal(
+  flow.state(missingConnection, [seatChoice], noneReady).notice?.text,
+  'This connection is unavailable. Your draft is kept.',
+  'missing saved connection does not become a sign-in chooser when no alternative is ready'
+)
+assert.deepEqual(
+  flow.state(missingConnection, [seatChoice], noneReady).notice?.actions,
+  [],
+  'missing saved connection offers no false authentication action'
+)
+assert.equal(
+  startLoginCard(missingConnection, noneReady, true, [seatChoice], true),
+  null,
+  'snapshot start card does not offer sign-in for a deleted connection'
+)
+assert.equal(
+  startLoginCard(missingBuiltin, noneReady, true, [seatChoice], true),
+  null,
+  'snapshot start card does not offer sign-in for an absent built-in provider'
+)
+const signedOutNoAlternative = flow.state(selectedHome, [seatChoice], {
+  claude: readinessFromLogin(false),
+  codex: readinessFromLogin(true)
+}).notice
+assert.match(
+  signedOutNoAlternative?.text ?? '',
+  /Claude is not signed in/,
+  'a listed selected seat with confirmed sign-out does not spin when other choices are absent'
+)
+assert.deepEqual(
+  signedOutNoAlternative?.actions.map((action) => action.action),
+  ['sign-in-claude'],
+  'confirmed sign-out retains authentication without a usable alternative'
+)
+const choiceRequests = []
+let loginResult = null
+const choicesController = new NativeChatController({
+  invoke: async (channel) => {
+    if (channel === 'providers:check-login') return { loggedIn: loginResult }
+    if (channel !== 'providers:choices') return { ok: true }
+    return new Promise((resolve, reject) => choiceRequests.push({ resolve, reject }))
+  },
+  render: () => {},
+  effect: () => {}
+})
+choicesController.start.enabled = true
+choicesController.readiness.claude = readinessFromLogin(true)
+choicesController.readiness.codex = readinessFromLogin(false)
+const loadedChoices = choicesController.refreshChoices()
+choiceRequests[0].resolve([seatChoice, codexChoice])
+await loadedChoices
+const cachedHome = choicesController.get('')
+cachedHome.settings.provider = 'codex'
+const cachedNotice = () =>
+  choicesController.start.state(cachedHome, choicesController.choices, choicesController.readiness)
+    .notice
+assert.match(
+  cachedNotice()?.text ?? '',
+  /Codex is not signed in/,
+  'loaded choices allow the existing sign-in notice'
+)
+const olderChoices = choicesController.refreshChoices()
+const currentChoices = choicesController.refreshChoices()
+assert.equal(
+  choicesController.start.choicesLoaded,
+  false,
+  'refresh makes cached choices non-authoritative'
+)
+assert.equal(
+  cachedNotice()?.text,
+  'Checking provider sign-in…',
+  'cached usable choices cannot show sign-in while refresh is pending'
+)
+assert.deepEqual(cachedNotice()?.actions, [], 'pending metadata exposes no sign-in action')
+choiceRequests[1].resolve([geminiChoice])
+await olderChoices
+assert.equal(
+  choicesController.start.choicesLoaded,
+  false,
+  'older choices cannot settle a newer request'
+)
+assert.deepEqual(
+  choicesController.choices,
+  [seatChoice, codexChoice],
+  'older metadata cannot replace cached choices'
+)
+assert.equal(
+  cachedNotice()?.text,
+  'Checking provider sign-in…',
+  'older completion cannot reopen sign-in'
+)
+choiceRequests[2].reject(new Error('choice metadata failed'))
+await currentChoices
+assert.equal(choicesController.start.choicesLoaded, false, 'failed current request is not ready')
+assert.equal(
+  choicesController.start.choicesError,
+  'Unable to load providers. Check your connection and retry.',
+  'current metadata failure settles with a fixed error'
+)
+cachedHome.error = undefined
+choicesController.changed(cachedHome)
+const dismissedNotice = choicesController.start.state(
+  cachedHome,
+  choicesController.choices,
+  choicesController.readiness
+).notice
+assert.equal(
+  dismissedNotice?.text,
+  choicesController.start.choicesError,
+  'dismiss keeps metadata error visible'
+)
+assert.equal(dismissedNotice?.progress, undefined, 'dismiss does not restart the spinner')
+assert.deepEqual(
+  dismissedNotice?.actions,
+  [],
+  'stale usable choices cannot hide the metadata failure'
+)
+const nextHome = newChat('')
+nextHome.settings.provider = 'codex'
+const nextNotice = choicesController.start.state(
+  nextHome,
+  choicesController.choices,
+  choicesController.readiness
+).notice
+assert.equal(
+  nextNotice?.text,
+  choicesController.start.choicesError,
+  'new chat inherits terminal metadata state'
+)
+const retryChoices = choicesController.refreshChoices()
+assert.equal(
+  choicesController.start.choicesError,
+  undefined,
+  'retry clears the terminal metadata error'
+)
+assert.equal(cachedNotice()?.text, 'Checking provider sign-in…', 'retry waits for current metadata')
+choiceRequests[3].resolve([seatChoice, codexChoice])
+await retryChoices
+assert.equal(choicesController.start.choicesLoaded, true, 'current response settles choices')
+assert.equal(choicesController.start.choicesError, undefined, 'success leaves no metadata error')
+assert.equal(choicesController.choices[0].provider, 'claude', 'only current choices are published')
+assert.match(
+  cachedNotice()?.text ?? '',
+  /Codex is not signed in/,
+  'successful retry restores the expected sign-in notice'
+)
+await choicesController.refreshReadiness('codex')
+assert.equal(
+  cachedNotice()?.text,
+  choicesController.readiness.codex.detail,
+  'failed selected-provider report replaces the false sign-out notice'
+)
+assert.deepEqual(
+  cachedNotice()?.actions.map((action) => action.action),
+  ['start-provider'],
+  'a failed report keeps the ready alternative without sign-in'
+)
+assert.equal(
+  choicesController.start.state(cachedHome, choicesController.choices, choicesController.readiness)
+    .ready,
+  false,
+  'failed selected-provider report keeps send disabled'
+)
+loginResult = true
+await choicesController.refreshReadiness('codex')
+assert.equal(
+  cachedNotice(),
+  undefined,
+  'successful report retry clears the selected-provider error'
+)
+assert.equal(
+  choicesController.start.state(cachedHome, choicesController.choices, choicesController.readiness)
+    .ready,
+  true,
+  'successful report retry restores send readiness'
 )
 const calls = []
 const controller = {
@@ -373,7 +725,9 @@ assert.deepEqual(calls, [
 assert.equal(chat.text, 'draft remains')
 assert.equal(chat.attachments[0].data, 'private-image')
 assert.equal(chat.messages.length, 0)
-assert.ok(!JSON.stringify(startLoginCard(chat, states)).includes('private-image'))
+assert.ok(
+  !JSON.stringify(startLoginCard(chat, states, true, [seatChoice], true)).includes('private-image')
+)
 const failed = newChat('failed')
 failed.root = '/fixture'
 failed.last = {

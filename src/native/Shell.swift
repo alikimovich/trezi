@@ -2,6 +2,8 @@ import AppKit
 
 final class ChatToolbarView: NSView {
     var align: (() -> Void)?
+    var attached: (() -> Void)?
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); attached?() }
     override func layout() {
         super.layout()
         // Wait for AppKit to place all toolbar items before measuring in window coordinates.
@@ -29,7 +31,11 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     /// The selected project finished opening; the chat header's title shows only then.
     var chatReady = false
     /// What the chat gate shows in the header, merged into `shellInspect`.
-    func gateInspect() -> [String: Any] { ["chatReady":chatReady, "chatHeaderContentVisible":!chatTitle.isHidden] }
+    func gateInspect() -> [String: Any] {
+        ["chatReady":chatReady, "chatHeaderContentVisible":!chatTitle.isHidden,
+         "chatTitleMode":chatTitleShimmer?.mode ?? "none",
+         "chatTitleLabel":chatTitle.accessibilityLabel() ?? ""]
+    }
     /// A toolbar button's control and its rect in it, to anchor a popover or menu (LKM-229).
     func toolbarButtonAnchor(_ key: String) -> (view: NSView, rect: NSRect)? {
         toolbar?.items.compactMap { $0 as? MomentaryToolbarGroup }.lazy.compactMap { $0.segmentAnchor(key) }.first
@@ -89,6 +95,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
     let chatHeader = ChatToolbarView()
     private let chatTitle = NSTextField(labelWithString: "Chat")
+    private var chatTitleShimmer: SidebarTitleShimmer?
     // The toolbar islands receive AppKit's glass from their item groups. The title's custom
     // item needs an explicit native glass view around its single action.
     private let chatNewGlass: NSView = {
@@ -191,6 +198,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         toolbar.delegate = self; toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false; toolbar.autosavesConfiguration = false
         chatHeader.align = { [weak self] in self?.measureToolbar() }
+        chatHeader.attached = { [weak self] in self?.chatTitleShimmer?.refresh() }
         addressHeader.measure = { [weak self] in self?.measureToolbar() }
         NotificationCenter.default.addObserver(self, selector: #selector(splitResized(_:)), name: NSSplitView.didResizeSubviewsNotification, object: split.splitView)
         // Window resizes set the toolbar widths synchronously, in the same layout pass.
@@ -453,7 +461,13 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         for (key, item) in toolbarItems {
             item.isEnabled = key == "chat" ? true : key == "code" || key == "expand" ? currentProject != nil : key == "branch" ? previewState["branch"] is String : ready
         }
-        chatTitle.stringValue = allRows.first(where: { $0.id == selectedID })?.title ?? "Chat"
+        let selected = allRows.first(where: { $0.id == selectedID })
+        chatTitle.stringValue = selected?.title ?? "Chat"
+        chatTitle.setAccessibilityLabel(chatTitle.stringValue == "••••••••" ? "Loading conversation" : chatTitle.stringValue)
+        if selected?.loadingTitle == true {
+            if chatTitleShimmer == nil { chatTitleShimmer = SidebarTitleShimmer(label: chatTitle) }
+            chatTitleShimmer?.refresh()
+        } else { chatTitleShimmer?.stop(); chatTitleShimmer = nil }
         chatTitle.toolTip = chatTitle.stringValue
         if chatHeaderWidth != nil {
             alignChatHeader()
