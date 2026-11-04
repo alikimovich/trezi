@@ -20,7 +20,10 @@ export const pick = (state: Toolbar) => ({
   windowWidth: state.windowWidth,
   addressLeading: state.addressLeading,
   addressTrailing: state.addressTrailing,
+  viewportLeading: state.viewportLeading,
+  viewportTrailing: state.viewportTrailing,
   addressWidth: state.addressWidth,
+  addressHostWidth: state.addressHostWidth,
   addressFormerWidth: state.addressFormerWidth,
   addressConstant: state.addressConstant,
   addressExtra: state.addressExtra,
@@ -54,6 +57,7 @@ export const pick = (state: Toolbar) => ({
   branchChevronGap: state.branchChevronGap,
   moreVisible: state.moreVisible,
   interactionSegments: state.interactionSegments,
+  viewportSegments: state.viewportSegments,
   toolSegments: state.toolSegments,
   islandDividers: state.islandDividers,
   publishVisible: state.publishVisible,
@@ -124,21 +128,16 @@ export function assertToolbar(state: Toolbar, stage: string) {
     state.addressVisible,
     `Toolbar ${stage}: the address block stays in the toolbar: ${detail}`
   )
-  // Never narrower than the pre-LKM-148 layout made it at this geometry (180pt by default, less in a minimum-width window).
+  // The address keeps enough room for the host when space is available.
   assert.ok(
-    state.addressWidth >= state.addressFormerWidth - 0.5,
-    `Toolbar ${stage}: the address block keeps its former ${state.addressFormerWidth}pt: ${detail}`
+    state.addressWidth >= state.addressFloor - 0.5 && state.addressWidth <= 420.5,
+    `Toolbar ${stage}: the address stays within its compact width range: ${detail}`
   )
   assert.ok(
-    gapOf(state) >= PINNED_GAP - 0.5,
-    `Toolbar ${stage}: the right groups do not overlap or get pushed: ${detail}`
+    state.viewportLeading >= state.addressTrailing - 0.5 &&
+      state.viewportTrailing <= state.rightGroupLeading - PINNED_GAP + 0.5,
+    `Toolbar ${stage}: address, viewport and interaction islands do not overlap: ${detail}`
   )
-  // Above its floor, the block fills the free space up to the fixed gap.
-  if (state.addressWidth > state.addressFloor + 1)
-    assert.ok(
-      Math.abs(gapOf(state) - state.addressGap) <= 1,
-      `Toolbar ${stage}: trailing edge ${state.addressGap}pt before the right groups: ${detail}`
-    )
   assert.equal(
     state.addressTruncation,
     'middle',
@@ -155,7 +154,7 @@ export async function assertIslandDividers(host: NativeBridge, stage: string, st
   if (!shell.islandHidesDividers) return
   assert.deepEqual(
     shell.islandDividers,
-    { interaction: 0, tools: 0 },
+    { interaction: 0, viewport: 0, tools: 0 },
     `Toolbar ${stage}: no divider inside an island: ${JSON.stringify(shell.islandDividers)}`
   )
 }
@@ -174,7 +173,7 @@ export async function capture(host: NativeBridge, artifacts: string, name: strin
   return how
 }
 
-/** Minimum, default and wide window widths: the address block fills the free toolbar
+/** Minimum, default and wide window widths: the address and viewport island fit
  *  width, keeps its minimum, and the right groups stay pinned without overlap. Each
  *  resize is read synchronously inside the resize (`resizeSnapshot`) and again once
  *  settled; they must agree, so the width is final in the resize's own layout pass. */
@@ -235,17 +234,18 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
       `Toolbar ${name}: the "…" item shows only in windows of ${MORE_MINIMUM_WINDOW} pt or more (${width} pt)`
     )
     // LKM-213: slow motion leaves the interaction group in the same windows as "…".
-    // LKM-430: Mark up stays at every width, and the device switch is in the tools group.
+    // Mark up stays at every width, and the viewport controls stay beside the address.
     assert.deepEqual(
       settled.interactionSegments,
       ['select-object', 'overlay', ...(moreShown ? ['speed'] : []), 'markup'],
       `Toolbar ${name}: select | ruler${moreShown ? ' | slow motion' : ''} | mark up`
     )
     assert.deepEqual(
-      settled.toolSegments,
-      ['code', 'layers', 'device', 'expand'],
-      `Toolbar ${name}: code | layers | device | expand`
+      settled.viewportSegments,
+      ['device', 'expand'],
+      `Toolbar ${name}: device | expand`
     )
+    assert.deepEqual(settled.toolSegments, ['code', 'layers'], `Toolbar ${name}: code | layers`)
     const pinnedInset = pinnedInsets.get(moreShown) ?? inset
     pinnedInsets.set(moreShown, pinnedInset)
     assert.ok(
@@ -255,6 +255,10 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
     trailingInset ??= settled.publishTrailingInset
     assertPublishLast(settled, name, trailingInset as number)
     if (name === 'wide') {
+      assert.ok(
+        settled.addressTextRoom >= settled.addressHostWidth - 16,
+        `Toolbar wide: scheme, host and port fit: ${JSON.stringify(pick(settled))}`
+      )
       assert.ok(
         settled.addressWidth > settled.addressMinimum + 1,
         `Toolbar wide: the block grows past its minimum: ${JSON.stringify(pick(settled))}`

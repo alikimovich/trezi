@@ -151,13 +151,25 @@ export async function checkSidebarChats(host: NativeBridge, artifacts: string) {
   assert.ok(button, 'the project row has a New chat button')
   assert.equal(button.role, 'AXButton', 'VoiceOver reads New chat as a button')
   assert.equal(button.label, `New chat in ${entry().name}`)
+  const header = await shell()
+  assert.equal(header.chatNewVisible, true, 'the chat header shows New Chat beside the title')
+  assert.equal(header.chatNewEnabled, true, 'the chat header New Chat is enabled for the project')
+  const rect = (value: string) => (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
+  const [titleX, , titleWidth] = rect(header.chatTitleFrame)
+  const [buttonX, , buttonWidth] = rect(header.chatNewFrame)
+  assert.ok(
+    buttonWidth >= 24 && buttonX >= titleX + titleWidth && buttonX - titleX - titleWidth <= 7,
+    'New Chat is immediately after the title without overlap'
+  )
   // Grow to more than five open chats; each gets a draft, so New chat never reuses it. Five new
   // chats: one takes the attachment, four get a prompt and fill History past "Show N more".
   for (let i = 0; i < 12 && (entry().sessionKeys.length < 6 || created.length < 5); i++) {
     const before = nativeChat.active,
       open = [...entry().sessionKeys]
     if (i === 0) assert.equal(await perform('sidebar-new-chat', key), true, 'New chat pressed')
-    else host.emit('shell-action', { action: 'new-chat', project: key })
+    else if (i === 1) {
+      assert.equal(await perform('header-new-chat'), true, 'chat header New Chat clicked')
+    } else host.emit('shell-action', { action: 'new-chat', project: key })
     await waitFor(() => nativeChat.active !== before, 'new chat active')
     const chat = nativeChat.active
     ;(open.includes(chat) ? reused : created).push(chat)

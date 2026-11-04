@@ -12,7 +12,7 @@ type State = Record<string, any>
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 type Focus = 'composer' | 'preview' | 'source'
 const INTERACTION = ['select-object', 'overlay', 'speed', 'markup']
-const TOOLS = ['code', 'layers', 'device', 'expand']
+const TOOLS = ['code', 'layers']
 const MINIMUM_WINDOW = 850
 
 /**
@@ -24,7 +24,7 @@ const MINIMUM_WINDOW = 850
  * question and nothing can be sent: this check never fills a field or presses a default button.
  * The real Mark up segment takes a posted click, draws a generated stroke and cancels; LKM-448:
  * a second click on it cancels, a third enters again (`smoke-markup-toggle.ts`). The
- * device segment takes posted clicks in the tools island with Code, Layers and Expand on and
+ * device segment takes posted clicks in the viewport island beside the address and
  * off and in full screen, and the viewport survives each of them, a resize and a project
  * switch.
  */
@@ -101,9 +101,10 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
     const state = await shell()
     // Slow motion leaves narrow windows together with "…" (LKM-213).
     const interaction = INTERACTION.filter((id) => id !== 'speed' || state.moreVisible)
-    assert.deepEqual(state.toolSegments, TOOLS, `${stage}: code | layers | device | expand`)
+    assert.deepEqual(state.toolSegments, TOOLS, `${stage}: code | layers`)
+    assert.deepEqual(state.viewportSegments, ['device', 'expand'], `${stage}: viewport island`)
     assert.deepEqual(state.interactionSegments, interaction, `${stage}: interaction island`)
-    const all = [...state.toolSegments, ...state.interactionSegments]
+    const all = [...state.toolSegments, ...state.viewportSegments, ...state.interactionSegments]
     assert.equal(all.filter((id) => id === 'device').length, 1, `${stage}: one device button`)
     assert.equal(all.filter((id) => id === 'markup').length, 1, `${stage}: one Mark up button`)
     await assertIslandDividers(host, stage, state)

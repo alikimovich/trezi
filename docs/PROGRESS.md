@@ -2,6 +2,11 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-03 — LKM-467 top bar controls
+
+- The preview address width now follows the displayed host up to a compact cap. Device and Expand Preview moved together to an island beside the address; the code and layers island remains at the right. The chat header has a momentary New Chat button wired through the same guarded action as `perform("new-chat")`.
+- Updated toolbar and island fixtures for the new grouping and ordinary/narrow layout. Native acceptance is pending the manager's run on main.
+
 ## 2026-11-03 — LKM-465 review repair: typecheck guidance
 
 - Independent review found one conflict: the `bun run typecheck` command row still said to run it after every change, while SELECTED feedback intentionally skips typechecks when the audited plan finds no TypeScript input. The row now describes the full manual command without requiring it on every edit. The proportional feedback and final CI rules remain below.

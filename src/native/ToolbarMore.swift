@@ -77,6 +77,7 @@ extension NativeShell {
         return ["moreMenu":item?.menu.items.filter { !$0.isSeparatorItem }.map(\.title) ?? [], "moreEnabled":item?.isEnabled ?? false,
                 "moreVisible":!hidden && (toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "more" } ?? false),
                 "interactionSegments":(toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? [],
+                "viewportSegments":(toolbar.items.first { $0.itemIdentifier.rawValue == "viewport" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? [],
                 "toolSegments":(toolbar.items.first { $0.itemIdentifier.rawValue == "tools" } as? MomentaryToolbarGroup)?.shown.map(\.itemIdentifier.rawValue) ?? []]
             .merging(markupInspect()) { _, new in new }
     }

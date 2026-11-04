@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Changed
+
+- The preview address keeps its host visible in a compact block, device and expand controls sit beside it, and the chat title has a New Chat button (LKM-467).
+
 ## [0.13.9] - 2026-11-03
 
 ### Fixed

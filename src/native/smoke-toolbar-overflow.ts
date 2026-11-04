@@ -178,7 +178,8 @@ export async function checkToolbarOverflow(host: NativeBridge, artifacts: string
           const rest = await host.request('shellInspect')
           return (
             rest.addressWidth <= rest.addressFloor + 1 ||
-            Math.abs(rest.rightGroupLeading - rest.addressTrailing - rest.addressGap) <= 1
+            (rest.viewportLeading >= rest.addressTrailing - 0.5 &&
+              rest.viewportTrailing < rest.rightGroupLeading)
           )
         },
         `toolbar sidebar ${sidebar}: block ends 20 pt before the right groups at rest`,

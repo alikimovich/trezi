@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Top bar address, viewport controls and chat header (LKM-467)
+
+- [x] Size the preview address for the host and place device and expand in an adjacent island.
+- [x] Put the existing New Chat action beside the chat title and cover the layout and controls in fixtures.
+- [ ] Manager: independent review, CI and native acceptance on the merged SHA.
+
 ## Proportionate local verification feedback (LKM-465)
 
 - [x] Add `bun run check:feedback --base=origin/main` using the audited changed-file plan, lint-first fail-fast execution and a structured partial-evidence receipt for SELECTED and FULL.
