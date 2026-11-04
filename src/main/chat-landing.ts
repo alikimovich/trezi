@@ -94,9 +94,16 @@ export function holdTurn(
   st: ChatState,
   outcome: TurnOutcome,
   verdict: GateVerdict | null,
-  turn: SessionTranscriptEntry[] = []
+  turn: SessionTranscriptEntry[] = [],
+  recoveryFailure?: string
 ): string {
-  const reason = holdMessage(outcome.hold, verdict)
+  const reason =
+    recoveryFailure &&
+    (verdict?.reason === 'unchecked' ||
+      verdict?.reason === 'runtime-changed' ||
+      verdict?.reason === 'check-running')
+      ? `Trezi could not verify this source: ${recoveryFailure}`
+      : holdMessage(outcome.hold, verdict)
   st.parked = true
   st.interrupted = false
   st.parkedFiles = outcome.files

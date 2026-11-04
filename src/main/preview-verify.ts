@@ -22,6 +22,7 @@ import { previewServers } from './preview-evidence'
 import type { PreviewIdentity } from './preview-identity'
 import {
   artifactDirectory,
+  beginReceiptCheck,
   macOSVersion,
   NOT_COVERED,
   newReceiptId,
@@ -78,6 +79,7 @@ export async function runPreviewVerify(
   if ('error' in args) return textResult(args.error, true)
   const session = receiptSession(scope.emitKey, projectKey(scope.root))
   if ('list' in args) return listReceipts(scope, session)
+  const settled = beginReceiptCheck(session)
   try {
     const receipt =
       args.engine === 'chromium'
@@ -93,6 +95,8 @@ export async function runPreviewVerify(
       `preview_verify failed: ${error instanceof Error ? error.message : String(error)}`,
       true
     )
+  } finally {
+    settled()
   }
 }
 
