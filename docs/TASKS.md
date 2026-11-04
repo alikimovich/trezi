@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-515 — Concise installer progress and per-install log
+
+- [x] Keep dependency, compiler, signing and timing output in a local per-install log, with concise default phases and a `--verbose` option.
+- [x] Report final version/build on success and failed phase, error tail, log path and nonzero status on build failure.
+- [x] Cover quiet, verbose, failure, piped invocation and paths with spaces in the existing installer fixture.
+- [ ] Manager: required CI, independent review and normal PR merge pipeline.
+
 ## LKM-508 — Loading titles and provider readiness
 
 - [x] Show an accessible redacted loading title in the sidebar and selected header, with cached and untitled states preserved.
