@@ -399,7 +399,8 @@ const reconciliation = new ReconciliationCoordinator({
   preparations: preparingTurns,
   currentSession: (key) => sessions.get(key),
   begin: () => {},
-  land: afterTurn,
+  land: (key, message, transcript, terminal, reconcile) =>
+    afterTurn(key, message, transcript, terminal, reconcile, true),
   resolutionContext: parkedResolution,
   showParked: showParkedChat,
   continued: (key, turn, run) => conversation().continueTurn(key, turn, run),

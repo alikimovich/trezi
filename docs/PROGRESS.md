@@ -4,6 +4,22 @@
 
 - The `core/toolbar-address` failure measured a 16 pt gap at the 850 pt window minimum with the address at its 80 pt floor. The fixture accepts 16 pt as non-overlapping, but `ToolbarAddressLayout.measure` required 19 pt to record the right-group inset, leaving `rightInsetMeasured` false. Measurement now recognizes the 16 pt pinned gap while layout still targets 20 pt wherever width permits. Native confirmation is pending the manager's locked run.
 
+## 2026-11-03 — LKM-478 CI fixture repair
+
+- CI exposed two older unit fixtures that still expected unchecked ordinary chat completion to park until a manual Retry. The new completion path legitimately arranges the existing check and lands the exact combined tree, so the peer fixture now requires automatic checking, no held state and the peer provenance. The lesson fixture now requires one lesson on that automatic landing and confirms an idempotent Retry cannot duplicate it.
+- The later Stop scenario now checks that a subsequent stopped edit stays private and does not erase the lesson from the prior checked landing. Failed-check, stale-tree and stopped-resolution scenarios keep their separate hold assertions.
+
+## 2026-11-03 — LKM-478 review repair: in-flight private browser check
+
+- Independent review found that `preview_verify` was not represented by the gate's running-check state. Ordinary completion could see `unchecked` and begin a second browser check while the first was still working.
+- The receipt owner now tracks both browser and command checks from start through receipt or error settlement. The gate and ordinary completion read the same state and wait for the existing browser check before rejudging the exact tree. The disposable-profile agent integration fixture holds a real browser assertion open across ordinary completion, then requires that one receipt, no duplicate check, private work until verification, and a landed terminal state. The focused gate unit pins receipt-before-settlement ordering.
+- Native acceptance remains for the manager's post-merge run; the worker has no native GUI calls for this ticket.
+
+## 2026-11-03 — LKM-478 ordinary private check recovery
+
+- The ordinary successful completion path reached `gatedTurn` before the existing `arrangeChecks` replay used by a manual Retry. On an unchecked web tree, that produced the screenshot's Problem card even though Trezi could arrange a private browser check. The screenshot alone did not establish the provider's terminal phase or check history; the source trace establishes this reachable completion path.
+- Successful ordinary completion now waits for an already running command check to write its receipt, then uses the existing bounded replay for an unchecked or runtime-changed exact tree before the gate and repository owner rejudge it. The chat chain serializes the attempt; checks run before the shared repository lease. Explicit `land_now`, failed turns, genuine failed receipts and decisions retain their existing paths. If no supported runner is available or replay fails, the terminal card gives the recorded reason rather than asking the user to request a check and Retry.
+- Focused fixtures cover missing browser evidence, stale command evidence, failed checks, Stop and receipt settlement. The existing disposable-profile `agent-integration` native fixture now also asserts ordinary stale browser recovery on an exact new tree with no held card. Native acceptance and the exact-head gates remain with the manager after merge; no native worker run is available for this ticket.
 ## 2026-11-03 — LKM-475 review repair: retained transcript evidence
 
 - Independent review found that `chat-gate` recorded a count but its new Gamma chat had no message, so it did not prove transcript retention. The disposable fixture now waits for that selected chat to initialize, inserts one synthetic assistant reply, and waits for its native row geometry before the opening capture. It asserts the same nonzero message count and realized row through Opening and failed opening, at the normal window size and 900 pt, and records the IDs with each PNG/JSON receipt. Send and Return still have to leave the count unchanged. No real chat data is used. Native captures remain for the manager's post-merge sidebar run.

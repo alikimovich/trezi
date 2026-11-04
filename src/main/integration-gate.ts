@@ -3,11 +3,11 @@ import { join } from 'node:path'
 import { projectKey } from '../shared/projectKey'
 import { agentRuntime, privateRuntimeKind } from './agent-runtime'
 import { gitOut } from './chat-park'
-import { checksRunning } from './command-checks'
 import type { LandingHold } from './repository-owner'
 import { sourceSnapshot } from './source-snapshot'
 import {
   type CommandReceipt,
+  checksRunning,
   receiptSession,
   sessionCommandReceipts,
   sessionReceipts,
@@ -346,7 +346,10 @@ export function setCheckReplayer(next: CheckReplayer | null): void {
  * live tree): run the checks that last passed in this session again, on the current
  * source. Answers how many ran; the gate then judges their receipts like any other.
  */
-export async function replayChecks(scope: GateScope): Promise<number> {
+export async function replayChecks(
+  scope: GateScope,
+  shouldStop: () => boolean = () => false
+): Promise<number> {
   const session = sessionOf(scope)
   if (!replayer) {
     // A web project that needs a browser check, with nothing to run one: say so.
@@ -388,6 +391,7 @@ export async function replayChecks(scope: GateScope): Promise<number> {
     })
   let ran = 0
   for (const item of passed) {
+    if (shouldStop()) break
     if (!item.recipe) continue
     let ok = false
     try {
@@ -413,11 +417,12 @@ export async function replayChecks(scope: GateScope): Promise<number> {
  * pass, so the card can say why evidence is still missing.
  */
 export async function arrangeChecks(
-  scope: GateScope
+  scope: GateScope,
+  shouldStop: () => boolean = () => false
 ): Promise<{ ran: number; failures: readonly string[] }> {
   const verdict = await integrationGate(scope)
   if (verdict.ok || (verdict.reason !== 'unchecked' && verdict.reason !== 'runtime-changed'))
     return { ran: 0, failures: [] }
-  const ran = await replayChecks(scope)
+  const ran = await replayChecks(scope, shouldStop)
   return { ran, failures: lastReplayFailures(scope) }
 }

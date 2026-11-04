@@ -226,6 +226,46 @@ export function sessionCommandReceipts(session: string): readonly CommandReceipt
   return commands.get(session) ?? []
 }
 
+/** Host checks remain active until their final receipt or error has settled. */
+const activeChecks = new Map<string, number>()
+const checkSettled = new Map<string, Set<() => void>>()
+
+export const checksRunning = (session: string): boolean => (activeChecks.get(session) ?? 0) > 0
+
+export function beginReceiptCheck(session: string): () => void {
+  activeChecks.set(session, (activeChecks.get(session) ?? 0) + 1)
+  let ended = false
+  return () => {
+    if (ended) return
+    ended = true
+    const left = (activeChecks.get(session) ?? 1) - 1
+    if (left) activeChecks.set(session, left)
+    else activeChecks.delete(session)
+    for (const listener of checkSettled.get(session) ?? []) listener()
+  }
+}
+
+/** Wait for every check already owned by this session to settle its receipt. */
+export function waitForChecks(session: string, timeoutMs = 15 * 60_000 + 10_000): Promise<boolean> {
+  if (!checksRunning(session)) return Promise.resolve(true)
+  return new Promise((resolve) => {
+    const listeners = checkSettled.get(session) ?? new Set<() => void>()
+    const done = (settled: boolean) => {
+      clearTimeout(timer)
+      listeners.delete(check)
+      if (!listeners.size) checkSettled.delete(session)
+      resolve(settled)
+    }
+    const check = () => {
+      if (!checksRunning(session)) done(true)
+    }
+    const timer = setTimeout(() => done(false), timeoutMs)
+    listeners.add(check)
+    checkSettled.set(session, listeners)
+    check()
+  })
+}
+
 /** Drops the session's receipts and its whole artifact folder (screenshots of failed runs too). */
 export function clearReceipts(session: string): void {
   for (const receipt of receipts.get(session) ?? [])

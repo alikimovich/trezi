@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { projectKey } from '../shared/projectKey'
 import { sourceSnapshot } from './source-snapshot'
 import {
+  beginReceiptCheck,
   type CommandReceipt,
   newReceiptId,
   receiptSession,
@@ -40,11 +41,11 @@ const SWIFT = { 'swift-build': 'build', 'swift-test': 'test' } as const
 
 /** Checks still running, per receipt session, so a landing never passes over one. */
 const running = new Map<string, Set<() => void>>()
-
-export const checksRunning = (session: string): boolean => (running.get(session)?.size ?? 0) > 0
+const preparing = new Map<string, Set<() => void>>()
 
 /** Ends the session's running checks; their receipts say `cancelled`. */
 export function cancelChecks(session: string): void {
+  for (const cancel of preparing.get(session) ?? []) cancel()
   for (const cancel of running.get(session) ?? []) cancel()
 }
 
@@ -108,10 +109,26 @@ export async function runCommandCheck(
   const command = resolveCheck(name, scope)
   if ('error' in command) return command
   const session = receiptSession(scope.emitKey, projectKey(scope.root))
+  const settled = beginReceiptCheck(session)
   const started = Date.now()
+  let cancelledBeforeRun = false
+  const preparingSet = preparing.get(session) ?? new Set<() => void>()
+  const cancelPreparation = () => {
+    cancelledBeforeRun = true
+  }
+  preparingSet.add(cancelPreparation)
+  preparing.set(session, preparingSet)
   const before = await sourceSnapshot(scope.root).catch(() => null)
-  if (!before?.id)
+  preparingSet.delete(cancelPreparation)
+  if (!preparingSet.size) preparing.delete(session)
+  if (cancelledBeforeRun) {
+    settled()
+    return { error: `${name}: the check was cancelled before it ran.` }
+  }
+  if (!before?.id) {
+    settled()
     return { error: `${name}: Trezi could not read this checkout's exact source, so nothing ran.` }
+  }
   const outcome = await run(command, scope.root, Math.min(timeoutMs, CHECK_LIMITS.maxMs), session)
   const after = await sourceSnapshot(scope.root).catch(() => null)
   let reason: string | null = null
@@ -143,6 +160,7 @@ export async function runCommandCheck(
     ms: Date.now() - started
   }
   recordCommandReceipt(session, receipt)
+  settled()
   return receipt
 }
 

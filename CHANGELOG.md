@@ -13,6 +13,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Fixed
 
 - The preview address keeps the right toolbar controls aligned at the minimum window width (LKM-480).
+## [0.13.14] - 2026-11-03
+
+### Fixed
+
+- Finished chats arrange missing or stale private checks before landing and report when a check runner is unavailable without asking you to request a check and Retry (LKM-478).
 
 ## [0.13.13] - 2026-11-03
 

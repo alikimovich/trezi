@@ -315,10 +315,12 @@ try {
     const runs = readFileSync(join(chat.cwd, '.runs'), 'utf8').length
     chat.done()
     await wait(() => landed(turn), 'the combined turn')
-    assert.doesNotMatch(p.live(), /price=10 badge=sale/, 'unchecked, it holds')
-    assert.equal(parkEvent(p.parent).reason, 'failed')
-    assert.equal((await invoke('agent:retry-landing', p.parent)).ok, true)
-    assert.match(p.live(), /header price=10 badge=sale/)
+    assert.match(
+      p.live(),
+      /header price=10 badge=sale/,
+      'the host checked and landed the combined tree'
+    )
+    assert.equal(parkEvent(p.parent).state, 'merged', 'no Retry is needed')
     assert.ok(
       readFileSync(join(chat.cwd, '.runs'), 'utf8').length > runs,
       'the host ran the check again on the combined tree'

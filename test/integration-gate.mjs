@@ -39,7 +39,13 @@ import {
   retainGateEvidence,
   setCheckReplayer
 } from '../src/main/integration-gate.ts'
-import { newReceiptId, receiptSession, recordReceipt } from '../src/main/verification-receipts.ts'
+import {
+  beginReceiptCheck,
+  newReceiptId,
+  receiptSession,
+  recordReceipt,
+  waitForChecks
+} from '../src/main/verification-receipts.ts'
 import { projectKey } from '../src/shared/projectKey.ts'
 import { candidateOf, passCheck } from './helpers/gate-checks.mjs'
 
@@ -167,14 +173,20 @@ try {
   assert.match((await runCommandCheck('pass', scope)).error, /changed the "prepass" script/)
   writeFileSync(join(root, 'package.json'), `${JSON.stringify(own, null, 2)}\n`)
 
+  const preflight = runCommandCheck('slow', scope)
+  cancelChecks(session)
+  assert.match((await preflight).error, /cancelled before it ran/)
+
   // A running check blocks; cancelled, its receipt is not a pass.
   const slow = runCommandCheck('slow', scope)
   const deadline = Date.now() + 5000
   while ((await gate()).reason !== 'check-running' && Date.now() < deadline)
     await new Promise((resolve) => setTimeout(resolve, 20))
   assert.equal((await gate()).reason, 'check-running')
+  const settledCheck = waitForChecks(session, 1000)
   cancelChecks(session)
   const cancelled = await slow
+  assert.equal(await settledCheck, true, 'the waiter sees the final receipt before settling')
   assert.equal(cancelled.cancelled, true)
   assert.equal(cancelled.reason, 'cancelled')
   assert.equal((await gate()).reason, 'check-failed')
@@ -232,6 +244,16 @@ try {
     'the automatic browser run makes real assertions'
   )
   assert.equal((await gate()).ok, true, 'automatic browser evidence passes on the exact tree')
+  const browserSettled = beginReceiptCheck(session)
+  assert.equal((await gate()).reason, 'check-running', 'browser receipt is still in flight')
+  const browserWait = waitForChecks(session, 1000)
+  const inFlightReceipt = browser(null, null)
+  inFlightReceipt.source.tree = await candidateOf(root)
+  recordReceipt(session, inFlightReceipt)
+  assert.equal((await gate()).reason, 'check-running', 'recording alone does not end the check')
+  browserSettled()
+  assert.equal(await browserWait, true)
+  assert.equal((await gate()).ok, true, 'settled browser receipt proves the current tree')
   setCheckReplayer(null)
   const now = await candidateOf(root)
   // Its private server has since stopped (or restarted): a server change.
@@ -250,6 +272,15 @@ try {
   })
   assert.equal(await replayChecks(scope), 2)
   assert.deepEqual(replayed.toSorted(), ['/', 'pass'])
+  let stoppedReplay = false
+  const bounded = []
+  setCheckReplayer(async (recipe) => {
+    bounded.push(recipe.kind)
+    stoppedReplay = true
+    return true
+  })
+  assert.equal(await replayChecks(scope, () => stoppedReplay), 1)
+  assert.equal(bounded.length, 1, 'Stop prevents the next replay check')
   setCheckReplayer(null)
   assert.equal(await replayChecks(scope), 0, 'no tools, no replay')
 
