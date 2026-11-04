@@ -11,11 +11,20 @@ const until = async (check, label, timeout) => {
   }
   throw new Error(`Timed out: ${label}`)
 }
-const scenario = async ({ log, states, exit = { code: null, signal: null } }) => {
+const scenario = async ({
+  log,
+  states,
+  exit = { code: null, signal: null },
+  deadline = Date.now() + 300_000
+}) => {
   const evidence = []
+  const waits = []
   let next = 0
   const run = waitForPreviewDriver({
-    until,
+    until: (check, label, timeout) => {
+      waits.push({ label, timeout })
+      return until(check, label, timeout)
+    },
     readState: async () => {
       const state = states[Math.min(next++, states.length - 1)]
       if (state instanceof Error) throw state
@@ -26,9 +35,9 @@ const scenario = async ({ log, states, exit = { code: null, signal: null } }) =>
     exit: () => exit,
     elapsed: () => '1.0s',
     emit: (value) => evidence.push(value),
-    deadline: Date.now() + 300_000
+    deadline
   })
-  return { run, evidence }
+  return { run, evidence, waits }
 }
 
 const ready = await scenario({
@@ -70,4 +79,19 @@ assert.equal(neverReady.evidence[0].state.status, 'building')
 assert.match(neverReady.evidence[0].buildLogTail, /compiling StudioKit/)
 assert.equal(neverReady.evidence[0].progress, 'driver build')
 
-console.log('Swift preview driver wait: ready, startup, error and never-ready passed')
+// With only 250 ms left before the 15 s evidence/cleanup reserve, the build
+// wait must use that remaining budget rather than its normal 180 s maximum.
+const nearDeadline = await scenario({
+  log: 'Serving at http://127.0.0.1:1234\ncompiling StudioKit',
+  states: [{ status: 'building', message: 'Still compiling StudioKit' }],
+  deadline: Date.now() + 15_250
+})
+await assert.rejects(nearDeadline.run, /Timed out: driver build/)
+const buildWait = nearDeadline.waits.find((wait) => wait.label === 'driver build')
+assert.ok(buildWait.timeout > 0 && buildWait.timeout <= 250)
+assert.equal(nearDeadline.evidence.length, 1)
+assert.equal(nearDeadline.evidence[0].state.status, 'building')
+assert.match(nearDeadline.evidence[0].buildLogTail, /compiling StudioKit/)
+assert.equal(nearDeadline.evidence[0].progress, 'driver build')
+
+console.log('Swift preview driver wait: ready, startup, error, never-ready and deadline passed')

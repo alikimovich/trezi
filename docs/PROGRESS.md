@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-505 deadline regression proof
+
+- Review found the fast preview-driver fixture did not assert the deadline reserve. Its near-deadline fake driver now records the build-wait budget with only 250 ms before the existing 15 s reserve, requires the bounded wait, and still checks failure plus final building state and log evidence. The real driver and its outer timeout are unchanged.
+
 ## 2026-11-04 — LKM-505 preview diagnostic review repair
 
 - Independent review found that driver startup timed out outside the evidence catch, and no regression exercised the new failure path. The driver URL and readiness waits now share one bounded catch that records final state availability, driver output, exit status and the last progress stage before rethrowing. A fast fake-driver fixture covers success, no server, error and never-ready states; the real Swift target fixture still requires readiness.
