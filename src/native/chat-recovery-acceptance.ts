@@ -71,6 +71,9 @@ function drawnProblems(m: RecoveryMeasure): string[] {
 export function busyProblems(m: RecoveryMeasure, kind: RecoveryKind): string[] {
   const problems = drawnProblems(m)
   if (!m.present) return problems
+  const status = kind === 'retry' ? 'Retrying the check…' : 'Resolving changes…'
+  if (m.title !== status || m.detail.startsWith('Problem:'))
+    problems.push(`the owned failure does not show ${status} status`)
   if (!m.busy) problems.push('the card is not busy')
   if (!m.actions.includes(BUSY_LABEL[kind])) problems.push(`no ${BUSY_LABEL[kind]} label`)
   if (!m.spinners.length) problems.push('no spinner')

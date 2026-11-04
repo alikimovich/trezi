@@ -18,7 +18,7 @@ import { retireWorktreeBranch } from './worktrees'
  */
 
 /** Restore the fallback after an automatic attempt was cancelled or unavailable. */
-export function showParkedChat(sessionKey: string): void {
+export function showParkedChat(sessionKey: string, turn?: string): void {
   const st = states.get(sessionKey)
   // LKM-406: the hold that ended this reconciliation announced its decision already; only
   // this repeat is skipped, so a re-hold or a later restore still reaches the chat.
@@ -34,7 +34,9 @@ export function showParkedChat(sessionKey: string): void {
       undefined,
       st.landingError ? 'failed' : st.interrupted ? 'interrupted' : undefined,
       st.landingError,
-      st.decision
+      st.decision,
+      undefined,
+      turn
     )
 }
 
@@ -142,7 +144,8 @@ export async function discardParkedBranch(
  * Serialized on the chat's chain. `{ ok: false }` if the chat isn't parked.
  */
 export async function resolveParkedChat(
-  sessionKey: string
+  sessionKey: string,
+  recoveryId?: string
 ): Promise<{ ok: boolean; conflicted: string[]; error?: string }> {
   const st = states.get(sessionKey)
   if (!st) return { ok: false, conflicted: [], error: 'no-chat' }
@@ -175,7 +178,7 @@ export async function resolveParkedChat(
       const described = await turnMessage(sessionKey, st, 'resolve')
       const { outcome, verdict } = await gatedTurn(sessionKey, st, described.text, true)
       if (outcome.outcome === 'held') {
-        held = holdTurn(sessionKey, st, outcome, verdict)
+        held = holdTurn(sessionKey, st, outcome, verdict, [], undefined, recoveryId)
         return
       }
       if (outcome.outcome === 'merged') {
@@ -202,7 +205,15 @@ export async function resolveParkedChat(
       // trade-off as the modal's Apply.
       const res = await applyParked(st.liveRoot, st.wt, verdict?.candidate ?? null)
       if (res.hold) {
-        held = holdTurn(sessionKey, st, { ...outcome, hold: res.hold }, verdict)
+        held = holdTurn(
+          sessionKey,
+          st,
+          { ...outcome, hold: res.hold },
+          verdict,
+          [],
+          undefined,
+          recoveryId
+        )
         return
       }
       if (res.ok) {

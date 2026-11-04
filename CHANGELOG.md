@@ -13,6 +13,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Changed
 
 - Settings → Skills now offers grouped design recommendations from Anthropic, Paul Bakaus, Emil Kowalski and Jakub Krehel, with a script-free static Impeccable edition and explicit Install choices (LKM-516).
+## [0.13.20] - 2026-11-04
+
+### Fixed
+
+- Recoverable held changes show their active check or recovery status before an honest terminal Problem and report (LKM-509).
 
 ## [0.13.19] - 2026-11-04
 

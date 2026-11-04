@@ -18,6 +18,7 @@ export const needsResolve = (chat: Chat) =>
 
 export function sendBlock(chat: Chat): SendBlock | null {
   if (chat.signingIn) return 'login'
+  if (chat.keepingStopped) return 'landing'
   if (chat.isRunning || chat.sending) return chat.phase === 'applying' ? 'landing' : 'running'
   if (needsResolve(chat)) return 'resolve'
   if (chat.login) return 'login'
@@ -37,6 +38,11 @@ const BLOCK_NOTES: Record<SendBlock, string> = {
  *  sign-in come first (their actions also resume a paused queue); a pause outlasts a
  *  running turn, so it is named before one. */
 export function queueNote(chat: Chat): { queueNote: string; queueCanSend: boolean } {
+  if (chat.keepingStopped)
+    return {
+      queueNote: 'Checking held changes — not sent until the check finishes',
+      queueCanSend: false
+    }
   const block = sendBlock(chat)
   const waiting = needsResolve(chat) ? 'resolve' : chat.login || chat.signingIn ? 'login' : null
   if (waiting) return { queueNote: BLOCK_NOTES[waiting], queueCanSend: false }
