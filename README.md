@@ -160,7 +160,11 @@ to whichever checkout was installed last, and the installer says which.
 
 Run the same command again to update and rebuild. Options: `--channel main|candidate`
 (or `TREZI_CHANNEL`; default `main`, and a re-run keeps the installed channel),
-`--update` and `--no-open`. Unattended installs skip every prompt.
+`--update`, `--no-open` and `--verbose`. By default, dependency and build steps show
+short phase progress; `--verbose` displays their full output. Each run saves the
+full dependency and build output, including compiler warnings and signing details, in a separate file
+under `~/Library/Logs/Trezi/`. The installer prints that path, and on failure shows
+the failed phase and recent log output. Unattended installs skip every prompt.
 
 If Claude chats say you are not logged in, run `claude auth login` in Terminal, or run
 `claude setup-token` and paste the token in **Settings → AI providers → Claude…**.

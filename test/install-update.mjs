@@ -73,9 +73,13 @@ shim(
   `[ -f "$1" ] && exec "${process.execPath}" "$@" # the launcher's shebang passes the symlink path
 case "$1" in
   *.mjs|--version|-v) exec "${process.execPath}" "$@";;
-  install) echo "install $(git rev-parse --short HEAD)" >> "$TEST_STATE/calls.log"; [ -f "$TEST_STATE/fail-install" ] && exit 1; exit 0;;
+  -p) echo 1.0.0; exit 0;;
+  install) echo "install $(git rev-parse --short HEAD)" >> "$TEST_STATE/calls.log"; echo 'bun dependency detail (fixture)'; [ -f "$TEST_STATE/fail-install" ] && exit 1; exit 0;;
   run) echo "run $2 $(git rev-parse --short HEAD)" >> "$TEST_STATE/calls.log"
     if [ -f "$TEST_STATE/fail-build" ]; then echo "build failed (fixture)" >&2; exit 1; fi
+    echo 'swift warning: fixture compiler warning' >&2
+    echo 'signing detail: fixture' >&2
+    echo 'build timing: fixture'
     mkdir -p out/native/Trezi.app/Contents/MacOS out/native/Trezi.app/Contents/Helpers out/native/Trezi.app/Contents/Resources/backend && : > out/native/Trezi.app/Contents/Resources/backend/index.cjs && : > out/native/TreziService
     : > out/native/Trezi.app/Contents/MacOS/TreziHost && : > out/native/Trezi.app/Contents/Helpers/bun; exit 0;;
 esac
@@ -173,6 +177,12 @@ const installer = readFileSync(join(root, 'install.sh'), 'utf8')
 /** `curl … | bash -s -- <args>`: the installer read from stdin, as the one-liner runs it. */
 const piped = (args = [], extra = {}) =>
   exec('bash', ['-s', '--', ...args], { extra, input: installer })
+const installLog = (output) => {
+  const path = output.match(/^Install log: (.+)$/m)?.[1]
+  assert.ok(path, `install log location: ${output}`)
+  assert.ok(path.startsWith(`${join(home, 'Library/Logs/Trezi')}/`))
+  return readFileSync(path, 'utf8')
+}
 const git = (cwd, ...args) =>
   execFileSync(realGit, args, { cwd, env: { ...process.env, ...env }, encoding: 'utf8' }).trim()
 /** The git calls since `from` that could move a checkout. */
@@ -254,7 +264,15 @@ try {
   )
   assert.equal(branch(), 'main')
   assert.match(install.stdout, /Cloning Trezi \(main channel\) into/)
-  assert.match(install.stdout, /Trezi installed to/)
+  assert.match(install.stdout, /Trezi v1\.0\.0 \(build \d+\) installed successfully to/)
+  assert.doesNotMatch(
+    install.stdout + install.stderr,
+    /swift warning: fixture|signing detail: fixture|bun dependency detail/
+  )
+  assert.match(
+    installLog(install.stdout),
+    /bun dependency detail[\s\S]*swift warning: fixture compiler warning[\s\S]*signing detail: fixture[\s\S]*build timing: fixture/
+  )
   assert.deepEqual(log().map(step), ['install', 'run build'])
   assert.ok(built(), 'the build produced the host, the service and the Bun bundle')
   assert.ok(lstatSync(join(home, '.local/bin/trezi')).isSymbolicLink())
@@ -366,6 +384,26 @@ try {
   assert.ok(!existsSync(join(state, 'opened')), '--no-open')
   assert.equal(lines('installers.log').length, 1, 'Bun is not reinstalled')
   assert.equal(lines('xcode-select.log').length, 2, 'nor are the tools')
+  const verbose = await piped(['--no-open', '--verbose'])
+  assert.equal(verbose.code, 0, verbose.stderr)
+  assert.match(
+    verbose.stdout + verbose.stderr,
+    /bun dependency detail[\s\S]*swift warning: fixture compiler warning[\s\S]*signing detail: fixture[\s\S]*build timing: fixture/
+  )
+  assert.match(installLog(verbose.stdout), /swift warning: fixture compiler warning/)
+  writeFileSync(join(state, 'fail-build'), '')
+  const failedInstall = await piped(['--no-open'])
+  assert.equal(failedInstall.code, 1)
+  assert.match(
+    failedInstall.stderr,
+    /Building Trezi failed \(exit 1\)[\s\S]*build failed \(fixture\)[\s\S]*Full install log:/
+  )
+  assert.match(installLog(failedInstall.stdout), /build failed \(fixture\)/)
+  assert.doesNotMatch(
+    failedInstall.stdout + failedInstall.stderr,
+    /installed successfully|Opening Trezi|Run: {2}trezi/
+  )
+  rmSync(join(state, 'fail-build'))
   console.log(
     'install-update: diverged checkout refused, lockfile drift, idempotent installer re-run, --no-open'
   )
@@ -388,7 +426,7 @@ try {
   assert.equal(back.code, 0, back.stderr)
   assert.equal(branch(), 'main')
   assert.equal(head(), tip('main'))
-  const tester = join(scratch, 'tester')
+  const tester = join(scratch, 'tester install')
   const cloneFrom = lines('git.log').length
   const fresh = await piped(['--no-open', '--channel', 'candidate'], { TREZI_HOME: tester })
   assert.equal(fresh.code, 0, `${fresh.stdout}\n${fresh.stderr}`)

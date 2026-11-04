@@ -16,6 +16,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: classify empty-file and rejected Keep failures through the terminal Problem, report, and Retry path before retaining the authoritative settlement.
 - [x] Review repair: distinguish old Stop callbacks from a new Resolve request during its active window with the initiating recovery request ID.
 - [ ] Manager: exact-head CI, independent review, and post-merge native acceptance on main.
+## LKM-515 — Concise installer progress and per-install log
+
+- [x] Keep dependency, compiler, signing and timing output in a local per-install log, with concise default phases and a `--verbose` option.
+- [x] Report final version/build on success and failed phase, error tail, log path and nonzero status on build failure.
+- [x] Cover quiet, verbose, failure, piped invocation and paths with spaces in the existing installer fixture.
+- [ ] Manager: required CI, independent review and normal PR merge pipeline.
+
 ## LKM-508 — Loading titles and provider readiness
 
 - [x] Show an accessible redacted loading title in the sidebar and selected header, with cached and untitled states preserved.
