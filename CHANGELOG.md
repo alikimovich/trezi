@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.13.12] - 2026-11-03
+
 ### Fixed
 
 - Editing an elided preview address restores and selects the full URL before copying or navigating (LKM-469).
