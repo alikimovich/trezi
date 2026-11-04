@@ -89,6 +89,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
     let chatHeader = ChatToolbarView()
     private let chatTitle = NSTextField(labelWithString: "Chat")
+    var chatTitleLoading: LoadingChatTitle?
     // The toolbar islands receive AppKit's glass from their item groups. The title's custom
     // item needs an explicit native glass view around its single action.
     private let chatNewGlass: NSView = {
@@ -316,7 +317,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             NSLayoutConstraint.activate([
                 chatHeaderWidth, chatHeader.widthAnchor.constraint(greaterThanOrEqualToConstant: 100), chatHeader.heightAnchor.constraint(equalToConstant: 32),
                 chatTitle.leadingAnchor.constraint(equalTo: chatHeader.leadingAnchor, constant: 4), chatTitle.centerYAnchor.constraint(equalTo: chatHeader.centerYAnchor),
-                chatTitle.trailingAnchor.constraint(lessThanOrEqualTo: chatNewButton.leadingAnchor, constant: -8),
+                chatTitle.trailingAnchor.constraint(equalTo: chatNewButton.leadingAnchor, constant: -8),
                 chatNewGlass.trailingAnchor.constraint(equalTo: chatHeader.trailingAnchor, constant: -4),
                 chatNewGlass.centerYAnchor.constraint(equalTo: chatHeader.centerYAnchor),
                 chatNewGlass.widthAnchor.constraint(equalToConstant: 32), chatNewGlass.heightAnchor.constraint(equalToConstant: 32),
@@ -453,8 +454,17 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         for (key, item) in toolbarItems {
             item.isEnabled = key == "chat" ? true : key == "code" || key == "expand" ? currentProject != nil : key == "branch" ? previewState["branch"] is String : ready
         }
-        chatTitle.stringValue = allRows.first(where: { $0.id == selectedID })?.title ?? "Chat"
-        chatTitle.toolTip = chatTitle.stringValue
+        let selected = allRows.first(where: { $0.id == selectedID })
+        if selected?.loadingTitle == true {
+            if chatTitleLoading == nil { chatTitleLoading = LoadingChatTitle(label: chatTitle) }
+            chatTitleLoading?.refresh(active: currentProject != nil && !chatHidden)
+            chatTitle.toolTip = "Loading conversation"
+        } else {
+            chatTitleLoading?.stop(); chatTitleLoading = nil
+            chatTitle.stringValue = selected?.title ?? "Chat"
+            chatTitle.toolTip = chatTitle.stringValue
+            chatTitle.setAccessibilityLabel(chatTitle.stringValue)
+        }
         if chatHeaderWidth != nil {
             alignChatHeader()
         }
@@ -698,7 +708,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             "enabled":toolbarItems.mapValues { $0.isEnabled }
         ]
         let chatInspect: [String: Any] = [
-            "chatTitle":chatTitle.stringValue, "chatTitlePlain":toolbarItems["chat"]?.action == nil,
+            "chatTitle":chatTitle.stringValue, "chatTitleLoadingMode":chatTitleLoading?.mode ?? "off", "chatTitleAccessibility":chatTitle.accessibilityLabel() ?? "", "chatTitlePlain":toolbarItems["chat"]?.action == nil,
             "chatNewVisible":!chatNewButton.isHidden, "chatNewEnabled":chatNewButton.isEnabled,
             "chatNewSystemGlass":chatNewSystemGlass,
             "chatNewGlassFrame":NSStringFromRect(mainFrame(chatNewGlass) ?? .zero),

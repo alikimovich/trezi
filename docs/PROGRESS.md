@@ -1,5 +1,38 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-485 stop loading titles on conversation error
+
+- Independent review found that a failed conversation hydration leaves `chat.ready` false while the project can still be running, so unknown row and header titles kept deciphering. Shell row state now excludes chats with an error from `loadingTitle`; the existing shell-controller fixture asserts the error transition stops loading and that a still-pending chat can resume after the error clears. This changes only the transient title presentation, leaving error feedback and chat readiness guards intact.
+
+## 2026-11-04 — LKM-485 loading-title lifecycle fixture proof
+
+- The existing standalone sidebar shimmer fixture now exercises a pending-title row alongside its shimmer cleanup checks. It asserts deciphering while attached, an off mode and unchanged visible text across timer ticks after detachment, release of the discarded row's `LoadingChatTitle`, and a fresh active loader on the replacement row. The existing fixture assertions remain intact; product code is unchanged.
+
+## 2026-11-04 — LKM-485 standalone sidebar fixture contract repair
+
+- The standalone sidebar shimmer and marquee fixtures compile the shared `SidebarChats.swift` extension against minimal `NativeShell` stubs. That extension now refreshes the selected header's loading title when Reduce Motion changes, so both stubs declare the same optional `LoadingChatTitle` member as the real shell. The fixtures retain their existing behavior and assertions; this fixes the Swift compile contract behind the CI unit-shard failures without changing the app.
+
+## 2026-11-04 — LKM-485 review repair: observe sidebar glyphs
+
+- Independent review found that the animation fixture sampled the header but the sidebar inspect exposed only the model title, so a frozen sidebar could pass. Sidebar inspection now adds `displayedText` from the actual row label without changing `title` or row identity. The existing `chat-gate` interval check requires both the selected row and header strings to change while pending, and both to remain at the static placeholder under Reduce Motion. The same animation JSON records both pairs for the manager's post-merge native run.
+
+## 2026-11-04 — LKM-485 review repair: prove changing and static glyphs
+
+- The `chat-gate` fixture previously checked the loader's mode and one rendered title, which could pass with frozen glyphs. It now samples the native header after a 180 ms animation tick and requires a changed visible string within a bounded interval while the mode stays deciphering. Under Reduce Motion it waits across two ticks and requires the static placeholder and still mode. It writes the sampled values to `chat-gate-title-animation.json` beside the existing loading and resolved captures. Native execution and image inspection remain with the manager after merge.
+
+## 2026-11-04 — LKM-485 review repair: stable title geometry
+
+- Independent review found that the loading-to-resolved captures did not assert title placement. The header title now fills its existing slot up to New Chat, so changing glyphs or resolving the title cannot resize its frame. The `chat-gate` fixture compares the selected row's measured text offset and all four header frame values within 1 pt at 1320 pt and 900 pt, with loading and resolved PNGs at both widths. Native execution and capture inspection remain with the manager after merge.
+
+## 2026-11-04 — LKM-485 review repair: project readiness gates provider choice
+
+- Independent review found that a conversation can finish hydration while its project is still opening. The start card now checks the selected project's loaded key as well as chat readiness and authoritative signed-out metadata. The existing start runtime refreshes the active chat when project readiness changes, so the choice returns after loading without a provider or workspace mutation.
+- The `chat-gate` fixture now forces signed-out status only in memory during its disposable-profile opening and ready phases. It asserts the card stays absent for a hydrated chat while the project is pending and returns after readiness; it restores the prior readiness and synthetic transcript before continuing the existing capture assertions. Native execution remains with the manager after merge.
+
+## 2026-11-03 — LKM-485 pending conversation titles
+
+- The shell now marks only unknown titles in the selected project while conversation or project hydration is pending. AppKit renders fixed-width transient glyphs in those rows and the selected header; it stops the timer on resolution, error, row removal and window detach. Reduce Motion holds a static placeholder and accessibility reads “Loading conversation.” Cached titles and ready untitled chats retain their ordinary text.
+- The initial provider card waits for a ready chat and confirmed signed-out metadata for both built-in seats. Failed or checking metadata does not imply signed out. Focused unit state assertions and a disposable-profile `chat-gate` loading-to-resolved fixture cover the presentation; native capture acceptance remains for the manager after merge.
 ## 2026-11-04 — LKM-484 CI worktree cleanup race
 
 - The native core capture passed with the new glass, but the manager's CI run failed in `chat-new-instant`: `git worktree list` read an entry while asynchronous chat cleanup removed its `commondir`. The fixture now retries only that transient Git read until its existing cleanup deadline and still fails other Git errors. A synthetic regression assertion covers the retry and error boundary; the real fixture continues to require every chat worktree to be removed.

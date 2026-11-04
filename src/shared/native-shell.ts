@@ -8,6 +8,8 @@ export interface NativeShellRow {
   session?: string
   record?: string
   running?: boolean
+  /** The active project's chat has no known title while its conversation is hydrating. */
+  loadingTitle?: boolean
   /** LKM-389: the model is at work on the running turn, so the title shimmers. Stays false
    *  while the turn waits for the user, stops or lands. */
   thinking?: boolean

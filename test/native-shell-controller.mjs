@@ -70,6 +70,62 @@ assert.equal(
 )
 assert.equal(renders.at(-1).rows[0].children[1].title, 'Older chat')
 assert.equal(renders.at(-1).chatReady, true)
+// A cached title stays readable through a later open; only unknown titles decipher.
+workspace.state.loadedKey = null
+workspace.state.status = { kind: 'busy', label: 'Opening Project…' }
+shell.render()
+assert.equal(renders.at(-1).rows[0].children[0].loadingTitle, false)
+const workingTitle = chat.chats.get('a').title
+chat.chats.get('a').title = ''
+shell.render()
+assert.equal(renders.at(-1).rows[0].children[0].loadingTitle, true)
+assert.equal(renders.at(-1).rows[0].children[0].title, 'New chat', 'glyphs never enter shell data')
+// A failed conversation hydration leaves ready false, but must stop the title animation.
+workspace.state.loadedKey = 'a'
+workspace.state.status = { kind: 'running' }
+chat.chats.get('a').ready = false
+chat.chats.get('a').error = 'Could not load conversation'
+shell.render()
+assert.equal(renders.at(-1).rows[0].children[0].loadingTitle, false, 'chat error stops loading')
+chat.chats.get('a').error = undefined
+shell.render()
+assert.equal(
+  renders.at(-1).rows[0].children[0].loadingTitle,
+  true,
+  'pending chat resumes after error clears'
+)
+workspace.state.loadedKey = null
+workspace.state.status = { kind: 'idle' }
+shell.render()
+assert.equal(renders.at(-1).rows[0].children[0].loadingTitle, false, 'cancel stops loading')
+workspace.state.status = { kind: 'busy', label: 'Opening Project…' }
+chat.chats.get('a').messages = [{ role: 'user', text: 'Cached request' }]
+shell.render()
+assert.deepEqual(
+  [renders.at(-1).rows[0].children[0].loadingTitle, renders.at(-1).rows[0].children[0].title],
+  [false, 'Cached request'],
+  'a cached transcript title remains legible during opening'
+)
+chat.chats.get('a').messages = []
+chat.chats.get('a').title = 'Resolved title'
+shell.render()
+assert.deepEqual(
+  [renders.at(-1).rows[0].children[0].loadingTitle, renders.at(-1).rows[0].children[0].title],
+  [false, 'Resolved title']
+)
+chat.chats.get('a').title = workingTitle
+workspace.state.loadedKey = 'a'
+workspace.state.status = { kind: 'running' }
+chat.chats.get('a').ready = true
+chat.chats.get('a').title = ''
+shell.render()
+assert.deepEqual(
+  [renders.at(-1).rows[0].children[0].loadingTitle, renders.at(-1).rows[0].children[0].title],
+  [false, 'New chat'],
+  'a genuinely untitled ready chat keeps New chat'
+)
+chat.chats.get('a').title = workingTitle
+shell.render()
 // The initial open hides chat until the selected project is loaded.
 workspace.state.loadedKey = null
 workspace.state.status = { kind: 'busy', label: 'Opening Project…' }
@@ -83,8 +139,11 @@ shell.render()
 assert.equal(renders.at(-1).chatReady, true)
 // An error reports truthfully and closes the gate until recovery.
 workspace.state.status = { kind: 'error', message: 'The dev server exited' }
+chat.chats.get('a').title = ''
 shell.render()
 assert.equal(renders.at(-1).chatReady, false)
+assert.equal(renders.at(-1).rows[0].children[0].loadingTitle, false)
+chat.chats.get('a').title = workingTitle
 workspace.state.status = { kind: 'running' }
 shell.render()
 assert.equal(renders.at(-1).chatReady, true)

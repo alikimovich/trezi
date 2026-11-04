@@ -176,6 +176,193 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
   )
   const gammaChat = nativeChat.get(gamma.activeSessionKey)
   await until(() => gammaChat.ready, 'selected chat initialized during opening')
+  const titleGeometry = (
+    state: {
+      sidebarChats: Array<{ id: string; selected: boolean; textOffset: number }>
+      chatTitleFrame: string
+    },
+    stage: string
+  ) => {
+    const row = state.sidebarChats.find((item) => item.id === `chat:${gamma.activeSessionKey}`)
+    assert.ok(row?.selected, `${stage}: the loading chat stays selected`)
+    assert.ok(Number.isFinite(row.textOffset), `${stage}: selected row has a measured text offset`)
+    const frame = (state.chatTitleFrame.match(/-?[\d.]+(?:e-?\d+)?/g) ?? []).map(Number)
+    assert.equal(frame.length, 4, `${stage}: selected header has a measured frame`)
+    assert.ok(frame.every(Number.isFinite), `${stage}: header frame is finite`)
+    return { offset: row.textOffset, frame }
+  }
+  const sameTitleGeometry = (
+    loading: ReturnType<typeof titleGeometry>,
+    resolved: ReturnType<typeof titleGeometry>,
+    stage: string
+  ) => {
+    assert.ok(Math.abs(loading.offset) < 1, `${stage}: loading row aligns with project title`)
+    assert.ok(Math.abs(resolved.offset) < 1, `${stage}: resolved row aligns with project title`)
+    assert.ok(
+      Math.abs(loading.offset - resolved.offset) <= 1,
+      `${stage}: row title keeps its leading edge`
+    )
+    for (const index of [0, 1, 2, 3])
+      assert.ok(
+        Math.abs(loading.frame[index] - resolved.frame[index]) <= 1,
+        `${stage}: header title keeps its x, y, width and height; loading ${loading.frame}, resolved ${resolved.frame}`
+      )
+  }
+  // Hold the existing chat's title unknown while the project opens. This is a presentation
+  // probe only: no record, title, or credential is written to the disposable profile.
+  gammaChat.ready = false
+  gammaChat.title = ''
+  nativeChat.changed(gammaChat)
+  await until(
+    async () =>
+      (await host.request('shellInspect')).sidebarChats?.some(
+        (row: { id: string; loadingTitle: boolean }) =>
+          row.id === `chat:${gamma.activeSessionKey}` && row.loadingTitle
+      ),
+    'unknown title reaches sidebar'
+  )
+  const pendingTitle = await host.request('shellInspect')
+  const pendingRow = pendingTitle.sidebarChats.find(
+    (row: { id: string }) => row.id === `chat:${gamma.activeSessionKey}`
+  )
+  assert.equal(pendingRow.label, 'Loading conversation')
+  assert.equal(pendingTitle.chatTitleAccessibility, 'Loading conversation')
+  assert.equal(pendingRow.titleLoadingMode, 'deciphering')
+  assert.equal(pendingTitle.chatTitleLoadingMode, 'deciphering')
+  const loadingNormal = titleGeometry(pendingTitle, 'normal loading')
+  // Read the actual AppKit labels for this stable row ID and the selected header.
+  // The row's model title remains "New chat" while both displayed labels decipher.
+  const rowID = `chat:${gamma.activeSessionKey}`
+  const displayedRow = (state: {
+    sidebarChats: Array<{
+      id: string
+      selected: boolean
+      displayedText: string
+      titleLoadingMode: string
+    }>
+  }) => {
+    const row = state.sidebarChats.find((item) => item.id === rowID)
+    assert.ok(row?.selected, 'the sampled title belongs to the selected chat')
+    return row
+  }
+  const firstGlyphs = {
+    header: pendingTitle.chatTitle,
+    row: displayedRow(pendingTitle).displayedText
+  }
+  assert.notEqual(
+    firstGlyphs.row,
+    pendingRow.title,
+    'sidebar inspection reads the painted glyphs, not the model title'
+  )
+  await pause(220)
+  let changedGlyphs = firstGlyphs
+  await until(
+    async () => {
+      const sample = await host.request('shellInspect')
+      assert.equal(sample.chatTitleLoadingMode, 'deciphering', 'title stays animated while pending')
+      const row = displayedRow(sample)
+      assert.equal(
+        row.titleLoadingMode,
+        'deciphering',
+        'sidebar title stays animated while pending'
+      )
+      changedGlyphs = { header: sample.chatTitle, row: row.displayedText }
+      return changedGlyphs.header !== firstGlyphs.header && changedGlyphs.row !== firstGlyphs.row
+    },
+    'pending header and sidebar glyphs change after a timer tick',
+    1200
+  )
+  await captureChatGate(host, artifacts, 'title-loading', true, false)
+  await host.request('shellPerform', { action: 'marquee-reduce-motion', row: 'on' })
+  const reducedTitle = await host.request('shellInspect')
+  assert.equal(
+    reducedTitle.sidebarChats.find(
+      (row: { id: string }) => row.id === `chat:${gamma.activeSessionKey}`
+    ).titleLoadingMode,
+    'still'
+  )
+  assert.equal(reducedTitle.chatTitle, '••••••••')
+  const reducedRow = displayedRow(reducedTitle)
+  assert.equal(
+    reducedRow.displayedText,
+    '••••••••',
+    'Reduce Motion gives the row a static placeholder'
+  )
+  await pause(400)
+  const reducedAfter = await host.request('shellInspect')
+  assert.equal(reducedAfter.chatTitleLoadingMode, 'still', 'Reduce Motion stops the title timer')
+  const reducedRowAfter = displayedRow(reducedAfter)
+  assert.equal(reducedRowAfter.titleLoadingMode, 'still', 'Reduce Motion stops the row timer')
+  assert.equal(
+    reducedRowAfter.displayedText,
+    reducedRow.displayedText,
+    'Reduce Motion holds the sidebar glyphs across ticks'
+  )
+  assert.equal(
+    reducedAfter.chatTitle,
+    reducedTitle.chatTitle,
+    'Reduce Motion holds static glyphs across ticks'
+  )
+  writeFileSync(
+    join(artifacts, 'chat-gate-title-animation.json'),
+    JSON.stringify(
+      {
+        firstGlyphs,
+        changedGlyphs,
+        reduced: { header: reducedTitle.chatTitle, row: reducedRow.displayedText },
+        reducedAfter: { header: reducedAfter.chatTitle, row: reducedRowAfter.displayedText }
+      },
+      null,
+      2
+    )
+  )
+  await host.request('shellPerform', { action: 'marquee-reduce-motion', row: 'off' })
+  assert.equal(await host.request('shellPerform', { action: 'window-width', row: '900' }), true)
+  const pendingNarrow = await host.request('shellInspect')
+  const loadingNarrow = titleGeometry(pendingNarrow, 'narrow loading')
+  await captureChatGate(host, artifacts, 'title-loading-narrow', true, false, null)
+  gammaChat.ready = true
+  gammaChat.title = 'Resolved chat'
+  nativeChat.changed(gammaChat)
+  await until(
+    async () => (await host.request('shellInspect')).chatTitle === 'Resolved chat',
+    'resolved title replaces glyphs'
+  )
+  const resolvedTitle = await host.request('shellInspect')
+  assert.equal(resolvedTitle.chatTitleLoadingMode, 'off')
+  assert.equal(
+    resolvedTitle.sidebarChats.find(
+      (row: { id: string }) => row.id === `chat:${gamma.activeSessionKey}`
+    ).titleLoadingMode,
+    'off'
+  )
+  sameTitleGeometry(loadingNarrow, titleGeometry(resolvedTitle, 'narrow resolved'), '900 pt')
+  await captureChatGate(host, artifacts, 'title-resolved-narrow', true, false, null)
+  assert.equal(
+    await host.request('shellPerform', { action: 'window-width', row: String(normalWidth) }),
+    true
+  )
+  const resolvedNormal = await host.request('shellInspect')
+  sameTitleGeometry(loadingNormal, titleGeometry(resolvedNormal, 'normal resolved'), '1320 pt')
+  await captureChatGate(host, artifacts, 'title-resolved', true, false)
+  // The chat has hydrated, but the project remains opening. Simulate authoritative
+  // signed-out metadata in memory to prove project readiness is a separate gate.
+  const priorReadiness = {
+    claude: nativeChat.readiness.claude,
+    codex: nativeChat.readiness.codex
+  }
+  nativeChat.readiness.claude = { status: 'signed_out' }
+  nativeChat.readiness.codex = { status: 'signed_out' }
+  nativeChat.changed(gammaChat)
+  assert.equal(gammaChat.ready, true, 'provider gate probes a hydrated conversation')
+  assert.notEqual(nativeWorkspace.state.loadedKey, gamma.key, 'project still opens')
+  assert.ok(
+    !(await host.request('chatInspect')).cards.includes('provider-start'),
+    'provider choice stays hidden during project opening after chat hydration'
+  )
+  nativeChat.readiness.claude = priorReadiness.claude
+  nativeChat.readiness.codex = priorReadiness.codex
+  nativeChat.changed(gammaChat)
   const transcriptID = 'chat-gate-existing-message'
   const transcriptText = 'An existing reply in this selected chat.'
   gammaChat.messages.push({
@@ -346,6 +533,22 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
       }
     }
   )
+  const retainedMessages = gammaChat.messages.splice(0)
+  const readyReadiness = {
+    claude: nativeChat.readiness.claude,
+    codex: nativeChat.readiness.codex
+  }
+  nativeChat.readiness.claude = { status: 'signed_out' }
+  nativeChat.readiness.codex = { status: 'signed_out' }
+  nativeChat.changed(gammaChat)
+  await until(
+    async () => (await host.request('chatInspect')).cards.includes('provider-start'),
+    'provider choice returns after project readiness'
+  )
+  gammaChat.messages.push(...retainedMessages)
+  nativeChat.readiness.claude = readyReadiness.claude
+  nativeChat.readiness.codex = readyReadiness.codex
+  nativeChat.changed(gammaChat)
   const ready = await captureChatGate(host, artifacts, 'retry-ready', true)
   assert.equal(ready.draft, 'Draft while opening', 'Ready chat keeps its unsent draft')
   assert.equal(ready.sendEnabled, true, 'Ready chat enables Send for the saved draft')

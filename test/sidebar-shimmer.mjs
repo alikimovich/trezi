@@ -261,6 +261,24 @@ if (process.platform !== 'darwin') {
   assert.equal(report.attached.mode, 'sweep', 'a row put back sweeps again')
   assert.equal(report.attached.shimmer.animated, true)
   assert.equal(report.released, true, 'nothing keeps a removed row’s shimmer alive')
+  assert.equal(report.loadingAttached.mode, 'deciphering', 'a pending row animates while attached')
+  assert.notEqual(report.loadingAttached.text, '••••••••', 'the attached loader shows glyphs')
+  assert.equal(report.loadingDetached.mode, 'off', 'a detached pending row stops deciphering')
+  assert.equal(
+    report.loadingDetached.after,
+    report.loadingDetached.before,
+    'the detached title stays fixed across timer ticks'
+  )
+  assert.equal(
+    report.loadingRebuilt.oldReleased,
+    true,
+    'a discarded row releases its loading-title controller'
+  )
+  assert.equal(
+    report.loadingRebuilt.newMode,
+    'deciphering',
+    'the replacement row owns an active loader'
+  )
   const [before, after] = report.offsets
   assert.ok(before >= 0 && before < 2 && after >= 0 && after < 2, `offsets ${report.offsets}`)
   const drift = Math.abs(after - before)

@@ -342,6 +342,21 @@ chat.attachments = [
   }
 ]
 states.codex = readinessFromLogin(false)
+assert.equal(startLoginCard(chat, initialProviderReadiness()), null, 'checking is not signed out')
+assert.equal(
+  startLoginCard(chat, { ...states, codex: readinessFromLogin(null) }),
+  null,
+  'failed metadata is not confirmed signed out'
+)
+chat.ready = false
+assert.equal(startLoginCard(chat, states), null, 'hydration defers provider choice')
+chat.ready = true
+assert.equal(startLoginCard(chat, states, false), null, 'project opening defers a hydrated chat')
+assert.equal(
+  startLoginCard(chat, states, true)?.id,
+  'provider-start',
+  'loaded project restores choice'
+)
 assert.deepEqual(
   startLoginCard(chat, states)
     .actions.slice(0, 2)

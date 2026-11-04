@@ -156,7 +156,7 @@ export function snapshot(
   const login = loginCard(chat)
   if (login) cards.push(login)
   if (readiness) {
-    const start = startLoginCard(chat, readiness)
+    const start = startLoginCard(chat, readiness, flow?.workspace?.ready?.() ?? true)
     if (start) cards.push(start)
   }
   if (chat.pendingModel)
