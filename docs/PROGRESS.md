@@ -2,6 +2,19 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-03 — LKM-465 review repair: typecheck guidance
+
+- Independent review found one conflict: the `bun run typecheck` command row still said to run it after every change, while SELECTED feedback intentionally skips typechecks when the audited plan finds no TypeScript input. The row now describes the full manual command without requiring it on every edit. The proportional feedback and final CI rules remain below.
+
+## 2026-11-03 — LKM-465 proportionate local verification feedback
+
+- Added `bun run check:feedback --base=origin/main`. It uses the audited changed-file selector, runs lint first, then applicable typechecks, then SELECTED unit tests. FULL runs static checks and emits a `FEEDBACK_RECEIPT` with the selection reason and remaining CI/native/review obligations; command failures stop the sequence.
+- Registered `test/check-feedback.mjs`: mocked selected and FULL dispatch, fail-fast order, failure propagation, invalid base and shell-text ref rejection. Ten mocked runs per path measured 13.9 ms for selected and 14.0 ms for FULL dispatch, excluding real subprocess time.
+- Updated agent and verification guidance for proportionate local feedback and deferred desktop checks. Full local commands, required CI, independent review, exact-head gate and explicit native obligations remain.
+- First manager quick verification took 495.7 s and failed on `AGENTS.md`'s 8 KiB cap and Biome formatting of the new test. Both were corrected.
+- The real `check:feedback` FULL path passed in 3.95 s: lint and typecheck passed, no unit suite ran, and its receipt listed the four changed paths forcing FULL plus broader CI and native obligations.
+- Manager quick verification rerun passed in 404.1 s: 315 unit PASS, 3 SKIP, typecheck and typecheck:native passed; no native desktop run was made (worker budget 0).
+
 ## 2026-11-03 — LKM-458 chat recovery acceptance: the busy card's buttons
 
 - Why: the GREEN run on a2c03fbb refused at the first held Retry ("…no all-enabled row of the same actions at this width was measured first") with no captures or outcomes. Only test, fixture and docs change.

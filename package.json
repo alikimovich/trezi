@@ -32,6 +32,7 @@
     "check:version": "bun scripts/check-version.mjs",
     "test:versioning": "bun test/versioning.mjs",
     "lint": "biome check src test",
+    "check:feedback": "bun scripts/check-feedback.mjs",
     "format": "biome format --write src test",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:preview": "tsc --noEmit -p tsconfig.preview.json",

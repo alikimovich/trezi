@@ -188,6 +188,7 @@ export const UNIT = [
   'jev-pilot',
   'test-runner',
   'test-selection',
+  'check-feedback',
   'swift-build-lock',
   'setup-stamps',
   'setup-vite',

@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Proportionate local verification feedback (LKM-465)
+
+- [x] Add `bun run check:feedback --base=origin/main` using the audited changed-file plan, lint-first fail-fast execution and a structured partial-evidence receipt for SELECTED and FULL.
+- [x] Cover selected, FULL, invalid-base and failure paths with `test/check-feedback.mjs`; preserve the full commands and CI gates.
+- [ ] Manager: independent review, required CI on the PR head and rollout into live Agent OS config after reviewed merge.
+
 ## Native suite failure on main a85a880c4dcf (LKM-451)
 
 - [x] Cause: run 55's host was slow for the whole suite (`captureShell` 0.9–1.6 s from the first checks; `shellInspect` and `chatState` 0.3–1.2 s during `parallel-stream`, none in run 54). The check samples every 100 ms, but samples came 0.7–4 s apart while the wall-clock stream went on, so chat A's reply reached 46 000–52 000 characters by `to-a-2` (green runs: at most 15 182) and no row was in view for 5 s. No chat code changed since the last green run.
