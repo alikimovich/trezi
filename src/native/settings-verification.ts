@@ -123,7 +123,6 @@ export function assertSectionEvidence(
     assert.deepEqual(
       ids,
       [
-        'activityAutoOpen',
         'agentFileAccess',
         'agentGitAccess',
         'agentMerge',

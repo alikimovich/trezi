@@ -1,5 +1,11 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-468 Activity visibility belongs to the user
+
+- `NativeActivityController` was the visibility owner. Its needs-action and saved Always policies opened Activity from background and startup reports; the Swift window then ordered itself front. Event appends now only record lines and update unread severity. Manual show and toggle still present and focus the window; events repaint an open feed without changing focus.
+- Removed the obsolete automatic-open Settings control while leaving its stored preference untouched for compatibility. Updated the activity unit fixture and the native chat-gate fixture to assert that failed open stays hidden, then opens through the menu. Native GUI acceptance remains for the operator after merge.
+
+
 Newest first. Append a dated entry when you finish a chunk of work.
 
 ## 2026-11-03 — LKM-465 review repair: typecheck guidance

@@ -98,7 +98,6 @@ assert.deepEqual(
     ['agentGitAccess', 'general'],
     ['agentMerge', 'general'],
     ['workspaceIdle', 'general'],
-    ['activityAutoOpen', 'general'],
     ['quitDontAsk', 'general'],
     ['workspaceUsage', 'general'],
     ['version', 'general'],
@@ -108,7 +107,6 @@ assert.deepEqual(
     ['connections', 'providers']
   ]
 )
-// LKM-152: Show Activity automatically, default "For problems that need me", persists.
 assert.equal(field('agentMerge').value, 'true', 'Agent PR merge is on by default')
 assert.equal(field('autoFixCI').value, 'ask', 'CI repair asks by default')
 await action('change', {
@@ -120,47 +118,12 @@ await action('change', {
 assert.equal(values.get('trezi:agent-merge:v1'), 'false')
 await settings.open()
 assert.equal(field('agentMerge').value, 'false')
-assert.equal(field('activityAutoOpen').label, 'Show Activity automatically')
-assert.equal(field('activityAutoOpen').value, 'problems')
-assert.deepEqual(
-  field('activityAutoOpen').choices.map((c) => [c.value, c.label]),
-  [
-    ['never', 'Never'],
-    ['problems', 'For problems that need me'],
-    ['always', 'Always']
-  ]
-)
-await action('change', {
-  default: 'last-used',
-  projectUi: 'false',
-  engine: 'agent',
-  activityAutoOpen: 'never'
-})
-assert.equal(values.get('trezi:activity-auto-open:v1'), 'never')
-await action('change', {
-  default: 'last-used',
-  projectUi: 'false',
-  engine: 'agent',
-  activityAutoOpen: 'sometimes'
-})
-assert.match(sheets.current.state.message, /Invalid setting/)
+assert.equal(field('activityAutoOpen'), undefined, 'Activity visibility has no automatic setting')
+values.set('trezi:activity-auto-open:v1', 'always')
 await action('change', { default: 'last-used', projectUi: 'false', engine: 'agent' })
-assert.equal(
-  values.get('trezi:activity-auto-open:v1'),
-  'never',
-  'a caller without the field leaves it unchanged'
-)
+assert.equal(values.get('trezi:activity-auto-open:v1'), 'always', 'legacy preference is untouched')
 await settings.open()
-assert.equal(field('activityAutoOpen').value, 'never', 'reopen shows the saved choice')
-await action('change', {
-  default: 'last-used',
-  projectUi: 'false',
-  engine: 'agent',
-  activityAutoOpen: 'always'
-})
-assert.equal(values.get('trezi:activity-auto-open:v1'), 'always')
-values.delete('trezi:activity-auto-open:v1')
-await settings.open()
+assert.equal(field('activityAutoOpen'), undefined, 'legacy preference cannot restore the setting')
 // LKM-221: "Don't ask again" for the quit alert defaults to asking, persists, and validates.
 assert.equal(field('quitDontAsk').label, 'Quit while agents are working')
 assert.equal(field('quitDontAsk').value, 'false')

@@ -36,10 +36,9 @@ final class NativeActivity: NSObject, NSWindowDelegate {
             panel.center(); window = panel
         }
         show(state["lines"] as? [[String: Any]] ?? [])
-        // The user's Show takes the key window; an automatic open only orders it front,
-        // so typing in the chat is not interrupted.
+        // Manual Show takes the key window; updates to an open feed keep it visible.
         if state["focus"] as? Bool == true { window?.makeKeyAndOrderFront(nil) }
-        else if state["raise"] as? Bool == true || window?.isVisible != true { window?.orderFront(nil) }
+        else if window?.isVisible != true { window?.orderFront(nil) }
     }
     private func show(_ lines: [[String: Any]]) {
         let pinned = text.visibleRect.maxY >= text.bounds.maxY - 24

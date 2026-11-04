@@ -31,7 +31,6 @@ export async function restoreNativeSheets(host: NativeBridge) {
       agentFileAccess: 'full',
       agentGitAccess: 'managed',
       agentMerge: 'true',
-      activityAutoOpen: 'problems',
       quitDontAsk: 'false'
     }
   })
@@ -217,6 +216,12 @@ export async function checkNativeSheets(host: NativeBridge, key: string, artifac
     throw new Error('Native activity did not receive server logs')
   if (activity.unread !== 0 || activity.indicatorVisible || activity.menuBadge)
     throw new Error('Viewing Activity did not clear the unread marker')
+  host.emit('download-error', { message: 'Native activity open fixture' })
+  await new Promise((resolve) => setTimeout(resolve, 150))
+  const whileOpen = await host.request('activityInspect')
+  if (!whileOpen.visible || !whileOpen.text.includes('Native activity open fixture'))
+    throw new Error('Incoming activity closed an open feed or lost its event')
+  if (whileOpen.unread !== 0) throw new Error('An open feed marked its incoming event unread')
   host.emit('activity-action', { action: 'clear' })
   await new Promise((resolve) => setTimeout(resolve, 100))
   if ((await host.request('activityInspect')).count !== 0)
