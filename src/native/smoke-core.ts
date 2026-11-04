@@ -585,7 +585,7 @@ export async function runNativeCoreSmoke(
       name: 'chat-gate',
       dependsOn: ['chat-ready'],
       run: async () => {
-        await checkChatGate(host, fixture, artifacts, preference)
+        await checkChatGate(host, fixture, artifacts)
       },
       cleanup: async () => {
         await restoreChatGate(firstProject, host)

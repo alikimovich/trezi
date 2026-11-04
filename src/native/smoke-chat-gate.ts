@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { ACTIVITY_AUTO_OPEN_KEY, activityAutoOpen } from './activity-controller'
 import type { NativeBridge } from './bridge'
 import { restoreSidebarFocus } from './smoke-sidebar'
 import { nativeWorkspace } from './workspace-runtime'
@@ -110,15 +109,9 @@ export async function captureChatGate(
 }
 
 /** Loaded → opening another project → failed open → Retry → switch back. */
-export async function checkChatGate(
-  host: NativeBridge,
-  fixture: string,
-  artifacts: string,
-  preference: (key: string) => string | null
-) {
+export async function checkChatGate(host: NativeBridge, fixture: string, artifacts: string) {
   const first = nativeWorkspace.active!
-  // LKM-152's automatic open happens once per event kind per process: start from a hidden,
-  // empty, unread-free Activity that has not auto-opened yet, whatever ran before this check.
+  // Start from a hidden, empty, unread-free Activity, whatever ran before this check.
   host.emit('activity-action', { action: 'reset' })
   await until(
     async () => {
@@ -169,29 +162,34 @@ export async function checkChatGate(
     'failed open'
   )
   const failed = await captureChatGate(host, artifacts, 'failed-open', false)
-  // LKM-152: a failed open has no automatic recovery, so Activity comes to front by itself,
-  // without taking the key window from the chat (the capture above needs it).
+  // The failure is recorded and marked unread without opening or focusing Activity.
   await until(
     async () => {
       const activity = await host.request('activityInspect')
-      return activity.visible && activity.text.includes('Could not open Folder Gamma')
+      return !activity.visible && activity.unread > 0 && activity.unreadLevel === 'needs-action'
     },
-    'failed open shows Activity',
+    'failed open marks Activity unread',
     30000,
     async () => {
       const { text, ...activity } = await host.request('activityInspect')
       return {
         activity,
         textTail: String(text).slice(-300),
-        autoOpen: activityAutoOpen(preference(ACTIVITY_AUTO_OPEN_KEY))
+        status: nativeWorkspace.state.status
       }
     }
   )
   assert.equal(
     (await host.request('activityInspect')).key,
     false,
-    'An automatic Activity open does not take the key window'
+    'A failed open does not take the key window'
   )
+  host.emit('menu', { action: 'activity' })
+  await until(async () => {
+    const activity = await host.request('activityInspect')
+    return activity.visible && activity.text.includes('Could not open Folder Gamma')
+  }, 'manual Activity menu shows the recorded failure')
+  assert.equal((await host.request('activityInspect')).key, true, 'manual open focuses Activity')
   host.emit('activity-action', { action: 'hide' })
   for (const state of [busy, failed]) {
     assert.equal(state.chatSession, gamma.activeSessionKey, `${state.stage}: correct conversation`)

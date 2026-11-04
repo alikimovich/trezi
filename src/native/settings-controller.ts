@@ -24,11 +24,6 @@ import {
   setLastUsedMode,
   settingsFromChoice
 } from '../shared/preferred-model'
-import {
-  ACTIVITY_AUTO_OPEN_CHOICES,
-  ACTIVITY_AUTO_OPEN_KEY,
-  activityAutoOpen
-} from './activity-controller'
 import { appVersion } from './app-version'
 import type { NativePreferences } from './preferences'
 import { QUIT_DONT_ASK_CHOICES, QUIT_DONT_ASK_KEY } from './quit-guard'
@@ -205,15 +200,6 @@ export class NativeSettingsController {
             choices: IDLE_CHOICES
           },
           {
-            id: 'activityAutoOpen',
-            section: 'general',
-            label: 'Show Activity automatically',
-            help: 'Unread warnings always show a dot on Activity.',
-            kind: 'choice',
-            value: activityAutoOpen(this.preferences.get(ACTIVITY_AUTO_OPEN_KEY)),
-            choices: ACTIVITY_AUTO_OPEN_CHOICES
-          },
-          {
             id: 'quitDontAsk',
             section: 'general',
             label: 'Quit while agents are working',
@@ -356,9 +342,6 @@ export class NativeSettingsController {
     const idle = action.values.workspaceIdle
     if (idle !== undefined && !IDLE_CHOICES.some((c) => c.value === idle))
       throw new Error('Invalid setting.')
-    const activity = action.values.activityAutoOpen
-    if (activity !== undefined && !ACTIVITY_AUTO_OPEN_CHOICES.some((c) => c.value === activity))
-      throw new Error('Invalid setting.')
     const quitDontAsk = action.values.quitDontAsk
     if (quitDontAsk !== undefined && !['true', 'false'].includes(quitDontAsk))
       throw new Error('Invalid setting.')
@@ -394,7 +377,6 @@ export class NativeSettingsController {
         ['trezi:project-ui-engine:v1', action.values.engine],
         ...(plugins === undefined ? [] : [[CLAUDE_USER_PLUGINS_KEY, plugins] as [string, string]]),
         ...(idle === undefined ? [] : [[IDLE_KEY, idle] as [string, string]]),
-        ...(activity === undefined ? [] : [[ACTIVITY_AUTO_OPEN_KEY, activity] as [string, string]]),
         ...(quitDontAsk === undefined
           ? []
           : [[QUIT_DONT_ASK_KEY, quitDontAsk] as [string, string]]),

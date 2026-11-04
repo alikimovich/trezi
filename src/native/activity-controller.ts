@@ -1,5 +1,4 @@
-/** LKM-152: how much attention a line asks for. Only `needs-action` may open the window
- *  by itself (once per event kind per app session); everything else is logged. */
+/** How much attention a line asks for; visibility is always controlled by the user. */
 export type ActivitySeverity = 'info' | 'warning' | 'needs-action'
 /** The line's style. `notice` (gray) is a startup recovery report: nothing was lost. */
 export type ActivityKind =
@@ -10,16 +9,6 @@ export type ActivityKind =
   | 'warning'
   | 'error'
   | 'needs-action'
-/** Settings → General → Show Activity automatically. */
-export type ActivityAutoOpen = 'never' | 'problems' | 'always'
-export const ACTIVITY_AUTO_OPEN_KEY = 'trezi:activity-auto-open:v1'
-export const ACTIVITY_AUTO_OPEN_CHOICES: { value: ActivityAutoOpen; label: string }[] = [
-  { value: 'never', label: 'Never' },
-  { value: 'problems', label: 'For problems that need me' },
-  { value: 'always', label: 'Always' }
-]
-export const activityAutoOpen = (value: string | null | undefined): ActivityAutoOpen =>
-  value === 'never' || value === 'always' ? value : 'problems'
 export interface ActivityLine {
   id: number
   time: string
@@ -31,7 +20,7 @@ export interface ActivityLine {
   summary?: string
 }
 export interface ActivityOptions {
-  /** The event kind a `needs-action` line opens the window for at most once per session. */
+  /** Accepted for existing callers; event kind no longer affects visibility. */
   event?: string
   /** Repeated lines of one group collapse into one line that reads `summary(count)`. */
   group?: { key: string; summary: (count: number) => string }
@@ -60,16 +49,11 @@ export class NativeActivityController {
   /** Warnings and needs-action lines added while the window was hidden. */
   unread = 0
   unreadLevel: ActivitySeverity = 'info'
-  /** Event kinds that already opened the window this session. */
-  readonly opened = new Set<string>()
   private sequence = 0
   private repaint?: ReturnType<typeof setTimeout>
-  /** An automatic open orders the window front without taking the key window. */
-  private raise = false
   constructor(
     readonly send: (method: string, value: any) => void,
-    readonly display: (text: string) => string = (text) => text,
-    readonly autoOpen: () => ActivityAutoOpen = () => 'problems'
+    readonly display: (text: string) => string = (text) => text
   ) {}
   append(text: string, kind: ActivityKind | string = 'info', options: ActivityOptions = {}) {
     if (typeof text !== 'string' || !text) return
@@ -93,15 +77,7 @@ export class NativeActivityController {
       })
     let size = this.lines.reduce((n, line) => n + line.text.length, 0)
     while (this.lines.length > 500 || size > 500000) size -= this.lines.shift()!.text.length
-    if (this.shouldOpen(kind, severity, options.event ?? text)) {
-      this.visible = true
-      this.raise = true
-      if (this.unread) {
-        this.unread = 0
-        this.unreadLevel = 'info'
-        this.badge()
-      }
-    } else if (!this.visible && severity !== 'info') {
+    if (!this.visible && severity !== 'info') {
       this.unread++
       if (rank[severity] > rank[this.unreadLevel]) this.unreadLevel = severity
       this.badge()
@@ -112,23 +88,10 @@ export class NativeActivityController {
         if (this.visible) this.render()
       }, 50)
   }
-  /** Never: nothing opens. Always: a hidden window opens for every error, as before
-   *  LKM-152. Problems (default): a needs-action event brings the window to front once
-   *  per event kind. Recovery notices and server output never open it. */
-  private shouldOpen(kind: string, severity: ActivitySeverity, event: string) {
-    const mode = this.autoOpen()
-    if (mode === 'never' || severity === 'info') return false
-    if (mode === 'always') return !this.visible && (kind === 'error' || severity === 'needs-action')
-    if (severity !== 'needs-action' || this.opened.has(event)) return false
-    this.opened.add(event)
-    return true
-  }
   private badge() {
     this.send('activityUnread', { count: this.unread, level: this.unreadLevel })
   }
   render(focus = false) {
-    const raise = this.raise
-    this.raise = false
     this.send('activityState', {
       lines: this.lines.map((line) => ({
         ...line,
@@ -137,16 +100,14 @@ export class NativeActivityController {
         )
       })),
       visible: this.visible,
-      ...(raise ? { raise: true } : {}),
       ...(focus ? { focus: true } : {})
     })
   }
   action(action: string) {
-    // Verification only: a known starting state (nothing shown, read or already auto-opened).
+    // Verification only: a known starting state (nothing shown or read).
     if (action === 'reset') {
       this.lines = []
       this.visible = false
-      this.opened.clear()
       this.unread = 0
       this.unreadLevel = 'info'
       this.badge()
