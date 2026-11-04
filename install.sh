@@ -15,19 +15,47 @@ REPO_URL="https://github.com/alikimovich/trezi.git"
 
 usage() {
   cat <<'EOF'
-Usage: install.sh [--channel main|candidate] [--update] [--no-open]
+Usage: install.sh [--channel main|candidate] [--update] [--no-open] [--verbose]
 
   --channel <name>  Branch to install: main (default) or candidate. Also TREZI_CHANNEL.
                     Ignored inside a checkout, which keeps its own branch.
   --update          Inside a checkout: pull it first (git pull --ff-only).
                     A piped install always updates ~/.trezi.
   --no-open         Do not open Trezi at the end.
+  --verbose         Show dependency, build and signing output as it runs.
 EOF
 }
 
 die() {
   echo "Error: $*" >&2
   exit 1
+}
+
+# Keep one log per invocation. stdout/stderr are combined for chronological build
+# diagnostics; stdin is never redirected, including for a piped installer.
+run_phase() {
+  local phase="$1" status=0
+  local -a statuses
+  shift
+  echo "==> $phase"
+  printf '\n==> %s\n' "$phase" >> "$install_log"
+  if [ "$verbose" = 1 ]; then
+    if "$@" 2>&1 | tee -a "$install_log"; then
+      :
+    else
+      statuses=("${PIPESTATUS[@]}")
+      status=${statuses[0]}
+      [ "$status" -ne 0 ] || status=${statuses[1]}
+    fi
+  else
+    "$@" >> "$install_log" 2>&1 || status=$?
+  fi
+  if [ "$status" -ne 0 ]; then
+    echo "Error: $phase failed (exit $status). Recent output:" >&2
+    tail -n 20 "$install_log" >&2
+    echo "Full install log: $install_log" >&2
+    exit "$status"
+  fi
 }
 
 # Asks on the terminal and stores the reply in $answer. stdin holds this script for
@@ -110,7 +138,7 @@ update_user_install() {
 }
 
 main() {
-  local channel="${TREZI_CHANNEL:-}" update=0 open_app=1
+  local channel="${TREZI_CHANNEL:-}" update=0 open_app=1 verbose=0 install_log
   while [ $# -gt 0 ]; do
     case "$1" in
       --channel)
@@ -122,6 +150,7 @@ main() {
         shift ;;
       --update) update=1; shift ;;
       --no-open) open_app=0; shift ;;
+      --verbose) verbose=1; shift ;;
       -h|--help) usage; return 0 ;;
       *) usage >&2; die "unknown option: $1" ;;
     esac
@@ -130,6 +159,11 @@ main() {
     ""|main|candidate) ;;
     *) die "unknown channel '$channel' (use main or candidate)." ;;
   esac
+
+  local log_dir="$HOME/Library/Logs/Trezi"
+  mkdir -p "$log_dir" || die "could not create install log directory: $log_dir"
+  install_log=$(mktemp "$log_dir/install.XXXXXX") || die "could not create install log in $log_dir"
+  echo "Install log: $install_log"
 
   echo "==> Checking prerequisites"
   if [ "$(uname -s)" != "Darwin" ]; then
@@ -168,17 +202,14 @@ main() {
   fi
 
   cd "$TREZI_HOME"
-  echo "==> Checking macOS, SDK and Bun versions"
-  bun scripts/requirements.mjs --build
+  run_phase "Checking macOS, SDK and Bun versions" bun scripts/requirements.mjs --build
 
-  echo "==> Installing dependencies"
-  "$PM" install
+  run_phase "Installing dependencies" "$PM" install
 
   # The build signs Trezi with one stable identity, creating the self-signed "Trezi Local"
   # identity in the login keychain once when there is no Apple Development one, so macOS
   # keeps Keychain and privacy approvals across rebuilds (README "Code signing").
-  echo "==> Building Trezi"
-  "$PM" run build
+  run_phase "Building Trezi" "$PM" run build
 
   echo "==> Linking the trezi command"
   local previous=""
@@ -297,7 +328,10 @@ main() {
     esac
   fi
 
-  echo "==> Trezi installed to $TREZI_HOME"
+  local version build_number
+  version=$(bun -p "require('./package.json').version") || die "could not read Trezi version (log: $install_log)."
+  build_number=$(git rev-list --count HEAD) || die "could not read Trezi build number (log: $install_log)."
+  echo "==> Trezi v$version (build $build_number) installed successfully to $TREZI_HOME"
   if [ "$app_linked" = 1 ]; then
     echo "The trezi command and Trezi.app now point to this checkout: $TREZI_HOME"
   else

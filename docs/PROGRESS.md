@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-515 concise installer progress
+
+- The installer now saves dependency and build output in a fresh `~/Library/Logs/Trezi/install.*` file. Default output gives phase progress and a final version/build; `--verbose` streams the full output. A failed phase retains its command status and prints recent output plus the log path. Command stdin remains unchanged for piped installs and prompts.
+- The existing shell fixture now checks quiet and verbose output, retained compiler and signing diagnostics, build failure without success/open text, piped invocation and a checkout path containing spaces. Required CI and independent review remain with the manager.
+
 ## 2026-11-04 — LKM-508 review repair: selected choice availability
 
 - The centered notice had treated any unselectable provider as signed out, even when current choices no longer contained the saved connection or built-in seat. It now checks selected-choice existence separately from readiness: missing choices report unavailability and keep the draft, confirmed sign-out still offers authentication, failed checks show their recovery detail, and available ready choices restore send. The focused provider fixture covers missing saved and built-in choices, the no-alternative case and the existing refresh, failure and retry paths. Prior CI diagnostics were on superseded heads, including unrelated conversation-owner and rename-compat failures; exact-head CI remains required.
