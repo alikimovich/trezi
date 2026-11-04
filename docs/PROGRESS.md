@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-516 review repair: visible recommendation action
+
+- The Skills overview fixture now captures the empty library at normal and minimum Settings widths and checks the first recommendation's rendered Details row is contained and hittable. Synthetic evidence rejects clipped and unhittable rows at both widths. This closes the independent review's layout evidence gap; native acceptance remains for the manager's post-merge run.
+
 ## 2026-11-04 — LKM-516 design skills catalog and static Impeccable edition
 
 - Settings → Skills now recommends Frontend Design, Paul Bakaus's Impeccable, and a selective ordered set from Emil Kowalski and Jakub Krehel for UI craft, motion, typography, color, accessibility, layout, writing, variants, states and review. Rows are grouped by task and remain opt-in. Official SKILL.md names, paths, support files and root licenses were checked at the recorded commits. Writing and the three invocation-controlled exploration/review skills have honest disabled Install actions because Trezi's current scope cannot preserve their source behavior.

@@ -140,7 +140,7 @@ export async function checkSkillsSettings(host: NativeBridge, artifacts: string)
   })
   await nativeSkills.loading
   await until('empty library', (s) => s.fields.includes('skills-status') && s.rows.length > 0)
-  await shoot('1-overview-empty', { view: 'overview', installed: [] }, SETTINGS_DEFAULT_SIZE.width)
+  await shoot('1-overview-empty', { view: 'overview', installed: [] })
 
   // Manual add: the template, then the sample typed over it in the rendered editor.
   await host.request('sheetPerform', { action: 'skill-add' })
