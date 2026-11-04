@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { logFileName } from '../src/main/product-log.ts'
@@ -29,6 +29,7 @@ try {
   chat.isolation = 'parked'
   const path = await writeRecoveryReport(chat, 'retry', 'Problem: check failed')
   const content = readFileSync(path, 'utf8')
+  assert.equal(statSync(path).mode & 0o777, 0o600, 'the actual report stays private')
   assert.equal(readableRecoveryReport('alpha'), content)
   assert.equal(readableRecoveryReport('beta'), null)
   assert.match(content, /operation-1/)
@@ -46,6 +47,9 @@ try {
   assert.equal(readableRecoveryReport('alpha'), newerContent, 'Copy keeps the newer incident')
   assert.match(newerContent, /operation-2/)
   assert.match(newerContent, /newer check failed/)
+  const rejected = await writeRecoveryReport(chat, 'retry', 'Problem: cancelled', () => false)
+  assert.equal(rejected, null, 'a cancelled callback cannot publish a report')
+  assert.equal(readableRecoveryReport('alpha'), newerContent)
 } finally {
   if (previous === undefined) delete process.env.TREZI_LOG_DIR
   else process.env.TREZI_LOG_DIR = previous

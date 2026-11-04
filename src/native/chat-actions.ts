@@ -19,25 +19,50 @@ export function setRecoveryRequestDeadlineForTests(ms: number | null) {
   recoveryRequestMs = ms ?? RECOVERY_REQUEST_MS
 }
 
+async function heldIdentity(controller: NativeChatController, chat: Chat) {
+  if (chat.heldOperation) return chat.heldOperation
+  const held = await controller.services.invoke('agent:held-operation', chat.chat)
+  if (!held?.id || chat.isolation !== 'parked' || controller.chats.get(chat.chat) !== chat)
+    throw new Error('The held work changed. Refresh this chat before retrying.')
+  chat.heldOperation = held
+  return held
+}
+
 /** Resolve for a chat whose changes are held: the agent fixes the conflict markers in a turn. */
 export async function resolveHeld(controller: NativeChatController, chat: Chat) {
   return recoveryRequest(controller, chat, 'resolve', async () => {
     chat.paused = false
-    const result = await controller.services.invoke('agent:resolve-conflict', chat.chat)
+    const held = await heldIdentity(controller, chat)
+    const result = await controller.services.invoke(
+      'agent:resolve-conflict',
+      chat.chat,
+      held.id,
+      chat.recoveryId
+    )
     if (!result.ok) throw new Error(result.error ?? 'Unable to resolve changes.')
     if (chat.recoveryTimedOut) return
     if (result.prompt && result.conflicted.length) {
       const prompt = result.prompt
       // The agent turn is not a request in flight: it starts after the request ends,
       // outside the deadline, and the running-turn lock takes over from the busy state.
-      return () =>
-        controller.run(chat, {
-          id: crypto.randomUUID(),
+      return () => {
+        const id = crypto.randomUUID()
+        if (chat.autoResolved === 'tried') {
+          chat.autoResolveTurn = id
+          chat.autoResolveAttempt = chat.recoveryId
+          chat.autoResolveIncarnation = result.incarnation
+        }
+        return controller.run(chat, {
+          id,
           text: prompt,
           attachments: [],
           selection: null,
-          turn: {}
+          turn: {},
+          heldOperationId: held.id,
+          attemptId: chat.recoveryId,
+          expectedIncarnation: result.incarnation
         })
+      }
     }
     if (chat.isolation === 'parked')
       chat.recoveryProblem = result.error ?? 'The changes are still held. Review the reason below.'
@@ -62,6 +87,14 @@ async function recoveryRequest(
   chat.recoveryOutcome = undefined
   chat.recoveryId = crypto.randomUUID()
   const id = chat.recoveryId
+  const cancellation = chat.cancellation
+  const heldId = chat.heldOperation?.id
+  const current = () =>
+    controller.chats.get(chat.chat) === chat &&
+    chat.cancellation === cancellation &&
+    chat.recoveryId === id &&
+    (!heldId || chat.heldOperation?.id === heldId) &&
+    chat.isolation === 'parked'
   if (chat.heldIncident) {
     chat.heldIncident.operation = id
     chat.heldIncident.attention = 'owned'
@@ -92,6 +125,7 @@ async function recoveryRequest(
     } finally {
       if (timer) clearTimeout(timer)
     }
+    if (!current()) return
     if (!handover && !chat.isRunning && chat.recoverySettled && chat.recoverySettled !== 'parked') {
       chat.heldIncident = undefined
       chat.recoveryId = undefined
@@ -108,24 +142,27 @@ async function recoveryRequest(
     // already available; a fresh report cannot be allowed to delay or abort the turn.
     if (!handover && chat.recoveryProblem) {
       try {
-        const path = await writeRecoveryReport(chat, kind, chat.recoveryProblem)
-        if (path && chat.recoveryId === id) chat.recoveryReport = path
+        const path = await writeRecoveryReport(chat, kind, chat.recoveryProblem, current)
+        if (path && current()) chat.recoveryReport = path
       } catch {
-        if (chat.recoveryId === id) {
+        if (current()) {
           chat.recoveryReport = undefined
           chat.recoveryProblem += ' The support report could not be written.'
         }
       }
     }
   } catch (error) {
+    if (!current()) return
     chat.recoveryTimedOut = timedOut
     chat.recoveryProblem = `Problem: ${error instanceof Error ? error.message : String(error)}`
     try {
-      const path = await writeRecoveryReport(chat, kind, chat.recoveryProblem)
-      if (path && chat.recoveryId === id) chat.recoveryReport = path
+      const path = await writeRecoveryReport(chat, kind, chat.recoveryProblem, current)
+      if (path && current()) chat.recoveryReport = path
     } catch {
-      chat.recoveryReport = undefined
-      chat.recoveryProblem += ' The support report could not be written.'
+      if (current()) {
+        chat.recoveryReport = undefined
+        chat.recoveryProblem += ' The support report could not be written.'
+      }
     }
     if (chat.heldIncident) chat.heldIncident.attention = 'terminal'
     if (kind === 'resolve') throw error
@@ -143,8 +180,10 @@ async function recoveryRequest(
         })
         .catch(() => {})
     } else {
-      chat.recovery = undefined
-      chat.recoveryTimedOut = false
+      if (chat.recoveryId === id) {
+        chat.recovery = undefined
+        chat.recoveryTimedOut = false
+      }
       // A handover starts its turn right away, which renders the running state itself.
       if (!handover) {
         if (chat.heldIncident && chat.isolation === 'parked')
@@ -154,21 +193,24 @@ async function recoveryRequest(
     }
   }
   if (handover) {
+    if (!current()) return
     const admission = await handover()
     if (admission.state === 'cancelled') {
       if (chat.autoResolved === 'tried') {
         chat.autoResolved = undefined
         chat.autoResolveTurn = undefined
+        chat.autoResolveAttempt = undefined
       }
       controller.changed(chat)
       return
     }
     if (admission.state === 'admitted') {
-      if (chat.autoResolved === 'tried' && chat.recoveryId === id) chat.autoResolveTurn = chat.turn
+      if (chat.autoResolved === 'tried' && chat.recoveryId === id)
+        chat.autoResolveIncarnation = admission.incarnation
       return
     }
     if (admission.state === 'queued' && chat.isRunning) return
-    if (chat.recoveryId !== id || chat.isolation !== 'parked') return
+    if (!current()) return
     if (admission.state === 'queued')
       chat.queue = chat.queue.filter((item) => item.id !== admission.id)
     const reason =
@@ -177,15 +219,15 @@ async function recoveryRequest(
         : 'The resolution turn could not start while this chat still needs Resolve.'
     chat.recoveryProblem = `Problem: ${reason}`
     try {
-      const path = await writeRecoveryReport(chat, 'resolve handover', reason)
-      if (path && chat.recoveryId === id) chat.recoveryReport = path
+      const path = await writeRecoveryReport(chat, 'resolve handover', reason, current)
+      if (path && current()) chat.recoveryReport = path
     } catch {
-      if (chat.recoveryId === id && chat.isolation === 'parked') {
+      if (current()) {
         chat.recoveryReport = undefined
         chat.recoveryProblem += ' The support report could not be written.'
       }
     }
-    if (chat.recoveryId !== id || chat.isolation !== 'parked') return
+    if (!current()) return
     if (chat.heldIncident) chat.heldIncident.attention = 'terminal'
     controller.changed(chat)
     throw new Error(reason)
@@ -217,13 +259,15 @@ export async function cardAction(
   if (action.action === 'discard')
     return recoveryRequest(controller, chat, 'discard', async () => {
       chat.paused = false
-      const result = await invoke('agent:discard-conflict', chat.chat)
+      const held = await heldIdentity(controller, chat)
+      const result = await invoke('agent:discard-conflict', chat.chat, held.id, chat.recoveryId)
       if (!result.ok && result.error) throw new Error(result.error)
     })
   if (action.action === 'landing-retry')
     return recoveryRequest(controller, chat, 'retry', async () => {
       chat.paused = false
-      const result = await invoke('agent:retry-landing', chat.chat)
+      const held = await heldIdentity(controller, chat)
+      const result = await invoke('agent:retry-landing', chat.chat, held.id, chat.recoveryId)
       if (!result.ok) throw new Error(result.error ?? 'Unable to retry the landing.')
       if (result.state === 'parked' && chat.isolation === 'parked')
         chat.recoveryProblem =

@@ -2,7 +2,9 @@
 // own (the Resolve button's path), logged as one `conflict` incident: recovered when the
 // park clears, failed when it parks again. Off, the card waits for the user as before.
 import assert from 'node:assert/strict'
+import { acceptOwnerTerminal } from '../src/main/chat-turns.ts'
 import { incidents } from '../src/main/self-heal/incidents.ts'
+import { cardAction } from '../src/native/chat-actions.ts'
 import { NativeChatController } from '../src/native/chat-controller.ts'
 import { readableRecoveryReport } from '../src/native/chat-recovery-report.ts'
 
@@ -10,9 +12,51 @@ const tick = (ms = 10) => new Promise((resolve) => setTimeout(resolve, ms))
 const records = []
 incidents.report = (record) => records.push(record)
 
+// Synthetic owner IO: a provider observation is not accepted terminal proof.
+{
+  const emitted = []
+  let settle
+  const pending = new Promise((resolve) => {
+    settle = resolve
+  })
+  const owner = { incarnation: 'inc-a', turn: 'turn-a', run: 0 }
+  const accepted = acceptOwnerTerminal(pending, owner, (event) => emitted.push(event))
+  assert.deepEqual(emitted, [], 'forwarding waits for the owner claim')
+  settle({ claimed: true, outcome: 'failed' })
+  await accepted
+  assert.deepEqual(
+    emitted.map((event) => event.type),
+    ['owner-terminal']
+  )
+  await acceptOwnerTerminal(
+    Promise.resolve({ claimed: false, reason: 'duplicate' }),
+    owner,
+    (event) => emitted.push(event)
+  )
+  assert.equal(emitted.length, 1, 'duplicate owner reply emits no second accepted terminal')
+}
+
+// Synthetic owner receipts; the fixture does not claim live provider or Git evidence.
+const held = { id: 'held-a', incarnation: 'inc-a', generation: 1, source: 'tree-a' }
+const settlement = (outcome, attemptId) => ({
+  heldOperationId: held.id,
+  incarnation: held.incarnation,
+  outcome,
+  source: held.source,
+  candidate: outcome === 'merged' ? 'checked-tree-a' : null,
+  evidenceIds: outcome === 'merged' ? ['synthetic-check'] : [],
+  ...(attemptId ? { attemptId } : {})
+})
+
 function harness(
   autoResolve,
-  { refuse = false, deferResolve = false, rejectSend = false, cancelSend = false } = {}
+  {
+    refuse = false,
+    deferResolve = false,
+    deferSend = false,
+    rejectSend = false,
+    cancelSend = false
+  } = {}
 ) {
   const calls = []
   const renders = []
@@ -20,6 +64,12 @@ function harness(
   const pendingResolve = deferResolve
     ? new Promise((resolve) => {
         acknowledgeResolve = resolve
+      })
+    : null
+  let acknowledgeSend
+  const pendingSend = deferSend
+    ? new Promise((resolve) => {
+        acknowledgeSend = resolve
       })
     : null
   const controller = new NativeChatController({
@@ -46,13 +96,23 @@ function harness(
           pendingResolve ??
           (refuse
             ? { ok: false, error: 'Nothing to resolve.' }
-            : { ok: true, conflicted: ['src/a.tsx'], prompt: 'Resolve the markers.' })
+            : {
+                ok: true,
+                conflicted: ['src/a.tsx'],
+                prompt: 'Resolve the markers.',
+                incarnation: held.incarnation
+              })
         )
+      if (channel === 'agent:held-operation') return held
       if (channel === 'agent:send' && rejectSend) throw new Error('Send admission refused.')
+      if (channel === 'agent:send' && pendingSend) return pendingSend
       if (channel === 'agent:send' && cancelSend) {
         controller.get('a').cancellation++
         throw new Error('Message cancelled before sending.')
       }
+      if (channel === 'agent:send')
+        return { state: 'admitted', incarnation: held.incarnation, turn: args[4], run: 0 }
+      if (channel === 'agent:turn-state') return { turn: controller.get('a').turn, running: false }
       return { ok: true }
     },
     render: (state) => renders.push(structuredClone(state)),
@@ -61,12 +121,24 @@ function harness(
   })
   return {
     controller,
+    calls,
     renders,
     acknowledgeResolve,
+    acknowledgeSend,
     resolves: () => calls.filter((c) => c[0] === 'agent:resolve-conflict').length,
     sent: () => calls.filter((c) => c[0] === 'agent:send').map((c) => c[1]),
     emit: async (event) => {
-      controller.event({ projectKey: 'a', ...event })
+      const actual =
+        event.type === 'isolation'
+          ? {
+              ...event,
+              ...(event.state === 'parked' && !Object.hasOwn(event, 'held') ? { held } : {}),
+              ...(event.state === 'merged' && !Object.hasOwn(event, 'settlement')
+                ? { settlement: settlement('merged') }
+                : {})
+            }
+          : event
+      controller.event({ projectKey: 'a', ...actual })
       await tick()
     },
     open: () =>
@@ -84,6 +156,21 @@ function harness(
         }
       })
   }
+}
+
+// Manual recovery actions carry the producer's exact held operation to main.
+for (const [action, channel] of [
+  ['resolve', 'agent:resolve-conflict'],
+  ['landing-retry', 'agent:retry-landing'],
+  ['discard', 'agent:discard-conflict']
+]) {
+  const h = harness(false)
+  await h.open()
+  await h.emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
+  await cardAction(h.controller, h.controller.get('a'), { action })
+  const call = h.calls.find((item) => item[0] === channel)
+  assert.equal(call?.[2], held.id, `${action} addresses the held producer operation`)
+  assert.equal(typeof call?.[3], 'string', `${action} has its own attempt`)
 }
 
 // 1. Parked, resolve turn runs, the park clears: one recovered incident.
@@ -111,7 +198,15 @@ function harness(
   const h = harness(true)
   await h.open()
   await h.emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
+  const attempt = h.controller.get('a').autoResolveAttempt
   await h.emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
+  assert.equal(h.controller.get('a').autoResolved, 'tried', 'duplicate park stays owned')
+  await h.emit({
+    type: 'isolation',
+    state: 'parked',
+    files: ['src/a.tsx'],
+    settlement: settlement('held', attempt)
+  })
   await h.emit({ type: 'done' })
   await h.emit({ type: 'done' })
   assert.equal(h.resolves(), 1, 'tried once only')
@@ -173,7 +268,8 @@ function harness(
   h.acknowledgeResolve({
     ok: true,
     conflicted: ['src/a.tsx'],
-    prompt: 'Resolve the markers.'
+    prompt: 'Resolve the markers.',
+    incarnation: held.incarnation
   })
   await tick()
   assert.deepEqual(h.sent(), ['Resolve the markers.'])
@@ -214,6 +310,60 @@ function harness(
   assert.deepEqual(records, [])
 }
 
+// Stop wins over a late, positive send ACK for the preallocated recovery turn.
+{
+  records.length = 0
+  const h = harness(true, { deferSend: true })
+  await h.open()
+  await h.emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
+  const chat = h.controller.get('a')
+  const turn = chat.turn
+  assert.ok(turn)
+  await h.controller.stop(chat)
+  h.acknowledgeSend({ state: 'admitted', incarnation: held.incarnation, turn, run: 0 })
+  await tick()
+  assert.notEqual(chat.autoResolved, 'tried', 'Stop settles pending recovery intent')
+  await h.emit({
+    type: 'owner-terminal',
+    outcome: 'failed',
+    owner: { incarnation: held.incarnation, turn, run: 0, heldOperationId: held.id }
+  })
+  assert.deepEqual(records, [], 'late terminal cannot resurrect cancelled recovery')
+}
+
+// An older or uncorrelated observation cannot clear a currently failed held batch.
+{
+  records.length = 0
+  const h = harness(true, { refuse: true })
+  await h.open()
+  await h.emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
+  const chat = h.controller.get('a')
+  const operation = chat.recoveryId
+  assert.equal(chat.autoResolved, 'failed')
+  await h.emit({ type: 'isolation', state: 'merged', settlement: null, files: ['src/old.tsx'] })
+  assert.equal(chat.recoveryId, operation)
+  assert.equal(chat.isolation, 'parked')
+  await h.emit({
+    type: 'isolation',
+    state: 'merged',
+    settlement: { ...settlement('merged'), incarnation: 'old-incarnation' }
+  })
+  assert.equal(chat.recoveryId, operation, 'old incarnation cannot settle the batch')
+}
+
+// A newer held source supersedes the old operation; its late park cannot roll back
+// the current source or incident identity.
+{
+  const h = harness(false)
+  await h.open()
+  await h.emit({ type: 'isolation', state: 'parked', held, files: ['src/a.tsx'] })
+  const newer = { ...held, id: 'held-b', generation: 2, source: 'tree-b' }
+  await h.emit({ type: 'isolation', state: 'parked', held: newer, files: ['src/b.tsx'] })
+  await h.emit({ type: 'isolation', state: 'parked', held, files: ['src/a.tsx'] })
+  assert.deepEqual(h.controller.get('a').heldOperation, newer)
+  assert.deepEqual(h.controller.get('a').isolationFiles, ['src/b.tsx'])
+}
+
 // An admitted Resolve can still end with an agent error. The held attempt gets one
 // terminal report; the earlier Checking state cannot outlive its owner turn.
 {
@@ -226,6 +376,28 @@ function harness(
   assert.ok(turn, 'the follow-up send was admitted')
   assert.equal(chat.autoResolveTurn, turn)
   await h.emit({ type: 'error', turn, message: 'Browser check could not complete.' })
+  await h.emit({
+    type: 'owner-terminal',
+    outcome: 'failed',
+    owner: {
+      incarnation: held.incarnation,
+      turn,
+      run: 0,
+      heldOperationId: held.id,
+      attemptId: chat.recoveryId
+    }
+  })
+  assert.equal(chat.autoResolved, 'tried', 'owner terminal alone is not held-work settlement')
+  await h.emit({
+    type: 'isolation',
+    state: 'parked',
+    held,
+    settlement: {
+      ...settlement('held', chat.recoveryId),
+      turn,
+      run: 0
+    }
+  })
   assert.equal(chat.autoResolved, 'failed')
   assert.equal(chat.isRunning, false)
   assert.equal(h.resolves(), 1, 'automatic Resolve remains bounded')
@@ -239,6 +411,11 @@ function harness(
   assert.match(conflict[0].detail, /Browser check could not complete/)
   assert.ok(conflict[0].actions.some((action) => action.action === 'recovery-report'))
   assert.match(readableRecoveryReport('a'), /Browser check could not complete/)
+  const terminalOperation = chat.recoveryId
+  const terminalReport = chat.recoveryReport
+  await h.emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
+  assert.equal(chat.recoveryId, terminalOperation, 'duplicate park keeps one incident')
+  assert.equal(chat.recoveryReport, terminalReport, 'duplicate park keeps its shareable report')
   await h.emit({ type: 'error', turn, message: 'Browser check could not complete.' })
   assert.deepEqual(
     records.map((record) => record.outcome),

@@ -11,8 +11,13 @@ import type { Chat } from './chat-state'
 /** A private artifact for one chat and one recovery attempt. No transcript or source. */
 const reports = new Map<string, string>()
 /** Publish only the operation that still owns this chat's held work. */
-export function publishRecoveryReport(chat: Chat, operation: string | undefined, path: string) {
-  if (!operation || chat.recoveryId !== operation || chat.isolation !== 'parked') {
+export function publishRecoveryReport(
+  chat: Chat,
+  operation: string | undefined,
+  path: string,
+  current: () => boolean = () => true
+) {
+  if (!operation || chat.recoveryId !== operation || chat.isolation !== 'parked' || !current()) {
     rmSync(dirname(path), { recursive: true, force: true })
     return null
   }
@@ -21,7 +26,12 @@ export function publishRecoveryReport(chat: Chat, operation: string | undefined,
   if (previous) rmSync(dirname(previous), { recursive: true, force: true })
   return path
 }
-export async function writeRecoveryReport(chat: Chat, requested: string, reason: string) {
+export async function writeRecoveryReport(
+  chat: Chat,
+  requested: string,
+  reason: string,
+  current: () => boolean = () => true
+) {
   const operation = chat.recoveryId
   const turn = chat.turn ?? null
   const startedAt = chat.recoveryStartedAt
@@ -65,7 +75,7 @@ export async function writeRecoveryReport(chat: Chat, requested: string, reason:
   writeFileSync(path, `${content}\n`, { mode: 0o600 })
   if (readFileSync(path, 'utf8') !== `${content}\n`)
     throw new Error('Support report could not be read back.')
-  return publishRecoveryReport(chat, operation, path)
+  return publishRecoveryReport(chat, operation, path, current)
 }
 
 export function readableRecoveryReport(chat: string): string | null {

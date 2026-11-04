@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { dirname } from 'node:path'
 import type { NativeView } from '../native/platform'
 import type { AgentEvent, PeerGateNote, SessionRecord } from '../shared/api'
@@ -18,6 +19,11 @@ import { retireWorktreeBranch, type Worktree } from './worktrees'
 
 /** In-memory state for one isolated chat, keyed by its `sessionKey` (= emitKey). */
 export interface ChatState {
+  /** One service-owned chat/worktree incarnation, replaced on recreation. */
+  incarnation?: string
+  heldGeneration?: number
+  /** The current held batch; stable while the same source remains held. */
+  heldOperation?: { id: string; incarnation: string; generation: number; source: string | null }
   wt: Worktree
   liveRoot: string
   /** Git mode captured when this chat workspace opened. */
@@ -91,6 +97,21 @@ interface Deps {
 let deps: Deps | null = null
 export const states = new Map<string, ChatState>()
 
+/** Mint only when actual held source or chat incarnation changes. */
+export function claimHeldOperation(st: ChatState, source: string | null) {
+  st.incarnation ??= randomUUID()
+  if (st.heldOperation?.source === source && st.heldOperation.incarnation === st.incarnation)
+    return st.heldOperation
+  st.heldGeneration = (st.heldGeneration ?? 0) + 1
+  st.heldOperation = {
+    id: randomUUID(),
+    incarnation: st.incarnation,
+    generation: st.heldGeneration,
+    source
+  }
+  return st.heldOperation
+}
+
 /** Wire the module's Electron/store/window seam. Called once at IPC registration. */
 export function initChatIsolation(d: Deps): void {
   deps = d
@@ -115,7 +136,8 @@ export function emitIsolation(
   revertable?: boolean,
   reason?: 'interrupted' | 'reverted' | 'failed',
   error?: string,
-  decision?: string
+  decision?: string,
+  settlement?: Extract<AgentEvent, { type: 'isolation' }>['settlement']
 ): void {
   // Guard a destroyed webContents: this fires from async turn lifecycle hooks,
   // which can land after the renderer process is killed (OS display sleep).
@@ -131,6 +153,10 @@ export function emitIsolation(
     ...(reason ? { reason } : {}),
     ...(error ? { error } : {}),
     ...(decision ? { decision } : {}),
+    ...(states.get(sessionKey)?.heldOperation
+      ? { held: states.get(sessionKey)?.heldOperation }
+      : {}),
+    ...(settlement ? { settlement } : {}),
     projectKey: sessionKey
   } satisfies AgentEvent)
 }
@@ -150,5 +176,8 @@ export async function recreateWorkspace(st: ChatState): Promise<void> {
   const created = await createChatWorktree(st.liveRoot, st.wt.id, dirname(st.wt.path))
   await retireWorktreeBranch(created)
   st.wt = created
+  st.incarnation = randomUUID()
+  st.heldGeneration = 0
+  st.heldOperation = undefined
   st.reclaimed = false
 }

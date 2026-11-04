@@ -1,7 +1,7 @@
 import type { SessionTranscriptEntry } from '../shared/api'
 import type { TurnMessage } from './chat-commit'
 import { clearPark, upsertParkRecord } from './chat-park'
-import { type ChatState, chatDeps, emitIsolation } from './chat-state'
+import { type ChatState, chatDeps, claimHeldOperation, emitIsolation } from './chat-state'
 import { completeTurn, type TurnOutcome } from './chat-worktrees'
 import { recordEdit } from './edit-history'
 import { type GateScope, type GateVerdict, holdMessage, integrationGate } from './integration-gate'
@@ -29,8 +29,11 @@ export async function landTurn(
   outcome: TurnOutcome,
   turn: number | 'resolve',
   message: TurnMessage,
-  checked = false
+  checked = false,
+  owner?: { turn?: string; run?: number; attemptId?: string },
+  verdict?: GateVerdict | null
 ): Promise<string> {
+  const held = st.heldOperation
   const group = `chat:${st.wt.id}:${turn}`
   for (const e of outcome.edits) {
     recordEdit(st.liveRoot, e.file, e.before, e.after, undefined, group)
@@ -51,7 +54,26 @@ export async function landTurn(
   clearPark(st)
   await retireWorktreeBranch(st.wt)
   // Not revertable once this chat's work has been pushed & merged via a PR.
-  emitIsolation(sessionKey, 'merged', st.wt.branch, outcome.files, group, !st.record?.prUrl)
+  emitIsolation(
+    sessionKey,
+    'merged',
+    st.wt.branch,
+    outcome.files,
+    group,
+    !st.record?.prUrl,
+    undefined,
+    undefined,
+    undefined,
+    held && {
+      heldOperationId: held.id,
+      incarnation: held.incarnation,
+      outcome: 'merged',
+      source: held.source,
+      candidate: checked ? (verdict?.candidate ?? null) : null,
+      evidenceIds: verdict?.evidence.map((item) => item.id) ?? [],
+      ...owner
+    }
+  )
   return group
 }
 
@@ -95,7 +117,9 @@ export function holdTurn(
   outcome: TurnOutcome,
   verdict: GateVerdict | null,
   turn: SessionTranscriptEntry[] = [],
-  recoveryFailure?: string
+  recoveryFailure?: string,
+  source: string | null = verdict?.tree ?? null,
+  owner?: { turn?: string; run?: number; attemptId?: string }
 ): string {
   const reason =
     recoveryFailure &&
@@ -105,6 +129,7 @@ export function holdTurn(
       ? `Trezi could not verify this source: ${recoveryFailure}`
       : holdMessage(outcome.hold, verdict)
   st.parked = true
+  const held = claimHeldOperation(st, source)
   st.interrupted = false
   st.parkedFiles = outcome.files
   st.resolvingFiles = null
@@ -126,7 +151,17 @@ export function holdTurn(
     undefined,
     undefined,
     'failed',
-    reason
+    reason,
+    undefined,
+    {
+      heldOperationId: held.id,
+      incarnation: held.incarnation,
+      outcome: 'held',
+      source,
+      candidate: verdict?.candidate ?? null,
+      evidenceIds: verdict?.evidence.map((item) => item.id) ?? [],
+      ...owner
+    }
   )
   return reason
 }

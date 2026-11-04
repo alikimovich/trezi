@@ -1,4 +1,5 @@
 import { incidents } from '../main/self-heal/incidents'
+import type { AgentEvent } from '../shared/api'
 import { resolveHeld } from './chat-actions'
 import type { NativeChatController } from './chat-controller'
 import { needsResolve } from './chat-queue'
@@ -33,6 +34,9 @@ export function autoResolve(
     if (chat.autoResolved === 'tried') report(chat, 'recovered')
     chat.autoResolved = undefined
     chat.autoResolveTurn = undefined
+    chat.autoResolveAttempt = undefined
+    chat.autoResolveIncarnation = undefined
+    chat.acceptedRecoveryFailure = undefined
     return
   }
   if (chat.autoResolved) {
@@ -40,6 +44,7 @@ export function autoResolve(
     if (chat.autoResolved === 'tried' && parkedAgain) {
       chat.autoResolved = 'failed'
       chat.autoResolveTurn = undefined
+      chat.autoResolveAttempt = undefined
       report(chat, 'failed')
     }
     return
@@ -49,10 +54,13 @@ export function autoResolve(
   running.add(chat.chat)
   void resolveHeld(controller, chat)
     .catch(() => {
-      chat.autoResolved = 'failed'
-      chat.autoResolveTurn = undefined
-      report(chat, 'failed')
-      controller.changed(chat)
+      if (chat.autoResolved === 'tried') {
+        chat.autoResolved = 'failed'
+        chat.autoResolveTurn = undefined
+        chat.autoResolveAttempt = undefined
+        report(chat, 'failed')
+        controller.changed(chat)
+      }
     })
     .finally(() => running.delete(chat.chat))
 }
@@ -61,35 +69,61 @@ export function autoResolve(
 export function autoResolveTurnError(
   controller: NativeChatController,
   chat: Chat,
-  turn: string | undefined,
-  message: string
+  owner: Extract<AgentEvent, { type: 'owner-terminal' }>['owner']
 ): void {
+  const pending = chat.pendingRecoveryError
+  const settled = chat.recoverySettlement
   if (
     chat.autoResolved !== 'tried' ||
-    !turn ||
-    turn !== chat.autoResolveTurn ||
-    turn !== chat.turn ||
+    !pending ||
+    !settled ||
+    settled.outcome !== 'held' ||
+    settled.heldOperationId !== owner.heldOperationId ||
+    settled.incarnation !== chat.heldOperation?.incarnation ||
+    settled.turn !== owner.turn ||
+    settled.run !== owner.run ||
+    settled.attemptId !== owner.attemptId ||
+    owner.turn !== pending.turn ||
+    owner.turn !== chat.autoResolveTurn ||
+    owner.turn !== chat.turn ||
+    owner.attemptId !== chat.autoResolveAttempt ||
+    owner.heldOperationId !== chat.heldOperation?.id ||
+    (chat.autoResolveIncarnation && owner.incarnation !== chat.autoResolveIncarnation) ||
     chat.isolation !== 'parked' ||
     chat.stopping ||
     !chat.recoveryId
   )
     return
+  const { message } = pending
+  const turn = owner.turn
   const operation = chat.recoveryId
+  const cancellation = chat.cancellation
   chat.autoResolved = 'failed'
   chat.autoResolveTurn = undefined
+  chat.autoResolveAttempt = undefined
+  chat.autoResolveIncarnation = undefined
+  chat.pendingRecoveryError = undefined
+  chat.acceptedRecoveryFailure = undefined
+  chat.recoverySettlement = undefined
   chat.recoveryProblem = `Problem: ${message}`
   chat.recoveryReport = undefined
   chat.heldIncident = { turn, operation, gate: 'agent-error', attention: 'recording' }
   report(chat, 'failed')
-  void writeRecoveryReport(chat, 'automatic resolve turn', message).then(
+  const current = () =>
+    controller.chats.get(chat.chat) === chat &&
+    chat.cancellation === cancellation &&
+    chat.recoveryId === operation &&
+    chat.heldOperation?.id === owner.heldOperationId &&
+    chat.isolation === 'parked'
+  void writeRecoveryReport(chat, 'automatic resolve turn', message, current).then(
     (path) => {
-      if (chat.recoveryId !== operation || chat.heldIncident?.operation !== operation) return
+      if (!current() || chat.heldIncident?.operation !== operation) return
       if (path) chat.recoveryReport = path
       chat.heldIncident.attention = 'terminal'
       controller.changed(chat)
     },
     () => {
-      if (chat.recoveryId !== operation || chat.heldIncident?.operation !== operation) return
+      if (!current() || chat.heldIncident?.operation !== operation) return
       chat.recoveryProblem += ' The support report could not be written.'
       chat.heldIncident.attention = 'terminal'
       controller.changed(chat)

@@ -492,6 +492,18 @@ export type AgentEvent = (
    *  turn's first output. */
   | { type: 'progress'; step?: string }
   | { type: 'done'; landingPending?: boolean }
+  /** The conversation owner accepted one terminal for this exact provider run. */
+  | {
+      type: 'owner-terminal'
+      outcome: 'success' | 'failed'
+      owner: {
+        incarnation: string
+        turn: string
+        run: number
+        heldOperationId?: string
+        attemptId?: string
+      }
+    }
   /** `code` (LKM-119): `auth` — the provider is not signed in (a login card, not
    *  assistant text); `no-response` — the turn produced nothing within the owner's
    *  first-event deadline and was ended; since LKM-135 its message names the
@@ -545,6 +557,20 @@ export type AgentEvent = (
   | {
       type: 'isolation'
       state: 'isolated' | 'merged' | 'parked'
+      /** Actual held batch identity; absent on legacy observations, never proof of settlement. */
+      held?: { id: string; incarnation: string; generation: number; source: string | null }
+      /** Emitted only after the repository owner settles this exact held batch. */
+      settlement?: {
+        heldOperationId: string
+        incarnation: string
+        outcome: 'merged' | 'held' | 'discarded' | 'released'
+        source: string | null
+        candidate: string | null
+        evidenceIds: string[]
+        turn?: string
+        run?: number
+        attemptId?: string
+      }
       branch?: string
       files?: string[]
       /** On 'parked': the product decision only the user can make (LKM-403/406). */

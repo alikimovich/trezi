@@ -37,9 +37,11 @@ import {
   afterTurn,
   applyParkedBranch,
   beforeTurn,
+  currentHeldOperation,
   discardParkedBranch,
   discardParkedChat,
   dropAll,
+  ensureCurrentHeldOperation,
   handleReclaimed,
   hasParkRecord,
   initChatIsolation,
@@ -58,7 +60,7 @@ import {
 import { type PendingChat, PendingChats } from './chat-pending'
 import { chatRecordLookup } from './chat-record'
 import { dropSpares, prewarmSpare, releaseSpare } from './chat-spare'
-import { TurnTracker } from './chat-turns'
+import { acceptOwnerTerminal, TurnTracker } from './chat-turns'
 import { answerChatUi, chatUiContext, chatUiDelivery, forgetChatUi, setChatUiHost } from './chat-ui'
 import { STALE_SEND_MS, STALE_STOP_MS, TurnWatchdog, WATCHDOG_INTERVAL_MS } from './chat-watchdog'
 import {
@@ -388,6 +390,7 @@ const watchdog = new TurnWatchdog()
 const turnIds = new Map<string, string>()
 // Each provider session's sends in order: which turn (and run of it) an event belongs to.
 const trackers = new WeakMap<ProviderSession, TurnTracker>()
+const sessionIncarnations = new WeakMap<ProviderSession, string>()
 // A model switch's recorded conversation, sent once with the next turn when the owner
 // says the handoff is due.
 const handoffHistory = new Map<string, SessionTranscriptEntry[]>()
@@ -399,8 +402,8 @@ const reconciliation = new ReconciliationCoordinator({
   preparations: preparingTurns,
   currentSession: (key) => sessions.get(key),
   begin: () => {},
-  land: (key, message, transcript, terminal, reconcile) =>
-    afterTurn(key, message, transcript, terminal, reconcile, true),
+  land: (key, message, transcript, terminal, reconcile, owner) =>
+    afterTurn(key, message, transcript, terminal, reconcile, true, owner),
   resolutionContext: parkedResolution,
   showParked: showParkedChat,
   continued: (key, turn, run) => conversation().continueTurn(key, turn, run),
@@ -561,7 +564,7 @@ function saveLesson(root: string, lesson: Lesson): void {
  * project. Approval requests are registered with the owner, which settles answers.
  */
 const interactiveEvents =
-  (sessionKey: string, tracker: TurnTracker) =>
+  (sessionKey: string, tracker: TurnTracker, incarnation: string) =>
   (e: AgentEvent): void => {
     // A late terminal event names an earlier turn; the current turn keeps its row.
     if (e.type === 'landing-finished') finishPeer(e.turn ?? peerTurn(sessionKey), sessionKey)
@@ -613,8 +616,22 @@ const interactiveEvents =
       })
       .catch(() => {})
     const record = session.record
-    void conversation()
-      .terminal(sessionKey, at.turn, at.run, e.type, record)
+    const heldOperationId = at.heldOperationId
+    const attemptId = at.attemptId
+    void acceptOwnerTerminal(
+      conversation().terminal(sessionKey, at.turn, at.run, e.type, record),
+      {
+        incarnation,
+        turn: at.turn,
+        run: at.run,
+        ...(heldOperationId ? { heldOperationId } : {}),
+        ...(attemptId ? { attemptId } : {})
+      },
+      (accepted) => {
+        if (sessions.get(sessionKey) === session)
+          session.emit({ ...accepted, projectKey: sessionKey })
+      }
+    )
       .then(async (claim) => {
         if (!claim.claimed) return
         const observed = await peerObservedFiles(session.root, session.record.filesTouched, at.turn)
@@ -625,7 +642,8 @@ const interactiveEvents =
           firstLine(last ?? 'trezi chat edit'),
           claim.outcome,
           at.turn,
-          at.run
+          at.run,
+          at.attemptId
         )
         if (claim.title) void maybeGenerateTitle(sessionKey)
         if (claim.memory) evaluateProjectMemory(sessionKey)
@@ -1330,6 +1348,7 @@ export function registerAgentIpc(
     // If the resume fails the new session starts from what the chat showed (LKM-165).
     const summary = resumeSessionId ? resumeSummary(prior) : ''
     const tracker = new TurnTracker()
+    const incarnation = crypto.randomUUID()
     const s = await startProviderSession(
       pickProvider(options),
       cwd,
@@ -1338,7 +1357,7 @@ export function registerAgentIpc(
       await contextWithMemory(root, sessionKey, {
         emitKey: sessionKey,
         liveRoot: root,
-        onEvent: interactiveEvents(sessionKey, tracker),
+        onEvent: interactiveEvents(sessionKey, tracker, incarnation),
         ...(resumeSessionId ? { resumeSessionId } : {}),
         ...(summary ? { resumeSummary: summary } : {}),
         ...(resumeSessionId && prior?.sdkCwd ? { resumeCwd: prior.sdkCwd } : {}),
@@ -1346,6 +1365,7 @@ export function registerAgentIpc(
       })
     )
     trackers.set(s, tracker)
+    sessionIncarnations.set(s, incarnation)
     return s
   }
 
@@ -2055,7 +2075,10 @@ export function registerAgentIpc(
       images?: ImageAttachment[],
       requestedKey?: string,
       turn?: AgentTurnOptions,
-      turnId?: string
+      turnId?: string,
+      heldOperationId?: string,
+      attemptId?: string,
+      expectedIncarnation?: string
     ) => {
       const receivedAt = Date.now()
       const key = requestedKey ?? activeKey
@@ -2104,6 +2127,10 @@ export function registerAgentIpc(
       }
       const id =
         typeof turnId === 'string' && turnId && turnId.length <= 128 ? turnId : randomUUID()
+      if (expectedIncarnation && sessionIncarnations.get(session) !== expectedIncarnation)
+        throw new Error('The chat provider changed before this recovery turn began.')
+      if (heldOperationId && currentHeldOperation(key)?.id !== heldOperationId)
+        throw new Error('The held work changed. Refresh this chat before retrying.')
       const admit = () => conversation().begin(key, id)
       const writerWait = new AbortController()
       const writerDeadline = Date.now() + liveWriterWaitMs()
@@ -2272,7 +2299,7 @@ export function registerAgentIpc(
           issue: dependencies,
           projectKey: key
         } satisfies AgentEvent)
-        trackers.get(session)?.push(id, 0)
+        trackers.get(session)?.push(id, 0, heldOperationId, attemptId)
         watchdog.touch(key)
         logTurnStart(key, id, session.options)
         // LKM-163/LKM-215: Full access Codex can write the live tree; compare it at the end.
@@ -2298,6 +2325,14 @@ export function registerAgentIpc(
           turn: id,
           uptimeNs: process.hrtime.bigint().toString()
         })
+        return {
+          state: 'admitted' as const,
+          incarnation: sessionIncarnations.get(session),
+          turn: id,
+          run: 0,
+          heldOperationId,
+          attemptId
+        }
       } catch (error) {
         finishPeer(id, key)
         logTurnNotSent(key, id, error)
@@ -2510,36 +2545,72 @@ export function registerAgentIpc(
     // v9: a LIVE parked chat's branch is reset in place (its worktree still checks it
     // out, so `git branch -D` would fail); only a real/dead spawn branch is deleted.
     const parked = await discardParkedBranch(root, branch)
-    if (parked.handled) return { ok: true }
+    if (parked.handled) return { ok: parked.ok === true }
     if (branch) await deleteBranch(root, branch)
     return { ok: true }
   })
+
+  // v9 conflict card — "Resolve it". Stage the active parked chat's worktree so it holds
+  ipcMain.handle('agent:held-operation', async (_e, sessionKey = activeKey) =>
+    sessionKey ? ensureCurrentHeldOperation(sessionKey) : null
+  )
 
   // v9 conflict card — "Resolve it". Stage the active parked chat's worktree so it holds
   // BOTH the user's live edits and the chat's changes (3-way merged). If they overlap,
   // return the conflicted files + a resolution PROMPT for the renderer to run as a normal
   // turn (its `afterTurn` merges + unparks). If they merged cleanly, `resolveParkedChat`
   // already committed + merged + unparked — nothing more to send (`conflicted: []`).
-  ipcMain.handle('agent:resolve-conflict', async (_e, sessionKey = activeKey) => {
-    if (!sessionKey) return { ok: false, conflicted: [] as string[], error: 'no-session' }
-    const res = await resolveParkedChat(sessionKey)
-    if (!res.ok || res.conflicted.length === 0) return { ...res, conflicted: res.conflicted }
-    const prompt = conflictResolutionPrompt(res.conflicted, parkedResolution(sessionKey))
-    return { ok: true, conflicted: res.conflicted, prompt }
-  })
+  ipcMain.handle(
+    'agent:resolve-conflict',
+    async (_e, sessionKey = activeKey, heldId?: string, attemptId?: string) => {
+      if (!sessionKey) return { ok: false, conflicted: [] as string[], error: 'no-session' }
+      const held = await ensureCurrentHeldOperation(sessionKey)
+      if (!held || held.id !== heldId)
+        return {
+          ok: false,
+          conflicted: [] as string[],
+          error: 'The held work changed. Refresh this chat.'
+        }
+      const res = await resolveParkedChat(sessionKey, heldId, attemptId)
+      if (!res.ok || res.conflicted.length === 0) return { ...res, conflicted: res.conflicted }
+      const prompt = conflictResolutionPrompt(res.conflicted, parkedResolution(sessionKey))
+      const provider = sessions.get(sessionKey)
+      return {
+        ok: true,
+        conflicted: res.conflicted,
+        prompt,
+        incarnation: provider ? sessionIncarnations.get(provider) : undefined
+      }
+    }
+  )
 
   // v9 conflict card — "Discard changes". Drop the active parked chat's unmerged work.
-  ipcMain.handle('agent:discard-conflict', async (_e, sessionKey = activeKey) => {
-    if (!sessionKey) return { ok: false }
-    return discardParkedChat(sessionKey)
-  })
+  ipcMain.handle(
+    'agent:discard-conflict',
+    async (_e, sessionKey = activeKey, heldId?: string, attemptId?: string) => {
+      if (!sessionKey) return { ok: false }
+      const held = await ensureCurrentHeldOperation(sessionKey)
+      if (!held || held.id !== heldId)
+        return { ok: false, error: 'The held work changed. Refresh this chat.' }
+      return discardParkedChat(sessionKey, heldId, attemptId)
+    }
+  )
 
   // LKM-165 landing card — "Retry": land the held batch again; the outcome reaches the
   // chat as the usual isolation event.
-  ipcMain.handle('agent:retry-landing', async (_e, sessionKey = activeKey) =>
-    sessionKey
-      ? retryLanding(sessionKey)
-      : { ok: false, state: 'isolated' as const, error: 'no-session' }
+  ipcMain.handle(
+    'agent:retry-landing',
+    async (_e, sessionKey = activeKey, heldId?: string, attemptId?: string) => {
+      if (!sessionKey) return { ok: false, state: 'isolated' as const, error: 'no-session' }
+      const held = await ensureCurrentHeldOperation(sessionKey)
+      if (!held || held.id !== heldId)
+        return {
+          ok: false,
+          state: 'parked' as const,
+          error: 'The held work changed. Refresh this chat.'
+        }
+      return retryLanding(sessionKey, heldId, attemptId)
+    }
   )
 
   // LKM-151 post-Stop card: revert (undoable), undo that revert, or keep the stopped

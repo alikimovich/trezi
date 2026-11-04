@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-486 held-work ownership contract
+
+- The main chat owner now mints a held operation for the actual parked source and chat incarnation. Resolve, Retry and Discard carry that operation through the existing IPC path; send admission and the accepted owner terminal carry separate turn and attempt facts. Only a matching producer settlement from landing, release or explicit discard can clear the native held incident. Stop and a newer source fence late acknowledgements and reports.
+- The focused chat fixture covers the deferred owner claim, Stop during send admission, a stale uncorrelated merge, changed-source park and the admitted error report. The native chat capture, independent review and PR-head CI remain manager gates.
+
 ## 2026-11-04 — LKM-486 admitted Resolve turn failure
 
 - An admitted automatic Resolve follow-up now records its owning turn. If that turn ends with a technical agent error while its changes remain held, the controller settles the attempt once, retains the error in the transcript, writes a shareable support report, and replaces Checking with one terminal Problem after report publication. Login errors, Stop, stale turns and a successful merge keep their existing paths.

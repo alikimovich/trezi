@@ -36,6 +36,9 @@ export interface Submission {
   attachments: Attachment[]
   selection: NativeChatContext['selection']
   turn: NativeChatContext['turn']
+  heldOperationId?: string
+  attemptId?: string
+  expectedIncarnation?: string
 }
 export interface Chat extends NativeChatMirror {
   /** A live assistant answer arrived since this conversation was last visible. */
@@ -101,6 +104,18 @@ export interface Chat extends NativeChatMirror {
   autoResolved?: 'tried' | 'failed'
   /** The admitted follow-up turn that owns an automatic Resolve attempt. */
   autoResolveTurn?: string
+  autoResolveAttempt?: string
+  autoResolveIncarnation?: string
+  pendingRecoveryError?: { turn: string; message: string }
+  acceptedRecoveryFailure?: {
+    incarnation: string
+    turn: string
+    run: number
+    heldOperationId?: string
+    attemptId?: string
+  }
+  recoverySettlement?: Extract<AgentEvent, { type: 'isolation' }>['settlement']
+  heldOperation?: { id: string; incarnation: string; generation: number; source: string | null }
   /** LKM-165: why the last landing failed; its work is held until Retry or Resolve. */
   landingError?: string
   /** A chat-scoped recovery request, distinct from an agent turn. */

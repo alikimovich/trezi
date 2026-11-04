@@ -1,5 +1,18 @@
 import type { AgentEvent } from '../shared/api'
 
+/** Forward only the conversation owner's accepted terminal, never the provider observation. */
+export async function acceptOwnerTerminal<
+  T extends { claimed: true; outcome: 'success' | 'failed' } | { claimed: false }
+>(
+  claim: Promise<T>,
+  owner: Extract<AgentEvent, { type: 'owner-terminal' }>['owner'],
+  emit: (event: AgentEvent) => void
+): Promise<T> {
+  const result = await claim
+  if (result.claimed) emit({ type: 'owner-terminal', outcome: result.outcome, owner })
+  return result
+}
+
 /**
  * The provider adapter's half of turn identity (S11). Every provider honours "one
  * `done` per `send`" (an `error` may precede it, or end a dead session alone), and
@@ -12,16 +25,26 @@ import type { AgentEvent } from '../shared/api'
 export interface Attribution {
   turn: string
   run: number
+  heldOperationId?: string
+  attemptId?: string
   /** The first terminal (`error` or `done`) of this run. */
   first: boolean
 }
 
 export class TurnTracker {
-  private runs: Array<{ turn: string; run: number; ended: boolean }> = []
+  private runs: Array<{
+    turn: string
+    run: number
+    ended: boolean
+    heldOperationId?: string
+    attemptId?: string
+  }> = []
+  private owners = new Map<string, { heldOperationId?: string; attemptId?: string }>()
 
   /** A send reached the provider. */
-  push(turn: string, run: number): void {
-    this.runs.push({ turn, run, ended: false })
+  push(turn: string, run: number, heldOperationId?: string, attemptId?: string): void {
+    if (heldOperationId || attemptId) this.owners.set(turn, { heldOperationId, attemptId })
+    this.runs.push({ turn, run, ended: false, ...(this.owners.get(turn) ?? {}) })
   }
 
   /** The run the provider is working on now, if any. */
@@ -36,17 +59,17 @@ export class TurnTracker {
    */
   drop(turn: string): void {
     this.runs = this.runs.filter((run) => run.turn !== turn)
+    this.owners.delete(turn)
   }
 
   attribute(event: AgentEvent): Attribution | null {
     const head = this.runs[0]
     if (!head) return null
-    if (event.type !== 'done' && event.type !== 'error')
-      return { turn: head.turn, run: head.run, first: false }
+    if (event.type !== 'done' && event.type !== 'error') return { ...head, first: false }
     const first = !head.ended
     head.ended = true
     // `done` ends the send; an `error` is followed by its `done` (or by nothing).
     if (event.type === 'done') this.runs.shift()
-    return { turn: head.turn, run: head.run, first }
+    return { ...head, first }
   }
 }

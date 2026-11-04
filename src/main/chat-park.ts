@@ -100,6 +100,7 @@ export function dropParkRecord(st: ChatState): void {
  * A record exists only while parked, so dropping it is a no-op for a chat that was not.
  */
 export function clearPark(st: ChatState): void {
+  st.heldOperation = undefined
   st.parked = false
   st.interrupted = false
   st.reverted = false

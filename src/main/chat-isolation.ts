@@ -12,6 +12,7 @@ import { spareWorktreeIds, takeSpare } from './chat-spare'
 import {
   type ChatState,
   chatDeps,
+  claimHeldOperation,
   emitIsolation,
   onChain,
   recreateWorkspace,
@@ -138,6 +139,8 @@ export async function isolatedCwd(liveRoot: string, sessionKey: string): Promise
       return created
     })
     states.set(sessionKey, {
+      incarnation: crypto.randomUUID(),
+      heldGeneration: 0,
       wt,
       liveRoot,
       gitAccess: currentAgentGitAccess(),
@@ -263,19 +266,33 @@ async function exclusive<T>(
 }
 
 /** Resolve for a held chat, refused while a landing or another recovery runs. */
-export const resolveParkedChat = (sessionKey: string) =>
+export const resolveParkedChat = (sessionKey: string, heldId?: string, attemptId?: string) =>
   exclusive(
     sessionKey,
     (error) => ({ ok: false, conflicted: [] as string[], error }),
-    () => resolveHeldChat(sessionKey)
+    () => resolveHeldChat(sessionKey, heldId, attemptId)
   )
 
+/** Current service-owned held batch identity for a native recovery action. */
+export const currentHeldOperation = (sessionKey: string) => states.get(sessionKey)?.heldOperation
+export async function ensureCurrentHeldOperation(sessionKey: string) {
+  const st = states.get(sessionKey)
+  if (!st?.parked) return null
+  if (st.heldOperation) return st.heldOperation
+  const source = await sourceSnapshot(st.wt.path).then(
+    (snapshot) => snapshot.tree,
+    () => null
+  )
+  if (states.get(sessionKey) !== st || !st.parked) return null
+  return claimHeldOperation(st, source)
+}
+
 /** Discard for a held chat, refused while a landing or another recovery runs. */
-export const discardParkedChat = (sessionKey: string) =>
+export const discardParkedChat = (sessionKey: string, heldId?: string, attemptId?: string) =>
   exclusive(
     sessionKey,
     (error): { ok: boolean; error?: string } => ({ ok: false, error }),
-    () => discardHeldChat(sessionKey)
+    () => discardHeldChat(sessionKey, heldId, attemptId)
   )
 
 /** The tail of a transcript from its LAST user message on — the "last turn" a park
@@ -303,7 +320,8 @@ export function afterTurn(
   transcript: SessionTranscriptEntry[] = [],
   terminal: TurnTerminalOutcome = 'success',
   reconcile = false,
-  ordinaryCompletion = false
+  ordinaryCompletion = false,
+  owner?: { turn?: string; run?: number; attemptId?: string }
 ): Promise<string[] | null> {
   const st = states.get(sessionKey)
   if (!st) return Promise.resolve(null)
@@ -342,7 +360,16 @@ export function afterTurn(
       admitted = true
       st.lastUsed = Date.now()
       if (st.reclaimed) return null
-      const batch = landBatch(sessionKey, st, message, turn, terminal, reconcile, recoveryFailure)
+      const batch = landBatch(
+        sessionKey,
+        st,
+        message,
+        turn,
+        terminal,
+        reconcile,
+        recoveryFailure,
+        owner
+      )
       batch.then(
         () => {
           settled = 'ok'
@@ -427,7 +454,8 @@ async function landBatch(
   turn: SessionTranscriptEntry[],
   terminal: TurnTerminalOutcome,
   reconcile: boolean,
-  recoveryFailure?: string
+  recoveryFailure?: string,
+  owner?: { turn?: string; run?: number; attemptId?: string }
 ): Promise<string[] | null> {
   await settleReverted(st)
   const turnNo = ++st.turnNo
@@ -509,16 +537,26 @@ async function landBatch(
   logLanding(sessionKey, st.wt.branch, outcome, terminal, reconcileFiles)
   const at = Date.now()
   if (outcome.outcome === 'merged') {
-    await landTurn(sessionKey, st, outcome, turnNo, described, !!verdict?.ok)
+    await landTurn(sessionKey, st, outcome, turnNo, described, !!verdict?.ok, owner, verdict)
     const peers = landingPeers(gate, combined, verdict?.candidate ?? null)
     st.lastLanding = { outcome: 'merged', files: outcome.files, at, ...peers }
   } else if (outcome.outcome === 'held' && outcome.hold?.reason !== 'live-changed') {
-    holdTurn(sessionKey, st, outcome, verdict, turn, recoveryFailure)
+    holdTurn(
+      sessionKey,
+      st,
+      outcome,
+      verdict,
+      turn,
+      recoveryFailure,
+      verdict?.tree ?? (await sourceSnapshot(st.wt.path)).tree,
+      owner
+    )
   } else if (outcome.outcome === 'parked' || outcome.outcome === 'held') {
     // A stopped or failed turn holds its work (LKM-151); a drift park (live moved since
     // the fork point) stays a conflict even when a later turn on top of it is stopped.
     st.interrupted = terminal !== 'success' && (!st.parked || st.interrupted)
     st.parked = true
+    const held = claimHeldOperation(st, verdict?.tree ?? (await sourceSnapshot(st.wt.path)).tree)
     st.parkedFiles = outcome.files
     // This attempt reached the repository: an earlier landing error is history.
     st.landingError = undefined
@@ -542,16 +580,47 @@ async function landBatch(
         undefined,
         undefined,
         st.interrupted ? 'interrupted' : replayFailure ? 'failed' : undefined,
-        replayFailure
+        replayFailure,
+        undefined,
+        {
+          heldOperationId: held.id,
+          incarnation: held.incarnation,
+          outcome: 'held',
+          source: held.source,
+          candidate: verdict?.candidate ?? null,
+          evidenceIds: verdict?.evidence.map((item) => item.id) ?? [],
+          ...owner
+        }
       )
   } else if (outcome.newBase) {
+    const held = st.heldOperation
     clearPark(st)
     st.wt.baseSha = outcome.newBase
     await retireWorktreeBranch(st.wt)
     if (terminal === 'success') st.lastLanding = { outcome: 'unchanged', files: outcome.files, at }
     // Setup may only restore an excluded helper; config can already be wired.
     // Acknowledge the no-op so it can restart and verify instead of waiting forever.
-    if (terminal === 'success') emitIsolation(sessionKey, 'merged', st.wt.branch, [])
+    if (terminal === 'success')
+      emitIsolation(
+        sessionKey,
+        'merged',
+        st.wt.branch,
+        [],
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        held && {
+          heldOperationId: held.id,
+          incarnation: held.incarnation,
+          outcome: 'released',
+          source: held.source,
+          candidate: verdict?.candidate ?? null,
+          evidenceIds: verdict?.evidence.map((item) => item.id) ?? [],
+          ...owner
+        }
+      )
   }
   return reconcileFiles
 }
@@ -579,6 +648,11 @@ async function landingFailed(
   st.parked = true
   st.landingError = reason || 'The landing failed.'
   st.lastLanding = { outcome: 'failed', files: st.parkedFiles, at: Date.now(), error: reason }
+  const source = await sourceSnapshot(st.wt.path).then(
+    (snapshot) => snapshot.tree,
+    () => null
+  )
+  const held = claimHeldOperation(st, source)
   upsertParkRecord(st, st.parkedFiles, turn)
   emitIsolation(
     sessionKey,
@@ -588,7 +662,16 @@ async function landingFailed(
     undefined,
     undefined,
     'failed',
-    st.landingError
+    st.landingError,
+    undefined,
+    {
+      heldOperationId: held.id,
+      incarnation: held.incarnation,
+      outcome: 'held',
+      source: held.source,
+      candidate: null,
+      evidenceIds: []
+    }
   )
 }
 
@@ -599,20 +682,26 @@ async function landingFailed(
  * is not retried here: its own card offers Keep.
  */
 export function retryLanding(
-  sessionKey: string
+  sessionKey: string,
+  heldId?: string,
+  attemptId?: string
 ): Promise<{ ok: boolean; state: 'isolated' | 'parked'; error?: string }> {
   return exclusive(
     sessionKey,
     (error) => ({ ok: false, state: 'parked' as const, error }),
-    () => retryHeldLanding(sessionKey)
+    () => retryHeldLanding(sessionKey, heldId, attemptId)
   )
 }
 
 async function retryHeldLanding(
-  sessionKey: string
+  sessionKey: string,
+  heldId?: string,
+  attemptId?: string
 ): Promise<{ ok: boolean; state: 'isolated' | 'parked'; error?: string }> {
   const st = states.get(sessionKey)
   if (!st) return { ok: false, state: 'isolated', error: 'That chat is no longer open.' }
+  if (heldId && st.heldOperation?.id !== heldId)
+    return { ok: false, state: 'parked', error: 'The held work changed. Refresh this chat.' }
   if (!st.parked || st.reverted || (st.interrupted && !st.landingError))
     return { ok: true, state: st.parked && !st.reverted ? 'parked' : 'isolated' }
   // LKM-403: only the user's answer moves this work on; retrying would pick a side.
@@ -640,7 +729,17 @@ async function retryHeldLanding(
   // since its last edit): the host runs the session's checks that passed before again.
   const { failures } = await arrangeChecks(chatGateScope(sessionKey, st))
   // Its outcome reaches the chat as the usual isolation event (merged, or the card again).
-  await afterTurn(sessionKey, 'Land held chat changes', [], 'success')
+  if (heldId && st.heldOperation?.id !== heldId)
+    return { ok: false, state: 'parked', error: 'The held work changed. Refresh this chat.' }
+  await afterTurn(
+    sessionKey,
+    'Land held chat changes',
+    [],
+    'success',
+    false,
+    false,
+    attemptId ? { attemptId } : undefined
+  )
   // Still held after Trezi tried to arrange the evidence: say why it is missing.
   if (st.parked && st.landingError && failures.length) {
     st.landingError = `${st.landingError} Trezi's own check did not pass: ${failures.join('; ')}`
