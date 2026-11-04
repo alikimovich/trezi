@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Changed
+
+- New Chat sits at the chat pane's trailing edge with native toolbar glass, and device and Expand Preview sit immediately left of the address (LKM-476).
+
 ## [0.13.12] - 2026-11-03
 
 ### Fixed

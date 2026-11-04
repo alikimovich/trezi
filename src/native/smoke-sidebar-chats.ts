@@ -152,14 +152,20 @@ export async function checkSidebarChats(host: NativeBridge, artifacts: string) {
   assert.equal(button.role, 'AXButton', 'VoiceOver reads New chat as a button')
   assert.equal(button.label, `New chat in ${entry().name}`)
   const header = await shell()
-  assert.equal(header.chatNewVisible, true, 'the chat header shows New Chat beside the title')
+  assert.equal(header.chatNewVisible, true, 'the chat header shows New Chat')
   assert.equal(header.chatNewEnabled, true, 'the chat header New Chat is enabled for the project')
+  assert.equal(header.chatNewBordered, true, 'New Chat uses a native bordered control')
+  assert.equal(header.chatNewTextured, true, 'New Chat matches the textured toolbar islands')
+  assert.equal(header.chatNewToolTip, 'New Chat', 'New Chat keeps its tooltip')
+  assert.equal(header.chatNewGlyph, 'New Chat', 'New Chat keeps its symbol description')
   const rect = (value: string) => (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
   const [titleX, , titleWidth] = rect(header.chatTitleFrame)
   const [buttonX, , buttonWidth] = rect(header.chatNewFrame)
   assert.ok(
-    buttonWidth >= 24 && buttonX >= titleX + titleWidth && buttonX - titleX - titleWidth <= 7,
-    'New Chat is immediately after the title without overlap'
+    buttonWidth === 32 &&
+      buttonX >= titleX + titleWidth + 7 &&
+      Math.abs(buttonX + buttonWidth - (header.chatHeaderTrailing - 4)) <= 1,
+    'New Chat is at the chat header trailing edge with room for the title'
   )
   // Grow to more than five open chats; each gets a draft, so New chat never reuses it. Five new
   // chats: one takes the attachment, four get a prompt and fill History past "Show N more".

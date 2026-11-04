@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Top bar New Chat glass and viewport order (LKM-476)
+
+- [x] Anchor the existing guarded New Chat control at the chat header's trailing edge and give it the textured native toolbar treatment.
+- [x] Move the device and Expand Preview island immediately left of the address; keep the host-based address sizing and existing control routes.
+- [x] Extend the toolbar and sidebar native fixtures for order, resize geometry, appearance and New Chat action.
+- [ ] Manager: required CI, independent review and post-merge native acceptance on main.
+
 ## Native suite failure on main 743c0a82c263 (LKM-469)
 
 - [x] `toolbar-address`: match wide block size to the host-based preferred width introduced in LKM-467.

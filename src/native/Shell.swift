@@ -245,7 +245,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         // LKM-213: Publish is always the last item, at the trailing edge; "…" goes before it.
-        [.toggleSidebar, .sidebarTrackingSeparator, NSToolbarItem.Identifier("address"), NSToolbarItem.Identifier("viewport"), .flexibleSpace,
+        [.toggleSidebar, .sidebarTrackingSeparator, NSToolbarItem.Identifier("viewport"), NSToolbarItem.Identifier("address"), .flexibleSpace,
          NSToolbarItem.Identifier("interaction"), .space, NSToolbarItem.Identifier("tools"), .space, NSToolbarItem.Identifier("more"), NSToolbarItem.Identifier("publish")]
     }
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar: Bool) -> NSToolbarItem? {
@@ -277,17 +277,20 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             chatTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             chatTitle.translatesAutoresizingMaskIntoConstraints = false; chatHeader.addSubview(chatTitle)
             chatNewButton.image = toolbarSymbol("square.and.pencil", "New Chat")
-            chatNewButton.isBordered = false; chatNewButton.setButtonType(.momentaryChange)
+            // Match the neighboring textured toolbar islands, including AppKit's glass,
+            // highlight, hover, focus and disabled drawing.
+            chatNewButton.isBordered = true; chatNewButton.bezelStyle = .texturedRounded
+            chatNewButton.setButtonType(.momentaryChange)
             chatNewButton.toolTip = "New Chat"; chatNewButton.setAccessibilityLabel("New Chat")
             chatNewButton.target = self; chatNewButton.action = #selector(headerNewChat(_:))
             chatNewButton.translatesAutoresizingMaskIntoConstraints = false; chatHeader.addSubview(chatNewButton)
             NSLayoutConstraint.activate([
                 chatHeaderWidth, chatHeader.widthAnchor.constraint(greaterThanOrEqualToConstant: 100), chatHeader.heightAnchor.constraint(equalToConstant: 32),
                 chatTitle.leadingAnchor.constraint(equalTo: chatHeader.leadingAnchor, constant: 4), chatTitle.centerYAnchor.constraint(equalTo: chatHeader.centerYAnchor),
-                chatNewButton.leadingAnchor.constraint(equalTo: chatTitle.trailingAnchor, constant: 6),
-                chatNewButton.trailingAnchor.constraint(lessThanOrEqualTo: chatHeader.trailingAnchor, constant: -8),
+                chatTitle.trailingAnchor.constraint(lessThanOrEqualTo: chatNewButton.leadingAnchor, constant: -8),
+                chatNewButton.trailingAnchor.constraint(equalTo: chatHeader.trailingAnchor, constant: -4),
                 chatNewButton.centerYAnchor.constraint(equalTo: chatHeader.centerYAnchor),
-                chatNewButton.widthAnchor.constraint(equalToConstant: 28), chatNewButton.heightAnchor.constraint(equalToConstant: 28)
+                chatNewButton.widthAnchor.constraint(equalToConstant: 32), chatNewButton.heightAnchor.constraint(equalToConstant: 32)
             ])
             item.view = chatHeader; item.isBordered = false; item.visibilityPriority = .high
         } else if key == "address" {
@@ -544,7 +547,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         let showChat = currentProject != nil && !chatHidden && (state["chatWidth"] as? Double ?? 0) > 60
         if !showChat, let index = chatIndex { toolbar.removeItem(at: index) }
         else if showChat && chatIndex == nil {
-            let index = toolbar.items.firstIndex { $0.itemIdentifier.rawValue == "address" } ?? 0
+            let index = toolbar.items.firstIndex { $0.itemIdentifier.rawValue == "viewport" } ?? 0
             toolbar.insertItem(withItemIdentifier: NSToolbarItem.Identifier("chat"), at: index)
             // LKM-296: narrow the block and lay the toolbar out now: with the block still wide, the
             // inserted chat header went to the overflow menu until the next layout pass.
@@ -663,6 +666,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         let chatInspect: [String: Any] = [
             "chatTitle":chatTitle.stringValue, "chatTitlePlain":toolbarItems["chat"]?.action == nil,
             "chatNewVisible":!chatNewButton.isHidden, "chatNewEnabled":chatNewButton.isEnabled,
+            "chatNewBordered":chatNewButton.isBordered, "chatNewTextured":chatNewButton.bezelStyle == .texturedRounded,
+            "chatNewToolTip":chatNewButton.toolTip ?? "", "chatNewGlyph":chatNewButton.image?.accessibilityDescription ?? "",
             "chatNewFrame":NSStringFromRect(mainFrame(chatNewButton) ?? .zero),
             "chatTitleFrame":NSStringFromRect(mainFrame(chatTitle) ?? .zero),
             "chatHeaderWidth":chatHeader.bounds.width,

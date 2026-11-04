@@ -1,5 +1,11 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-476 top bar placement follow-up
+
+- The existing New Chat button now uses the textured native toolbar bezel and sits 4 pt from the chat header's trailing edge; the title keeps its leading alignment and can use the space up to the button. Its guarded action, glyph, tooltip and momentary button remain.
+- The device and Expand Preview island moved as one group to immediately left of the address. Address sizing now accounts for that order, with the viewport in the measured chat-to-address offset rather than reserved again to the address's right.
+- The existing toolbar and sidebar native fixtures assert the order, non-overlap, button styling, trailing alignment, retained title/address and action routes at their selected widths. Foreground capture and native acceptance remain for the manager's post-merge run.
+
 ## 2026-11-03 — LKM-469 address editor follow-up
 
 - Manager native verification passed 45 of 46 core checks, including `publish-progress`; `toolbar-address` still read the elided URL immediately after `address.selectText(nil)`. Ending a prior edit session did not help, so the prior explanation was incomplete. The `NSTextField` delegate restoration was too late for this synchronous focus path.
