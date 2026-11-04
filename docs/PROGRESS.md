@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-478 CI fixture repair
+
+- CI exposed two older unit fixtures that still expected unchecked ordinary chat completion to park until a manual Retry. The new completion path legitimately arranges the existing check and lands the exact combined tree, so the peer fixture now requires automatic checking, no held state and the peer provenance. The lesson fixture now requires one lesson on that automatic landing and confirms an idempotent Retry cannot duplicate it.
+- The later Stop scenario now checks that a subsequent stopped edit stays private and does not erase the lesson from the prior checked landing. Failed-check, stale-tree and stopped-resolution scenarios keep their separate hold assertions.
+
 ## 2026-11-03 — LKM-478 review repair: in-flight private browser check
 
 - Independent review found that `preview_verify` was not represented by the gate's running-check state. Ordinary completion could see `unchecked` and begin a second browser check while the first was still working.

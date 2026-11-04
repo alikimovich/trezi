@@ -132,19 +132,17 @@ try {
     assert.match(saved[0], /overlapped in page\.txt/)
   })
 
-  await scenario('Retry of a held landing saves one lesson, from the resolving turn', async (p) => {
+  await scenario('automatic checking saves one lesson, from the resolving turn', async (p) => {
     const { chat, turn } = await overlappingChat(p)
     combine(chat, COMBINED)
     chat.say(`Combined both.\n${REUSABLE}`)
     chat.done()
-    await wait(() => landed(turn), 'the held landing')
-    assert.equal(parkEvent(p.parent).reason, 'failed', 'unchecked, it holds')
-    assert.equal((await lessons(p)).length, 0, 'held work saves nothing')
-    assert.equal((await invoke('agent:retry-landing', p.parent)).ok, true)
-    assert.match(p.live(), /header price=10 badge=sale/)
+    await wait(() => landed(turn), 'the checked landing')
+    assert.match(p.live(), /header price=10 badge=sale/, 'ordinary completion arranged the check')
+    assert.equal(parkEvent(p.parent).state, 'merged', 'the landing did not need Retry')
     await invoke('agent:retry-landing', p.parent)
     const saved = await lessons(p)
-    assert.equal(saved.length, 1, 'one lesson, whatever else is retried')
+    assert.equal(saved.length, 1, 'one lesson, even after an idempotent Retry')
     assert.match(saved[0], /--> Keep the price and the badge/, 'the resolving turn stated it')
   })
 
@@ -246,20 +244,22 @@ try {
     }
   )
 
-  await scenario('Stop of a later turn forgets a resolution that was held', async (p) => {
+  await scenario('Stop of a later turn preserves the earlier landed resolution', async (p) => {
     const { chat, turn } = await overlappingChat(p)
     combine(chat, COMBINED)
     chat.say(`Combined both.\n${REUSABLE}`)
     chat.done()
-    await wait(() => landed(turn), 'the held landing')
+    await wait(() => landed(turn), 'the checked landing')
+    assert.match(p.live(), /header price=10 badge=sale/, 'the checked resolution landed')
+    assert.equal((await lessons(p)).length, 1, 'the landed resolution saved its lesson')
     const later = await send(chat, 'Mention the currency too.')
     put(chat, 'page.txt', `${readFileSync(join(chat.cwd, 'page.txt'), 'utf8')}currency=eur\n`)
     await check(p, chat)
     await invoke('agent:interrupt', chat.key)
     await wait(() => landed(later), 'the stopped turn to settle')
     assert.equal((await invoke('agent:retry-landing', p.parent)).ok, true)
-    assert.match(p.live(), /currency=eur/, 'Retry did land it')
-    assert.equal((await lessons(p)).length, 0, 'the tree that landed came from a stopped turn')
+    assert.doesNotMatch(p.live(), /currency=eur/, 'Retry does not land stopped edits')
+    assert.equal((await lessons(p)).length, 1, 'Stop does not erase the earlier lesson')
   })
 
   await scenario('Stop during a background resolution saves nothing', async (p) => {
