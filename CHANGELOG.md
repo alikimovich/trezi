@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.13.10] - 2026-11-03
+
 ### Changed
 
 - Activity stays closed until you open it, including for errors, agent requests, and startup recovery; unread indicators continue to show new attention (LKM-468).
