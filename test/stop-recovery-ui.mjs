@@ -216,6 +216,9 @@ emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'], reason: 'interr
 await tick()
 assert.equal(chat.stopped, 'held')
 assert.equal(card('conflict'), undefined, 'a stopped turn is not a conflict')
+controller.event({ projectKey: 'a', type: 'error', turn: 'stale-turn', message: 'late failure' })
+assert.equal(card('conflict'), undefined, 'a late terminal callback cannot revive a Problem')
+assert.ok(card('stopped'), 'Stop retains its settled action after a late callback')
 assert.deepEqual(
   card('stopped').actions.map((a) => a.label),
   ['Revert this turn’s changes', 'Keep changes', 'Ask agent to finish']
@@ -397,6 +400,9 @@ answers['agent:retry-landing'] = new Promise((resolve) => {
   finishRetry = resolve
 })
 const pendingRetry = act('landing-retry', 'conflict')
+await tick()
+assert.equal(card('conflict').title, 'Retrying the check…')
+assert.equal(card('conflict').detail, 'Trezi is working on the held changes.')
 assert.equal(card('conflict').actions[1].label, 'Retrying…', 'busy before IPC settles')
 assert.equal(
   card('conflict').actions.every((action) => action.disabled),
@@ -421,10 +427,13 @@ answers['agent:retry-landing'] = new Promise((resolve) => {
   finishLanding = resolve
 })
 const settledRetry = act('landing-retry', 'conflict')
+await tick()
+assert.equal(card('conflict').title, 'Retrying the check…')
 emit({ type: 'isolation', state: 'merged', files: ['src/a.tsx'] })
 finishLanding({ ok: true, state: 'isolated' })
 await settledRetry
 assert.equal(card('recovery-outcome').detail, 'Changes applied to the project.')
+assert.equal(card('conflict'), undefined, 'matching recovery leaves no held Problem')
 await act('recovery-outcome-dismiss', 'recovery-outcome')
 assert.equal(card('recovery-outcome'), undefined)
 emit({
@@ -477,6 +486,7 @@ assert.equal(chat.recoveryProblem, undefined, 'a running agent turn is not a Pro
 assert.equal(chat.recoveryReport, undefined, 'no support report for a legitimately running turn')
 assert.equal(chat.recovery, undefined, 'the recovery request ended at the handover')
 assert.equal(chat.isRunning, true, 'the agent turn owns the lock now')
+assert.equal(card('conflict')?.title, 'Working on held changes…')
 assert.equal(card('conflict')?.busy ?? false, false, 'no request spinner while the agent runs')
 assert.equal(
   card('conflict')?.actions?.find((action) => action.action === 'landing-retry')?.disabled ?? true,

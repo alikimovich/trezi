@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-509 owned recoverable failures
+
+- A parked isolation can precede the turn's finish or an automatic Resolve. The controller now starts an eligible automatic Resolve before publishing that snapshot, and the existing conflict card uses live turn or request ownership to show status. Once that operation ends, its actual parked reason, report and actions remain visible; matching recovery clears them. User decisions retain their own card. No backend, provider, landing, or Activity expansion was needed.
+- The existing auto-resolve and Stop/recovery unit fixtures cover the park-to-recovery handoff, busy request, terminal report, per-chat isolation and quiet Stop. The native chat and recovery acceptance fixtures assert the status instead of a Problem during the held request. Native rendering remains for the manager's post-merge run.
+
 ## 2026-11-04 — LKM-503 Mark up acceptance state contract
 
 - The held-press probe now records semantic Select mode, overlay state and both accent images before down, while held and after the outside release. The matrix validates any completed Select or Mark up action and restores the resting state with the normal toolbar toggle before each step and after probe reset. Focus and disabled retain their labeled synthetic setup. A focused regression distinguishes active Select, focus without selection and a stale accent. The native GREEN/RED run remains for the reviewed merged SHA.

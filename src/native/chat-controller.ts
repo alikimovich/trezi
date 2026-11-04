@@ -539,6 +539,13 @@ export class NativeChatController {
     )
       chat.unreadAnswer = true
     reduce(chat, event)
+    // Start an eligible resolve before publishing the parked snapshot. The request
+    // itself owns the incident until its IPC hands off to a turn or settles.
+    if (
+      this.services.autoResolve &&
+      (event.type === 'done' || event.type === 'landing-finished' || event.type === 'isolation')
+    )
+      autoResolve(this, chat, event.type === 'isolation' && event.state === 'parked')
     if (event.type === 'isolation' && !chat.recovery) {
       // Landed or discarded: the held problem and its report are history.
       if (event.state !== 'parked') {
@@ -630,13 +637,6 @@ export class NativeChatController {
       (event.type === 'isolation' && event.state !== 'parked')
     )
       queueMicrotask(() => void this.drain(chat))
-    if (
-      this.services.autoResolve &&
-      (event.type === 'done' || event.type === 'landing-finished' || event.type === 'isolation')
-    )
-      queueMicrotask(() =>
-        autoResolve(this, chat, event.type === 'isolation' && event.state === 'parked')
-      )
   }
   async composer(action: NativeComposerAction) {
     if (action.chat !== this.active) return

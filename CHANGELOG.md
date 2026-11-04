@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+
+- Recoverable held changes show their active check or recovery status before an honest terminal Problem and report (LKM-509).
+
 ## [0.13.17] - 2026-11-04
 
 ### Fixed

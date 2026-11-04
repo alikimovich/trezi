@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Owned recoverable failure presentation (LKM-509)
+
+- [x] Derive the held card's status from the running turn or recovery request and start automatic Resolve before publishing its parked snapshot.
+- [x] Keep user decisions visible and terminal reports/actions intact; extend controller and native consumer fixtures for status, recovery, and Stop.
+- [ ] Manager: exact-head CI, independent review, and post-merge native acceptance on main.
+
 ## Native suite failure on main 17fbc17129bb (LKM-484)
 
 - [x] Embed New Chat as native AppKit glass content inside the chat title's custom toolbar item and preserve its existing segment behavior and visibility.
