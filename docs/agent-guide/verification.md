@@ -22,7 +22,8 @@ and fails on an unlisted one; the gate requires 0 Bun-owned rows and no rollback
 | `bun run build` / `bun run build:native` | Build `out/native/Trezi.app` (Swift host and service, bundled Bun, backend and preview) |
 | `bun run start` | Launch the existing native build (development launcher) |
 | `open -a Trezi` / `trezi [path]` | The start path: open the app, optionally on a project |
-| `bun run typecheck` | Type-check native/backend/shared code and isolated preview. Run after every change |
+| `bun run typecheck` | Type-check native/backend/shared code and isolated preview |
+| `bun run check:feedback --base=origin/main` | Local feedback: lint, applicable typechecks, and audited selected unit tests; emits a structured partial-evidence receipt |
 | `bun run typecheck:native` | Native/backend/shared check only |
 | `node test/run.mjs unit` | Backend and controller tests, no desktop |
 | `bun run test:quick` | Quick verification in one command: the typecheck next to the unit tier (`typecheck:native` too once its config differs from `typecheck:node`), plus the 20 slowest tests (`--typecheck --report`, `docs/TESTING.md`) |
@@ -40,19 +41,27 @@ The `dev:native`, `build:native`, and `typecheck:native` aliases remain supporte
 
 ## Verify your own work WITHOUT asking the user
 
-- After changes run `bun run typecheck` and the relevant unit tests. Native app changes
-  also require `bun run typecheck:native` and `bun run test:native`. `bun run test`
-  combines unit and native checks.
+- After coherent edits use `bun run check:feedback --base=origin/main`. It fails
+  immediately if a command fails. It uses the audited changed-file plan. SELECTED
+  runs that plan's unit tests after lint and any applicable typechecks. FULL runs
+  lint and applicable typechecks, then leaves the broad unit gate to CI. The final
+  `FEEDBACK_RECEIPT` JSON lists executed checks, selection reasons and checks still
+  required. Invalid base refs and diffs fail before any check runs. This local
+  receipt is partial evidence, never merge acceptance.
+- Required CI checks on the PR head, independent review and the exact-head merge
+  gate remain required. Agent OS schedules native checks under its shared desktop
+  lock; native acceptance and native-failure pre-merge verification still require
+  their explicit evidence. Nightly native checks continue. `bun run test` remains
+  the full unit and native command for authorized local use.
 - `bun run lint` must exit 0. `test/lint.mjs` runs it in the unit tier, so quick
   verification fails on a new lint or format error; fix it with
   `bunx biome check --write <files>`. Warnings and infos do not fail. `biome.json`
   neither formats nor sorts imports in `test/fixtures/**`: fixtures stand in for user
   apps and tests depend on their bytes and line numbers.
-- For test, docs or copy-only changes with unchanged application behavior, typecheck,
-  lint and relevant focused unit tests provide scoped evidence; a full native rerun
-  is not required. Use `bun test/run.mjs unit --filter=name,name --list` to inspect
-  the selection first, or `node test/run.mjs unit --changed=main --list` for the
-  audited changed-file plan. This is distinct from full-suite acceptance.
+- For test, docs or copy-only changes with unchanged application behavior, the
+  feedback receipt provides scoped local evidence. Use `bun test/run.mjs unit
+  --filter=name,name --list` or `node test/run.mjs unit --changed=main --list`
+  to inspect a plan separately.
 - Live provider calls (`test:native-live` / `verify`) require authorization. Do not
   run real provider calls without it.
 - The runner tiers are `unit`, `native`, `live`, and `all`. Unit jobs are bounded
