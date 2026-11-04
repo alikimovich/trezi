@@ -265,8 +265,10 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
         `Toolbar wide: scheme, host and port fit: ${JSON.stringify(pick(settled))}`
       )
       assert.ok(
-        settled.addressWidth > settled.addressMinimum + 1,
-        `Toolbar wide: the block grows past its minimum: ${JSON.stringify(pick(settled))}`
+        Math.abs(
+          settled.addressWidth - Math.max(settled.addressMinimum, settled.addressHostWidth)
+        ) <= 1,
+        `Toolbar wide: the block fits the host without unused width: ${JSON.stringify(pick(settled))}`
       )
       assert.equal(settled.addressTruncated, false, 'Toolbar wide: the full URL shows when it fits')
       assert.equal(

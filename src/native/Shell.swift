@@ -102,7 +102,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     let addressHeader = ToolbarAddressView()
     private var chatHeaderWidth: NSLayoutConstraint!
     private var previewTextColor = NSColor.labelColor { didSet { branchMenu.dot.textColor = previewTextColor } }
-    let address = NSTextField()
+    let address = PreviewAddressField()
     let branchMenu = BranchPopUpButton(frame: .zero, pullsDown: true)
     var publishTitle = "Publish"
     let publishSpinner = ToolbarPublishSpinner()
@@ -345,12 +345,9 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         return prefix + "…"
     }
     private func showAddress() {
+        address.fullAddress = previewAddress
         address.stringValue = displayAddress(previewAddress)
         address.toolTip = previewAddress
-    }
-    func controlTextDidBeginEditing(_ notification: Notification) {
-        guard let editor = address.currentEditor() else { return }
-        editor.string = previewAddress; editor.selectAll(nil)
     }
     func controlTextDidEndEditing(_ notification: Notification) {
         DispatchQueue.main.async { [weak self] in
@@ -369,6 +366,9 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     /// the emitted shell action; no global clipboard contents are read or replaced.
     func verifyAddressRoundtrip() -> [String: Any] {
         guard window != nil, address.isEnabled else { return ["error":"Address is unavailable"] }
+        // Another toolbar check may have left this field's editor active. Start a new
+        // edit session so the delegate restores the full URL before inspecting it.
+        window?.makeFirstResponder(nil)
         address.selectText(nil)
         guard let editor = address.currentEditor() as? NSTextView else { return ["error":"Address editor did not open"] }
         let editing = editor.string

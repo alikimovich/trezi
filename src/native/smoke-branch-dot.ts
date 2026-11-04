@@ -47,7 +47,13 @@ export async function checkBranchDot(
       undefined,
       20
     )
-    assert.ok(state.branchDotVisible && state.branchDotFits, `The ${ci} dot is in its slot`)
+    // At the 80 pt address floor AppKit gives the branch control about 85 pt. Its
+    // title cannot keep both the dot and ellipsis, so the control hides the dot.
+    const compactCut = state.branchFrameWidth <= 90 && state.branchTitleCut
+    assert.ok(
+      state.branchDotFits && (state.branchDotVisible || (compactCut && !state.branchDotVisible)),
+      `The ${ci} dot fits its slot, or hides with a cut title at the compact floor: ${JSON.stringify({ width: state.branchFrameWidth, cut: state.branchTitleCut, visible: state.branchDotVisible, fits: state.branchDotFits })}`
+    )
     assert.equal(state.branchDotFilled, ci === 'passed' || ci === 'failed', `${ci} fill`)
     assert.equal(state.branchDotColor, colors[ci], `${ci} keeps its status colour`)
     return state

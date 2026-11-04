@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native suite failure on main 743c0a82c263 (LKM-469)
+
+- [x] `toolbar-address`: match wide block size to the host-based preferred width introduced in LKM-467.
+- [x] Start a fresh field edit session in the address roundtrip fixture before checking the full URL.
+- [x] Follow-up: restore the full URL in the address control's synchronous focus path; ending the prior session alone did not resolve manager native verification.
+- [x] `publish-progress`: accept a hidden CI dot only for a cut title in a branch control no wider than 90 pt; keep the dot geometry and state checks.
+- [ ] Manager: confirm the repaired `core` native suite under the desktop lock on the merged tree.
+
 ## Top bar address, viewport controls and chat header (LKM-467)
 
 - [x] Size the preview address for the host and place device and expand in an adjacent island.

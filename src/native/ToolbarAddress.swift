@@ -1,5 +1,27 @@
 import AppKit
 
+/// The resting label may elide a long path; editing always starts from the full URL.
+final class PreviewAddressField: NSTextField {
+    var fullAddress = ""
+
+    private func restoreFullAddress() {
+        guard let editor = currentEditor() as? NSTextView else { return }
+        editor.string = fullAddress
+        editor.selectAll(nil)
+    }
+
+    override func selectText(_ sender: Any?) {
+        let wasEditing = currentEditor() != nil
+        super.selectText(sender)
+        if !wasEditing { restoreFullAddress() }
+    }
+
+    override func textDidBeginEditing(_ notification: Notification) {
+        super.textDidBeginEditing(notification)
+        restoreFullAddress()
+    }
+}
+
 /// The preview address/branch block. Re-measures the toolbar after each of its layouts.
 final class ToolbarAddressView: NSStackView {
     var measure: (() -> Void)?
