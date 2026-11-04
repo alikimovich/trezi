@@ -168,7 +168,8 @@ const controller = new NativeChatController({
         ]
       }
     if (channel === 'providers:choices') return []
-    return answers[channel] ?? { ok: true }
+    const answer = answers[channel]
+    return typeof answer === 'function' ? answer() : (answer ?? { ok: true })
   },
   render: (state) => renders.push(structuredClone(state)),
   effect: () => {}
@@ -267,6 +268,12 @@ assert.match(renders.at(-1).composer.queueNote, /Paused after Stop — not sent/
 assert.equal(renders.at(-1).composer.queueCanSend, true)
 
 // Hover Revert on the stopped message reverts the held work; Undo puts it back.
+answers['agent:revert-stopped'] = { ok: false, error: 'The stopped work could not be reverted.' }
+await act('stopped-revert')
+assert.ok(card('stopped'), 'a failed Revert leaves the held work and its actions intact')
+assert.equal(chat.stopped, 'held')
+await act('error-dismiss')
+answers['agent:revert-stopped'] = { ok: true, files: ['src/a.tsx'] }
 await act('revert', stoppedMessage.id)
 assert.deepEqual(calls.at(-1), ['agent:revert-stopped', 'a'])
 assert.equal(calls.filter((c) => c[0] === 'edit:revert').length, 0)
@@ -286,8 +293,69 @@ assert.deepEqual(calls.at(-1), ['agent:revert-stopped', 'a'])
 
 // Keep: the landed turn's group goes on the message, so its Revert is the real one.
 emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'], reason: 'interrupted' })
+const keepFrames = renders.length
+answers['agent:keep-stopped'] = () => {
+  emit({
+    type: 'isolation',
+    state: 'parked',
+    files: ['src/a.tsx'],
+    reason: 'failed',
+    error: 'The stopped work did not pass its check.'
+  })
+  assert.equal(card('stopped')?.title, 'Checking changes…', 'old callbacks stay quiet during Keep')
+  assert.equal(card('conflict'), undefined)
+  return { ok: false, files: ['src/a.tsx'], error: 'The stopped work did not pass its check.' }
+}
+await act('stopped-keep')
+await tick()
+assert.ok(
+  renders
+    .slice(keepFrames)
+    .some((frame) =>
+      frame.cards.some((shown) => shown.id === 'conflict' && shown.title === 'Checking changes…')
+    ),
+  'the active Keep check presents calm status before its terminal result'
+)
+assert.ok(
+  renders.slice(keepFrames).some((frame) => {
+    const held = frame.cards.find((shown) => shown.id === 'conflict')
+    return held?.busy && held.actions.every((action) => action.disabled)
+  }),
+  'the active Keep check locks conflicting recovery actions'
+)
+assert.equal(card('conflict')?.title, 'Problem', 'a failed Keep exposes its real check result')
+assert.match(card('conflict').detail, /The stopped work did not pass its check/)
+assert.equal(card('error'), undefined, 'the failed Keep has one reportable card')
+assert.ok(chat.recoveryReport, 'the failed Keep has an actual support report')
+assert.ok(card('conflict').actions.some((action) => action.action === 'landing-retry'))
+emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'], reason: 'interrupted' })
+answers['agent:keep-stopped'] = {
+  ok: false,
+  files: ['src/a.tsx'],
+  error: 'The delayed Keep check did not pass.'
+}
+await act('stopped-keep')
+await tick()
+assert.equal(card('conflict')?.title, 'Problem', 'the owner result settles before its callback')
+assert.match(card('conflict').detail, /The delayed Keep check did not pass/)
+assert.ok(chat.recoveryReport)
+emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'], reason: 'interrupted' })
+delete answers['agent:keep-stopped']
+answers['agent:keep-stopped'] = () => {
+  emit({
+    type: 'isolation',
+    state: 'parked',
+    files: ['src/a.tsx'],
+    reason: 'failed',
+    error: 'late Stop check'
+  })
+  return { ok: true, files: ['src/a.tsx'], group: 'chat:w:2' }
+}
 await act('stopped-keep')
 assert.deepEqual(calls.at(-1), ['agent:keep-stopped', 'a'])
+assert.equal(card('conflict'), undefined, 'the Keep result supersedes an older failed callback')
+assert.equal(chat.recoveryReport, undefined)
+delete answers['agent:keep-stopped']
 emit({
   type: 'isolation',
   state: 'merged',
@@ -385,6 +453,25 @@ assert.equal(sent().length, before + 2, 'the queued message follows once the hel
 assert.equal(sent().at(-1)[1], 'And round it')
 emit({ type: 'done' })
 await tick()
+
+// A fresh Ask-to-finish turn can also fail honestly after it ends.
+emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'], reason: 'interrupted' })
+await act('stopped-finish')
+emit({ type: 'done' })
+emit({
+  type: 'isolation',
+  state: 'parked',
+  files: ['src/a.tsx'],
+  reason: 'failed',
+  error: 'The finish check did not pass.'
+})
+await tick()
+assert.equal(card('conflict')?.title, 'Problem', 'a new Finish turn can report failure')
+assert.match(card('conflict').detail, /The finish check did not pass/)
+assert.ok(chat.recoveryReport)
+assert.ok(card('conflict').actions.some((action) => action.action === 'landing-retry'))
+emit({ type: 'isolation', state: 'merged', files: ['src/a.tsx'], group: 'chat:w:finish' })
+assert.equal(chat.recoveryReport, undefined, 'matching Finish recovery clears its report')
 
 // Send now on a queue paused after Stop sends it on top of the held work.
 await controller.composer({ chat: 'a', action: 'input', text: 'Now', caret: 3, revision: 4 })

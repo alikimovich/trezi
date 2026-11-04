@@ -209,6 +209,7 @@ export function snapshot(
     // that operation ends, the same card exposes its actual reason and report.
     const owned =
       (!!chat.recovery && !chat.recoveryTimedOut) ||
+      !!chat.keepingStopped ||
       (chat.isRunning &&
         !chat.stopping &&
         (!chat.landingError || (chat.phase === 'applying' && chat.operation === 'parking')))
@@ -234,18 +235,22 @@ export function snapshot(
       ...(!owned && chat.recoveryProblem && chat.isolationFiles?.length
         ? { fullDetail: chat.isolationFiles.join('\n') }
         : {}),
-      busy: !!chat.recovery && !chat.recoveryTimedOut,
+      busy: (!!chat.recovery && !chat.recoveryTimedOut) || !!chat.keepingStopped,
       actions: [
-        { label: 'Discard', action: 'discard', disabled: chat.isRunning || !!chat.recovery },
+        {
+          label: 'Discard',
+          action: 'discard',
+          disabled: chat.isRunning || !!chat.recovery || !!chat.keepingStopped
+        },
         {
           label: chat.recovery === 'retry' ? 'Retrying…' : 'Retry',
           action: 'landing-retry',
-          disabled: chat.isRunning || !!chat.recovery
+          disabled: chat.isRunning || !!chat.recovery || !!chat.keepingStopped
         },
         {
           label: chat.recovery === 'resolve' ? 'Resolving…' : 'Resolve',
           action: 'resolve',
-          disabled: chat.isRunning || !!chat.recovery
+          disabled: chat.isRunning || !!chat.recovery || !!chat.keepingStopped
         },
         ...(chat.recoveryReport
           ? [{ label: 'Copy support report', action: 'recovery-report' }]

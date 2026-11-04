@@ -41,7 +41,7 @@ export function autoResolve(
     }
     return
   }
-  if (!needsResolve(chat) || chat.isRunning || chat.sending) return
+  if (!needsResolve(chat) || chat.landingError || chat.isRunning || chat.sending) return
   chat.autoResolved = 'tried'
   running.add(chat.chat)
   void resolveHeld(controller, chat)

@@ -53,7 +53,7 @@ async function recoveryRequest(
   kind: NonNullable<Chat['recovery']>,
   request: () => Promise<Handover | void>
 ) {
-  if (chat.isRunning || chat.sending || chat.recovery) return
+  if (chat.isRunning || chat.sending || chat.recovery || chat.keepingStopped) return
   chat.recovery = kind
   chat.recoveryTimedOut = false
   chat.recoveryProblem = undefined

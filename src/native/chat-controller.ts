@@ -442,7 +442,7 @@ export class NativeChatController {
       this.services.effect({ type: 'focus' })
     } else await this.submit(chat, command.text)
   }
-  event(event: AgentEvent) {
+  event(event: AgentEvent, fromStoppedKeepResult = false) {
     if (event.sessionId) {
       this.services.effect({ type: 'spawn', event })
       // Detached agent output must never enter an interactive stream.
@@ -528,7 +528,7 @@ export class NativeChatController {
     if (!key || this.closed.has(key)) return
     const chat = this.get(key)
     // A late terminal (an earlier turn's, or one no send accounts for) completes nothing.
-    if (late(chat, event)) return
+    if (!fromStoppedKeepResult && late(chat, event)) return
     // A heartbeat racing the turn's end is not news (and must not flag review).
     if (event.type === 'progress' && !chat.isRunning) return
     const priorPhase = chat.phase

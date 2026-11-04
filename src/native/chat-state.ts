@@ -99,6 +99,8 @@ export interface Chat extends NativeChatMirror {
   stopped?: 'held' | 'reverted'
   /** The turn whose Stop settled, with or without an interrupted park. */
   stoppedTurn?: string
+  /** An explicit Keep request owns the stopped hold until its IPC settles. */
+  keepingStopped?: boolean
   /** LKM-225: the automatic Resolve of a drift park ran once ('tried'), then gave up ('failed'). */
   autoResolved?: 'tried' | 'failed'
   /** LKM-165: why the last landing failed; its work is held until Retry or Resolve. */

@@ -171,5 +171,21 @@ function harness(autoResolve, { refuse = false } = {}) {
   )
 }
 
+// A failed check is terminal; automatic conflict resolution cannot turn it into
+// an unrequested recovery operation or hide its actual reason.
+{
+  const h = harness(true)
+  await h.open()
+  await h.emit({
+    type: 'isolation',
+    state: 'parked',
+    files: ['src/a.tsx'],
+    reason: 'failed',
+    error: 'The stopped work did not pass its check.'
+  })
+  assert.equal(h.resolves(), 0)
+  assert.equal(h.frames.at(-1).cards.find((card) => card.id === 'conflict')?.title, 'Problem')
+}
+
 console.log('chat-auto-resolve: OK')
 process.exit(0)
