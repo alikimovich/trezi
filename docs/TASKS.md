@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native suite failure on main 17fbc17129bb (LKM-484)
+
+- [x] Embed New Chat as native AppKit glass content inside the chat title's custom toolbar item and preserve its existing segment behavior and visibility.
+- [ ] Manager: confirm the native core suite and required gates on this tree.
+
 ## Native sidebar suite Restore capture (LKM-482)
 
 - [x] Wait for the chat column's Restore animation to finish before asserting and capturing the preview status geometry.
