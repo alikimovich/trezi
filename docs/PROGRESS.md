@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-485 standalone sidebar fixture contract repair
+
+- The standalone sidebar shimmer and marquee fixtures compile the shared `SidebarChats.swift` extension against minimal `NativeShell` stubs. That extension now refreshes the selected header's loading title when Reduce Motion changes, so both stubs declare the same optional `LoadingChatTitle` member as the real shell. The fixtures retain their existing behavior and assertions; this fixes the Swift compile contract behind the CI unit-shard failures without changing the app.
+
 ## 2026-11-04 — LKM-485 review repair: observe sidebar glyphs
 
 - Independent review found that the animation fixture sampled the header but the sidebar inspect exposed only the model title, so a frozen sidebar could pass. Sidebar inspection now adds `displayedText` from the actual row label without changing `title` or row identity. The existing `chat-gate` interval check requires both the selected row and header strings to change while pending, and both to remain at the static placeholder under Reduce Motion. The same animation JSON records both pairs for the manager's post-merge native run.

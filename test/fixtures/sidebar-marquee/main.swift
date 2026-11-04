@@ -13,6 +13,7 @@ final class NativeShell: NSObject {
     var rows: [ShellRow] = []
     var currentProject: String?
     var selectedID: String?
+    var chatTitleLoading: LoadingChatTitle?
     var sidebarHistory = SidebarHistoryState()
     var applying = false
     let outline = NSOutlineView()
