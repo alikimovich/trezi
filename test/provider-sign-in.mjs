@@ -352,6 +352,35 @@ chat.attachments = [
   }
 ]
 states.codex = readinessFromLogin(false)
+const geminiChoice = {
+  value: 'gemini:default',
+  modelId: 'default',
+  provider: 'gemini',
+  group: 'Gemini',
+  label: 'Default'
+}
+for (const status of ['ready', 'checking', 'failed']) {
+  states.gemini = { status }
+  assert.equal(
+    startLoginCard(chat, states, true, [geminiChoice]),
+    null,
+    `listed Gemini ${status} does not require the chooser`
+  )
+}
+delete states.gemini
+assert.equal(
+  startLoginCard(chat, states, true, [geminiChoice]),
+  null,
+  'listed Gemini with unknown readiness suppresses the chooser'
+)
+states.gemini = readinessFromLogin(false)
+assert.equal(startLoginCard(chat, states, true, [geminiChoice])?.title, 'Choose a provider')
+assert.equal(
+  startLoginCard(chat, states, true, [{ ...geminiChoice, connectionId: 'saved' }]),
+  null,
+  'a saved connection does not require built-in sign-in'
+)
+delete states.gemini
 for (const pending of ['checking', 'failed']) {
   states.codex = { status: pending }
   assert.equal(startLoginCard(chat, states), null, `${pending} is not authoritative sign-out`)

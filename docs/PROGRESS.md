@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-508 review repair: Gemini readiness and loading-header fixture
+
+- Independent review found that the initial chooser could appear while listed Gemini was ready, checking or unresolved. The chooser now considers every listed built-in provider and saved connection; it appears only when the listed seats have confirmed sign-out. The existing chat-gate fixture holds Gamma's real conversation snapshot just long enough to assert the redacted selected header, accessible label and active or Reduce Motion effect, then releases it and asserts the effect stops on readiness and remains stopped on opening error. The normal post-merge native run remains the acceptance gate.
+
 ## 2026-11-04 — LKM-508 Loading titles and provider readiness
 
 - Unknown conversation titles now use the existing native shimmer on a redacted placeholder in both sidebar rows and the selected header. Cached titles remain visible; a ready untitled chat shows New chat. The shimmer stops on error or readiness, and Reduce Motion holds the placeholder still. The initial provider chooser requires confirmed sign-out for both built-in seats and a ready conversation; explicit login-error cards retain their path. Focused row, sign-in and Swift fixture checks cover these transitions; native GUI acceptance follows the reviewed merge.

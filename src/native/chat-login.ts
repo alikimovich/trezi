@@ -1,6 +1,7 @@
-import type { ProviderErrorCode, ProviderLoginReport } from '../shared/api'
+import type { ModelChoice, ProviderErrorCode, ProviderLoginReport } from '../shared/api'
 import { agentOptionsFor } from '../shared/chat-settings'
 import type { NativeChatCard } from '../shared/native-chat'
+import { providerOptions } from '../shared/provider-choices'
 import type { BuiltinProvider, ProviderReadinessMap } from '../shared/provider-readiness'
 import type { NativeChatController } from './chat-controller'
 import type { Chat } from './chat-state'
@@ -37,13 +38,18 @@ const signInActions = (chat: Chat) =>
 export function startLoginCard(
   chat: Chat,
   readiness: ProviderReadinessMap,
-  projectReady = true
+  projectReady = true,
+  choices: ModelChoice[] = []
 ): NativeChatCard | null {
+  const options = providerOptions(choices)
   if (
     chat.messages.length ||
     chat.login ||
     !projectReady ||
     (chat.chat !== '' && !chat.ready) ||
+    options.some((option) => !!option.connectionId) ||
+    (options.some((option) => option.provider === 'gemini') &&
+      readiness.gemini?.status !== 'signed_out') ||
     readiness.claude.status !== 'signed_out' ||
     readiness.codex.status !== 'signed_out'
   )

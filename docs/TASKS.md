@@ -8,6 +8,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Show an accessible redacted loading title in the sidebar and selected header, with cached and untitled states preserved.
 - [x] Gate the initial provider chooser on confirmed sign-out and keep explicit login errors.
 - [x] Add focused title, readiness and Swift fixture assertions.
+- [x] Repair review findings for listed Gemini readiness and deterministic selected-header loading evidence.
 - [ ] Manager: obtain native acceptance on main after review and CI.
 
 ## Native suite failure on main 17fbc17129bb (LKM-484)

@@ -141,7 +141,7 @@ export class StartFlow {
       planning: chat.chat === this.planningKey,
       ready: selectable(chat, usable),
       heading: START_HEADING,
-      notice: centered ? this.notice(chat, usable, readiness) : undefined,
+      notice: centered ? this.notice(chat, usable, readiness, choices) : undefined,
       project: {
         title: home ? (this.draftTarget?.name ?? null) : (this.workspace?.project() ?? null),
         recents: (this.workspace?.recents() ?? []).slice(0, 8)
@@ -152,7 +152,8 @@ export class StartFlow {
   private notice(
     chat: Chat,
     usable: ProviderOption[],
-    readiness: ProviderReadinessMap
+    readiness: ProviderReadinessMap,
+    choices: ModelChoice[]
   ): NativeChatStart['notice'] {
     if (chat.error)
       return { text: chat.error, actions: [{ label: 'Dismiss', action: 'error-dismiss' }] }
@@ -161,7 +162,7 @@ export class StartFlow {
     // No provider can answer: LKM-231's own sign-in card, here under the composer.
     const start = usable.length
       ? null
-      : startLoginCard(chat, readiness, this.workspace?.ready?.() ?? true)
+      : startLoginCard(chat, readiness, this.workspace?.ready?.() ?? true, choices)
     if (start && !checking(readiness))
       return { text: start.detail ?? start.title, actions: start.actions }
     if (chat.signingIn || chat.signInMessage)
