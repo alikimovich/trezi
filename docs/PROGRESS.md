@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-475 review repair: retained transcript evidence
+
+- Independent review found that `chat-gate` recorded a count but its new Gamma chat had no message, so it did not prove transcript retention. The disposable fixture now waits for that selected chat to initialize, inserts one synthetic assistant reply, and waits for its native row geometry before the opening capture. It asserts the same nonzero message count and realized row through Opening and failed opening, at the normal window size and 900 pt, and records the IDs with each PNG/JSON receipt. Send and Return still have to leave the count unchanged. No real chat data is used. Native captures remain for the manager's post-merge sidebar run.
+
 ## 2026-11-03 — LKM-475 keep chat visible during project opening
 
 - The selected project's shell already reserved chat width while opening, but `WorkspaceLayout` hid the chat and composer on `chatReady == false` and stretched the preview status over that width. The chat header used the same readiness gate. The layout now keeps the existing selected chat and its draft visible, with Opening or error confined to the preview; manual Hide still collapses the column.

@@ -34,7 +34,8 @@ export async function captureChatGate(
   artifacts: string,
   stage: string,
   chat: boolean,
-  ready = chat
+  ready = chat,
+  header: boolean | null = chat
 ) {
   if (!background()) await restoreSidebarFocus(host, `chat gate ${stage}`)
   const [layout, shell, view, composer] = await Promise.all(
@@ -52,6 +53,8 @@ export async function captureChatGate(
     sendEnabled: composer.enabled,
     draft: composer.text,
     messageCount: view.messageCount,
+    messageIDs: view.messages.map((message: { id: string }) => message.id),
+    visibleMessageIDs: view.visibleMessageIDs,
     chatSession: view.chat,
     chatTitle: shell.chatTitle,
     selected: shell.selected,
@@ -62,6 +65,7 @@ export async function captureChatGate(
     preview: layout.preview,
     statusView: { frame: layout.status, hidden: layout.statusHidden, kind: layout.statusKind },
     previewHidden: layout.previewHidden,
+    windowWidth: shell.sidebarWidth + shell.detailWidth,
     sidebarWidth: shell.sidebarWidth,
     detailLeading: shell.detailLeading,
     toolbar: shell.toolbar,
@@ -73,7 +77,6 @@ export async function captureChatGate(
   for (const [name, value] of [
     ['chat view', view.visible],
     ['composer', composer.visible],
-    ['chat header', shell.chatHeaderContentVisible],
     ['chat column', !layout.chatColumnHidden]
   ] as const)
     assert.equal(
@@ -81,6 +84,8 @@ export async function captureChatGate(
       chat,
       `Chat gate ${stage}: ${name} must be ${chat ? 'shown' : 'hidden'}: ${JSON.stringify(state)}`
     )
+  if (header !== null)
+    assert.equal(shell.chatHeaderContentVisible, header, `Chat gate ${stage}: chat header`)
   if (!ready) assert.equal(composer.enabled, false, `Chat gate ${stage}: Send stays disabled`)
   if (chat) {
     assert.equal(
@@ -142,12 +147,17 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
     }
   )
   assert.equal(nativeWorkspace.state.loadedKey, first.key, 'The opened project is the loaded one')
+  const originalShell = await host.request('shellInspect')
+  const originalWidth = Math.round(originalShell.sidebarWidth + originalShell.detailWidth)
+  assert.ok(originalWidth >= 850 && originalWidth <= 2000, 'Original window can be restored')
+  assert.equal(await host.request('shellPerform', { action: 'window-width', row: '1320' }), true)
   const loaded = await captureChatGate(host, artifacts, 'loaded', true)
+  const normalWidth = 1320
   const root = join(fixture, '../Folder Gamma')
   mkdirSync(root, { recursive: true })
   writeFileSync(join(root, 'index.html'), '<h1 id="gamma-project">Gamma project</h1>')
   // A custom command that runs a while and then fails gives a deterministic opening then failed-open state.
-  const opening = nativeWorkspace.command({ type: 'open', root, command: 'sleep 8; exit 1' })
+  const opening = nativeWorkspace.command({ type: 'open', root, command: 'sleep 15; exit 1' })
   const settled = opening.then(
     () => null,
     (error: unknown) => error
@@ -165,11 +175,45 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
     'opening chat belongs to Gamma'
   )
   const gammaChat = nativeChat.get(gamma.activeSessionKey)
+  await until(() => gammaChat.ready, 'selected chat initialized during opening')
+  const transcriptID = 'chat-gate-existing-message'
+  const transcriptText = 'An existing reply in this selected chat.'
+  gammaChat.messages.push({
+    id: transcriptID,
+    role: 'assistant',
+    at: Date.now(),
+    text: transcriptText,
+    statuses: [],
+    segments: [{ kind: 'text', text: transcriptText }]
+  })
+  nativeChat.changed(gammaChat)
+  await until(
+    async () => (await host.request('chatInspect')).visibleMessageIDs.includes(transcriptID),
+    'selected transcript row rendered during opening'
+  )
   const previousMessages = gammaChat.messages.length
+  assert.ok(previousMessages > 0, 'The opening chat has an existing transcript')
   await host.request('composerPerform', { text: 'Draft while opening' })
   await until(() => gammaChat.text === 'Draft while opening', 'opening draft reaches selected chat')
   const busy = await captureChatGate(host, artifacts, 'opening', true, false)
   assert.equal(busy.draft, 'Draft while opening', 'Opening keeps the selected draft')
+  assert.equal(busy.messageCount, previousMessages, 'Opening keeps the native transcript count')
+  assert.ok(busy.visibleMessageIDs.includes(transcriptID), 'Opening renders the selected reply')
+  assert.equal(await host.request('shellPerform', { action: 'window-width', row: '900' }), true)
+  const busyNarrow = await captureChatGate(host, artifacts, 'opening-narrow', true, false, null)
+  assert.ok(
+    busy.windowWidth - busyNarrow.windowWidth > 300,
+    'Opening captures normal and narrow widths'
+  )
+  assert.equal(busyNarrow.messageCount, previousMessages, 'Narrow opening keeps the transcript')
+  assert.ok(
+    busyNarrow.visibleMessageIDs.includes(transcriptID),
+    'Narrow opening renders the selected reply'
+  )
+  assert.equal(
+    await host.request('shellPerform', { action: 'window-width', row: String(normalWidth) }),
+    true
+  )
   await host.request('composerPerform', { action: 'send' })
   await host.request('composerPerform', { key: 'Enter' })
   assert.equal(busy.statusView.kind, 'busy', 'The opening capture shows the loading state')
@@ -185,10 +229,34 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
     'failed open'
   )
   const failed = await captureChatGate(host, artifacts, 'failed-open', true, false)
+  assert.equal(
+    failed.messageCount,
+    previousMessages,
+    'Opening error keeps the native transcript count'
+  )
+  assert.ok(
+    failed.visibleMessageIDs.includes(transcriptID),
+    'Opening error renders the selected reply'
+  )
   assert.equal(gammaChat.messages.length, previousMessages, 'Disabled Send admits no early message')
   assert.equal(gammaChat.text, 'Draft while opening', 'Disabled Send keeps the draft')
   assert.equal(gammaChat.isRunning, false, 'Disabled Send starts no provider turn')
   assert.equal(failed.draft, busy.draft, 'Failed opening keeps the draft in the column')
+  assert.equal(await host.request('shellPerform', { action: 'window-width', row: '900' }), true)
+  const narrow = await captureChatGate(host, artifacts, 'failed-open-narrow', true, false, null)
+  assert.ok(
+    failed.windowWidth - narrow.windowWidth > 300,
+    'Error captures normal and narrow widths'
+  )
+  assert.equal(narrow.messageCount, previousMessages, 'Narrow opening error keeps the transcript')
+  assert.ok(
+    narrow.visibleMessageIDs.includes(transcriptID),
+    'Narrow column renders the selected reply'
+  )
+  assert.equal(
+    await host.request('shellPerform', { action: 'window-width', row: String(normalWidth) }),
+    true
+  )
   assert.equal(await host.request('shellPerform', { action: 'expand' }), true)
   await until(
     async () => (await host.request('layoutInspect')).chatColumnHidden,
@@ -291,10 +359,22 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
     'first project ready again'
   )
   await nativeWorkspace.command({ type: 'close', key: gamma.key })
+  assert.equal(
+    await host.request('shellPerform', { action: 'window-width', row: String(originalWidth) }),
+    true
+  )
   writeFileSync(
     join(artifacts, 'chat-gate.json'),
     JSON.stringify(
-      { loaded, opening: busy, failedOpen: failed, retryReady: ready, switchedBack: true },
+      {
+        loaded,
+        opening: busy,
+        openingNarrow: busyNarrow,
+        failedOpen: failed,
+        failedOpenNarrow: narrow,
+        retryReady: ready,
+        switchedBack: true
+      },
       null,
       2
     )
