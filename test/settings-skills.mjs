@@ -36,10 +36,18 @@ import { compileSkills, link, scratchSpace, skillMd } from './helpers/skills-fix
     SKILL_RECOMMENDATIONS.map((r) => [r.id, r.repository, r.license, r.importable]),
     [
       ['frontend-design', 'anthropics/skills', 'Apache-2.0', true],
-      ['vercel-react-best-practices', 'vercel-labs/agent-skills', 'MIT', false],
-      ['vercel-composition-patterns', 'vercel-labs/agent-skills', 'MIT', true],
-      ['swiftui-view-refactor', 'steipete/agent-scripts', 'MIT', true],
-      ['swiftui-expert-skill', 'AvdLee/SwiftUI-Agent-Skill', 'MIT', false]
+      ['impeccable', 'pbakaus/impeccable', 'Apache-2.0', true],
+      ['emil-design-eng', 'emilkowalski/skills', 'MIT', true],
+      ['better-ui', 'jakubkrehel/skills', 'MIT', true],
+      ['animate', 'emilkowalski/skills', 'MIT', true],
+      ['better-typography', 'jakubkrehel/skills', 'MIT', true],
+      ['better-colors', 'jakubkrehel/skills', 'MIT', true],
+      ['better-accessibility', 'jakubkrehel/skills', 'MIT', true],
+      ['better-layout', 'jakubkrehel/skills', 'MIT', true],
+      ['better-writing', 'jakubkrehel/skills', 'MIT', false],
+      ['variant', 'jakubkrehel/skills', 'MIT', false],
+      ['state-machine', 'jakubkrehel/skills', 'MIT', false],
+      ['interface-review', 'jakubkrehel/skills', 'MIT', false]
     ]
   )
   const keys = [
@@ -57,7 +65,11 @@ import { compileSkills, link, scratchSpace, skillMd } from './helpers/skills-fix
   for (const entry of SKILL_RECOMMENDATIONS) {
     assert.deepEqual(
       Object.keys(entry).sort(),
-      entry.importable ? keys : [...keys, 'unavailableReason'].sort(),
+      entry.importable
+        ? entry.installNote
+          ? [...keys, 'installNote'].sort()
+          : keys
+        : [...keys, 'unavailableReason'].sort(),
       'Metadata only: no SKILL.md text, scripts or install commands'
     )
     assert.match(entry.id, /^[a-z0-9]+(-[a-z0-9]+)*$/)
@@ -144,7 +156,7 @@ try {
   assert.equal(field('recommendations-note').label, 'Not installed until you choose Install')
   for (const entry of SKILL_RECOMMENDATIONS) {
     const row = field(`recommendation:${entry.id}`)
-    assert.equal(row.group, 'Recommended')
+    assert.ok(row.group.startsWith('Recommended · '))
     assert.equal(
       row.value,
       entry.importable ? `${entry.publisher} · ${entry.license}` : 'Not importable'
@@ -181,11 +193,20 @@ try {
   assert.deepEqual(footer(), ['skill-back', 'skill-install'])
   assert.deepEqual(disabled(), [])
   await act('skill-back')
+  await act('skill-recommendation:impeccable')
+  assert.equal(field('recommendation-status').value, 'Not installed')
+  assert.equal(field('recommendation-source').value, 'pbakaus/impeccable/plugin/skills/impeccable')
+  assert.match(field('recommendation-status').help, /17 static Markdown playbooks/)
+  assert.deepEqual(disabled(), [])
+  await act('skill-back')
   // One that cannot be imported: Install is shown disabled and refused if sent anyway.
-  await act('skill-recommendation:swiftui-expert-skill')
+  await act('skill-recommendation:variant')
   assert.equal(field('recommendation-status').value, 'Can’t be installed')
   assert.ok(field('recommendation-status').help, 'It says why')
-  assert.equal(field('recommendation-link').value, recommendationUrl(SKILL_RECOMMENDATIONS[4]))
+  assert.equal(
+    field('recommendation-link').value,
+    recommendationUrl(SKILL_RECOMMENDATIONS.find((r) => r.id === 'variant'))
+  )
   assert.deepEqual(disabled(), ['skill-install'])
   await act('skill-install')
   assert.equal(state().message, undefined, 'A disabled action is not handled')

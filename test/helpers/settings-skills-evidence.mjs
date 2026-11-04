@@ -46,10 +46,10 @@ const base = {
   busy: false,
   disabledActions: []
 }
-const reject = (evidence, expect, mutate) => {
+const reject = (evidence, expect, mutate, width = 680) => {
   const bad = structuredClone(evidence)
   mutate(bad)
-  assert.throws(() => assertSkillsEvidence(bad, 680, expect))
+  assert.throws(() => assertSkillsEvidence(bad, width, expect))
 }
 
 // Overview: rows usable as rendered; a recommendation never reads as installed unless it is.
@@ -82,6 +82,20 @@ reject(overview, expectOverview, (e) => (e.sidebarSelected = 1))
 reject(overview, expectOverview, (e) => (e.foreground = false))
 reject(overview, expectOverview, (e) => (e.busy = true))
 reject(overview, expectOverview, (e) => (e.width = 780))
+// Empty library: the first recommendation is visible and actionable at both widths.
+const emptyOverview = {
+  ...structuredClone(overview),
+  rows: recommended.map((r, index) => ({ ...r, contained: index === 0 })),
+  fields: ['skills-status', 'recommendations-note']
+}
+const expectEmpty = { view: 'overview', installed: [] }
+assertSkillsEvidence(emptyOverview, 680, expectEmpty)
+reject(emptyOverview, expectEmpty, (e) => (e.rows[0].contained = false))
+reject(emptyOverview, expectEmpty, (e) => (e.rows[0].hitTarget = false))
+const normalOverview = { ...emptyOverview, width: 780 }
+assertSkillsEvidence(normalOverview, 780, expectEmpty)
+reject(normalOverview, expectEmpty, (e) => (e.rows[0].contained = false), 780)
+reject(normalOverview, expectEmpty, (e) => (e.rows[0].hitTarget = false), 780)
 const withInstalled = {
   ...structuredClone(overview),
   values: { ...overview.values, 'recommendation:frontend-design': 'Installed' }

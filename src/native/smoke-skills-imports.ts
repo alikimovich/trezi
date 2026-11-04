@@ -5,7 +5,11 @@ import { SKILL_RECOMMENDATIONS } from '../shared/skills-catalog'
 import type { NativeBridge } from './bridge'
 import { bodyField, GITHUB_FIELDS, nativeSkills } from './settings-skills'
 import { SETTINGS_DEFAULT_SIZE } from './settings-verification'
-import { SKILLS_FIXTURE_IMPORT, SKILLS_FIXTURE_RECOMMENDATION } from './skills-github-fixture'
+import {
+  SKILLS_FIXTURE_IMPECCABLE,
+  SKILLS_FIXTURE_IMPORT,
+  SKILLS_FIXTURE_RECOMMENDATION
+} from './skills-github-fixture'
 import type { SkillsRegistry } from './skills-service'
 import type { SkillsEvidence, SkillsExpectation } from './skills-verification'
 
@@ -13,7 +17,7 @@ import type { SkillsEvidence, SkillsExpectation } from './skills-verification'
  * LKM-286: the import half of the Settings → Skills smoke. A fixture folder is
  * imported through the folder action (the open panel replaced by
  * `nativeSkills.pickFolder`); a GitHub folder pinned to tag `v1` and the
- * `frontend-design` recommendation are imported from the launcher's loopback GitHub
+ * `frontend-design` and static Impeccable recommendations are imported from loopback GitHub
  * (`skills-github-fixture.ts`) by the real service importer. A recommendation that
  * cannot be imported shows a disabled Install that the runtime refuses.
  */
@@ -175,6 +179,40 @@ export async function checkSkillsImports(
     { view: 'recommendation', id: entry, status: 'Installed' },
     normal
   )
+
+  // The pinned static Impeccable edition is offered as an opt-in recommendation.
+  await host.request('sheetPerform', { action: 'skill-back' })
+  await until('library', (s) => s.actions.includes('skill-github'))
+  await host.request('settingsVerification', { press: 'skill-recommendation:impeccable' })
+  await until(
+    'Impeccable recommendation',
+    (s) => s.values['recommendation-status'] === 'Not installed'
+  )
+  await shoot(
+    '12-impeccable',
+    { view: 'recommendation', id: 'impeccable', status: 'Not installed' },
+    normal
+  )
+  await host.request('sheetPerform', { action: 'skill-install' })
+  await until(
+    'Impeccable installed',
+    (s) => !s.busy && s.message.startsWith('Added impeccable from'),
+    60_000
+  )
+  await nativeSkills.importing
+  const impeccable = await named(SKILLS_FIXTURE_IMPECCABLE.id)
+  assert.equal(impeccable.source.kind, 'github')
+  if (impeccable.source.kind === 'github') {
+    assert.equal(impeccable.source.repository, SKILLS_FIXTURE_IMPECCABLE.repository)
+    assert.equal(impeccable.source.subpath, SKILLS_FIXTURE_IMPECCABLE.subpath)
+    assert.equal(impeccable.source.commit, SKILLS_FIXTURE_IMPECCABLE.commit)
+    assert.equal(impeccable.source.license, SKILLS_FIXTURE_IMPECCABLE.license)
+  }
+  const impeccableBody = await registry.read(impeccable.id)
+  assert.match(impeccableBody.body, /static edition/)
+  assert.equal(impeccableBody.references.length, 18, 'License and all static playbooks imported')
+  assert.ok(impeccableBody.references.every((file) => !file.path.startsWith('scripts/')))
+  report.push({ action: 'install-impeccable', skill: impeccable })
 
   // An entry that cannot be imported: Install is shown disabled, and refused if sent.
   assert.ok(UNIMPORTABLE, 'The catalog has an entry that cannot be imported')

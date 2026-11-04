@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import { SKILL_RECOMMENDATIONS } from '../shared/skills-catalog'
-import { assertSidebar, assertUsable, type SettingsEvidence } from './settings-verification'
+import {
+  assertSidebar,
+  assertUsable,
+  SETTINGS_DEFAULT_SIZE,
+  type SettingsEvidence
+} from './settings-verification'
 
 /**
  * LKM-288, LKM-286: what the Settings → Skills pane must render, checked against the
@@ -109,8 +114,21 @@ export function assertSkillsEvidence(
     for (const skill of removed)
       row(evidence, `skill-open:${skill.id}`, 'Restore…', `Restore ${skill.name}`)
     const recommended = new Set(expect.recommended ?? [])
-    for (const entry of SKILL_RECOMMENDATIONS) {
-      row(evidence, `skill-recommendation:${entry.id}`, 'Details…', `Details ${entry.title}`)
+    for (const [index, entry] of SKILL_RECOMMENDATIONS.entries()) {
+      // The first recommendation is in the viewport when the library is empty.
+      // Check the rendered button at both the normal and minimum Settings widths.
+      const firstVisible =
+        index === 0 &&
+        expect.installed.length === 0 &&
+        removed.length === 0 &&
+        width <= SETTINGS_DEFAULT_SIZE.width
+      row(
+        evidence,
+        `skill-recommendation:${entry.id}`,
+        'Details…',
+        `Details ${entry.title}`,
+        firstVisible
+      )
       // A recommendation never reads as installed unless its folder is in the library.
       const value = evidence.values[`recommendation:${entry.id}`]
       if (recommended.has(entry.id)) assert.equal(value, 'Installed', `${entry.id} is installed`)

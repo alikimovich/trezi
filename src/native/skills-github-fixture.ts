@@ -61,6 +61,32 @@ export const SKILLS_FIXTURE_RECOMMENDATION = {
   commit: 'f0e1d2c3b4a5968778695a4b3c2d1e0f0e1d2c3b',
   license: 'Apache-2.0'
 } as const
+export const SKILLS_FIXTURE_IMPECCABLE = {
+  id: 'impeccable',
+  repository: 'pbakaus/impeccable',
+  subpath: 'plugin/skills/impeccable',
+  commit: '5af4319c4e7a7ee3e5e2b9fe899bcfb21c6190cb',
+  license: 'Apache-2.0'
+} as const
+const IMPECCABLE_REFERENCES = [
+  'adapt.md',
+  'adapt.native.md',
+  'android.md',
+  'animate.md',
+  'bolder.md',
+  'clarify.md',
+  'craft-floor.md',
+  'delight.md',
+  'distill.md',
+  'harden.md',
+  'ios.md',
+  'mode-operate.md',
+  'mode-persuade.md',
+  'mode-read.md',
+  'onboard.md',
+  'operate.md',
+  'quieter.md'
+]
 
 /** A repository the fixture never answers for, so an import of it can be cancelled. */
 export const SKILLS_FIXTURE_SLOW = 'trezi-fixtures/slow'
@@ -102,6 +128,23 @@ description: Fixture copy of the frontend-design recommendation for the Trezi na
 Choose a clear visual direction before writing components.
 `,
       'skills/frontend-design/LICENSE.txt': APACHE
+    }
+  },
+  {
+    repository: SKILLS_FIXTURE_IMPECCABLE.repository,
+    refs: { [SKILLS_FIXTURE_IMPECCABLE.commit]: SKILLS_FIXTURE_IMPECCABLE.commit },
+    commit: SKILLS_FIXTURE_IMPECCABLE.commit,
+    files: {
+      LICENSE: APACHE,
+      'plugin/skills/impeccable/SKILL.md':
+        '---\nname: impeccable\ndescription: Upstream fixture.\nversion: 4.8.0\n---\n\n# Upstream fixture\n',
+      ...Object.fromEntries(
+        IMPECCABLE_REFERENCES.map((name) => [
+          `plugin/skills/impeccable/reference/${name}`,
+          `# ${name}\nStatic playbook fixture.\n`
+        ])
+      ),
+      'plugin/skills/impeccable/scripts/modern-screenshot.umd.js': 'x'.repeat(1_100_013)
     }
   }
 ]

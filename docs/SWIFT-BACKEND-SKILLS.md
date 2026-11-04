@@ -196,7 +196,8 @@ Nothing is preinstalled, and the curated recommendations are metadata only.
      single top folder
    - sparse or unknown entry types
    - in the imported folder: symlinks, hard links, devices, FIFOs, executable modes,
-     duplicate or case-colliding paths, and a file whose ancestor is a file
+     duplicate or case-colliding paths, and a file whose ancestor is a file (except
+     excluded runtime files in the exact pinned Impeccable static adaptation)
    - base-256 sizes, a second global header, entries after the end marker, trailing
      data and truncation
 
@@ -224,6 +225,15 @@ Nothing is preinstalled, and the curated recommendations are metadata only.
 
    Nothing from a package is run. Untrusted skill text never becomes policy or a
    permission; normal tool approval still applies.
+   LKM-516 adds two narrow, commit-pinned import projections. At Jakub Krehel's
+   reviewed commit, a `skills/better-*` GitHub folder drops only
+   `agents/openai.yaml`, which is optional Codex display metadata; all Markdown
+   references are retained and the normal scope check still runs. At Paul Bakaus's
+   reviewed commit, `plugin/skills/impeccable` retains 17 named, script-free Markdown
+   playbooks and replaces its launcher-dependent entry with an explicit static-edition
+   entry. It refuses a missing playbook. Other files, including scripts, are streamed
+   past without being stored or run. Manual imports and every other GitHub import
+   retain the existing refusal rules and size limits.
 6. **License.** Evidence comes from the folder's own `LICENSE*` file, then the
    `SKILL.md` `license:` field, then the repository root `LICENSE*`. A root license is
    copied into the package as `attribution`. An unrecognised license is `NOASSERTION`
@@ -243,29 +253,24 @@ Recommendations (`SKILL_RECOMMENDATIONS` with `SKILL_RECOMMENDATION_IMPORTS`):
 
 | ID | Category | Source (path verified) | License evidence | Importable | Upstream evidence |
 | --- | --- | --- | --- | --- | --- |
-| `frontend-design` | UI craft | `anthropics/skills` `skills/frontend-design` | Apache-2.0 (the folder's `LICENSE.txt`) | yes | `dbd4588f`: 2 files, 19 564 B, largest 10 174 B |
-| `vercel-react-best-practices` | React | `vercel-labs/agent-skills` `skills/react-best-practices` | MIT (`SKILL.md` frontmatter) | **no**: 76 files, over the 64-file cap | `063bee94`: 76 files (75 `.md`, 1 `.json`), 230 383 B, largest 108 261 B |
-| `vercel-composition-patterns` | design systems | `vercel-labs/agent-skills` `skills/composition-patterns` | MIT (`SKILL.md` frontmatter) | yes | `063bee94`: 14 files, 50 339 B, largest 22 627 B |
-| `swiftui-view-refactor` | SwiftUI | `steipete/agent-scripts` `skills/swiftui-view-refactor` | MIT (repository `LICENSE`) | yes | `d602e8ad`: 2 UTF-8 `.md` files, 12 565 B, largest 7 961 B (`/tmp/trezi-swiftui-compatible-recommendation.json`) |
-| `swiftui-expert-skill` | SwiftUI | `AvdLee/SwiftUI-Agent-Skill` `skills/swiftui-expert-skill` | MIT (repository `LICENSE`) | **no**: scripts, images and a file over 256 KiB | `204dba7c`: 51 files (34 `.md`, 13 `.py`, 2 `.png`, 1 `.svg`, 1 `.yaml`), 901 559 B, largest 398 841 B |
+| `frontend-design` | Start here | `anthropics/skills` `skills/frontend-design` | Apache-2.0 (folder `LICENSE.txt`) | yes | `dbd4588f`: 2 files |
+| `impeccable` | Start here | `pbakaus/impeccable` `plugin/skills/impeccable` | Apache-2.0 (root `LICENSE`) | **static edition**: 17 playbooks, no launcher | `5af4319c`: original 58 files, 2 215 692 B; retained references 90 604 B |
+| `emil-design-eng`, `animate` | Start here; UI and motion | `emilkowalski/skills` `skills/<id>` | MIT (root `LICENSE`) | yes | `c8a79627`: 1 or 2 Markdown files |
+| `better-ui`, `better-typography`, `better-colors`, `better-accessibility`, `better-layout` | UI and motion; Type and color; Inclusive layout | `jakubkrehel/skills` `skills/<id>` | MIT (root `LICENSE`) | yes, optional `agents/openai.yaml` omitted | `60bf140e`: 4–8 files per folder, under limits |
+| `better-writing` | Writing | `jakubkrehel/skills` `skills/better-writing` | MIT (root `LICENSE`) | **no**: Markdown contains the scope's `!` plus backtick sequence | `60bf140e`: 3 files |
+| `variant`, `state-machine`, `interface-review` | Explore and review | `jakubkrehel/skills` `skills/<id>` | MIT (root `LICENSE`) | **no**: `disable-model-invocation` cannot be preserved | `60bf140e`: 3–4 files each |
 
-The evidence was measured on the upstream trees at those commits and is recorded in
-`SKILL_RECOMMENDATION_IMPORTS`. The earlier catalog path `swiftui-expert-skill` was wrong;
-the folder is `skills/swiftui-expert-skill`. A recommendation is `importable` only when its
-folder is instructions only and fits `SKILLS_LIMITS`; the caps are not weakened to fit a
-folder. A non-importable entry carries an `unavailableReason` for the UI and
-`recommendationImport` returns `null` for it, so it is never offered an import.
-`test/skills-github.mjs` asserts that `importable` follows the evidence against the
-caps, and that every importable entry has a verified path and a permissive license. Every
-category (UI craft, design systems, SwiftUI) has an importable entry; React is the one
-deliberate exception, because its only curated skill is over the file cap. If a
-maintainer raises `maxFiles` (and the evidence then fits), the React entry can become
-importable.
+The official trees, SKILL.md names, support files and license files were checked at
+these full commits. `SKILL_RECOMMENDATION_IMPORTS` records the measured evidence and
+the pinned import ref. A non-importable row carries an explicit reason and has no
+enabled Install action. Impeccable is labeled as a static adaptation in the row,
+detail and imported entry; it does not claim its runtime workflows. The original
+Impeccable folder would exceed the package limit and contains executable components.
 
-`recommendationImport` builds the `github` request on `main`. The service pins it.
+`recommendationImport` uses the reviewed commit for the new author repositories.
+The retained Frontend Design entry still resolves `main` before the service pins it.
 `recommendationMismatch` then reports a moved folder, a renamed skill or a changed
-license instead of hiding it. `skills/web-design-guidelines` is left out on purpose:
-it declares no license and fetches mutable guidelines on every use.
+license instead of hiding it.
 
 ## Settings → Skills (LKM-286)
 

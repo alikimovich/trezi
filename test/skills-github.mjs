@@ -86,10 +86,17 @@ try {
     assert.equal(skillLicenseStatus('NOASSERTION'), 'unknown')
     assert.equal(skillLicenseStatus(null), 'unknown')
 
-    assert.equal(SKILL_RECOMMENDATIONS.length, 5)
+    assert.equal(SKILL_RECOMMENDATIONS.length, 13)
     assert.deepEqual(
       new Set(Object.values(SKILL_RECOMMENDATION_IMPORTS).map((item) => item.category)),
-      new Set(['ui-craft', 'design-systems', 'react', 'swiftui'])
+      new Set([
+        'Start here',
+        'UI and motion',
+        'Type and color',
+        'Inclusive layout',
+        'Writing',
+        'Explore and review'
+      ])
     )
     const limits = SKILLS_LIMITS
     for (const entry of SKILL_RECOMMENDATIONS) {
@@ -99,12 +106,15 @@ try {
       assert.match(evidence.commit, /^[0-9a-f]{40}$/, entry.id)
       // Every folder was measured upstream, so its path is verified whatever it can do.
       assert.equal(entry.pathVerified, true, `${entry.id} has a verified path`)
-      assert.ok(entry.path.startsWith('skills/'), `${entry.id} path is ${entry.path}`)
+      assert.ok(
+        entry.path.startsWith('skills/') || entry.path === 'plugin/skills/impeccable',
+        `${entry.id} path is ${entry.path}`
+      )
       const fits =
-        evidence.files <= limits.maxFiles &&
+        evidence.files - (evidence.omitted ? 1 : 0) <= limits.maxFiles &&
         evidence.maxFileBytes <= limits.maxFileBytes &&
         evidence.bytes <= limits.maxPackageBytes &&
-        !evidence.other?.match(/\.(py|png|svg|yaml|sh|js|ts)\b/)
+        !evidence.unsupported
       // Importability follows the evidence against the unchanged caps and scope.
       assert.equal(entry.importable, fits, `${entry.id} importable matches its evidence`)
       if (entry.importable) {
@@ -123,14 +133,16 @@ try {
       const input = recommendationImport(entry)
       assert.deepEqual(input, {
         url: `https://github.com/${entry.repository}`,
-        ref: 'main',
+        ref: SKILL_RECOMMENDATION_IMPORTS[entry.id].ref,
         subpath: entry.path
       })
       const source = {
         kind: 'github',
         repository: entry.repository,
         subpath: entry.path,
-        commit,
+        commit: /^[0-9a-f]{40}$/.test(SKILL_RECOMMENDATION_IMPORTS[entry.id].ref)
+          ? SKILL_RECOMMENDATION_IMPORTS[entry.id].ref
+          : commit,
         license: entry.license
       }
       assert.deepEqual(recommendationMismatch(entry, { name: entry.id, source }), [])
@@ -141,23 +153,48 @@ try {
         }).length,
         3
       )
+      if (source.commit !== commit)
+        assert.ok(
+          recommendationMismatch(entry, { name: entry.id, source: { ...source, commit } }).some(
+            (message) => message.startsWith('commit is ')
+          )
+        )
     }
     assert.deepEqual(
       SKILL_RECOMMENDATIONS.filter((entry) => !entry.importable).map((entry) => entry.id),
-      ['vercel-react-best-practices', 'swiftui-expert-skill']
+      ['better-writing', 'variant', 'state-machine', 'interface-review']
     )
-    // Every category offers something importable, except React: its only curated skill
-    // has 76 files, over the unchanged 64-file cap (a deliberate, documented exception).
-    const noImport = new Set(['react'])
-    for (const category of ['ui-craft', 'design-systems', 'react', 'swiftui']) {
+    // Exploration entries carry invocation control that Trezi does not preserve;
+    // their rows are honest about unavailability.
+    const noImport = new Set(['Writing', 'Explore and review'])
+    for (const category of [
+      'Start here',
+      'UI and motion',
+      'Type and color',
+      'Inclusive layout',
+      'Writing',
+      'Explore and review'
+    ]) {
       const importable = SKILL_RECOMMENDATIONS.filter(
         (entry) => entry.importable && SKILL_RECOMMENDATION_IMPORTS[entry.id].category === category
       )
       assert.equal(importable.length > 0, !noImport.has(category), `${category} importable`)
     }
     assert.equal(
-      SKILL_RECOMMENDATION_IMPORTS['swiftui-view-refactor'].evidence.commit,
-      'd602e8ada5e8c73fadcb4d9eaff6d16fa17462db'
+      SKILL_RECOMMENDATION_IMPORTS['animate'].evidence.commit,
+      'c8a79627b59d72d764d6ab6f2c87c09a48169833'
+    )
+    assert.deepEqual(
+      { ...SKILL_RECOMMENDATION_IMPORTS.impeccable.evidence },
+      {
+        commit: '5af4319c4e7a7ee3e5e2b9fe899bcfb21c6190cb',
+        files: 17,
+        bytes: 90604,
+        maxFileBytes: 11313,
+        adapter: 'static-markdown',
+        upstreamFiles: 58,
+        upstreamBytes: 2215692
+      }
     )
     assert.ok(!SKILL_RECOMMENDATIONS.some((entry) => entry.path.includes('web-design-guidelines')))
     console.log(

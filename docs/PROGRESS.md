@@ -1,5 +1,22 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-516 CI importer request-log repair
+
+- The PR-head unit log shows the demo import's request-log assertion included the two preceding pinned recommendation requests. The fixture now clears only its loopback request/override state before the demo case, retaining the two installed skills and their coverage. The other named failure is the unrelated tall chat recovery card fixture; its assertion trace has been identified for the owning ticket. Current-head CI remains required.
+
+## 2026-11-04 — LKM-516 CI fixture repair
+
+- The pinned Jakub and Impeccable importer examples now count as retained skills in the later demo import assertions; the demo's source is found by ID instead of list position. A concurrent CI shard also stopped the uncached host-warning Swift compile at the generic 120-second test cap without a diagnostic, so that existing warning check now has a 300-second compile budget while keeping every warning and canary assertion. Exact-head CI still needs to confirm both repairs.
+
+## 2026-11-04 — LKM-516 review repair: visible recommendation action
+
+- The Skills overview fixture now captures the empty library at normal and minimum Settings widths and checks the first recommendation's rendered Details row is contained and hittable. Synthetic evidence rejects clipped and unhittable rows at both widths. This closes the independent review's layout evidence gap; native acceptance remains for the manager's post-merge run.
+
+## 2026-11-04 — LKM-516 design skills catalog and static Impeccable edition
+
+- Settings → Skills now recommends Frontend Design, Paul Bakaus's Impeccable, and a selective ordered set from Emil Kowalski and Jakub Krehel for UI craft, motion, typography, color, accessibility, layout, writing, variants, states and review. Rows are grouped by task and remain opt-in. Official SKILL.md names, paths, support files and root licenses were checked at the recorded commits. Writing and the three invocation-controlled exploration/review skills have honest disabled Install actions because Trezi's current scope cannot preserve their source behavior.
+- The pinned Jakub imports omit only optional Codex display metadata while retaining their Markdown references. Impeccable's official unified folder contains launcher/runtime files and exceeds Trezi's package limit, so the explicit static edition retains 17 script-free playbooks and an adapted entry, with runtime features clearly excluded. The ordinary scope and limits still vet the result; other GitHub and manual imports are unchanged. Focused catalog, loopback importer, rendered Settings and native fixture assertions cover provenance, support files, grouping and opt-in behavior. CI, independent review and native acceptance on main remain with the manager.
+
 ## 2026-11-04 — LKM-509 owned recoverable failures
 
 - The review's two callback races share one producer identity rule. Turn-end landings and their parked fallback now carry the turn ID captured by the reconciliation coordinator before queuing; Retry carries its admitted recovery request ID through its own landing and check callbacks. The controller rejects a park from another turn or expired recovery request, while accepting the current Retry result on the same held turn. The existing Stop consumer fixture first reproduced the missing Retry ID and the old Stop park overwriting a Resolve handover, then checks the genuine terminal Problem/report/Retry, quiet Stop and fresh-turn outcomes. Native acceptance, independent review and exact-head CI remain with the manager.
