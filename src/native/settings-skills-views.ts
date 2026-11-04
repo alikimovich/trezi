@@ -203,9 +203,10 @@ export function overview(pane: Pane) {
   })
   for (const entry of SKILL_RECOMMENDATIONS) {
     const taken = installedFrom(pane.list, entry)
+    const category = SKILL_RECOMMENDATION_IMPORTS[entry.id]?.category ?? 'Start here'
     row({
       id: `recommendation:${entry.id}`,
-      group: 'Recommended',
+      group: `Recommended · ${category}`,
       label: entry.title,
       help: entry.summary,
       value: taken
@@ -428,7 +429,9 @@ export function recommendation(pane: Pane, entry: SkillRecommendation) {
       : entry.importable
         ? {
             value: 'Not installed',
-            help: `Install downloads ${entry.repository}/${entry.path} at the commit “${ref}” points to now, checks every file and adds it to your library. Installing runs none of its files and grants no tool permissions.`
+            help: entry.installNote
+              ? `Install downloads ${entry.repository}/${entry.path} at pinned commit ${ref}. ${entry.installNote} Installing grants no tool permissions.`
+              : `Install downloads ${entry.repository}/${entry.path} at the commit “${ref}” points to now, checks every file and adds it to your library. Installing runs none of its files and grants no tool permissions.`
           }
         : { value: 'Can’t be installed', help: entry.unavailableReason }
   const fields: NativeSheetField[] = [
