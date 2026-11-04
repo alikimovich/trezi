@@ -351,6 +351,12 @@ assert.equal(
 chat.ready = false
 assert.equal(startLoginCard(chat, states), null, 'hydration defers provider choice')
 chat.ready = true
+assert.equal(startLoginCard(chat, states, false), null, 'project opening defers a hydrated chat')
+assert.equal(
+  startLoginCard(chat, states, true)?.id,
+  'provider-start',
+  'loaded project restores choice'
+)
 assert.deepEqual(
   startLoginCard(chat, states)
     .actions.slice(0, 2)

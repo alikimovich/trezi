@@ -11,10 +11,14 @@ export function installNativeStart(
   chat: NativeChatController,
   workspace: NativeWorkspaceController
 ) {
+  const projectReady = () =>
+    !workspace.active ||
+    (workspace.state.loadedKey === workspace.active.key && workspace.state.status.kind !== 'error')
   chat.start.workspace = {
     project: () => workspace.active?.name ?? null,
     recents: () => workspace.state.recents.map(({ root, name }) => ({ root, name })),
     busy: () => (workspace.state.status.kind === 'busy' ? workspace.state.status.label : ''),
+    ready: projectReady,
     preferred: () => ({ ...workspace.preferred })
   }
   const fail = (error: unknown) => workspace.reportError(error)
@@ -81,8 +85,11 @@ export function installNativeStart(
   }
   // The no-project screen shows the workspace's own progress ("Opening Site…") and recents.
   const render = workspace.services.render
+  let lastProjectReady = projectReady()
   workspace.services.render = (state) => {
     render(state)
-    if (chat.active === HOME) chat.changed()
+    const ready = projectReady()
+    if (chat.active === HOME || ready !== lastProjectReady) chat.changed()
+    lastProjectReady = ready
   }
 }

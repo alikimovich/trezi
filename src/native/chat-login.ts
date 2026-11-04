@@ -34,8 +34,13 @@ const signInActions = (chat: Chat) =>
     disabled: !!chat.signingIn
   }))
 
-export function startLoginCard(chat: Chat, readiness: ProviderReadinessMap): NativeChatCard | null {
+export function startLoginCard(
+  chat: Chat,
+  readiness: ProviderReadinessMap,
+  projectReady = true
+): NativeChatCard | null {
   if (
+    !projectReady ||
     (chat.chat !== '' && !chat.ready) ||
     chat.messages.length ||
     chat.login ||

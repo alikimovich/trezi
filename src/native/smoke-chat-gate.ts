@@ -224,6 +224,24 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
     'off'
   )
   await captureChatGate(host, artifacts, 'title-resolved', true, false)
+  // The chat has hydrated, but the project remains opening. Simulate authoritative
+  // signed-out metadata in memory to prove project readiness is a separate gate.
+  const priorReadiness = {
+    claude: nativeChat.readiness.claude,
+    codex: nativeChat.readiness.codex
+  }
+  nativeChat.readiness.claude = { status: 'signed_out' }
+  nativeChat.readiness.codex = { status: 'signed_out' }
+  nativeChat.changed(gammaChat)
+  assert.equal(gammaChat.ready, true, 'provider gate probes a hydrated conversation')
+  assert.notEqual(nativeWorkspace.state.loadedKey, gamma.key, 'project still opens')
+  assert.ok(
+    !(await host.request('chatInspect')).cards.includes('provider-start'),
+    'provider choice stays hidden during project opening after chat hydration'
+  )
+  nativeChat.readiness.claude = priorReadiness.claude
+  nativeChat.readiness.codex = priorReadiness.codex
+  nativeChat.changed(gammaChat)
   const transcriptID = 'chat-gate-existing-message'
   const transcriptText = 'An existing reply in this selected chat.'
   gammaChat.messages.push({
@@ -394,6 +412,22 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
       }
     }
   )
+  const retainedMessages = gammaChat.messages.splice(0)
+  const readyReadiness = {
+    claude: nativeChat.readiness.claude,
+    codex: nativeChat.readiness.codex
+  }
+  nativeChat.readiness.claude = { status: 'signed_out' }
+  nativeChat.readiness.codex = { status: 'signed_out' }
+  nativeChat.changed(gammaChat)
+  await until(
+    async () => (await host.request('chatInspect')).cards.includes('provider-start'),
+    'provider choice returns after project readiness'
+  )
+  gammaChat.messages.push(...retainedMessages)
+  nativeChat.readiness.claude = readyReadiness.claude
+  nativeChat.readiness.codex = readyReadiness.codex
+  nativeChat.changed(gammaChat)
   const ready = await captureChatGate(host, artifacts, 'retry-ready', true)
   assert.equal(ready.draft, 'Draft while opening', 'Ready chat keeps its unsent draft')
   assert.equal(ready.sendEnabled, true, 'Ready chat enables Send for the saved draft')

@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-485 review repair: project readiness gates provider choice
+
+- Independent review found that a conversation can finish hydration while its project is still opening. The start card now checks the selected project's loaded key as well as chat readiness and authoritative signed-out metadata. The existing start runtime refreshes the active chat when project readiness changes, so the choice returns after loading without a provider or workspace mutation.
+- The `chat-gate` fixture now forces signed-out status only in memory during its disposable-profile opening and ready phases. It asserts the card stays absent for a hydrated chat while the project is pending and returns after readiness; it restores the prior readiness and synthetic transcript before continuing the existing capture assertions. Native execution remains with the manager after merge.
+
 ## 2026-11-03 — LKM-485 pending conversation titles
 
 - The shell now marks only unknown titles in the selected project while conversation or project hydration is pending. AppKit renders fixed-width transient glyphs in those rows and the selected header; it stops the timer on resolution, error, row removal and window detach. Reduce Motion holds a static placeholder and accessibility reads “Loading conversation.” Cached titles and ready untitled chats retain their ordinary text.
