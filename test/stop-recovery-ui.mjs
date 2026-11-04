@@ -390,6 +390,38 @@ assert.equal(card('conflict')?.title, 'Problem', 'the owner result settles befor
 assert.match(card('conflict').detail, /The delayed Keep check did not pass/)
 assert.ok(chat.recoveryReport)
 await freshHeldTurn()
+// A Keep failure has an outcome even when the owner cannot list files. The
+// already observed stopped hold remains private, with its real error and Retry.
+answers['agent:keep-stopped'] = {
+  ok: false,
+  files: [],
+  error: 'The Keep check could not read the held files.'
+}
+await act('stopped-keep')
+await tick()
+assert.equal(card('conflict')?.title, 'Problem', 'an empty-files failure is terminal')
+assert.match(card('conflict').detail, /Keep check could not read the held files/)
+assert.deepEqual(chat.isolationFiles, ['src/a.tsx'], 'observed held work remains available')
+assert.ok(chat.recoveryReport, 'the empty-files failure has an actual report')
+assert.ok(card('conflict').actions.some((action) => action.action === 'landing-retry'))
+for (const parked of stoppedGenerationParks) {
+  oldPark(parked)
+  assert.equal(card('conflict')?.title, 'Problem', 'old Stop cannot replace the failed Keep')
+  assert.ok(chat.recoveryReport)
+}
+await freshHeldTurn()
+answers['agent:keep-stopped'] = () => {
+  throw new Error('The Keep request lost its owner response.')
+}
+await act('stopped-keep')
+await tick()
+assert.equal(card('conflict')?.title, 'Problem', 'a rejected Keep request settles as failure')
+assert.match(card('conflict').detail, /Keep request lost its owner response/)
+assert.ok(chat.recoveryReport)
+assert.ok(card('conflict').actions.some((action) => action.action === 'landing-retry'))
+oldPark({ reason: 'interrupted' })
+assert.equal(card('conflict')?.title, 'Problem', 'old Stop cannot replace rejected Keep')
+await freshHeldTurn()
 delete answers['agent:keep-stopped']
 answers['agent:keep-stopped'] = () => {
   emit({

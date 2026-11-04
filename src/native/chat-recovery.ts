@@ -148,11 +148,21 @@ export async function recoveryAction(
       chat.keepingStopped = true
       controller.changed(chat)
       try {
-        const result = await invoke('agent:keep-stopped', chat.chat)
+        // The owner can fail before it can list files. A rejected IPC is the
+        // same failed action, not an unowned chat error.
+        const result = await invoke('agent:keep-stopped', chat.chat).catch((error) => ({
+          ok: false,
+          files: [],
+          error: error instanceof Error ? error.message : String(error)
+        }))
         if (chat.turn !== keepTurn || controller.chats.get(chat.chat) !== chat) return true
         // The owner result is authoritative even if an old Stop callback raced
         // this request, or this request's own isolation callback arrives later.
-        const files = result.files ?? []
+        const files = result.files?.length
+          ? result.files
+          : result.ok
+            ? []
+            : (chat.isolationFiles ?? [])
         const sameFiles = JSON.stringify(chat.isolationFiles ?? []) === JSON.stringify(files)
         if (result.ok && result.conflict) {
           if (chat.isolation !== 'parked' || chat.stopped || chat.landingError || !sameFiles)
@@ -178,23 +188,20 @@ export async function recoveryAction(
               { projectKey: chat.chat, type: 'isolation', state: 'isolated', files },
               true
             )
-        } else if (files.length) {
+        } else {
           const error = result.error ?? 'Unable to keep this turn’s changes.'
-          if (chat.landingError !== error || chat.isolation !== 'parked' || !sameFiles)
-            controller.event(
-              {
-                projectKey: chat.chat,
-                type: 'isolation',
-                state: 'parked',
-                files,
-                reason: 'failed',
-                error
-              },
-              true
-            )
+          controller.event(
+            {
+              projectKey: chat.chat,
+              type: 'isolation',
+              state: 'parked',
+              files,
+              reason: 'failed',
+              error
+            },
+            true
+          )
         }
-        if (!result.ok && !chat.landingError)
-          throw new Error(result.error ?? 'Unable to keep this turn’s changes.')
         chat.settledStoppedKeep = { turn: keepTurn }
       } finally {
         chat.keepingStopped = false
