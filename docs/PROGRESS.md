@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-486 Stop releases held-recovery attention
+
+- Stop now ends a parked chat's owned manual or automatic recovery and pending failed-park report attention at the cancellation boundary. It clears the busy request and stale Problem text, keeping the actual held operation, source and any completed support report. The existing held-work card offers actions again after Stop; later lookup, request, report and handover completions remain fenced by the cancellation epoch.
+- The existing synthetic controller fixture asserts the final card title, detail and enabled actions immediately after Stop and after each deferred completion, then starts a new manual action. Native acceptance remains a post-merge manager gate.
+
 ## 2026-11-04 — LKM-486 restored held-operation binding
 
 - A reopened parked chat can begin Resolve, Retry or Discard before its held operation is in native memory. The request now owns a provisional chat/cancellation/attempt intent, binds the authoritative held operation after lookup only while that intent and source still match, and uses the bound identity for completion and report guards. A matching producer settlement clears the busy request and held incident; Stop and changed source or provider identity cannot dispatch the stale action.

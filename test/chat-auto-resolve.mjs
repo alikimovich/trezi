@@ -27,6 +27,21 @@ const settlement = (outcome, attemptId) => ({
   ...(attemptId ? { attemptId } : {})
 })
 
+function assertStoppedHeld(h, chat, report) {
+  const card = h.renders.at(-1).cards.find((item) => item.id === 'conflict')
+  assert.equal(chat.recovery, undefined, 'Stop releases the busy recovery owner')
+  assert.equal(chat.recoveryReport, report, 'Stop retains a completed support report')
+  assert.equal(card?.title, 'This turn’s changes didn’t land')
+  assert.doesNotMatch(card?.detail ?? '', /Checking the held changes/)
+  for (const action of ['discard', 'landing-retry', 'resolve'])
+    assert.equal(
+      card.actions.find((item) => item.action === action)?.disabled,
+      false,
+      `${action} is available after Stop`
+    )
+  if (report) assert.ok(card.actions.some((item) => item.action === 'recovery-report'))
+}
+
 // Synthetic owner IO: a provider observation is not accepted terminal proof.
 {
   const emitted = []
@@ -114,6 +129,69 @@ for (const stopped of [true, false]) {
     assert.equal(chat.recoveryReport, '/tmp/synthetic-deferred-report.json')
     assert.equal(h.renders.at(-1).cards.filter((card) => card.title === 'Problem').length, 1)
   }
+}
+
+// Stop settles the visible owner for bound manual requests, automatic Resolve,
+// provisional lookup and a pending failed-park report. Late completions stay quiet.
+for (const mode of ['retry', 'resolve', 'auto-resolve', 'lookup', 'park-report']) {
+  const h = harness(mode === 'auto-resolve', {
+    deferRetry: mode === 'retry',
+    deferResolve: mode === 'resolve' || mode === 'auto-resolve',
+    restoredParked: mode === 'lookup',
+    deferHeld: mode === 'lookup',
+    deferReport: mode === 'park-report'
+  })
+  await h.open()
+  if (mode !== 'lookup')
+    await h.emit({
+      type: 'isolation',
+      state: 'parked',
+      reason: mode === 'auto-resolve' ? undefined : 'failed',
+      files: ['src/a.tsx']
+    })
+  const chat = h.controller.get('a')
+  const operation = chat.heldOperation
+  const report = chat.recoveryReport
+  if (mode === 'retry' || mode === 'resolve') {
+    assert.deepEqual(operation, held)
+    assert.ok(report, 'the pre-Stop held failure has a completed support report')
+  }
+  let request
+  if (mode === 'retry' || mode === 'lookup')
+    request = cardAction(h.controller, chat, { action: 'landing-retry' })
+  if (mode === 'resolve') request = cardAction(h.controller, chat, { action: 'resolve' })
+  await tick()
+  assert.ok(
+    mode === 'park-report'
+      ? h.reportWrites() === 1
+      : chat.recovery || chat.autoResolved === 'tried',
+    `${mode} has pending ownership before Stop`
+  )
+  await h.controller.stop(chat)
+  assert.deepEqual(chat.heldOperation, operation, 'Stop preserves the held source identity')
+  assertStoppedHeld(h, chat, report)
+  const afterStop = h.renders.length
+  if (mode === 'retry') h.acknowledgeRetry({ ok: true, state: 'isolated' })
+  if (mode === 'resolve' || mode === 'auto-resolve')
+    h.acknowledgeResolve({
+      ok: true,
+      conflicted: ['src/a.tsx'],
+      prompt: 'Resolve the markers.',
+      incarnation: held.incarnation
+    })
+  if (mode === 'lookup') h.acknowledgeHeld(held)
+  if (mode === 'park-report') h.completeReport('/tmp/synthetic-stopped-report.json')
+  if (request) await request
+  await tick()
+  assert.equal(h.renders.length, afterStop, 'late completion cannot render over Stop')
+  assertStoppedHeld(h, chat, report)
+  assert.equal(h.sent().length, 0, 'late Resolve does not start a provider turn')
+  await cardAction(h.controller, chat, { action: 'landing-retry' })
+  assert.equal(
+    h.calls.filter((call) => call[0] === 'agent:retry-landing').length,
+    mode === 'retry' ? 2 : 1,
+    `${mode}: a fresh manual action can address the held work`
+  )
 }
 
 // A producer-confirmed merge may complete while Retry awaits its IPC response.
@@ -282,7 +360,8 @@ function harness(
       }
       if (channel === 'agent:send')
         return { state: 'admitted', incarnation: held.incarnation, turn: args[4], run: 0 }
-      if (channel === 'agent:turn-state') return { turn: controller.get('a').turn, running: false }
+      if (channel === 'agent:turn-state')
+        return { turn: controller.get('a').turn ?? null, running: false }
       return { ok: true }
     },
     render: (state) => renders.push(structuredClone(state)),

@@ -5,6 +5,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 ## Chat Problem attention (LKM-486)
 
+- [x] Settle manual and automatic held-recovery ownership on Stop; preserve held work and reports while restoring the quiet held-work actions after deferred callbacks.
 - [x] Bind restored parked-chat recovery to the authoritative held operation after deferred lookup; fence stale Stop, source, provider and replacement-chat callbacks.
 - [x] Independent review completion repair: fence recovery request `finally` after Stop and roll back an unsent recovery tracker entry before later terminal attribution.
 - [x] Independent review repair: fence failed-park report completion against Stop and changed held source, and recheck held/provider identity immediately before provider dispatch.

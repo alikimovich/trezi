@@ -1056,6 +1056,22 @@ export class NativeChatController {
     const stoppedTurn = chat.turn
     chat.paused = true
     chat.cancellation++
+    // Stop ends this chat's ownership of a held-work recovery, including a
+    // pending failure report. Keep the held source and any completed report so
+    // the ordinary held-work actions remain available after interruption.
+    if (
+      chat.isolation === 'parked' &&
+      (chat.recovery ||
+        chat.autoResolved === 'tried' ||
+        chat.heldIncident?.attention === 'owned' ||
+        chat.heldIncident?.attention === 'recording')
+    ) {
+      chat.recovery = undefined
+      chat.recoveryTimedOut = false
+      chat.recoveryId = undefined
+      chat.recoveryProblem = undefined
+      chat.heldIncident = undefined
+    }
     if (chat.autoResolved === 'tried') {
       chat.autoResolved = undefined
       chat.autoResolveTurn = undefined
@@ -1063,8 +1079,6 @@ export class NativeChatController {
       chat.autoResolveIncarnation = undefined
       chat.pendingRecoveryError = undefined
       chat.acceptedRecoveryFailure = undefined
-      if (chat.heldIncident?.attention === 'owned')
-        chat.heldIncident.attention = chat.recoveryReport ? 'terminal' : 'recording'
     }
     chat.stopping = true
     this.changed(chat)
