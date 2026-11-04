@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-508 review repair: terminal readiness and conversation errors
+
+- Independent review found three remaining paths: a conversation snapshot failure left its unknown title animating, terminal provider-check failure kept the centered notice in progress, and signed-out seat checks could reveal the chooser before model choices arrived. The shell now stops the effect for a chat error. The start notice shows the provider's fixed failure detail without progress once checks settle, and both start and snapshot chooser paths wait for successful choice metadata. The existing title and provider fixtures assert these transitions. The supplied CI excerpt has a canceled unit shard and macOS jobs, with no actionable failing assertion; the next exact-head CI remains required.
+
 ## 2026-11-04 — LKM-508 review repair: Gemini readiness and loading-header fixture
 
 - Independent review found that the initial chooser could appear while listed Gemini was ready, checking or unresolved. The chooser now considers every listed built-in provider and saved connection; it appears only when the listed seats have confirmed sign-out. The existing chat-gate fixture holds Gamma's real conversation snapshot just long enough to assert the redacted selected header, accessible label and active or Reduce Motion effect, then releases it and asserts the effect stops on readiness and remains stopped on opening error. The normal post-merge native run remains the acceptance gate.

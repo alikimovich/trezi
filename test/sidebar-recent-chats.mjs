@@ -122,6 +122,13 @@ chat.get('a').title = ''
 workspace.state.status = { kind: 'error', message: 'Open failed' }
 assert.deepEqual([titleRow('a').title, titleRow('a').loadingTitle], ['••••••••', false])
 workspace.state.status = { kind: 'running' }
+chat.get('a').error = 'Conversation metadata failed'
+assert.deepEqual(
+  [titleRow('a').title, titleRow('a').loadingTitle],
+  ['••••••••', false],
+  'a conversation error stops the title effect even while the project is running'
+)
+chat.get('a').error = undefined
 chat.get('a').ready = true
 assert.deepEqual([titleRow('a').title, titleRow('a').loadingTitle], ['New chat', false])
 chat.get('a').ready = false

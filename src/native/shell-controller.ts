@@ -83,7 +83,7 @@ export class NativeShellController {
             session: key,
             kind: 'chat',
             title: loadingTitle ? '••••••••' : title(knownTitle),
-            loadingTitle: loadingTitle && ws.status.kind !== 'error',
+            loadingTitle: loadingTitle && !chat?.error && ws.status.kind !== 'error',
             running: chat?.isRunning ?? false,
             thinking: chat ? chatThinking(chat) : false,
             unread: chat?.unreadAnswer ?? false

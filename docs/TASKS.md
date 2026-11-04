@@ -9,6 +9,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Gate the initial provider chooser on confirmed sign-out and keep explicit login errors.
 - [x] Add focused title, readiness and Swift fixture assertions.
 - [x] Repair review findings for listed Gemini readiness and deterministic selected-header loading evidence.
+- [x] Stop unknown-title motion on conversation error, report terminal provider-check failure, and wait for authoritative choice metadata.
 - [ ] Manager: obtain native acceptance on main after review and CI.
 
 ## Native suite failure on main 17fbc17129bb (LKM-484)

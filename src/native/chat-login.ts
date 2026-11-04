@@ -39,13 +39,15 @@ export function startLoginCard(
   chat: Chat,
   readiness: ProviderReadinessMap,
   projectReady = true,
-  choices: ModelChoice[] = []
+  choices: ModelChoice[] = [],
+  choicesLoaded = false
 ): NativeChatCard | null {
   const options = providerOptions(choices)
   if (
     chat.messages.length ||
     chat.login ||
     !projectReady ||
+    !choicesLoaded ||
     (chat.chat !== '' && !chat.ready) ||
     options.some((option) => !!option.connectionId) ||
     (options.some((option) => option.provider === 'gemini') &&

@@ -15,6 +15,7 @@ import {
   signInProvider
 } from '../src/main/provider-sign-in.ts'
 import { loginAction, loginCard, startLoginCard } from '../src/native/chat-login.ts'
+import { StartFlow } from '../src/native/chat-start.ts'
 import { newChat, reduce } from '../src/native/chat-state.ts'
 import {
   anyProviderReady,
@@ -332,11 +333,20 @@ assert.equal(states.codex.status, 'failed')
 assert.deepEqual(initialProviderReadiness().claude, { status: 'checking' }, 'restart checks again')
 const chat = newChat('fixture')
 chat.ready = true
+const seatChoice = {
+  value: 'claude:default',
+  modelId: 'default',
+  provider: 'claude',
+  group: 'Claude',
+  label: 'Default'
+}
 assert.equal(
   startLoginCard(
     chat,
     { claude: { status: 'signed_out' }, codex: { status: 'signed_out' } },
-    false
+    false,
+    [seatChoice],
+    true
   ),
   null,
   'project opening suppresses the chooser'
@@ -352,6 +362,16 @@ chat.attachments = [
   }
 ]
 states.codex = readinessFromLogin(false)
+assert.equal(
+  startLoginCard(chat, states, true, [], false),
+  null,
+  'signed-out seats cannot open the chooser before choices arrive'
+)
+assert.equal(
+  startLoginCard(chat, states, true, [seatChoice], false),
+  null,
+  'cached choices remain non-authoritative during a refresh'
+)
 const geminiChoice = {
   value: 'gemini:default',
   modelId: 'default',
@@ -362,39 +382,69 @@ const geminiChoice = {
 for (const status of ['ready', 'checking', 'failed']) {
   states.gemini = { status }
   assert.equal(
-    startLoginCard(chat, states, true, [geminiChoice]),
+    startLoginCard(chat, states, true, [geminiChoice], true),
     null,
     `listed Gemini ${status} does not require the chooser`
   )
 }
 delete states.gemini
 assert.equal(
-  startLoginCard(chat, states, true, [geminiChoice]),
+  startLoginCard(chat, states, true, [geminiChoice], true),
   null,
   'listed Gemini with unknown readiness suppresses the chooser'
 )
 states.gemini = readinessFromLogin(false)
-assert.equal(startLoginCard(chat, states, true, [geminiChoice])?.title, 'Choose a provider')
+assert.equal(startLoginCard(chat, states, true, [geminiChoice], true)?.title, 'Choose a provider')
 assert.equal(
-  startLoginCard(chat, states, true, [{ ...geminiChoice, connectionId: 'saved' }]),
+  startLoginCard(chat, states, true, [{ ...geminiChoice, connectionId: 'saved' }], true),
   null,
   'a saved connection does not require built-in sign-in'
 )
 delete states.gemini
 for (const pending of ['checking', 'failed']) {
   states.codex = { status: pending }
-  assert.equal(startLoginCard(chat, states), null, `${pending} is not authoritative sign-out`)
+  assert.equal(
+    startLoginCard(chat, states, true, [seatChoice], true),
+    null,
+    `${pending} is not authoritative sign-out`
+  )
 }
 states.codex = readinessFromLogin(false)
 chat.ready = false
-assert.equal(startLoginCard(chat, states), null, 'the project conversation is still loading')
+assert.equal(
+  startLoginCard(chat, states, true, [seatChoice], true),
+  null,
+  'the project conversation is still loading'
+)
 chat.ready = true
 assert.deepEqual(
-  startLoginCard(chat, states)
+  startLoginCard(chat, states, true, [seatChoice], true)
     .actions.slice(0, 2)
     .map((x) => x.action),
   ['sign-in-claude', 'sign-in-codex']
 )
+const flow = new StartFlow()
+flow.enabled = true
+const home = newChat('')
+const homeReadiness = {
+  claude: readinessFromLogin(false),
+  codex: readinessFromLogin(false)
+}
+assert.equal(
+  flow.state(home, [seatChoice], homeReadiness).notice?.text,
+  'Checking provider sign-in…',
+  'the centered start waits for choice metadata after seat checks finish'
+)
+flow.choicesLoaded = true
+assert.equal(
+  flow.state(home, [seatChoice], homeReadiness).notice?.text,
+  'Sign in to either provider to start chatting.',
+  'authoritative signed-out metadata shows the existing chooser'
+)
+homeReadiness.claude = readinessFromLogin(null)
+const failedNotice = flow.state(home, [seatChoice], homeReadiness).notice
+assert.equal(failedNotice?.text, homeReadiness.claude.detail, 'terminal provider error is visible')
+assert.equal(failedNotice?.progress, undefined, 'a failed check has no endless progress')
 const calls = []
 const controller = {
   services: {
@@ -420,7 +470,9 @@ assert.deepEqual(calls, [
 assert.equal(chat.text, 'draft remains')
 assert.equal(chat.attachments[0].data, 'private-image')
 assert.equal(chat.messages.length, 0)
-assert.ok(!JSON.stringify(startLoginCard(chat, states)).includes('private-image'))
+assert.ok(
+  !JSON.stringify(startLoginCard(chat, states, true, [seatChoice], true)).includes('private-image')
+)
 const failed = newChat('failed')
 failed.root = '/fixture'
 failed.last = {

@@ -284,8 +284,13 @@ export class NativeChatController {
     void this.refreshReadiness()
   }
   async refreshChoices() {
+    if (this.start.choicesLoaded) {
+      this.start.choicesLoaded = false
+      this.changed()
+    }
     try {
       this.choices = await this.services.invoke('providers:choices')
+      this.start.choicesLoaded = true
       // LKM-315: Gemini has a readiness only while it is on (its models are listed).
       if (!this.geminiListed()) delete this.readiness.gemini
       else if (this.readinessStarted && !this.readiness.gemini) void this.refreshReadiness('gemini')

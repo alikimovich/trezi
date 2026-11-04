@@ -78,6 +78,8 @@ const sameModel = (a: ChatAgentSettings, b: ChatAgentSettings) =>
 export class StartFlow {
   /** Off in the smoke suite until a check opts in, so other groups keep their layout. */
   enabled = false
+  /** Model choices may arrive after seat sign-in checks; the chooser waits for this metadata. */
+  choicesLoaded = false
   /** The app-managed conversation that is planning a project before a repository exists. */
   planningKey: string | null = null
   /** The project chat to return to when New Project is cancelled. */
@@ -162,7 +164,13 @@ export class StartFlow {
     // No provider can answer: LKM-231's own sign-in card, here under the composer.
     const start = usable.length
       ? null
-      : startLoginCard(chat, readiness, this.workspace?.ready?.() ?? true, choices)
+      : startLoginCard(
+          chat,
+          readiness,
+          this.workspace?.ready?.() ?? true,
+          choices,
+          this.choicesLoaded
+        )
     if (start && !checking(readiness))
       return { text: start.detail ?? start.title, actions: start.actions }
     if (chat.signingIn || chat.signInMessage)
@@ -199,7 +207,25 @@ export class StartFlow {
         ]
       }
     }
-    if (!usable.length) return { text: 'Checking provider sign-in…', progress: true, actions: [] }
+    if (!usable.length) {
+      if (!checking(readiness) && this.choicesLoaded) {
+        const geminiListed = choices.some(
+          (choice) => choice.provider === 'gemini' && !choice.connectionId
+        )
+        const failed = [
+          readiness.claude,
+          readiness.codex,
+          ...(geminiListed ? [readiness.gemini] : [])
+        ].find((state) => state?.status === 'failed')
+        if (failed)
+          return {
+            text:
+              failed.detail ?? 'Unable to check provider sign-in. Check your connection and retry.',
+            actions: []
+          }
+      }
+      return { text: 'Checking provider sign-in…', progress: true, actions: [] }
+    }
     return undefined
   }
 
