@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.13.17] - 2026-11-04
+
 ### Fixed
 
 - New Chat's toolbar capsule now renders in light and dark appearances (LKM-484).
