@@ -8,6 +8,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Trace the ordinary completion gate on `origin/main` and reuse the existing private check runner before exact-tree landing.
 - [x] Cover missing and stale evidence, failed checks, Stop, and terminal settlement with focused fixtures; add an ordinary recovery assertion to the disposable-profile native integration fixture.
 - [ ] Manager: independent review, configured CI and native acceptance on the merged source.
+## Native chat during project opening (LKM-475)
+
+- [x] Keep the selected chat column, header, transcript and draft beside the preview through opening and failed-open states; keep Opening and error in the preview.
+- [x] Disable Send before project readiness and reject early composer Send/Return; restore existing actions when ready.
+- [x] Extend the `chat-gate` disposable-profile fixture for opening, failed-open, retry and explicit Hide/Restore captures and assertions.
+- [x] Review follow-up: seed a synthetic selected transcript and assert its nonzero native count and rendered row through opening and failed opening at normal and narrow widths.
+- [ ] Manager: independent review, CI and native sidebar acceptance on the merged SHA.
 
 ## Native suite failure on main 743c0a82c263 (LKM-469)
 

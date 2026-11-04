@@ -13,6 +13,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Fixed
 
 - Finished chats arrange missing or stale private checks before landing and report when a check runner is unavailable without asking you to request a check and Retry (LKM-478).
+## [0.13.13] - 2026-11-03
+
+### Fixed
+
+- The selected chat column, title and draft remain visible while a project opens or reports an opening error; Send waits until the project is ready (LKM-475).
 
 ## [0.13.12] - 2026-11-03
 
