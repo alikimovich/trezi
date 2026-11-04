@@ -89,7 +89,11 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
     let chatHeader = ChatToolbarView()
     private let chatTitle = NSTextField(labelWithString: "Chat")
-    private let chatNewButton = NSButton()
+    // The toolbar islands paint their own glass through this control; a standalone NSButton
+    // inside a custom toolbar item has no such material, even with a textured bezel.
+    private let chatNewButton = IslandSegmentedControl(images: [toolbarSymbol("square.and.pencil", "New Chat") ?? NSImage()], trackingMode: .momentary, target: nil, action: nil)
+    // Disposable-profile appearance fixture toggles only this control, then restores readiness.
+    func testChatNewEnabled(_ enabled: Bool) { chatNewButton.isEnabled = enabled }
     /// The selected project's History section (`SidebarChats.swift`).
     var sidebarHistory = SidebarHistoryState()
     // The address block and its layout (`ToolbarAddress.swift`).
@@ -276,12 +280,10 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             chatTitle.lineBreakMode = .byTruncatingTail
             chatTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             chatTitle.translatesAutoresizingMaskIntoConstraints = false; chatHeader.addSubview(chatTitle)
-            chatNewButton.image = toolbarSymbol("square.and.pencil", "New Chat")
-            // Match the neighboring textured toolbar islands, including AppKit's glass,
-            // highlight, hover, focus and disabled drawing.
-            chatNewButton.isBordered = true; chatNewButton.bezelStyle = .texturedRounded
-            chatNewButton.setButtonType(.momentaryChange)
+            chatNewButton.segmentStyle = .texturedRounded
+            chatNewButton.setWidth(32, forSegment: 0)
             chatNewButton.toolTip = "New Chat"; chatNewButton.setAccessibilityLabel("New Chat")
+            chatNewButton.setAccessibilityRole(.button)
             chatNewButton.target = self; chatNewButton.action = #selector(headerNewChat(_:))
             chatNewButton.translatesAutoresizingMaskIntoConstraints = false; chatHeader.addSubview(chatNewButton)
             NSLayoutConstraint.activate([
@@ -390,7 +392,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             emit(["event":"shell-action", "action":action, "project":project])
         } else { emit(["event":"menu", "action":action]) }
     }
-    @objc private func headerNewChat(_ sender: NSButton) {
+    @objc private func headerNewChat(_ sender: NSSegmentedControl) {
         _ = startNewChat()
     }
     @discardableResult private func startNewChat() -> Bool {
@@ -666,9 +668,12 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         let chatInspect: [String: Any] = [
             "chatTitle":chatTitle.stringValue, "chatTitlePlain":toolbarItems["chat"]?.action == nil,
             "chatNewVisible":!chatNewButton.isHidden, "chatNewEnabled":chatNewButton.isEnabled,
-            "chatNewBordered":chatNewButton.isBordered, "chatNewTextured":chatNewButton.bezelStyle == .texturedRounded,
-            "chatNewToolTip":chatNewButton.toolTip ?? "", "chatNewGlyph":chatNewButton.image?.accessibilityDescription ?? "",
+            "chatNewSegmented":chatNewButton.segmentCount == 1, "chatNewTextured":chatNewButton.segmentStyle == .texturedRounded,
+            "chatNewMomentary":chatNewButton.trackingMode == .momentary,
+            "chatNewButtonRole":chatNewButton.accessibilityRole() == .button,
+            "chatNewToolTip":chatNewButton.toolTip ?? "", "chatNewGlyph":chatNewButton.image(forSegment: 0)?.accessibilityDescription ?? "",
             "chatNewFrame":NSStringFromRect(mainFrame(chatNewButton) ?? .zero),
+            "chatNewNeighborFrame":NSStringFromRect(toolbarButtonFrame("device") ?? .zero),
             "chatTitleFrame":NSStringFromRect(mainFrame(chatTitle) ?? .zero),
             "chatHeaderWidth":chatHeader.bounds.width,
             "chatHeaderTrailing":chatHeader.convert(NSPoint(x: chatHeader.bounds.maxX, y: 0), to: nil).x,

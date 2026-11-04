@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-481 New Chat painted glass
+
+- The LKM-476 capture showed a bare square-and-pencil despite `NSButton` textured flags. The neighboring native glass is painted by `IslandSegmentedControl`, so New Chat now uses a single momentary segment in its existing 32 pt chat-header position. The guarded action, glyph, tooltip and accessibility label stay on that control.
+- The disposable-profile toolbar fixture now retains foreground light/dark PNGs and geometry receipts for enabled and disabled states, compares its rendered glass with the adjacent device segment, and rejects the disabled action. Existing toolbar and sidebar fixtures continue to cover placement, resizing and enabled input. Native acceptance remains for the manager's post-merge run.
+
 ## 2026-11-03 — LKM-478 CI fixture repair
 
 - CI exposed two older unit fixtures that still expected unchecked ordinary chat completion to park until a manual Retry. The new completion path legitimately arranges the existing check and lands the exact combined tree, so the peer fixture now requires automatic checking, no held state and the peer provenance. The lesson fixture now requires one lesson on that automatic landing and confirms an idempotent Retry cannot duplicate it.

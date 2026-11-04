@@ -461,6 +461,10 @@ extension Host {
                 do { reply(id, try await captureVisibleRegion(window: window, view: content, region: content.bounds, recognize: false)) }
                 catch { reply(id, error: error.localizedDescription) }
             }
+        case "chatNewAppearanceTest":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            shell.testChatNewEnabled(c["enabled"] as? Bool ?? false)
+            reply(id, shell.inspect())
         case "captureToolbarWindow":
             // LKM-321: in full screen the toolbar is in AppKit's own window, outside the main window's capture.
             guard ephemeral, let host = shell.toolbarWindow else { reply(id, error: "Test profile required"); return true }

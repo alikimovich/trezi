@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## New Chat native glass follow-up (LKM-481)
+
+- [x] Reuse the toolbar island segmented control for the chat header's single momentary New Chat action.
+- [x] Extend the disposable-profile toolbar fixture with foreground light/dark idle and disabled pixel comparisons, geometry receipts and disabled input rejection.
+- [ ] Manager: independent review, CI and post-merge native core/sidebar acceptance on main.
+
 ## Ordinary private check recovery (LKM-478)
 
 - [x] Trace the ordinary completion gate on `origin/main` and reuse the existing private check runner before exact-tree landing.
