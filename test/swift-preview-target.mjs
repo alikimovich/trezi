@@ -41,6 +41,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 // finished when the outer timeout kills this process (its stdout was blank before).
 // Static stage names only: no logs, paths or environment.
 const startedAt = Date.now()
+// The unit runner stops this fixture at 300 s. Leave time for a final state
+// request and driver shutdown before that outer bound.
+const outerDeadline = startedAt + 300_000
 const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`
 const stage = (name) => console.log(`swift-preview-target: [${elapsed()}] start ${name}`)
 async function until(check, label, timeout = 180_000, stageName = label) {
@@ -278,17 +281,47 @@ const driver = spawn(process.execPath, [SWIFT_PREVIEW_DRIVER, '--manifest-dir', 
 driver.stdout.on('data', (chunk) => driverLog.push(String(chunk)))
 driver.stderr.on('data', (chunk) => driverLog.push(String(chunk)))
 const base = `http://127.0.0.1:${port}`
+const driverState = async () =>
+  (await fetch(`${base}/state`, { signal: AbortSignal.timeout(2_000) })).json()
+const driverEvidence = async (reason, lastState) => {
+  let finalState = lastState
+  try {
+    finalState = await driverState()
+  } catch (error) {
+    finalState = { unavailable: String(error) }
+  }
+  const evidence = {
+    reason,
+    elapsed: elapsed(),
+    progress: 'driver build',
+    driverExit: { code: driver.exitCode, signal: driver.signalCode },
+    state: finalState,
+    buildLogTail: driverLog.join('').slice(-12_000)
+  }
+  console.error(`swift-preview-target: driver evidence ${JSON.stringify(evidence)}`)
+  return evidence
+}
 try {
   await until(() => driverLog.join('').includes(`Serving at ${base}`), 'driver URL', 20_000)
-  const state = await until(
-    async () => {
-      const value = await (await fetch(`${base}/state`)).json()
-      return value.status === 'ready' && value
-    },
-    `driver build (${driverLog.join('')})`,
-    undefined,
-    'driver build'
-  )
+  let lastState
+  let state
+  try {
+    state = await until(
+      async () => {
+        lastState = await driverState()
+        if (lastState.status === 'error' || lastState.status === 'failed') {
+          throw new Error(`Driver ${lastState.status}: ${lastState.message}`)
+        }
+        return lastState.status === 'ready' && lastState
+      },
+      'driver build',
+      Math.max(1, Math.min(180_000, outerDeadline - Date.now() - 15_000)),
+      'driver build'
+    )
+  } catch (error) {
+    await driverEvidence(String(error), lastState)
+    throw error
+  }
   stage('driver graph and project info')
   assert.equal(state.manifest.treziPath, join(manifestDir, 'trezi-previews.json'))
   assert.equal(state.plan.target, 'Studio')

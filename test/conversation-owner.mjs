@@ -173,13 +173,28 @@ const within = async (work, label, ms = 20_000) => {
   }
 }
 // A deadline, not a poll count: landing a turn runs real Git and can take far longer on a loaded machine.
-const until = async (condition, label) => {
-  const deadline = Date.now() + 30_000
+const until = async (condition, label, timeout = 30_000) => {
+  const deadline = Date.now() + timeout
   while (Date.now() < deadline) {
     if (await condition()) return
     await sleep(10)
   }
   throw new Error(`Timed out: ${label}`)
+}
+const waitingEvents = (events, key) =>
+  events.filter(
+    (event) =>
+      event.type === 'status' &&
+      event.projectKey === key &&
+      event.text === 'Waiting: Another chat is editing this live project.'
+  )
+const waitForWaitingStatus = async (events, key, timeout) => {
+  await until(() => waitingEvents(events, key).length > 0, 'live waiting status', timeout)
+  assert.equal(
+    waitingEvents(events, key).length,
+    1,
+    'one waiting status explains the admission delay'
+  )
 }
 const profile = (name) => {
   const path = join(scratch, `profile-${name}-${++count}`)
@@ -828,6 +843,24 @@ try {
     const swift = await agentScenario(repo)
     const liveEvents = []
     window = (event) => liveEvents.push(event)
+    // Exercise the event seam beyond the old fixed 50 ms sleep, and keep both
+    // failure modes bounded without starting a provider or another owner.
+    const delayedEvents = []
+    setTimeout(
+      () =>
+        delayedEvents.push({
+          type: 'status',
+          projectKey: 'delayed',
+          text: 'Waiting: Another chat is editing this live project.'
+        }),
+      80
+    )
+    await waitForWaitingStatus(delayedEvents, 'delayed', 500)
+    await assert.rejects(waitForWaitingStatus([], 'missing', 60), /Timed out: live waiting status/)
+    await assert.rejects(
+      waitForWaitingStatus([...delayedEvents, ...delayedEvents], 'delayed', 60),
+      /one waiting status explains the admission delay/
+    )
     // LKM-404: two chats in a live checkout must not enter provider turns together.
     for (const liveRoot of [
       join(repository('nested-parent'), 'child'),
@@ -858,18 +891,8 @@ try {
         {},
         `live-second-${first}`
       )
-      await sleep(50)
+      await waitForWaitingStatus(liveEvents, second.sessionKey)
       assert.equal(p2.sent.length, 0, 'the second live writer waits for the first')
-      assert.equal(
-        liveEvents.filter(
-          (event) =>
-            event.type === 'status' &&
-            event.projectKey === second.sessionKey &&
-            event.text === 'Waiting: Another chat is editing this live project.'
-        ).length,
-        1,
-        'one waiting status explains the admission delay'
-      )
       p1.done()
       await within(competing, 'queued live admission')
       await until(() => p2.sent.length === 1, 'queued live provider send')

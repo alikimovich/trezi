@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-505 bounded async fixture failures
+
+- The live conversation fixture now waits for the actual waiting status with its existing deadline, then requires exactly one event while the second provider remains unsent. The event seam exercises a status delayed beyond 50 ms, a missing status and a duplicate; the later protocol scenarios remain intact.
+- The Swift target preview fixture reserves time inside the unchanged 300 s outer bound to collect a final bounded `/state` snapshot and driver build log tail on a slow, stuck or errored build. A terminal error and a never-ready driver still fail. The driver output is diagnostic evidence, not a readiness substitute.
+
 ## 2026-11-04 — LKM-484 CI worktree cleanup race
 
 - The native core capture passed with the new glass, but the manager's CI run failed in `chat-new-instant`: `git worktree list` read an entry while asynchronous chat cleanup removed its `commondir`. The fixture now retries only that transient Git read until its existing cleanup deadline and still fails other Git errors. A synthetic regression assertion covers the retry and error boundary; the real fixture continues to require every chat worktree to be removed.
