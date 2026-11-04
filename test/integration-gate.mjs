@@ -26,8 +26,7 @@ import {
   cancelChecks,
   resolveCheck,
   runChecksTool,
-  runCommandCheck,
-  waitForChecks
+  runCommandCheck
 } from '../src/main/command-checks.ts'
 import {
   arrangeChecks,
@@ -40,7 +39,13 @@ import {
   retainGateEvidence,
   setCheckReplayer
 } from '../src/main/integration-gate.ts'
-import { newReceiptId, receiptSession, recordReceipt } from '../src/main/verification-receipts.ts'
+import {
+  beginReceiptCheck,
+  newReceiptId,
+  receiptSession,
+  recordReceipt,
+  waitForChecks
+} from '../src/main/verification-receipts.ts'
 import { projectKey } from '../src/shared/projectKey.ts'
 import { candidateOf, passCheck } from './helpers/gate-checks.mjs'
 
@@ -239,6 +244,16 @@ try {
     'the automatic browser run makes real assertions'
   )
   assert.equal((await gate()).ok, true, 'automatic browser evidence passes on the exact tree')
+  const browserSettled = beginReceiptCheck(session)
+  assert.equal((await gate()).reason, 'check-running', 'browser receipt is still in flight')
+  const browserWait = waitForChecks(session, 1000)
+  const inFlightReceipt = browser(null, null)
+  inFlightReceipt.source.tree = await candidateOf(root)
+  recordReceipt(session, inFlightReceipt)
+  assert.equal((await gate()).reason, 'check-running', 'recording alone does not end the check')
+  browserSettled()
+  assert.equal(await browserWait, true)
+  assert.equal((await gate()).ok, true, 'settled browser receipt proves the current tree')
   setCheckReplayer(null)
   const now = await candidateOf(root)
   // Its private server has since stopped (or restarted): a server change.

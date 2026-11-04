@@ -7,6 +7,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 - [x] Trace the ordinary completion gate on `origin/main` and reuse the existing private check runner before exact-tree landing.
 - [x] Cover missing and stale evidence, failed checks, Stop, and terminal settlement with focused fixtures; add an ordinary recovery assertion to the disposable-profile native integration fixture.
+- [x] Review repair: track in-flight `preview_verify` through receipt settlement and assert ordinary completion uses that single browser receipt.
 - [ ] Manager: independent review, configured CI and native acceptance on the merged source.
 ## Native chat during project opening (LKM-475)
 

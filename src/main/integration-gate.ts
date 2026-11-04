@@ -3,11 +3,11 @@ import { join } from 'node:path'
 import { projectKey } from '../shared/projectKey'
 import { agentRuntime, privateRuntimeKind } from './agent-runtime'
 import { gitOut } from './chat-park'
-import { checksRunning } from './command-checks'
 import type { LandingHold } from './repository-owner'
 import { sourceSnapshot } from './source-snapshot'
 import {
   type CommandReceipt,
+  checksRunning,
   receiptSession,
   sessionCommandReceipts,
   sessionReceipts,

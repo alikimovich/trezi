@@ -1,5 +1,11 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-478 review repair: in-flight private browser check
+
+- Independent review found that `preview_verify` was not represented by the gate's running-check state. Ordinary completion could see `unchecked` and begin a second browser check while the first was still working.
+- The receipt owner now tracks both browser and command checks from start through receipt or error settlement. The gate and ordinary completion read the same state and wait for the existing browser check before rejudging the exact tree. The disposable-profile agent integration fixture holds a real browser assertion open across ordinary completion, then requires that one receipt, no duplicate check, private work until verification, and a landed terminal state. The focused gate unit pins receipt-before-settlement ordering.
+- Native acceptance remains for the manager's post-merge run; the worker has no native GUI calls for this ticket.
+
 ## 2026-11-03 — LKM-478 ordinary private check recovery
 
 - The ordinary successful completion path reached `gatedTurn` before the existing `arrangeChecks` replay used by a manual Retry. On an unchecked web tree, that produced the screenshot's Problem card even though Trezi could arrange a private browser check. The screenshot alone did not establish the provider's terminal phase or check history; the source trace establishes this reachable completion path.

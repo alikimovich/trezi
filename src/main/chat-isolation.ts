@@ -28,7 +28,7 @@ import {
   stageResolve,
   syncFromLive
 } from './chat-worktrees'
-import { cancelChecks, waitForChecks } from './command-checks'
+import { cancelChecks } from './command-checks'
 import { recordEdit } from './edit-history'
 import { editingOwner } from './editing-owner'
 import { isRepoRoot } from './git'
@@ -53,7 +53,7 @@ import { enqueueRepoWrite } from './repo-write-queue'
 import { sourceSnapshot } from './source-snapshot'
 import { logLanding, logLandingFailed } from './turn-log'
 import type { TurnTerminalOutcome } from './turn-terminal'
-import { receiptSession } from './verification-receipts'
+import { receiptSession, waitForChecks } from './verification-receipts'
 import { dependencyInstall } from './worktree-dependencies'
 import { reclaimWorktree, removeWorktree, retireWorktreeBranch } from './worktrees'
 

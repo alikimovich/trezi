@@ -16,6 +16,7 @@ import {
   beforeTurn,
   isolatedCwd,
   isolationSnapshot,
+  landingInFlight,
   releaseChat,
   resolveParkedChat,
   retryLanding
@@ -27,6 +28,7 @@ import { runPreviewVerify } from '../main/preview-verify'
 import {
   clearReceipts,
   receiptSession,
+  sessionReceipts,
   setVerificationArtifactsRoot
 } from '../main/verification-receipts'
 import type { SessionRecord } from '../shared/api'
@@ -343,16 +345,63 @@ export async function checkAgentIntegration(
     user: user2
   }
 
-  // Ordinary completion owns stale private evidence without a card request. The
-  // existing /other.html recipe must be replayed on this exact new tree.
-  writeFileSync(join(wtB, 'recovery.txt'), 'ordinary completion\n')
-  assert.equal((await integrationGate(scopeB)).reason, 'unchecked')
-  await afterTurn(B, 'Add recovery note', [], 'success', false, true)
+  // A real private browser check stays in flight while ordinary completion begins.
+  // Its own receipt, not a competing replay, must settle the new tree.
+  const recoveryHtml = merged.replace('</body>', '<!-- ordinary completion --></body>')
+  writeFileSync(join(wtB, 'other.html'), recoveryHtml)
+  await b.open('/other.html', { reload: true })
+  await waitFor(
+    async () => (await b.identity()).source?.verified,
+    'private page has new source',
+    5000
+  )
+  const browserSession = receiptSession(B, projectKey(wtB))
+  const receiptCount = sessionReceipts(browserSession).length
+  const pendingBrowser = runPreviewVerify(
+    {
+      checks: [{ kind: 'text', selector: '#late-check', equals: 'ready', timeoutMs: 10_000 }]
+    },
+    scopeB
+  )
+  await waitFor(
+    async () => (await integrationGate(scopeB)).reason === 'check-running',
+    'private browser check is registered',
+    5000
+  )
+  const ordinary = afterTurn(B, 'Add recovery note', [], 'success', false, true)
+  let finished = false
+  void ordinary.then(() => {
+    finished = true
+  })
+  await waitFor(() => landingInFlight(B), 'ordinary landing retains ownership', 5000)
+  assert.equal(finished, false, 'completion waits for the private browser receipt')
+  assert.equal(sessionReceipts(browserSession).length, receiptCount, 'no receipt before assertion')
+  assert.equal(liveFile('other.html'), merged, 'unchecked work stays private')
+  await b.host.evaluate(
+    "document.body.insertAdjacentHTML('beforeend', '<span id=\"late-check\">ready</span>')",
+    'preview',
+    2000
+  )
+  const browserResult = await pendingBrowser
+  assert.equal(browserResult.isError, undefined, JSON.stringify(browserResult.content[0]))
+  const browserReceipt = JSON.parse(
+    String(browserResult.content[1]?.type === 'text' ? browserResult.content[1].text : 'null')
+  ) as Receipt
+  assert.equal(browserReceipt.verified, true)
+  await ordinary
+  assert.equal(sessionReceipts(browserSession).length, receiptCount + 1, 'no second browser check')
+  assert.equal(sessionReceipts(browserSession).at(-1)?.id, browserReceipt.id)
   assert.equal(isolationSnapshot(B)?.state, 'isolated', 'no held Problem after recovery')
-  assert.equal(liveFile('recovery.txt'), 'ordinary completion\n')
+  assert.equal(liveFile('other.html'), recoveryHtml)
   const recoveredTree = git(project, 'rev-parse', 'HEAD^{tree}')
   assert.equal((await integrationGate(scopeB)).candidate, recoveredTree)
-  evidence.ordinaryRecovery = { tree: recoveredTree, state: isolationSnapshot(B)?.state }
+  evidence.ordinaryRecovery = {
+    tree: recoveredTree,
+    receipt: browserReceipt.id,
+    receiptCountBefore: receiptCount,
+    receiptCountAfter: sessionReceipts(browserSession).length,
+    state: isolationSnapshot(B)?.state
+  }
 
   // Each page still has only its own state.
   assert.equal((await agentMarkers(a)).cookie, 'trezi_agent_a=1')
