@@ -1,5 +1,22 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-467 CI build repair: More inspection
+
+- The next ad hoc TreziHost build reached a second Swift type-check timeout in `moreInspect()`. It now computes menu titles, visibility and each segment list as separately typed values, assigns the original inspection keys, then merges Mark up inspection. The toolbar action fixture also checks that the neighboring More menu remains enabled with its three actions. The exact-head CI build is needed to confirm the compiler repair; native GUI fixture execution remains with the manager.
+
+## 2026-11-03 — LKM-467 CI build repair: inspection expression
+
+- The ad hoc TreziHost build timed out while Swift type-checked the large `Shell.inspect()` dictionary. Split its existing keys into typed sidebar, toolbar and chat sections, precomputed the project-cell edges, and merged sections in the original order. This preserves the pipe-only inspection payload while giving the compiler smaller expressions to check. The exact-head CI app build remains the final confirmation.
+
+## 2026-11-03 — LKM-467 review repair: full address roundtrip fixture
+
+- The toolbar address fixture now puts a long same-origin URL in the resting field, saves `toolbar-long-path-roundtrip.png` and a JSON receipt, focuses the real editor, and asserts its full value and full selection. It copies that selection through AppKit to a private pasteboard, checks the copied string, submits through `navigateAddress`, observes the emitted `shell-action` value and waits for the preview URL before restoring the original address. The private pasteboard avoids reading or replacing the operator's clipboard. The probe is available only through the disposable-profile host inspect route. Native GUI acceptance still runs on main after merge.
+
+## 2026-11-03 — LKM-467 review repair: host text and Expand click
+
+- Independent review found that middle truncation could hide the host behind a long path. The resting address now elides the path after the authority, omits the scheme if needed for the host and port, and restores the full URL on edit; the width no longer has a fixed 420 pt cap when a longer host has room. The toolbar fixture asserts rendered host and port, full stored URL and no further cell clipping at ordinary and narrow widths with a long synthetic path.
+- The toolbar actions fixture now clicks the Expand segment through AppKit and waits for the existing layout action. The LKM-467 changelog line is visibly separated from the released section under Unreleased. Native GUI acceptance remains deferred to the manager's post-merge run.
+
 ## 2026-11-03 — LKM-468 Activity visibility belongs to the user
 
 - `NativeActivityController` was the visibility owner. Its needs-action and saved Always policies opened Activity from background and startup reports; the Swift window then ordered itself front. Event appends now only record lines and update unread severity. Manual show and toggle still present and focus the window; events repaint an open feed without changing focus.
@@ -7,6 +24,11 @@
 
 
 Newest first. Append a dated entry when you finish a chunk of work.
+
+## 2026-11-03 — LKM-467 top bar controls
+
+- The preview address width now follows the displayed host up to a compact cap. Device and Expand Preview moved together to an island beside the address; the code and layers island remains at the right. The chat header has a momentary New Chat button wired through the same guarded action as `perform("new-chat")`.
+- Updated toolbar and island fixtures for the new grouping and ordinary/narrow layout. Native acceptance is pending the manager's run on main.
 
 ## 2026-11-03 — LKM-465 review repair: typecheck guidance
 

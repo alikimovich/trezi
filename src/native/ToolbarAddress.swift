@@ -60,6 +60,7 @@ extension NativeShell {
     }
     /// The first right action group (the interaction island).
     var rightGroup: NSView? { toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" }?.view }
+    var viewportGroup: NSView? { toolbar.items.first { $0.itemIdentifier.rawValue == "viewport" }?.view }
     /// LKM-296: where the first item after the sidebar starts in the last toolbar layout. While the
     /// sidebar closes (expanding the preview) it is still right of the measured `leading`; sizing the
     /// block from `leading` overflowed it and "…" into AppKit's overflow menu until `backOff`.
@@ -95,6 +96,8 @@ extension NativeShell {
         layoutToolbar()
         return addressLayout.inspect(block: mainFrame(addressHeader) ?? .zero, right: mainFrame(rightGroup) ?? .zero, address: address, branch: branchMenu)
             .merging(["windowWidth":window?.frame.width ?? 0, "addressConstant":addressWidth?.constant ?? 0,
+                      "addressHostWidth":addressHostWidth,
+                      "viewportLeading":mainFrame(viewportGroup)?.minX ?? 0, "viewportTrailing":mainFrame(viewportGroup)?.maxX ?? 0,
                       "toolbarItemFrames":toolbarFrames.mapValues { NSStringFromRect($0) },
                       "chatHeaderAttached":chatHeader.window === window, "addressExtra":addressLayout.extra,
                       "sidebarInset":addressLayout.sidebarInset, "chatLead":addressLayout.chatLead.offset,
@@ -105,14 +108,11 @@ extension NativeShell {
     }
 }
 
-/// LKM-148: the address block fills the toolbar from its leading edge to `gap`
-/// before the first right action group (the interaction island). Its width is computed from
-/// the window width and offsets measured after a toolbar layout, so a window resize
-/// sets the final width synchronously, in the same layout pass, instead of a frame
-/// later. The right groups stay pinned to the window's trailing edge.
+/// The address block follows the host's width and reserves the adjacent viewport island.
+/// Available width is computed from measured toolbar offsets during the resize pass.
+/// The right groups stay pinned to the window's trailing edge.
 struct ToolbarAddressLayout {
-    /// The block's former width at the default window size. The chat header gives way
-    /// (down to its 100 pt floor) before the block gets narrower than this.
+    /// Preferred minimum before the chat header gives way.
     static let minimum: CGFloat = 180
     /// The former layout's floor; only a minimum-width window with the sidebar open gets near it.
     static let floor: CGFloat = 80
@@ -176,13 +176,13 @@ struct ToolbarAddressLayout {
     /// The block's leading edge for a chat header ending at `chatTrailing` (nil: no chat header,
     /// the block starts at `slot`, by default the measured `leading`).
     func blockLeading(chatTrailing: CGFloat?, slot: CGFloat? = nil) -> CGFloat { chatTrailing.map { $0 + chatOffset } ?? slot ?? leading }
-    /// The width constraint that puts the block's trailing edge `gap` before the right groups.
-    func width(windowWidth: CGFloat, chatTrailing: CGFloat?, slot: CGFloat? = nil) -> CGFloat {
-        max(Self.floor, windowWidth - rightInset - Self.gap - extra - blockLeading(chatTrailing: chatTrailing, slot: slot))
+    /// Reserve the viewport island and stop growing once the host fits.
+    func width(windowWidth: CGFloat, chatTrailing: CGFloat?, slot: CGFloat? = nil, preferred: CGFloat = Self.minimum) -> CGFloat {
+        min(preferred, max(Self.floor, windowWidth - rightInset - Self.gap - 100 - extra - blockLeading(chatTrailing: chatTrailing, slot: slot)))
     }
     /// The widest chat header starting at `chatLeading` that still leaves the block its preferred minimum.
-    func chatLimit(windowWidth: CGFloat, chatLeading: CGFloat) -> CGFloat {
-        windowWidth - rightInset - Self.gap - extra - Self.minimum - chatOffset - chatLeading
+    func chatLimit(windowWidth: CGFloat, chatLeading: CGFloat, addressPreferred: CGFloat = Self.minimum) -> CGFloat {
+        windowWidth - rightInset - Self.gap - 100 - extra - addressPreferred - chatOffset - chatLeading
     }
     /// Frames (main-window coordinates, zero outside a window) and truncation state for the shell inspector.
     func inspect(block frame: NSRect, right rightFrame: NSRect, address: NSTextField, branch: NSPopUpButton) -> [String: Any] {
@@ -195,7 +195,7 @@ struct ToolbarAddressLayout {
         return ["addressLeading":frame.minX, "addressTrailing":frame.maxX, "addressWidth":frame.width,
                 "rightGroupLeading":rightFrame.minX, "rightGroupWidth":rightFrame.width,
                 "addressGap":gap, "addressMinimum":minimum, "addressFloor":Self.floor, "addressFormerWidth":formerWidth, "rightInset":rightInset, "rightInsetMeasured":measured,
-                "addressTruncation":address.lineBreakMode == .byTruncatingMiddle ? "middle" : String(describing: address.lineBreakMode.rawValue),
+                "addressTruncation":address.lineBreakMode == .byTruncatingTail ? "tail" : String(describing: address.lineBreakMode.rawValue),
                 "branchTruncation":branch.cell?.lineBreakMode == .byTruncatingTail ? "tail" : String(describing: branch.cell?.lineBreakMode.rawValue ?? 0),
                 "addressTextWidth":textWidth, "addressTextRoom":textRoom, "addressTruncated":textWidth > textRoom + 0.5,
                 "branchTitleWidth":branchTitle, "branchTitleRoom":branchRoom, "branchTruncated":branchTitle > branchRoom + 0.5]

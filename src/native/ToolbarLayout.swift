@@ -60,12 +60,13 @@ func toolbarAccentSymbol(_ name: String, _ label: String? = nil) -> NSImage? {
     return image
 }
 
-/// The preview toolbar's two islands, in segment order. LKM-430: the device switch belongs with
-/// code, layers and expand, and Mark up has its own segment. LKM-448: the Actions menu entry
+/// The preview toolbar's islands, in segment order. LKM-467 keeps viewport controls
+/// beside the address. LKM-448: the Actions menu entry
 /// stays; the "…" one is gone.
 enum ToolbarIslands {
     static let interaction = ["select-object", "overlay", "speed", "markup"]
-    static let tools = ["code", "layers", "device", "expand"]
+    static let viewport = ["device", "expand"]
+    static let tools = ["code", "layers"]
     static let markupLabel = "Mark up"
     static let markupSymbol = "pencil.tip"
     /// LKM-448: the buttons that show an on state, each with its one glyph for both states.

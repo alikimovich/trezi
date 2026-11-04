@@ -427,6 +427,9 @@ extension Host {
             target.cacheDisplay(in: target.bounds, to: bitmap)
             reply(id, bitmap.representation(using: .png, properties: [:])?.base64EncodedString() ?? "")
         case "shellInspect": reply(id, shell.inspect().merging(shell.gateInspect()) { _, new in new }.merging(shell.selection.inspect) { _, new in new })
+        case "shellAddressRoundtrip":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            reply(id, shell.verifyAddressRoundtrip())
         case "toolbarOverflow":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             reply(id, shell.toolbarOverflowTest(c))

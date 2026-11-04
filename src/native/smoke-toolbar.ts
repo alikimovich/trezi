@@ -17,10 +17,15 @@ type Toolbar = Record<string, any>
 
 const gapOf = (state: Toolbar) => state.rightGroupLeading - state.addressTrailing
 export const pick = (state: Toolbar) => ({
+  fullAddress: state.address,
+  renderedAddress: state.domain,
   windowWidth: state.windowWidth,
   addressLeading: state.addressLeading,
   addressTrailing: state.addressTrailing,
+  viewportLeading: state.viewportLeading,
+  viewportTrailing: state.viewportTrailing,
   addressWidth: state.addressWidth,
+  addressHostWidth: state.addressHostWidth,
   addressFormerWidth: state.addressFormerWidth,
   addressConstant: state.addressConstant,
   addressExtra: state.addressExtra,
@@ -54,6 +59,7 @@ export const pick = (state: Toolbar) => ({
   branchChevronGap: state.branchChevronGap,
   moreVisible: state.moreVisible,
   interactionSegments: state.interactionSegments,
+  viewportSegments: state.viewportSegments,
   toolSegments: state.toolSegments,
   islandDividers: state.islandDividers,
   publishVisible: state.publishVisible,
@@ -124,25 +130,21 @@ export function assertToolbar(state: Toolbar, stage: string) {
     state.addressVisible,
     `Toolbar ${stage}: the address block stays in the toolbar: ${detail}`
   )
-  // Never narrower than the pre-LKM-148 layout made it at this geometry (180pt by default, less in a minimum-width window).
+  // The address keeps enough room for the host when space is available.
   assert.ok(
-    state.addressWidth >= state.addressFormerWidth - 0.5,
-    `Toolbar ${stage}: the address block keeps its former ${state.addressFormerWidth}pt: ${detail}`
+    state.addressWidth >= state.addressFloor - 0.5 &&
+      state.addressWidth <= Math.max(state.addressMinimum, state.addressHostWidth) + 0.5,
+    `Toolbar ${stage}: the address stays within its compact width range: ${detail}`
   )
   assert.ok(
-    gapOf(state) >= PINNED_GAP - 0.5,
-    `Toolbar ${stage}: the right groups do not overlap or get pushed: ${detail}`
+    state.viewportLeading >= state.addressTrailing - 0.5 &&
+      state.viewportTrailing <= state.rightGroupLeading - PINNED_GAP + 0.5,
+    `Toolbar ${stage}: address, viewport and interaction islands do not overlap: ${detail}`
   )
-  // Above its floor, the block fills the free space up to the fixed gap.
-  if (state.addressWidth > state.addressFloor + 1)
-    assert.ok(
-      Math.abs(gapOf(state) - state.addressGap) <= 1,
-      `Toolbar ${stage}: trailing edge ${state.addressGap}pt before the right groups: ${detail}`
-    )
   assert.equal(
     state.addressTruncation,
-    'middle',
-    `Toolbar ${stage}: the URL truncates in the middle`
+    'tail',
+    `Toolbar ${stage}: the resting URL elides its path after the host`
   )
   assert.equal(state.branchTruncation, 'tail', `Toolbar ${stage}: the branch truncates at the tail`)
 }
@@ -155,7 +157,7 @@ export async function assertIslandDividers(host: NativeBridge, stage: string, st
   if (!shell.islandHidesDividers) return
   assert.deepEqual(
     shell.islandDividers,
-    { interaction: 0, tools: 0 },
+    { interaction: 0, viewport: 0, tools: 0 },
     `Toolbar ${stage}: no divider inside an island: ${JSON.stringify(shell.islandDividers)}`
   )
 }
@@ -174,7 +176,7 @@ export async function capture(host: NativeBridge, artifacts: string, name: strin
   return how
 }
 
-/** Minimum, default and wide window widths: the address block fills the free toolbar
+/** Minimum, default and wide window widths: the address and viewport island fit
  *  width, keeps its minimum, and the right groups stay pinned without overlap. Each
  *  resize is read synchronously inside the resize (`resizeSnapshot`) and again once
  *  settled; they must agree, so the width is final in the resize's own layout pass. */
@@ -191,6 +193,8 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
   )
   const defaultWidth = Math.round(initial.windowWidth)
   const evidence: Record<string, unknown> = {}
+  const record = () =>
+    writeFileSync(join(artifacts, 'toolbar-address.json'), JSON.stringify(evidence, null, 2))
   // The "…" item (LKM-197) leaves a window narrower than MORE_MINIMUM_WINDOW, which
   // shortens the right groups' inset by its width: each state keeps its own pinned inset.
   const pinnedInsets = new Map<boolean, number>()
@@ -235,17 +239,18 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
       `Toolbar ${name}: the "…" item shows only in windows of ${MORE_MINIMUM_WINDOW} pt or more (${width} pt)`
     )
     // LKM-213: slow motion leaves the interaction group in the same windows as "…".
-    // LKM-430: Mark up stays at every width, and the device switch is in the tools group.
+    // Mark up stays at every width, and the viewport controls stay beside the address.
     assert.deepEqual(
       settled.interactionSegments,
       ['select-object', 'overlay', ...(moreShown ? ['speed'] : []), 'markup'],
       `Toolbar ${name}: select | ruler${moreShown ? ' | slow motion' : ''} | mark up`
     )
     assert.deepEqual(
-      settled.toolSegments,
-      ['code', 'layers', 'device', 'expand'],
-      `Toolbar ${name}: code | layers | device | expand`
+      settled.viewportSegments,
+      ['device', 'expand'],
+      `Toolbar ${name}: device | expand`
     )
+    assert.deepEqual(settled.toolSegments, ['code', 'layers'], `Toolbar ${name}: code | layers`)
     const pinnedInset = pinnedInsets.get(moreShown) ?? inset
     pinnedInsets.set(moreShown, pinnedInset)
     assert.ok(
@@ -255,6 +260,10 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
     trailingInset ??= settled.publishTrailingInset
     assertPublishLast(settled, name, trailingInset as number)
     if (name === 'wide') {
+      assert.ok(
+        settled.addressTextRoom >= settled.addressHostWidth - 16,
+        `Toolbar wide: scheme, host and port fit: ${JSON.stringify(pick(settled))}`
+      )
       assert.ok(
         settled.addressWidth > settled.addressMinimum + 1,
         `Toolbar wide: the block grows past its minimum: ${JSON.stringify(pick(settled))}`
@@ -298,7 +307,110 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
     hiddenInset !== undefined && shownInset !== undefined && hiddenInset < shownInset,
     `Toolbar minimum: without the "…" item the right groups are narrower (${hiddenInset} vs ${shownInset})`
   )
-  writeFileSync(join(artifacts, 'toolbar-address.json'), JSON.stringify(evidence, null, 2))
+  const originalURL: string = (await host.request('shellInspect')).address
+  const longURL = `http://sub.t:7/${'long-path/'.repeat(35)}`
+  for (const [stage, width] of [
+    ['ordinary', 1320],
+    ['narrow', 950]
+  ] as const) {
+    assert.equal(
+      await host.request('shellPerform', { action: 'address-test-url', row: longURL }),
+      true
+    )
+    assert.equal(
+      await host.request('shellPerform', { action: 'window-width', row: String(width) }),
+      true
+    )
+    const state: Toolbar = await host.request('shellInspect')
+    assert.equal(
+      state.address,
+      longURL,
+      `${stage}: the full URL is kept for editing and navigation`
+    )
+    assert.ok(
+      state.domain.includes('sub.t:7'),
+      `${stage}: rendered address keeps the host and port: ${state.domain}`
+    )
+    assert.ok(
+      state.domain.endsWith('…'),
+      `${stage}: the path elides after the host: ${state.domain}`
+    )
+    assert.ok(
+      state.addressTextWidth <= state.addressTextRoom + 0.5,
+      `${stage}: the rendered host and port fit without further cell clipping: ${JSON.stringify(pick(state))}`
+    )
+    evidence[`longPath-${stage}`] = pick(state)
+  }
+  const longHost = `${'preview'.repeat(6)}.example.test:7443`
+  const hostURL = `http://${longHost}/${'path/'.repeat(30)}`
+  assert.equal(
+    await host.request('shellPerform', { action: 'address-test-url', row: hostURL }),
+    true
+  )
+  assert.equal(await host.request('shellPerform', { action: 'window-width', row: '1800' }), true)
+  const wideHost: Toolbar = await host.request('shellInspect')
+  assert.ok(wideHost.addressHostWidth > 420, 'the long host exceeds the former fixed cap')
+  assert.ok(wideHost.domain.includes(longHost), 'wide: the full long host and port render')
+  assert.ok(
+    wideHost.addressTextWidth <= wideHost.addressTextRoom + 0.5,
+    `wide: the long host fits without cell clipping: ${JSON.stringify(pick(wideHost))}`
+  )
+  evidence.longHost = pick(wideHost)
+  const roundtripURL = new URL(`/${'long-path/'.repeat(35)}`, originalURL).href
+  assert.equal(
+    await host.request('shellPerform', { action: 'address-test-url', row: roundtripURL }),
+    true
+  )
+  assert.equal(await host.request('shellPerform', { action: 'window-width', row: '1320' }), true)
+  const roundtripBefore: Toolbar = await host.request('shellInspect')
+  assert.ok(roundtripBefore.domain.endsWith('…'), 'the roundtrip begins with an elided path')
+  const roundtripCapture = await capture(host, artifacts, 'long-path-roundtrip')
+  evidence.longPathRoundtrip = {
+    before: pick(roundtripBefore),
+    capture: 'toolbar-long-path-roundtrip.png',
+    captureMode: roundtripCapture
+  }
+  record()
+  const navigation = new Promise<{ action?: string; value?: string }>((resolve, reject) => {
+    const listener = (event: { action?: string; value?: string }) => {
+      if (event.action !== 'address') return
+      clearTimeout(timer)
+      host.off('shell-action', listener)
+      resolve(event)
+    }
+    const timer = setTimeout(() => {
+      host.off('shell-action', listener)
+      reject(new Error('Address submit did not emit a shell action'))
+    }, 5000)
+    host.on('shell-action', listener)
+  })
+  const roundtrip = await host.request('shellAddressRoundtrip')
+  const submitted = await navigation
+  evidence.longPathRoundtrip = {
+    ...(evidence.longPathRoundtrip as Record<string, unknown>),
+    roundtrip,
+    submitted
+  }
+  record()
+  assert.equal(roundtrip.error, undefined, `address editor opened: ${roundtrip.error}`)
+  assert.equal(roundtrip.editing, roundtripURL, 'editing restores the unelided URL')
+  assert.equal(roundtrip.selectedAll, true, 'the full editor URL is selected for Copy')
+  assert.equal(roundtrip.copied, roundtripURL, 'Copy writes the full URL to a private pasteboard')
+  assert.equal(submitted.value, roundtripURL, 'navigation receives the full URL from the editor')
+  await waitFor(
+    async () => (await host.request('shellInspect')).address === roundtripURL,
+    'the submitted full URL reaches the preview'
+  )
+  assert.equal(await host.request('shellPerform', { action: 'address', row: originalURL }), true)
+  await waitFor(
+    async () => (await host.request('shellInspect')).address === originalURL,
+    'the preview returns to its original URL'
+  )
+  assert.equal(
+    await host.request('shellPerform', { action: 'address-test-url', row: originalURL }),
+    true
+  )
+  record()
 }
 
 /** Cleanup: the default window width and the system appearance. */
