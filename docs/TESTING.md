@@ -15,9 +15,17 @@ segments). Routes are labelled in `evidence.json`: idle posts no input; hover is
 posted `mouseMoved`, and AppKit's tracking-area hover follows the real cursor, so the
 hover capture may show the idle look and is not proof of a hover highlight; pressed
 posts mouse-down, captures a resting baseline and a held frame, reads the segment
-while held (no accent) and waits for a release outside the segment (no action runs),
-and fails if the held crop is identical to the baseline or the press overlapped the
-next step; focus and disabled are synthetic setup. "One shared treatment" is measured,
+while held and after release outside the segment. The fixture records Select mode,
+overlay state and both accent images at all three points. A completed Select or
+Mark up action is validated and restored through its normal toolbar click before
+the next step. Overlay panel, Code/source, Layers, desktop/mobile viewport,
+expanded layout and speed are also recorded; a completed action is checked against
+its segment and restored by the ordinary toolbar or speed-menu route. Every idle,
+hover, focus and disabled step starts and ends with exact resting semantics,
+preview geometry and page viewport/scroll; focus and disabled are synthetic setup. A
+pressed image is allowed only while its matching semantic state is active. The
+fixture fails if the held crop is identical to the baseline or the press overlaps
+the next step. "One shared treatment" is measured,
 not declared: per phase all eight segments share one image size, hit width/height
 and vertical centre (within 1 pt), a unique glyph from the toolbar's own symbol
 table, and painted ink (size, centre, coverage) that matches a fresh render of that

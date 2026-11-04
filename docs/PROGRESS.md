@@ -1,5 +1,11 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-503 Mark up acceptance state contract
+
+- The held-press probe now records semantic Select mode, overlay state and both accent images before down, while held and after the outside release. The matrix validates any completed Select or Mark up action and restores the resting state with the normal toolbar toggle before each step and after probe reset. Focus and disabled retain their labeled synthetic setup. A focused regression distinguishes active Select, focus without selection and a stale accent. The native GREEN/RED run remains for the reviewed merged SHA.
+- Independent review and the retained e12ac410 pressed Expand PNG showed that Code, Layers and viewport/layout changes could survive the earlier reset. The probe now records overlay panel, Code/source, Layers, viewport, expanded layout, speed and preview geometry at pre/held/post release. Each matrix step restores durable changes through the existing toolbar or speed-menu route and checks the exact resting semantics, preview geometry and page viewport before and after. The focused regression rejects a leftover Code panel and a misattributed action. Native GREEN/RED remains pending after the reviewed merge.
+- Exact-head CI compiled the host and caught two probe reads of `NativeShell.previewState`, which is private. The probe now takes Code and viewport values from the shell's existing inspection result, the same exposed values used by the acceptance fixture; no product state or access level changes. CI must compile this repair on the next PR head.
+
 ## 2026-11-04 — LKM-484 CI worktree cleanup race
 
 - The native core capture passed with the new glass, but the manager's CI run failed in `chat-new-instant`: `git worktree list` read an entry while asynchronous chat cleanup removed its `commondir`. The fixture now retries only that transient Git read until its existing cleanup deadline and still fails other Git errors. A synthetic regression assertion covers the retry and error boundary; the real fixture continues to require every chat worktree to be removed.
