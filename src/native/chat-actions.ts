@@ -4,7 +4,7 @@ import type { ChatUiRecord } from '../shared/chat-ui'
 import type { NativeChatAction } from '../shared/native-chat'
 import { setupPrompt } from '../shared/setup-prompt'
 import { requestTarget } from './chat-agent-card'
-import type { NativeChatController } from './chat-controller'
+import type { NativeChatController, SendAdmission } from './chat-controller'
 import { loginAction } from './chat-login'
 import { editQueued, sendBlock } from './chat-queue'
 import { recoveryAction } from './chat-recovery'
@@ -19,25 +19,54 @@ export function setRecoveryRequestDeadlineForTests(ms: number | null) {
   recoveryRequestMs = ms ?? RECOVERY_REQUEST_MS
 }
 
+type Held = NonNullable<Chat['heldOperation']>
+
+async function heldIdentity(
+  controller: NativeChatController,
+  chat: Chat,
+  bind: (held: Held) => Held
+) {
+  if (chat.heldOperation) return bind(chat.heldOperation)
+  const held = await controller.services.invoke('agent:held-operation', chat.chat)
+  if (!held?.id) throw new Error('The held work changed. Refresh this chat before retrying.')
+  return bind(held)
+}
+
 /** Resolve for a chat whose changes are held: the agent fixes the conflict markers in a turn. */
 export async function resolveHeld(controller: NativeChatController, chat: Chat) {
-  return recoveryRequest(controller, chat, 'resolve', async () => {
+  return recoveryRequest(controller, chat, 'resolve', async (bind) => {
     chat.paused = false
-    const result = await controller.services.invoke('agent:resolve-conflict', chat.chat)
+    const held = await heldIdentity(controller, chat, bind)
+    const result = await controller.services.invoke(
+      'agent:resolve-conflict',
+      chat.chat,
+      held.id,
+      chat.recoveryId
+    )
     if (!result.ok) throw new Error(result.error ?? 'Unable to resolve changes.')
     if (chat.recoveryTimedOut) return
     if (result.prompt && result.conflicted.length) {
       const prompt = result.prompt
       // The agent turn is not a request in flight: it starts after the request ends,
       // outside the deadline, and the running-turn lock takes over from the busy state.
-      return () =>
-        controller.run(chat, {
-          id: crypto.randomUUID(),
+      return () => {
+        const id = crypto.randomUUID()
+        if (chat.autoResolved === 'tried') {
+          chat.autoResolveTurn = id
+          chat.autoResolveAttempt = chat.recoveryId
+          chat.autoResolveIncarnation = result.incarnation
+        }
+        return controller.run(chat, {
+          id,
           text: prompt,
           attachments: [],
           selection: null,
-          turn: {}
+          turn: {},
+          heldOperationId: held.id,
+          attemptId: chat.recoveryId,
+          expectedIncarnation: result.incarnation
         })
+      }
     }
     if (chat.isolation === 'parked')
       chat.recoveryProblem = result.error ?? 'The changes are still held. Review the reason below.'
@@ -45,23 +74,62 @@ export async function resolveHeld(controller: NativeChatController, chat: Chat) 
 }
 
 /** A request's follow-up that outlives the request (an agent turn); it gets no deadline. */
-type Handover = () => Promise<void>
+type Handover = () => Promise<SendAdmission>
 
 async function recoveryRequest(
   controller: NativeChatController,
   chat: Chat,
   kind: NonNullable<Chat['recovery']>,
-  request: () => Promise<Handover | void>
+  request: (bind: (held: Held) => Held) => Promise<Handover | void>
 ) {
   if (chat.isRunning || chat.sending || chat.recovery) return
   chat.recovery = kind
   chat.recoveryTimedOut = false
-  chat.recoveryProblem = undefined
-  chat.recoveryReport = undefined
+  // The prior failed attempt remains part of this incident until a real landing or
+  // discard settles it. Its card is shown as progress while the request owns it.
   chat.recoverySettled = undefined
   chat.recoveryOutcome = undefined
   chat.recoveryId = crypto.randomUUID()
   const id = chat.recoveryId
+  const cancellation = chat.cancellation
+  const initialHeld = chat.heldOperation
+  let boundHeld: Held | undefined
+  const sameIntent = () =>
+    controller.chats.get(chat.chat) === chat &&
+    chat.cancellation === cancellation &&
+    !chat.stopping &&
+    chat.recoveryId === id
+  const matches = (left: Held | undefined, right: Held | undefined) =>
+    left?.id === right?.id &&
+    left?.incarnation === right?.incarnation &&
+    left?.generation === right?.generation &&
+    left?.source === right?.source
+  const bind = (held: Held) => {
+    if (
+      boundHeld ||
+      !sameIntent() ||
+      chat.recoveryTimedOut ||
+      chat.isolation !== 'parked' ||
+      (initialHeld && !matches(initialHeld, held)) ||
+      (chat.heldOperation && !matches(chat.heldOperation, held))
+    )
+      throw new Error('The held work changed. Refresh this chat before retrying.')
+    boundHeld = held
+    chat.heldOperation = held
+    return held
+  }
+  const sameRequest = () => sameIntent() && matches(chat.heldOperation, boundHeld ?? initialHeld)
+  const ownsAttempt = () => controller.chats.get(chat.chat) === chat && chat.recoveryId === id
+  const current = () => sameRequest() && chat.isolation === 'parked'
+  const settled = () =>
+    sameRequest() &&
+    chat.isolation !== 'parked' &&
+    !!chat.recoverySettled &&
+    chat.recoverySettled !== 'parked'
+  if (chat.heldIncident) {
+    chat.heldIncident.operation = id
+    chat.heldIncident.attention = 'owned'
+  }
   chat.recoveryStartedAt = Date.now()
   controller.changed(chat)
   let requestPromise: Promise<Handover | void> | undefined
@@ -70,7 +138,7 @@ async function recoveryRequest(
   try {
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      requestPromise = request()
+      requestPromise = request(bind)
       handover =
         (await Promise.race([
           requestPromise,
@@ -88,29 +156,60 @@ async function recoveryRequest(
     } finally {
       if (timer) clearTimeout(timer)
     }
-    if (
-      !handover &&
-      !chat.recoveryProblem &&
-      !chat.isRunning &&
-      chat.recoverySettled &&
-      chat.recoverySettled !== 'parked'
-    )
+    if (!current() && !settled()) return
+    if (!handover && !chat.isRunning && chat.recoverySettled && chat.recoverySettled !== 'parked') {
+      chat.heldIncident = undefined
+      chat.recovery = undefined
+      chat.recoveryTimedOut = false
+      chat.recoveryId = undefined
+      chat.recoveryProblem = undefined
+      chat.recoveryReport = undefined
       chat.recoveryOutcome =
         kind === 'discard'
           ? 'Held changes discarded.'
           : chat.recoverySettled === 'merged'
             ? 'Changes applied to the project.'
             : 'No changes remained to apply.'
-    if (chat.recoveryProblem)
-      chat.recoveryReport = await writeRecoveryReport(chat, kind, chat.recoveryProblem)
+      controller.changed(chat)
+    }
+    // Acknowledged handover starts its agent turn immediately. The prior report is
+    // already available; a fresh report cannot be allowed to delay or abort the turn.
+    if (!handover && chat.recoveryProblem) {
+      try {
+        const path = await (controller.services.writeRecoveryReport ?? writeRecoveryReport)(
+          chat,
+          kind,
+          chat.recoveryProblem,
+          current
+        )
+        if (path && current()) chat.recoveryReport = path
+      } catch {
+        if (current()) {
+          chat.recoveryReport = undefined
+          chat.recoveryProblem += ' The support report could not be written.'
+        }
+      }
+    }
   } catch (error) {
+    if (!current()) return
     chat.recoveryTimedOut = timedOut
     chat.recoveryProblem = `Problem: ${error instanceof Error ? error.message : String(error)}`
     try {
-      chat.recoveryReport = await writeRecoveryReport(chat, kind, chat.recoveryProblem)
+      const path = await (controller.services.writeRecoveryReport ?? writeRecoveryReport)(
+        chat,
+        kind,
+        chat.recoveryProblem,
+        current
+      )
+      if (path && current()) chat.recoveryReport = path
     } catch {
-      chat.recoveryProblem += ' The support report could not be written.'
+      if (current()) {
+        chat.recoveryReport = undefined
+        chat.recoveryProblem += ' The support report could not be written.'
+      }
     }
+    if (!current()) return
+    if (chat.heldIncident) chat.heldIncident.attention = 'terminal'
     if (kind === 'resolve') throw error
   } finally {
     if (chat.recoveryTimedOut && requestPromise) {
@@ -118,21 +217,70 @@ async function recoveryRequest(
       // every card mutation locked until its actual IPC settles, without a spinner.
       void requestPromise
         .finally(() => {
-          if (chat.recoveryId === id) {
+          if (current() || settled() || ownsAttempt()) {
             chat.recovery = undefined
             chat.recoveryTimedOut = false
-            controller.changed(chat)
+            if (current() || settled()) controller.changed(chat)
           }
         })
         .catch(() => {})
     } else {
-      chat.recovery = undefined
-      chat.recoveryTimedOut = false
+      if (current() || settled()) {
+        chat.recovery = undefined
+        chat.recoveryTimedOut = false
+      } else if (ownsAttempt()) {
+        // Stop or a changed held source invalidates this provisional intent.
+        // Release only its busy flag; the newer owner renders its own state.
+        chat.recovery = undefined
+        chat.recoveryTimedOut = false
+      }
       // A handover starts its turn right away, which renders the running state itself.
-      if (!handover) controller.changed(chat)
+      if (!handover && (current() || settled())) {
+        if (current() && chat.heldIncident) chat.heldIncident.attention = 'terminal'
+        controller.changed(chat)
+      }
     }
   }
-  if (handover) await handover()
+  if (handover) {
+    if (!current()) return
+    const admission = await handover()
+    if (admission.state === 'cancelled') {
+      if (chat.autoResolved === 'tried') {
+        chat.autoResolved = undefined
+        chat.autoResolveTurn = undefined
+        chat.autoResolveAttempt = undefined
+      }
+      controller.changed(chat)
+      return
+    }
+    if (admission.state === 'admitted') {
+      if (chat.autoResolved === 'tried' && chat.recoveryId === id)
+        chat.autoResolveIncarnation = admission.incarnation
+      return
+    }
+    if (admission.state === 'queued' && chat.isRunning) return
+    if (!current()) return
+    if (admission.state === 'queued')
+      chat.queue = chat.queue.filter((item) => item.id !== admission.id)
+    const reason =
+      admission.state === 'failed'
+        ? `The resolution turn could not start: ${admission.reason}`
+        : 'The resolution turn could not start while this chat still needs Resolve.'
+    chat.recoveryProblem = `Problem: ${reason}`
+    try {
+      const path = await writeRecoveryReport(chat, 'resolve handover', reason, current)
+      if (path && current()) chat.recoveryReport = path
+    } catch {
+      if (current()) {
+        chat.recoveryReport = undefined
+        chat.recoveryProblem += ' The support report could not be written.'
+      }
+    }
+    if (!current()) return
+    if (chat.heldIncident) chat.heldIncident.attention = 'terminal'
+    controller.changed(chat)
+    throw new Error(reason)
+  }
 }
 
 /** Card actions call application services directly; shell effects only refresh web panels. */
@@ -158,15 +306,17 @@ export async function cardAction(
   // cannot reach the backend while the first request is still in flight.
   if (action.action === 'resolve') return resolveHeld(controller, chat).catch(() => {})
   if (action.action === 'discard')
-    return recoveryRequest(controller, chat, 'discard', async () => {
+    return recoveryRequest(controller, chat, 'discard', async (bind) => {
       chat.paused = false
-      const result = await invoke('agent:discard-conflict', chat.chat)
+      const held = await heldIdentity(controller, chat, bind)
+      const result = await invoke('agent:discard-conflict', chat.chat, held.id, chat.recoveryId)
       if (!result.ok && result.error) throw new Error(result.error)
     })
   if (action.action === 'landing-retry')
-    return recoveryRequest(controller, chat, 'retry', async () => {
+    return recoveryRequest(controller, chat, 'retry', async (bind) => {
       chat.paused = false
-      const result = await invoke('agent:retry-landing', chat.chat)
+      const held = await heldIdentity(controller, chat, bind)
+      const result = await invoke('agent:retry-landing', chat.chat, held.id, chat.recoveryId)
       if (!result.ok) throw new Error(result.error ?? 'Unable to retry the landing.')
       if (result.state === 'parked' && chat.isolation === 'parked')
         chat.recoveryProblem =

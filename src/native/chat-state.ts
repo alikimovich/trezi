@@ -36,6 +36,9 @@ export interface Submission {
   attachments: Attachment[]
   selection: NativeChatContext['selection']
   turn: NativeChatContext['turn']
+  heldOperationId?: string
+  attemptId?: string
+  expectedIncarnation?: string
 }
 export interface Chat extends NativeChatMirror {
   /** A live assistant answer arrived since this conversation was last visible. */
@@ -99,6 +102,20 @@ export interface Chat extends NativeChatMirror {
   stopped?: 'held' | 'reverted'
   /** LKM-225: the automatic Resolve of a drift park ran once ('tried'), then gave up ('failed'). */
   autoResolved?: 'tried' | 'failed'
+  /** The admitted follow-up turn that owns an automatic Resolve attempt. */
+  autoResolveTurn?: string
+  autoResolveAttempt?: string
+  autoResolveIncarnation?: string
+  pendingRecoveryError?: { turn: string; message: string }
+  acceptedRecoveryFailure?: {
+    incarnation: string
+    turn: string
+    run: number
+    heldOperationId?: string
+    attemptId?: string
+  }
+  recoverySettlement?: Extract<AgentEvent, { type: 'isolation' }>['settlement']
+  heldOperation?: { id: string; incarnation: string; generation: number; source: string | null }
   /** LKM-165: why the last landing failed; its work is held until Retry or Resolve. */
   landingError?: string
   /** A chat-scoped recovery request, distinct from an agent turn. */
@@ -106,6 +123,13 @@ export interface Chat extends NativeChatMirror {
   /** A deadline can stop the spinner while the original IPC still owns the mutation. */
   recoveryTimedOut?: boolean
   recoveryProblem?: string
+  /** A failed held attempt stays owned by this turn until its report and landing settle. */
+  heldIncident?: {
+    turn?: string
+    operation: string
+    gate: string
+    attention: 'recording' | 'owned' | 'terminal'
+  }
   recoveryId?: string
   recoveryStartedAt?: number
   recoveryReport?: string

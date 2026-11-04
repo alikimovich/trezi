@@ -10,6 +10,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+
+- Chat keeps technical check failures in a quiet held status while the agent or recovery owns them, then shows one reported Problem only if the work remains held (LKM-486).
 ## [0.13.17] - 2026-11-04
 
 ### Fixed

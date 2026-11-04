@@ -3,6 +3,9 @@
 // preview-error card and paused-queue "Send now". The Git side (a stopped turn is held,
 // reverts byte-exact, keeps, finishes) is test/stop-recovery.mjs.
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { liveCheckoutEdit } from '../src/main/live-write-guard.ts'
 import { setRecoveryRequestDeadlineForTests } from '../src/native/chat-actions.ts'
 import { NativeChatController } from '../src/native/chat-controller.ts'
@@ -389,6 +392,12 @@ emit({
   reason: 'failed',
   error: 'index.lock exists'
 })
+assert.equal(
+  card('conflict').title,
+  'Changes are still held',
+  'failed attempt stays quiet while recording'
+)
+await tick()
 assert.match(card('conflict').detail, /Problem: index\.lock exists/)
 assert.doesNotMatch(card('conflict').detail, /couldn’t apply them to the project/)
 assert.match(card('conflict').fullDetail, /src\/a\.tsx/)
@@ -397,11 +406,8 @@ answers['agent:retry-landing'] = new Promise((resolve) => {
   finishRetry = resolve
 })
 const pendingRetry = act('landing-retry', 'conflict')
-assert.equal(card('conflict').actions[1].label, 'Retrying…', 'busy before IPC settles')
-assert.equal(
-  card('conflict').actions.every((action) => action.disabled),
-  true
-)
+assert.equal(card('conflict').title, 'Changes are still held', 'retry has ordinary status')
+assert.deepEqual(card('conflict').actions, [], 'no stale action row while retry owns the incident')
 await act('landing-retry', 'conflict')
 await act('discard', 'conflict')
 assert.equal(calls.filter((call) => call[0] === 'agent:retry-landing').length, 1)
@@ -460,6 +466,8 @@ assert.equal(chat.recovery, undefined, 'the original IPC release unlocks mutatio
 // A Resolve handover to an agent turn is not a request in flight: the deadline covers
 // only the IPC, so a long agent turn is never timed out or reported as a Problem.
 emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
+await tick()
+assert.ok(chat.recoveryReport, 'the prior incident has a shareable report')
 const reportsBefore = calls.filter((call) => call[0] === 'recovery:copy-report').length
 answers['agent:resolve-conflict'] = {
   ok: true,
@@ -470,25 +478,30 @@ let admitTurn
 answers['agent:send'] = new Promise((resolve) => {
   admitTurn = resolve
 })
+const previousTmpdir = process.env.TMPDIR
+const missingReportRoot = join(tmpdir(), `trezi-no-report-${crypto.randomUUID()}`)
+assert.equal(existsSync(missingReportRoot), false)
+process.env.TMPDIR = missingReportRoot
 const handover = act('resolve', 'conflict')
 await new Promise((resolve) => setTimeout(resolve, 30)) // far past the 1 ms deadline
 assert.equal(chat.recoveryTimedOut, false, 'the handed-over turn never trips the request deadline')
-assert.equal(chat.recoveryProblem, undefined, 'a running agent turn is not a Problem')
-assert.equal(chat.recoveryReport, undefined, 'no support report for a legitimately running turn')
+assert.ok(chat.recoveryProblem, 'the failed attempt remains recorded until recovery succeeds')
+assert.ok(chat.recoveryReport, 'the prior report remains available during recovery')
 assert.equal(chat.recovery, undefined, 'the recovery request ended at the handover')
 assert.equal(chat.isRunning, true, 'the agent turn owns the lock now')
-assert.equal(card('conflict')?.busy ?? false, false, 'no request spinner while the agent runs')
-assert.equal(
-  card('conflict')?.actions?.find((action) => action.action === 'landing-retry')?.disabled ?? true,
-  true,
-  'mutations stay locked by the running agent turn'
-)
+assert.equal(card('conflict')?.title, 'Changes are still held', 'the agent owns the incident')
+assert.deepEqual(card('conflict')?.actions, [], 'no stale actions while the agent runs')
 assert.equal(calls.filter((call) => call[0] === 'agent:send').at(-1)[1], 'Fix the conflict markers')
 admitTurn({ ok: true })
-await handover
+try {
+  await assert.doesNotReject(handover, 'a report write failure cannot abort an acknowledged turn')
+} finally {
+  if (previousTmpdir === undefined) delete process.env.TMPDIR
+  else process.env.TMPDIR = previousTmpdir
+}
 emit({ type: 'done' })
 await tick()
-assert.equal(chat.recoveryProblem, undefined)
+assert.ok(chat.recoveryProblem, 'a done event alone does not clear an unlanded incident')
 assert.equal(calls.filter((call) => call[0] === 'recovery:copy-report').length, reportsBefore)
 delete answers['agent:send']
 setRecoveryRequestDeadlineForTests(null)
@@ -544,6 +557,78 @@ controller.event({ projectKey: 'b', type: 'isolation', state: 'isolated' })
 assert.equal(heldCard(other), undefined, 'a discarded chat clears too')
 assert.equal(other.recoveryProblem, undefined)
 assert.equal(other.recoveryReport, undefined)
+
+// LKM-486: a failed technical attempt belongs to its active turn. A passing retry
+// removes the incident without ever showing an actionable Problem.
+const attentionRenders = []
+const attention = new NativeChatController({
+  invoke: async () => ({ ok: true }),
+  render: (state) => attentionRenders.push(structuredClone(state)),
+  effect: () => {}
+})
+attention.active = 'incident'
+const working = attention.get('incident')
+working.isRunning = true
+working.turn = 'turn-1'
+const attentionCard = () => attentionRenders.at(-1)?.cards.find((c) => c.id === 'conflict')
+attention.event({
+  projectKey: 'incident',
+  type: 'isolation',
+  state: 'parked',
+  reason: 'failed',
+  files: ['src/a.tsx'],
+  error: 'chromium check failed'
+})
+assert.equal(attentionCard()?.title, 'Changes are still held')
+assert.deepEqual(attentionCard()?.actions, [])
+await tick()
+assert.equal(attentionCard()?.title, 'Changes are still held', 'report completion cannot flash')
+attention.event({ projectKey: 'incident', type: 'status', text: 'Retrying the browser check' })
+assert.equal(attentionCard()?.title, 'Changes are still held', 'the agent retry owns this attempt')
+attention.event({
+  projectKey: 'incident',
+  type: 'isolation',
+  state: 'merged',
+  files: ['src/a.tsx']
+})
+attention.event({ projectKey: 'incident', type: 'landing-finished', turn: 'turn-1' })
+assert.equal(attentionCard(), undefined, 'passing recovery clears the incident')
+assert.equal(working.heldIncident, undefined)
+assert.equal(
+  attentionRenders.some((state) => state.cards.some((c) => c.title === 'Problem')),
+  false
+)
+
+working.isRunning = true
+working.turn = 'turn-2'
+attention.event({
+  projectKey: 'incident',
+  type: 'isolation',
+  state: 'parked',
+  reason: 'failed',
+  files: ['src/a.tsx'],
+  error: 'no supported check is available'
+})
+attention.event({ projectKey: 'incident', type: 'landing-finished', turn: 'turn-2' })
+assert.equal(attentionCard()?.title, 'Changes are still held', 'no flash before report')
+await tick()
+assert.equal(attentionCard()?.title, 'Problem', 'exhausted recovery reports once')
+assert.equal(attentionRenders.at(-1).cards.filter((c) => c.title === 'Problem').length, 1)
+assert.ok(attentionCard()?.actions.some((a) => a.action === 'recovery-report'))
+working.isRunning = true
+attention.event({
+  projectKey: 'incident',
+  type: 'isolation',
+  state: 'parked',
+  reason: 'failed',
+  files: ['src/a.tsx'],
+  error: 'choice required',
+  decision: 'Keep which version?'
+})
+assert.ok(
+  attentionRenders.at(-1).cards.some((c) => c.id === 'conflict' && c.title !== 'Problem'),
+  'a genuine decision remains visible while the agent is busy'
+)
 console.log(
   'STOP RECOVERY UI OK — guard, relative sources, dev-server errors, post-Stop and preview-error cards, queue'
 )

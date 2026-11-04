@@ -1,5 +1,49 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-486 Stop releases held-recovery attention
+
+- Stop now ends a parked chat's owned manual or automatic recovery and pending failed-park report attention at the cancellation boundary. It clears the busy request and stale Problem text, keeping the actual held operation, source and any completed support report. The existing held-work card offers actions again after Stop; later lookup, request, report and handover completions remain fenced by the cancellation epoch.
+- The existing synthetic controller fixture asserts the final card title, detail and enabled actions immediately after Stop and after each deferred completion, then starts a new manual action. Native acceptance remains a post-merge manager gate.
+
+## 2026-11-04 — LKM-486 restored held-operation binding
+
+- A reopened parked chat can begin Resolve, Retry or Discard before its held operation is in native memory. The request now owns a provisional chat/cancellation/attempt intent, binds the authoritative held operation after lookup only while that intent and source still match, and uses the bound identity for completion and report guards. A matching producer settlement clears the busy request and held incident; Stop and changed source or provider identity cannot dispatch the stale action.
+- The existing synthetic chat fixture defers held-operation lookup for all three actions, a failed retry report, Stop, close/reopen and changed owner/source/provider cases. Focused checks and manager gates are recorded in the worker receipt, with native acceptance still pending after merge.
+
+## 2026-11-04 — LKM-486 completion rollback repair
+
+- Recovery request report completion now checks the captured chat, cancellation epoch and held-source identity before its `finally` path changes status or renders. A stopped request cannot reopen a terminal Problem after delayed report IO; an uninterrupted request still publishes its one report. A matching producer-confirmed settlement also releases the request's busy state without reviving the held Problem.
+- A send rejected by the final held-operation or provider-incarnation check now removes its unsent turn tracker entry before another provider terminal can be attributed. The focused synthetic fixture defers both boundaries, checks Stop and identity changes, and confirms an unrelated turn plus the next valid send retain their own terminal attribution.
+
+## 2026-11-04 — LKM-486 independent review await-boundary repair
+
+- A failed-park report now captures its chat object, cancellation epoch, held operation, source and chat incarnation before report IO. Completion publishes only while those facts still match, so Stop and later held work cannot reopen an old Problem. The existing report writer discards a stale private artifact.
+- Recovery sends now recheck their captured held operation and provider incarnation at the final synchronous provider-dispatch boundary after writer and preparation awaits. The focused fixture defers report and send preparation to cover Stop, stale identities and uninterrupted publication/dispatch; live provider and native acceptance remain manager gates.
+
+## 2026-11-04 — LKM-486 held-work ownership contract
+
+- The main chat owner now mints a held operation for the actual parked source and chat incarnation. Resolve, Retry and Discard carry that operation through the existing IPC path; send admission and the accepted owner terminal carry separate turn and attempt facts. Only a matching producer settlement from landing, release or explicit discard can clear the native held incident. Stop and a newer source fence late acknowledgements and reports.
+- The focused chat fixture covers the deferred owner claim, Stop during send admission, a stale uncorrelated merge, changed-source park and the admitted error report. The native chat capture, independent review and PR-head CI remain manager gates.
+
+## 2026-11-04 — LKM-486 admitted Resolve turn failure
+
+- An admitted automatic Resolve follow-up now records its owning turn. If that turn ends with a technical agent error while its changes remain held, the controller settles the attempt once, retains the error in the transcript, writes a shareable support report, and replaces Checking with one terminal Problem after report publication. Login errors, Stop, stale turns and a successful merge keep their existing paths.
+- The focused automatic Resolve fixture covers an admitted send followed by an agent error, report readability, terminal card deduplication and bounded recovery. Native chat acceptance remains for the manager after merge.
+
+## 2026-11-04 — LKM-486 rejected Resolve handover
+
+- The chat controller now returns whether a follow-up send was admitted, queued, cancelled or rejected. An automatic Resolve whose follow-up send fails writes the held incident's support report and settles its status to one terminal Problem; it cannot remain at Checking indefinitely. A queued send waits only while another turn actually owns the chat, cancellation does not create a technical Problem, and a stale operation cannot publish a terminal result after recovery has cleared.
+- The focused automatic Resolve fixture rejects the agent send and requires one terminal card, a readable report with the admission reason, and no repeat recovery. The existing admitted and deferred-acknowledgement paths remain covered. Native chat acceptance remains for the manager after merge.
+
+## 2026-11-04 — LKM-486 independent review repair
+
+- An acknowledged Resolve handover now starts the agent turn without a second support-report write. Report creation failures in a terminal request stay report failures and cannot turn a successful request into a failed recovery.
+- Report publication now checks the captured operation before replacing the chat's readable report. A late older artifact is removed; the Copy action continues to read the current incident's report. Focused fixtures cover that ordering, an unwritable report location during handover, and the render boundary while automatic Resolve awaits its acknowledgement.
+
+## 2026-11-03 — LKM-486 chat Problem attention
+
+- A failed held check now records its turn and recovery operation before the support report is written. While the agent or retry owns that incident, the chat shows a quiet held status without stale actions; a terminal Problem appears only after its report is ready or report writing fails. The prior failure and report remain until a merged or discarded isolation confirms recovery, and the per-chat operation ID rejects late report completions.
+- The controller claims automatic Resolve before rendering the parked state, closing the failure-to-recovery frame gap. Decision and approval cards retain priority. The focused chat fixture covers active failure through success, terminal failure, report readiness, no duplicate card, and decision visibility. Native chat acceptance remains for the manager after merge.
 ## 2026-11-04 — LKM-484 CI worktree cleanup race
 
 - The native core capture passed with the new glass, but the manager's CI run failed in `chat-new-instant`: `git worktree list` read an entry while asynchronous chat cleanup removed its `commondir`. The fixture now retries only that transient Git read until its existing cleanup deadline and still fails other Git errors. A synthetic regression assertion covers the retry and error boundary; the real fixture continues to require every chat worktree to be removed.

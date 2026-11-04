@@ -21,7 +21,8 @@ interface ReconciliationDeps {
     message: string,
     transcript: SessionTranscriptEntry[],
     terminal: TurnTerminalOutcome,
-    reconcile: boolean
+    reconcile: boolean,
+    owner?: { turn: string; run: number }
   ) => Promise<string[] | null>
   showParked: (key: string) => void
   // The conversation owner's transitions (S11). Absent in unit tests of the policy alone.
@@ -49,7 +50,8 @@ export class ReconciliationCoordinator {
     message: string,
     terminal: TurnTerminalOutcome,
     turn?: string,
-    run = 0
+    run = 0,
+    attemptId?: string
   ): Promise<void> {
     const d = this.deps
     const session = d.currentSession(key)
@@ -81,7 +83,8 @@ export class ReconciliationCoordinator {
         message,
         session?.record.transcript ?? [],
         preparation.cancelled ? 'failed' : terminal,
-        !wasResolving
+        !wasResolving,
+        turn ? { turn, run, ...(attemptId ? { attemptId } : {}) } : undefined
       )
       if (!current()) return
       const next = run + 1

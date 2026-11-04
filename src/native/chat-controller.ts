@@ -24,7 +24,7 @@ import {
 } from '../shared/provider-readiness'
 import { cardAction } from './chat-actions'
 import { planAttachments } from './chat-attachments'
-import { autoResolve } from './chat-auto-resolve'
+import { autoResolve, autoResolveTurnError } from './chat-auto-resolve'
 import { menuQuery, withReferences } from './chat-island-refs'
 import { needsResolve, sendBlock } from './chat-queue'
 import { writeRecoveryReport } from './chat-recovery-report'
@@ -62,7 +62,14 @@ export interface ChatServices {
   notice?: (settings: ChatAgentSettings) => string | undefined
   /** LKM-225: a drift park is resolved once automatically (off where tests need the card). */
   autoResolve?: boolean
+  /** Injectable report IO for the deferred completion fixture. */
+  writeRecoveryReport?: typeof writeRecoveryReport
 }
+export type SendAdmission =
+  | { state: 'admitted'; incarnation?: string }
+  | { state: 'queued'; id: string }
+  | { state: 'cancelled' }
+  | { state: 'failed'; reason: string }
 /** Owns native conversation behavior. No browser, React, DOM or renderer stores. */
 export class NativeChatController {
   readonly chats = new Map<string, Chat>()
@@ -526,6 +533,60 @@ export class NativeChatController {
         : event.projectKey
     if (!key || this.closed.has(key)) return
     const chat = this.get(key)
+    if (event.type === 'owner-terminal') {
+      if (event.outcome === 'failed') {
+        chat.acceptedRecoveryFailure = event.owner
+        autoResolveTurnError(this, chat, event.owner)
+      }
+      return
+    }
+    if (event.type === 'isolation') {
+      const held = chat.heldOperation
+      const settled = event.settlement
+      if (
+        event.state === 'parked' &&
+        held &&
+        event.held?.id === held.id &&
+        !event.decision &&
+        (!settled?.attemptId ||
+          (chat.autoResolved === 'tried' && settled.attemptId !== chat.autoResolveAttempt))
+      )
+        return
+      if (held && event.state !== 'parked') {
+        if (
+          !settled ||
+          settled.heldOperationId !== held.id ||
+          settled.incarnation !== held.incarnation ||
+          !['merged', 'discarded', 'released'].includes(settled.outcome)
+        )
+          return
+      }
+      if (event.state === 'parked' && event.held) {
+        if (
+          held &&
+          (held.incarnation !== event.held.incarnation ||
+            event.held.generation < held.generation ||
+            (event.held.generation === held.generation && event.held.id !== held.id))
+        )
+          return
+        if (held && (held.id !== event.held.id || held.incarnation !== event.held.incarnation)) {
+          chat.recoveryId = undefined
+          chat.recoveryProblem = undefined
+          chat.recoveryReport = undefined
+          chat.heldIncident = undefined
+          if (
+            chat.autoResolved !== 'tried' ||
+            event.settlement?.attemptId !== chat.autoResolveAttempt
+          ) {
+            chat.autoResolved = undefined
+            chat.autoResolveTurn = undefined
+            chat.autoResolveAttempt = undefined
+          }
+        }
+        chat.heldOperation = event.held
+      }
+      if (event.state === 'parked' && settled?.outcome === 'held') chat.recoverySettlement = settled
+    }
     // A late terminal (an earlier turn's, or one no send accounts for) completes nothing.
     if (late(chat, event)) return
     // A heartbeat racing the turn's end is not news (and must not flag review).
@@ -539,9 +600,17 @@ export class NativeChatController {
     )
       chat.unreadAnswer = true
     reduce(chat, event)
+    if (event.type === 'error' && !event.code && event.turn)
+      chat.pendingRecoveryError = { turn: event.turn, message: event.message }
+    if (event.type === 'error' && !event.code && chat.acceptedRecoveryFailure)
+      autoResolveTurnError(this, chat, chat.acceptedRecoveryFailure)
     if (event.type === 'isolation' && !chat.recovery) {
       // Landed or discarded: the held problem and its report are history.
       if (event.state !== 'parked') {
+        chat.heldOperation = undefined
+        chat.recoverySettlement = undefined
+        chat.heldIncident = undefined
+        chat.recoveryId = undefined
         chat.recoveryProblem = undefined
         chat.recoveryReport = undefined
       } else if (
@@ -555,24 +624,64 @@ export class NativeChatController {
         const id = crypto.randomUUID()
         chat.recoveryId = id
         chat.recoveryStartedAt = Date.now()
+        if (event.reason === 'failed')
+          chat.heldIncident = {
+            turn: chat.turn,
+            operation: id,
+            gate: event.reason,
+            attention: 'recording'
+          }
         chat.recoveryProblem = `Problem: ${reason}`
         chat.recoveryReport = undefined
-        void writeRecoveryReport(chat, 'turn-end landing', reason).then(
+        const cancellation = chat.cancellation
+        const held = chat.heldOperation
+        const incident = chat.heldIncident
+        const current = () =>
+          this.chats.get(key) === chat &&
+          chat.cancellation === cancellation &&
+          !chat.stopping &&
+          chat.recoveryId === id &&
+          chat.isolation === 'parked' &&
+          chat.heldOperation?.id === held?.id &&
+          chat.heldOperation?.incarnation === held?.incarnation &&
+          chat.heldOperation?.source === held?.source &&
+          chat.heldIncident === incident
+        void (this.services.writeRecoveryReport ?? writeRecoveryReport)(
+          chat,
+          'turn-end landing',
+          reason,
+          current
+        ).then(
           (path) => {
-            if (chat.recoveryId === id && chat.isolation === 'parked') {
+            if (path && current()) {
               chat.recoveryReport = path
+              if (chat.heldIncident)
+                chat.heldIncident.attention = chat.isRunning ? 'owned' : 'terminal'
               this.changed(chat)
             }
           },
           () => {
-            if (chat.recoveryId === id) {
+            if (current()) {
               chat.recoveryProblem += ' The support report could not be written.'
+              if (chat.heldIncident)
+                chat.heldIncident.attention = chat.isRunning ? 'owned' : 'terminal'
               this.changed(chat)
             }
           }
         )
       }
     }
+    if (event.type === 'isolation' && chat.acceptedRecoveryFailure)
+      autoResolveTurnError(this, chat, chat.acceptedRecoveryFailure)
+    if (
+      (event.type === 'landing-finished' ||
+        event.type === 'error' ||
+        (event.type === 'done' && !event.landingPending)) &&
+      !chat.isRunning &&
+      chat.isolation === 'parked' &&
+      chat.heldIncident?.attention === 'owned'
+    )
+      chat.heldIncident.attention = chat.recoveryReport ? 'terminal' : 'recording'
     // A seat that refused a turn is signed out for the start screen too (LKM-232).
     const seat = chat.settings.provider
     if (event.type === 'error' && event.code === 'auth' && !chat.settings.connectionId)
@@ -615,6 +724,19 @@ export class NativeChatController {
       })
     }
     if (!chat.isRunning && key !== this.active && event.type !== 'model') chat.needsReview = true
+    // A bounded automatic Resolve takes ownership before this render. A microtask here
+    // exposed the parked Problem for one frame between the turn and its acknowledgement.
+    if (
+      this.services.autoResolve &&
+      (event.type === 'done' || event.type === 'landing-finished' || event.type === 'isolation')
+    )
+      autoResolve(
+        this,
+        chat,
+        event.type === 'isolation' &&
+          event.state === 'parked' &&
+          event.settlement?.attemptId === chat.autoResolveAttempt
+      )
     if (event.type === 'delta' && priorPhase === 'writing') {
       if (!this.streamUpdates.has(key))
         this.streamUpdates.set(
@@ -630,13 +752,6 @@ export class NativeChatController {
       (event.type === 'isolation' && event.state !== 'parked')
     )
       queueMicrotask(() => void this.drain(chat))
-    if (
-      this.services.autoResolve &&
-      (event.type === 'done' || event.type === 'landing-finished' || event.type === 'isolation')
-    )
-      queueMicrotask(() =>
-        autoResolve(this, chat, event.type === 'isolation' && event.state === 'parked')
-      )
   }
   async composer(action: NativeComposerAction) {
     if (action.chat !== this.active) return
@@ -783,8 +898,9 @@ export class NativeChatController {
     }
     return held
   }
-  async run(chat: Chat, submission: Submission) {
+  async run(chat: Chat, submission: Submission): Promise<SendAdmission> {
     begin(chat)
+    if (chat.heldIncident) chat.heldIncident.attention = 'owned'
     chat.stopping = false
     chat.sending = true
     chat.isRunning = true
@@ -827,6 +943,7 @@ export class NativeChatController {
       turn: submission.id,
       uptimeNs: process.hrtime.bigint().toString()
     })
+    let admission: SendAdmission = { state: 'admitted' }
     try {
       const plan = await planAttachments(
         attachments,
@@ -842,14 +959,24 @@ export class NativeChatController {
         this.changed(chat)
       }
       const prompt = plan.header + (selection?.prompt ?? '') + text
-      await this.services.invoke(
+      const ack = await this.services.invoke(
         'agent:send',
         prompt,
         plan.images.length ? plan.images : undefined,
         chat.chat,
         turn,
-        submission.id
+        submission.id,
+        submission.heldOperationId,
+        submission.attemptId,
+        submission.expectedIncarnation
       )
+      if (cancellation !== chat.cancellation || this.chats.get(chat.chat) !== chat)
+        throw new Error('Message cancelled before sending.')
+      if (ack?.state === 'admitted' && ack.turn === submission.id) {
+        admission = { state: 'admitted', incarnation: ack.incarnation }
+        if (chat.autoResolveTurn === submission.id && chat.autoResolved === 'tried')
+          chat.autoResolveIncarnation = ack.incarnation
+      }
       // The owner admitted the turn. A provider may be quiet before its first
       // event, so do not keep showing the earlier live-writer wait as current.
       if (chat.activityDetail === 'Waiting: Another chat is editing this live project.') {
@@ -873,6 +1000,7 @@ export class NativeChatController {
       // queues the same way, with no error turn or duplicate (LKM-169).
       const resolve = isResolveNeeded(error)
       if ((resolve || isChatBusy(error)) && cancellation === chat.cancellation) {
+        admission = { state: 'queued', id: submission.id }
         chat.messages = chat.messages.filter((m) => m.id !== userMessage && m.id !== reply)
         chat.queue.unshift(submission)
         chat.streamingId = null
@@ -893,6 +1021,10 @@ export class NativeChatController {
           chat.operation = 'waiting'
         }
       } else {
+        admission =
+          cancellation !== chat.cancellation
+            ? { state: 'cancelled' }
+            : { state: 'failed', reason: error instanceof Error ? error.message : String(error) }
         chat.paused = true
         append(chat, `\n\nUnable to send: ${String(error)}`)
         finish(chat)
@@ -902,6 +1034,7 @@ export class NativeChatController {
       this.changed(chat)
       void this.drain(chat)
     }
+    return admission
   }
   async drain(chat: Chat) {
     // Sends the next queued message once nothing blocks it (`sendBlock`): a stopped
@@ -923,6 +1056,30 @@ export class NativeChatController {
     const stoppedTurn = chat.turn
     chat.paused = true
     chat.cancellation++
+    // Stop ends this chat's ownership of a held-work recovery, including a
+    // pending failure report. Keep the held source and any completed report so
+    // the ordinary held-work actions remain available after interruption.
+    if (
+      chat.isolation === 'parked' &&
+      (chat.recovery ||
+        chat.autoResolved === 'tried' ||
+        chat.heldIncident?.attention === 'owned' ||
+        chat.heldIncident?.attention === 'recording')
+    ) {
+      chat.recovery = undefined
+      chat.recoveryTimedOut = false
+      chat.recoveryId = undefined
+      chat.recoveryProblem = undefined
+      chat.heldIncident = undefined
+    }
+    if (chat.autoResolved === 'tried') {
+      chat.autoResolved = undefined
+      chat.autoResolveTurn = undefined
+      chat.autoResolveAttempt = undefined
+      chat.autoResolveIncarnation = undefined
+      chat.pendingRecoveryError = undefined
+      chat.acceptedRecoveryFailure = undefined
+    }
     chat.stopping = true
     this.changed(chat)
     if (chat.setup || chat.awaitingLanding)

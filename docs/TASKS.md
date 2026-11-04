@@ -3,6 +3,20 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Chat Problem attention (LKM-486)
+
+- [x] Settle manual and automatic held-recovery ownership on Stop; preserve held work and reports while restoring the quiet held-work actions after deferred callbacks.
+- [x] Bind restored parked-chat recovery to the authoritative held operation after deferred lookup; fence stale Stop, source, provider and replacement-chat callbacks.
+- [x] Independent review completion repair: fence recovery request `finally` after Stop and roll back an unsent recovery tracker entry before later terminal attribution.
+- [x] Independent review repair: fence failed-park report completion against Stop and changed held source, and recheck held/provider identity immediately before provider dispatch.
+- [x] Bind held work to producer operation, source and incarnation; distinguish send admission from accepted owner terminal and settle only from actual landing or discard.
+- [x] Keep Stop and changed-source callbacks from reviving an old Problem or clearing the current held incident in the focused controller fixture.
+- [x] Correlate failed held attempts with their turn and recovery operation; keep an ordinary status until a report exists or recovery succeeds.
+- [x] Keep user decisions visible and cover active failure, retry, terminal report and per-chat clearing in the focused chat fixture.
+- [x] Review repair: keep a report failure out of an acknowledged Resolve handover, reject stale report publication, and assert the deferred automatic Resolve render boundary.
+- [x] Review repair: settle a rejected Resolve follow-up send as a reported terminal incident instead of leaving Checking indefinitely.
+- [x] Review repair: settle an admitted Resolve turn's technical error as one reported terminal incident.
+- [ ] Manager: independent review, configured CI and post-merge native chat acceptance on main.
 ## Native suite failure on main 17fbc17129bb (LKM-484)
 
 - [x] Embed New Chat as native AppKit glass content inside the chat title's custom toolbar item and preserve its existing segment behavior and visibility.

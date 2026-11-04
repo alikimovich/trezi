@@ -3,7 +3,7 @@ import { turnMessage } from './chat-commit'
 import { chatGateScope, gatedTurn, holdTurn, landTurn } from './chat-landing'
 import { clearPark, dropParkRecord, upsertParkRecord } from './chat-park'
 import { noteResolution } from './chat-resolution'
-import { type ChatState, emitIsolation, onChain, states } from './chat-state'
+import { type ChatState, claimHeldOperation, emitIsolation, onChain, states } from './chat-state'
 import { applyParked, discardParked, type ResolvePrep, stageResolve } from './chat-worktrees'
 import { holdMessage, integrationGate, replayChecks } from './integration-gate'
 import { commitLiveTurn } from './live-commit'
@@ -83,6 +83,7 @@ export async function applyParkedBranch(
       return { handled: true, ok: false, conflict: false, error }
     }
     if (res.ok) {
+      const held = st.heldOperation
       if (res.newBase) st.wt.baseSha = res.newBase
       // A 3-way apply onto a dirty tree can leave conflict markers, so unlike the
       // turn path this commits whatever landed — keeping the apply revertable in one
@@ -93,7 +94,27 @@ export async function applyParkedBranch(
       })
       clearPark(st)
       await retireWorktreeBranch(st.wt)
-      emitIsolation(key, 'merged', st.wt.branch, res.files)
+      emitIsolation(
+        key,
+        'merged',
+        st.wt.branch,
+        res.files,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        held && verdict.ok
+          ? {
+              heldOperationId: held.id,
+              incarnation: held.incarnation,
+              outcome: 'merged',
+              source: held.source,
+              candidate: verdict.candidate,
+              evidenceIds: verdict.evidence.map((item) => item.id)
+            }
+          : undefined
+      )
     }
     return { handled: true, ok: res.ok, conflict: res.conflict, error: res.error }
   } catch (e) {
@@ -115,19 +136,46 @@ export async function applyParkedBranch(
  */
 export async function discardParkedBranch(
   root: string,
-  branch: string
-): Promise<{ handled: boolean }> {
+  branch: string,
+  heldId?: string,
+  attemptId?: string
+): Promise<{ handled: boolean; ok?: boolean }> {
   const found = findByBranch(root, branch)
   if (!found) return { handled: false }
   const [key, st] = found
-  await onChain(st, async () => {
-    await discardParked(st.wt)
-    await retireWorktreeBranch(st.wt)
-  }).catch(() => {})
-  // Unparks even when the reset failed: the user asked to drop the work.
+  if (heldId && st.heldOperation?.id !== heldId) return { handled: true, ok: false }
+  const held = st.heldOperation
+  try {
+    await onChain(st, async () => {
+      if (heldId && st.heldOperation?.id !== heldId) throw new Error('The held work changed.')
+      await discardParked(st.wt)
+      await retireWorktreeBranch(st.wt)
+    })
+  } catch {
+    return { handled: true, ok: false }
+  }
   clearPark(st)
-  emitIsolation(key, 'isolated', st.wt.branch)
-  return { handled: true }
+  emitIsolation(
+    key,
+    'isolated',
+    st.wt.branch,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    held && {
+      heldOperationId: held.id,
+      incarnation: held.incarnation,
+      outcome: 'discarded',
+      source: held.source,
+      candidate: null,
+      evidenceIds: [],
+      ...(attemptId ? { attemptId } : {})
+    }
+  )
+  return { handled: true, ok: true }
 }
 
 /**
@@ -142,17 +190,22 @@ export async function discardParkedBranch(
  * Serialized on the chat's chain. `{ ok: false }` if the chat isn't parked.
  */
 export async function resolveParkedChat(
-  sessionKey: string
+  sessionKey: string,
+  heldId?: string,
+  attemptId?: string
 ): Promise<{ ok: boolean; conflicted: string[]; error?: string }> {
   const st = states.get(sessionKey)
   if (!st) return { ok: false, conflicted: [], error: 'no-chat' }
   if (!st.parked) return { ok: false, conflicted: [], error: 'not-parked' }
+  if (heldId && st.heldOperation?.id !== heldId)
+    return { ok: false, conflicted: [], error: 'The held work changed.' }
   // LKM-403: staging again would land one side of what the user is being asked about.
   if (st.decision) return { ok: false, conflicted: [], error: st.landingError }
   if (st.resolvingFiles) return { ok: true, conflicted: st.resolvingFiles }
   let prep: ResolvePrep
   try {
     prep = await onChain(st, async () => {
+      if (heldId && st.heldOperation?.id !== heldId) throw new Error('The held work changed.')
       const staged = await stageResolve(st.liveRoot, st.wt)
       await noteResolution(sessionKey, st, staged)
       return staged
@@ -179,18 +232,53 @@ export async function resolveParkedChat(
         return
       }
       if (outcome.outcome === 'merged') {
-        await landTurn(sessionKey, st, outcome, 'resolve', described, !!verdict?.ok)
+        await landTurn(
+          sessionKey,
+          st,
+          outcome,
+          'resolve',
+          described,
+          !!verdict?.ok,
+          attemptId ? { attemptId } : undefined,
+          verdict
+        )
         return
       }
       if (outcome.outcome === 'noop') {
+        if (!verdict?.ok) {
+          held = 'The held source has not passed its checks.'
+          return
+        }
         // Staging showed the live tree already CONTAINS the chat's work (or the
         // chat's diff vanished against it) — there is nothing left to merge.
         // Leaving the chat parked here made "Resolve it" a silent infinite loop:
         // ok:true + still-parked re-renders the same card. Unpark.
+        const heldOperation = st.heldOperation
         clearPark(st)
         if (outcome.newBase) st.wt.baseSha = outcome.newBase
         await retireWorktreeBranch(st.wt)
-        emitIsolation(sessionKey, 'isolated', st.wt.branch)
+        emitIsolation(
+          sessionKey,
+          'isolated',
+          st.wt.branch,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          heldOperation && verdict?.ok
+            ? {
+                heldOperationId: heldOperation.id,
+                incarnation: heldOperation.incarnation,
+                outcome: 'released',
+                source: heldOperation.source,
+                candidate: verdict.candidate,
+                evidenceIds: verdict.evidence.map((item) => item.id),
+                ...(attemptId ? { attemptId } : {})
+              }
+            : undefined
+        )
         return
       }
       // 'parked' again — autoApplyWorktree refused the batch (it only writes text
@@ -207,9 +295,31 @@ export async function resolveParkedChat(
       }
       if (res.ok) {
         if (res.newBase) st.wt.baseSha = res.newBase
+        const held = st.heldOperation
         clearPark(st)
         await retireWorktreeBranch(st.wt)
-        emitIsolation(sessionKey, 'merged', st.wt.branch, res.files)
+        emitIsolation(
+          sessionKey,
+          'merged',
+          st.wt.branch,
+          res.files,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          held && verdict?.ok
+            ? {
+                heldOperationId: held.id,
+                incarnation: held.incarnation,
+                outcome: 'merged',
+                source: held.source,
+                candidate: verdict.candidate,
+                evidenceIds: verdict.evidence.map((item) => item.id),
+                ...(attemptId ? { attemptId } : {})
+              }
+            : undefined
+        )
         return
       }
       // `res.error` is bounded by the owner and names the path and Git's reason.
@@ -226,11 +336,15 @@ export async function resolveParkedChat(
 /** "Discard changes" backend for a live PARKED chat: drop the chat's unmerged work
  *  (reset its worktree to the fork point) and unpark. Thin wrapper over
  *  `discardParkedBranch` keyed by `sessionKey` so the renderer needn't know the branch. */
-export async function discardParkedChat(sessionKey: string): Promise<{ ok: boolean }> {
+export async function discardParkedChat(
+  sessionKey: string,
+  heldId?: string,
+  attemptId?: string
+): Promise<{ ok: boolean }> {
   const st = states.get(sessionKey)
   if (!st) return { ok: false }
-  const res = await discardParkedBranch(st.liveRoot, st.wt.branch)
-  return { ok: res.handled }
+  const res = await discardParkedBranch(st.liveRoot, st.wt.branch, heldId, attemptId)
+  return { ok: res.handled && res.ok === true }
 }
 
 /** A chat's held stopped turn (LKM-151), as `stopped-turn.ts` sees it. */
@@ -298,6 +412,7 @@ export function landStoppedTurn(
     if (outcome.outcome === 'parked') {
       st.interrupted = false
       st.parkedFiles = outcome.files
+      claimHeldOperation(st, verdict?.tree ?? null)
       upsertParkRecord(st, outcome.files)
       emitIsolation(sessionKey, 'parked', st.wt.branch, outcome.files)
       return { files: outcome.files, conflict: true }
@@ -309,9 +424,30 @@ export function landStoppedTurn(
       }
     // Nothing left to land: the hold ends all the same.
     if (outcome.newBase) st.wt.baseSha = outcome.newBase
+    const held = st.heldOperation
     clearPark(st)
     await retireWorktreeBranch(st.wt)
-    emitIsolation(sessionKey, 'isolated', st.wt.branch)
+    emitIsolation(
+      sessionKey,
+      'isolated',
+      st.wt.branch,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      held && verdict?.ok
+        ? {
+            heldOperationId: held.id,
+            incarnation: held.incarnation,
+            outcome: 'released',
+            source: held.source,
+            candidate: verdict.candidate,
+            evidenceIds: verdict.evidence.map((item) => item.id)
+          }
+        : undefined
+    )
     return { files: outcome.files }
   })
 }

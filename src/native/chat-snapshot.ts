@@ -204,39 +204,56 @@ export function snapshot(
   // LKM-165: an unlandable turn says so, with why and a way out — never "pending".
   if (chat.isolation === 'parked' && chat.stopped !== 'held' && chat.decision)
     cards.push(decisionCard(chat, chat.decision))
-  else if (chat.isolation === 'parked' && chat.stopped !== 'held')
-    cards.push({
-      id: 'conflict',
-      title: chat.recoveryProblem ? 'Problem' : 'This turn’s changes didn’t land',
-      detail:
-        chat.recoveryProblem ??
-        [
-          chat.landingError
-            ? `Trezi couldn’t apply them to the project: ${chat.landingError}`
-            : 'The project changed under them, so Trezi held them instead of overwriting.',
-          ...(chat.isolationFiles ?? [])
-        ].join('\n'),
-      ...(chat.recoveryProblem && chat.isolationFiles?.length
-        ? { fullDetail: chat.isolationFiles.join('\n') }
-        : {}),
-      busy: !!chat.recovery && !chat.recoveryTimedOut,
-      actions: [
-        { label: 'Discard', action: 'discard', disabled: chat.isRunning || !!chat.recovery },
-        {
-          label: chat.recovery === 'retry' ? 'Retrying…' : 'Retry',
-          action: 'landing-retry',
-          disabled: chat.isRunning || !!chat.recovery
-        },
-        {
-          label: chat.recovery === 'resolve' ? 'Resolving…' : 'Resolve',
-          action: 'resolve',
-          disabled: chat.isRunning || !!chat.recovery
-        },
-        ...(chat.recoveryReport
-          ? [{ label: 'Copy support report', action: 'recovery-report' }]
-          : [])
-      ]
-    })
+  else if (chat.isolation === 'parked' && chat.stopped !== 'held') {
+    const recovering =
+      chat.autoResolved === 'tried' ||
+      (!!chat.heldIncident &&
+        chat.heldIncident.operation === chat.recoveryId &&
+        (chat.isRunning ||
+          chat.sending ||
+          (!!chat.recovery && !chat.recoveryTimedOut) ||
+          chat.heldIncident.attention !== 'terminal'))
+    if (recovering)
+      cards.push({
+        id: 'conflict',
+        title: 'Changes are still held',
+        detail: 'Checking the held changes. The project still has its previous source.',
+        actions: []
+      })
+    else
+      cards.push({
+        id: 'conflict',
+        title: chat.recoveryProblem ? 'Problem' : 'This turn’s changes didn’t land',
+        detail:
+          chat.recoveryProblem ??
+          [
+            chat.landingError
+              ? `Trezi couldn’t apply them to the project: ${chat.landingError}`
+              : 'The project changed under them, so Trezi held them instead of overwriting.',
+            ...(chat.isolationFiles ?? [])
+          ].join('\n'),
+        ...(chat.recoveryProblem && chat.isolationFiles?.length
+          ? { fullDetail: chat.isolationFiles.join('\n') }
+          : {}),
+        busy: !!chat.recovery && !chat.recoveryTimedOut,
+        actions: [
+          { label: 'Discard', action: 'discard', disabled: chat.isRunning || !!chat.recovery },
+          {
+            label: chat.recovery === 'retry' ? 'Retrying…' : 'Retry',
+            action: 'landing-retry',
+            disabled: chat.isRunning || !!chat.recovery
+          },
+          {
+            label: chat.recovery === 'resolve' ? 'Resolving…' : 'Resolve',
+            action: 'resolve',
+            disabled: chat.isRunning || !!chat.recovery
+          },
+          ...(chat.recoveryReport
+            ? [{ label: 'Copy support report', action: 'recovery-report' }]
+            : [])
+        ]
+      })
+  }
   const peers = peerCard(chat.peerWork)
   if (peers) cards.push(peers)
   for (const p of chat.permissions)

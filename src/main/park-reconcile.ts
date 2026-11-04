@@ -92,6 +92,7 @@ export async function reconcileParkOnChain(
     }
     const { files, pending } = await heldBatch(st)
     if (!pending.length && !(fold && (await dirty(st.wt.path)))) {
+      const held = st.heldOperation
       const head = (await gitOut(st.wt.path, ['rev-parse', 'HEAD'])).trim()
       const reason = st.landingError ? 'failed' : st.interrupted ? 'interrupted' : 'conflict'
       clearPark(st)
@@ -109,7 +110,25 @@ export async function reconcileParkOnChain(
         reason,
         files: files.length
       })
-      emitIsolation(sessionKey, 'isolated', st.wt.branch)
+      emitIsolation(
+        sessionKey,
+        'isolated',
+        st.wt.branch,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        held && {
+          heldOperationId: held.id,
+          incarnation: held.incarnation,
+          outcome: 'released',
+          source: held.source,
+          candidate: null,
+          evidenceIds: []
+        }
+      )
       return 'cleared'
     }
     const lost = folded || !st.parkedFiles.length || files.some((f) => !st.parkedFiles.includes(f))
