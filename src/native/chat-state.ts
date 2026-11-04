@@ -345,7 +345,6 @@ export function late(chat: Chat, event: AgentEvent) {
     event.type === 'isolation' &&
     event.state === 'parked' &&
     event.reason !== 'interrupted' &&
-    !event.decision &&
     chat.stopped === 'held' &&
     !chat.isRunning &&
     chat.stoppedTurn === chat.turn

@@ -207,7 +207,11 @@ export function snapshot(
   else if (chat.isolation === 'parked' && chat.stopped !== 'held') {
     // A running turn, check, or live recovery request still owns this park. Once
     // that operation ends, the same card exposes its actual reason and report.
-    const owned = (chat.isRunning && !chat.stopping) || (!!chat.recovery && !chat.recoveryTimedOut)
+    const owned =
+      (!!chat.recovery && !chat.recoveryTimedOut) ||
+      (chat.isRunning &&
+        !chat.stopping &&
+        (!chat.landingError || (chat.phase === 'applying' && chat.operation === 'parking')))
     const status =
       chat.recovery === 'retry'
         ? 'Retrying the check…'

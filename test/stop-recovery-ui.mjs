@@ -225,6 +225,9 @@ emit({
 })
 assert.equal(chat.stopped, 'held', 'a late failed park cannot replace the settled Stop')
 assert.equal(card('conflict'), undefined, 'late failed park cannot revive a Problem')
+emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'], decision: 'Keep ours?' })
+assert.equal(chat.stopped, 'held', 'a late decision cannot replace the settled Stop')
+assert.equal(card('conflict'), undefined, 'late decision cannot revive the stopped incident')
 controller.event({ projectKey: 'a', type: 'error', turn: 'stale-turn', message: 'late failure' })
 assert.equal(card('conflict'), undefined, 'a late terminal callback cannot revive a Problem')
 assert.ok(card('stopped'), 'Stop retains its settled action after a late callback')
@@ -404,6 +407,20 @@ emit({
 assert.match(card('conflict').detail, /Problem: index\.lock exists/)
 assert.doesNotMatch(card('conflict').detail, /couldn’t apply them to the project/)
 assert.match(card('conflict').fullDetail, /src\/a\.tsx/)
+await tick()
+const terminalReport = chat.recoveryReport
+assert.ok(terminalReport, 'the failed park has an actual report before the later turn')
+await controller.run(chat, {
+  id: crypto.randomUUID(),
+  text: 'Unrelated follow-up',
+  attachments: [],
+  selection: null,
+  turn: {}
+})
+assert.equal(card('conflict').title, 'Problem', 'a later turn does not own the failed park')
+assert.equal(chat.recoveryReport, terminalReport, 'the earlier report remains available')
+assert.ok(card('conflict').actions.some((action) => action.action === 'recovery-report'))
+emit({ type: 'done' })
 let finishRetry
 answers['agent:retry-landing'] = new Promise((resolve) => {
   finishRetry = resolve
