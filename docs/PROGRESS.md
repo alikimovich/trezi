@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-480 minimum-width toolbar inset
+
+- The `core/toolbar-address` failure measured a 16 pt gap at the 850 pt window minimum with the address at its 80 pt floor. The fixture accepts 16 pt as non-overlapping, but `ToolbarAddressLayout.measure` required 19 pt to record the right-group inset, leaving `rightInsetMeasured` false. Measurement now recognizes the 16 pt pinned gap while layout still targets 20 pt wherever width permits. Native confirmation is pending the manager's locked run.
+
 ## 2026-11-03 — LKM-475 review repair: retained transcript evidence
 
 - Independent review found that `chat-gate` recorded a count but its new Gamma chat had no message, so it did not prove transcript retention. The disposable fixture now waits for that selected chat to initialize, inserts one synthetic assistant reply, and waits for its native row geometry before the opening capture. It asserts the same nonzero message count and realized row through Opening and failed opening, at the normal window size and 900 pt, and records the IDs with each PNG/JSON receipt. Send and Return still have to leave the count unchanged. No real chat data is used. Native captures remain for the manager's post-merge sidebar run.

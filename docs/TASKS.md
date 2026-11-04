@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native suite failure on main efe3c3843087 (LKM-480)
+
+- [x] Treat the 16 pt address-to-right-group gap at the 850 pt window minimum as a measured pinned layout; retain the 20 pt sizing target when space allows.
+- [ ] Manager: confirm the full native `core` group and required gates on this tree.
+
 ## Native chat during project opening (LKM-475)
 
 - [x] Keep the selected chat column, header, transcript and draft beside the preview through opening and failed-open states; keep Opening and error in the preview.
