@@ -141,11 +141,11 @@ struct ToolbarAddressLayout {
     /// What the layout before LKM-148 gave the block at the current geometry (the
     /// test's lower bound: the block is never narrower than it used to be).
     var formerWidth: CGFloat = minimum
-    /// NSToolbar keeps the right groups pinned only while at least 14–16 pt separate
-    /// them from the block (measured on macOS 26, depending on the items); closer,
-    /// it shifts them and drops the fixed spaces. 20 keeps a margin, and a pushed
-    /// layout (gap at the toolbar's own minimum) cannot pass for a pinned one.
+    /// NSToolbar keeps the right groups pinned with at least 16 pt between them and
+    /// the block. Prefer 20 pt when there is room; at the 850 pt window minimum the
+    /// 80 pt address floor leaves exactly 16 pt, which is still a pinned layout.
     static let gap: CGFloat = 20
+    static let pinnedGap: CGFloat = 16
     /// Window width minus the first right group's leading edge. Starts high: an
     /// underestimate overflows the block, and an overflowed block cannot be measured.
     var rightInset: CGFloat = 432
@@ -185,8 +185,8 @@ struct ToolbarAddressLayout {
         if abs(frame.width - constant) <= 8 { extra = max(0, frame.width - constant) }
         if let chat { chatOffset = frame.minX - chat.maxX } else { leading = frame.minX }
         let actual = rightFrame.minX - frame.maxX
-        if actual >= Self.gap - 1 { rightInset = windowWidth - rightFrame.minX; measured = true }
-        else { rightInset = min(windowWidth, rightInset + Self.gap - actual); measured = false }
+        if actual >= Self.pinnedGap - 0.5 { rightInset = windowWidth - rightFrame.minX; measured = true }
+        else { rightInset = min(windowWidth, rightInset + Self.pinnedGap - actual); measured = false }
     }
     /// Widens the reserved inset after the toolbar overflowed the block; false once
     /// the inset is already larger than any right-group layout.

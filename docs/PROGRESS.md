@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-480 minimum-width toolbar inset
+
+- The `core/toolbar-address` failure measured a 16 pt gap at the 850 pt window minimum with the address at its 80 pt floor. The fixture accepts 16 pt as non-overlapping, but `ToolbarAddressLayout.measure` required 19 pt to record the right-group inset, leaving `rightInsetMeasured` false. Measurement now recognizes the 16 pt pinned gap while layout still targets 20 pt wherever width permits. Native confirmation is pending the manager's locked run.
+
 ## 2026-11-03 — LKM-478 CI fixture repair
 
 - CI exposed two older unit fixtures that still expected unchecked ordinary chat completion to park until a manual Retry. The new completion path legitimately arranges the existing check and lands the exact combined tree, so the peer fixture now requires automatic checking, no held state and the peer provenance. The lesson fixture now requires one lesson on that automatic landing and confirms an idempotent Retry cannot duplicate it.
