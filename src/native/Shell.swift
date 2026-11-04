@@ -621,25 +621,67 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
                                             "branchDetails":Array(branchMenu.menu?.items.dropFirst() ?? []).map { ["title":$0.title, "enabled":$0.isEnabled, "action":$0.action == #selector(previewMenuAction(_:)) ? "open" : "none"] },
                                             "branchStatus":previewState["branchStatus"] ?? [:],
                                             "publishStep":previewState["publishStep"] ?? ""]
-        return ["sidebarContainsTrafficLights":sidebarFrame.contains(trafficFrame),
-         "interactionGroup":(toolbar.items.first(where: { $0.itemIdentifier.rawValue == "interaction" }) as? NSToolbarItemGroup)?.subitems.map { $0.itemIdentifier.rawValue } ?? [], "viewportSegments":(toolbar.items.first(where: { $0.itemIdentifier.rawValue == "viewport" }) as? NSToolbarItemGroup)?.subitems.map { $0.itemIdentifier.rawValue } ?? [], "selectMode":selecting, "projectsMenuOnly":toolbarItems["projects"]?.action == nil,
-         "sidebarTop":sidebarFrame.maxY, "contentTop":window?.contentLayoutRect.maxY ?? 0,
-         "detailTop":contentCanvas.convert(contentCanvas.bounds, to: nil).maxY,
-         "sidebarListTop":outline.enclosingScrollView.map { $0.convert($0.bounds, to: nil).maxY } ?? 0,
-         "rows":allRows.map { ["id":$0.id, "title":$0.title, "kind":$0.kind] }, "selected":selectedID ?? "", "sidebarCollapsed":sidebarItem.isCollapsed, "sourceList":SourceList.inspect(outline, item: sidebarItem),
-         "sidebarWidth":sidebar.view.bounds.width, "detailWidth":split.splitViewItems[1].viewController.view.bounds.width,
-         "projectMoreRightEdges":(0..<outline.numberOfRows).compactMap { index -> CGFloat? in
+        let projectMoreRightEdges: [CGFloat] = (0..<outline.numberOfRows).compactMap { index -> CGFloat? in
              guard let cell = outline.view(atColumn: 0, row: index, makeIfNecessary: true) as? ProjectCell, let clip = outline.enclosingScrollView?.contentView else { return nil }
              cell.layoutSubtreeIfNeeded()
-             return cell.more.convert(cell.more.bounds, to: clip).maxX
-         }, "projectIconCount":rows.filter { $0.icon != nil }.count, "outlineClipWidth":outline.enclosingScrollView?.contentSize.width ?? 0, "outlineRows":outline.numberOfRows, "outlineWidth":outline.bounds.width,
-         "toolbar":toolbar.items.map { $0.itemIdentifier.rawValue }, "branch":previewState["branch"] ?? "", "publishLabel":previewState["publishLabel"] ?? "", "codeOpen":previewState["codeOpen"] ?? false,
-         "toolbarGroupsMomentary":toolbar.items.compactMap { $0 as? NSToolbarItemGroup }.allSatisfy { ($0 as? MomentaryToolbarGroup)?.hasMomentaryControl == true }, "visibleToolbar":toolbar.visibleItems?.map { $0.itemIdentifier.rawValue } ?? [], "previewHeaderLightText":previewTextColor == .white, "address":previewAddress, "domain":address.stringValue, "viewport":previewState["viewport"] ?? "", "publishStandard":toolbarItems["publish"]?.view == nil, "toolGroup":(toolbar.items.first(where: { $0.itemIdentifier.rawValue == "tools" }) as? NSToolbarItemGroup)?.subitems.map { $0.itemIdentifier.rawValue } ?? [], "sidebarAutohidesScrollers":(outline.enclosingScrollView?.autohidesScrollers ?? false), "sidebarActions":sidebarButtons.keys.sorted(), "chatTitle":chatTitle.stringValue, "chatTitlePlain":toolbarItems["chat"]?.action == nil, "chatNewVisible":!chatNewButton.isHidden, "chatNewEnabled":chatNewButton.isEnabled, "chatNewFrame":NSStringFromRect(mainFrame(chatNewButton) ?? .zero), "chatTitleFrame":NSStringFromRect(mainFrame(chatTitle) ?? .zero), "chatHeaderWidth":chatHeader.bounds.width, "chatHeaderTrailing":chatHeader.convert(NSPoint(x: chatHeader.bounds.maxX, y: 0), to: nil).x, "detailLeading":split.splitViewItems[1].viewController.view.convert(.zero, to: nil).x, "chatWidth":previewState["chatWidth"] ?? 0, "enabled":toolbarItems.mapValues { $0.isEnabled }]
-            .merging(branchInspect) { _, new in new }.merging(branchMenu.progressInspect) { _, new in new }
-            .merging(toolbarInspect()) { _, new in new }.merging(["resizeSnapshot":resizeSnapshot]) { _, new in new }
-            .merging(publishInspect(toolbarItems["publish"] as? NSMenuToolbarItem, state: previewState)) { _, new in new }
-            .merging(moreInspect(toolbarItems["more"] as? NSMenuToolbarItem)) { _, new in new }.merging(islandInspect()) { _, new in new }
-            .merging(sidebarChatsInspect()) { _, new in new }
+             let moreFrame = cell.more.convert(cell.more.bounds, to: clip)
+             return moreFrame.maxX
+        }
+        let sidebarInspect: [String: Any] = [
+            "sidebarContainsTrafficLights":sidebarFrame.contains(trafficFrame),
+            "sidebarTop":sidebarFrame.maxY, "contentTop":window?.contentLayoutRect.maxY ?? 0,
+            "detailTop":contentCanvas.convert(contentCanvas.bounds, to: nil).maxY,
+            "sidebarListTop":outline.enclosingScrollView.map { $0.convert($0.bounds, to: nil).maxY } ?? 0,
+            "rows":allRows.map { ["id":$0.id, "title":$0.title, "kind":$0.kind] },
+            "selected":selectedID ?? "", "sidebarCollapsed":sidebarItem.isCollapsed,
+            "sourceList":SourceList.inspect(outline, item: sidebarItem),
+            "sidebarWidth":sidebar.view.bounds.width,
+            "detailWidth":split.splitViewItems[1].viewController.view.bounds.width,
+            "projectMoreRightEdges":projectMoreRightEdges,
+            "projectIconCount":rows.filter { $0.icon != nil }.count,
+            "outlineClipWidth":outline.enclosingScrollView?.contentSize.width ?? 0,
+            "outlineRows":outline.numberOfRows, "outlineWidth":outline.bounds.width,
+            "sidebarAutohidesScrollers":outline.enclosingScrollView?.autohidesScrollers ?? false,
+            "sidebarActions":sidebarButtons.keys.sorted()
+        ]
+        let toolbarState: [String: Any] = [
+            "interactionGroup":(toolbar.items.first(where: { $0.itemIdentifier.rawValue == "interaction" }) as? NSToolbarItemGroup)?.subitems.map { $0.itemIdentifier.rawValue } ?? [],
+            "viewportSegments":(toolbar.items.first(where: { $0.itemIdentifier.rawValue == "viewport" }) as? NSToolbarItemGroup)?.subitems.map { $0.itemIdentifier.rawValue } ?? [],
+            "selectMode":selecting, "projectsMenuOnly":toolbarItems["projects"]?.action == nil,
+            "toolbar":toolbar.items.map { $0.itemIdentifier.rawValue },
+            "branch":previewState["branch"] ?? "", "publishLabel":previewState["publishLabel"] ?? "",
+            "codeOpen":previewState["codeOpen"] ?? false,
+            "toolbarGroupsMomentary":toolbar.items.compactMap { $0 as? NSToolbarItemGroup }.allSatisfy { ($0 as? MomentaryToolbarGroup)?.hasMomentaryControl == true },
+            "visibleToolbar":toolbar.visibleItems?.map { $0.itemIdentifier.rawValue } ?? [],
+            "previewHeaderLightText":previewTextColor == .white,
+            "address":previewAddress, "domain":address.stringValue,
+            "viewport":previewState["viewport"] ?? "",
+            "publishStandard":toolbarItems["publish"]?.view == nil,
+            "toolGroup":(toolbar.items.first(where: { $0.itemIdentifier.rawValue == "tools" }) as? NSToolbarItemGroup)?.subitems.map { $0.itemIdentifier.rawValue } ?? [],
+            "enabled":toolbarItems.mapValues { $0.isEnabled }
+        ]
+        let chatInspect: [String: Any] = [
+            "chatTitle":chatTitle.stringValue, "chatTitlePlain":toolbarItems["chat"]?.action == nil,
+            "chatNewVisible":!chatNewButton.isHidden, "chatNewEnabled":chatNewButton.isEnabled,
+            "chatNewFrame":NSStringFromRect(mainFrame(chatNewButton) ?? .zero),
+            "chatTitleFrame":NSStringFromRect(mainFrame(chatTitle) ?? .zero),
+            "chatHeaderWidth":chatHeader.bounds.width,
+            "chatHeaderTrailing":chatHeader.convert(NSPoint(x: chatHeader.bounds.maxX, y: 0), to: nil).x,
+            "detailLeading":split.splitViewItems[1].viewController.view.convert(.zero, to: nil).x,
+            "chatWidth":previewState["chatWidth"] ?? 0
+        ]
+        var result = sidebarInspect
+        result.merge(toolbarState) { _, new in new }
+        result.merge(chatInspect) { _, new in new }
+        result.merge(branchInspect) { _, new in new }
+        result.merge(branchMenu.progressInspect) { _, new in new }
+        result.merge(toolbarInspect()) { _, new in new }
+        result["resizeSnapshot"] = resizeSnapshot
+        result.merge(publishInspect(toolbarItems["publish"] as? NSMenuToolbarItem, state: previewState)) { _, new in new }
+        result.merge(moreInspect(toolbarItems["more"] as? NSMenuToolbarItem)) { _, new in new }
+        result.merge(islandInspect()) { _, new in new }
+        result.merge(sidebarChatsInspect()) { _, new in new }
+        return result
     }
     func perform(_ action: String, id: String?) -> Bool {
         if action == "address-test-url", let id {

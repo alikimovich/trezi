@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-467 CI build repair: inspection expression
+
+- The ad hoc TreziHost build timed out while Swift type-checked the large `Shell.inspect()` dictionary. Split its existing keys into typed sidebar, toolbar and chat sections, precomputed the project-cell edges, and merged sections in the original order. This preserves the pipe-only inspection payload while giving the compiler smaller expressions to check. The exact-head CI app build remains the final confirmation.
+
 ## 2026-11-03 — LKM-467 review repair: full address roundtrip fixture
 
 - The toolbar address fixture now puts a long same-origin URL in the resting field, saves `toolbar-long-path-roundtrip.png` and a JSON receipt, focuses the real editor, and asserts its full value and full selection. It copies that selection through AppKit to a private pasteboard, checks the copied string, submits through `navigateAddress`, observes the emitted `shell-action` value and waits for the preview URL before restoring the original address. The private pasteboard avoids reading or replacing the operator's clipboard. The probe is available only through the disposable-profile host inspect route. Native GUI acceptance still runs on main after merge.
