@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { createServer } from 'node:http'
 import { serviceSkills } from '../src/native/skills-service.ts'
-import { gzip, MIT, repository } from './helpers/skills-archive.mjs'
+import { APACHE, gzip, MIT, repository } from './helpers/skills-archive.mjs'
 import {
   code,
   compileSkills,
@@ -55,14 +55,28 @@ const server = createServer((request, response) => {
     response.writeHead(status, { 'content-type': type })
     response.end(body)
   }
-  if (path === '/api/repos/acme/skills')
+  if (
+    path === '/api/repos/acme/skills' ||
+    path === '/api/repos/jakubkrehel/skills' ||
+    path === '/api/repos/pbakaus/impeccable'
+  )
     return text(200, JSON.stringify({ default_branch: state.defaultBranch }), 'application/json')
-  const ref = path.match(/^\/api\/repos\/acme\/skills\/commits\/(.+)$/)?.[1]
+  const ref = path
+    .match(
+      /^\/api\/repos\/(?:acme|jakubkrehel)\/skills\/commits\/(.+)$|^\/api\/repos\/pbakaus\/impeccable\/commits\/(.+)$/
+    )
+    ?.slice(1)
+    .find(Boolean)
   if (ref) {
     assert.equal(request.headers.accept, 'application/vnd.github.sha')
     return state.refs.has(ref) ? text(200, state.refs.get(ref)) : text(422, '{}')
   }
-  const commit = path.match(/^\/codeload\/acme\/skills\/tar\.gz\/([0-9a-f]{40})$/)?.[1]
+  const commit = path
+    .match(
+      /^\/codeload\/(?:acme|jakubkrehel)\/skills\/tar\.gz\/([0-9a-f]{40})$|^\/codeload\/pbakaus\/impeccable\/tar\.gz\/([0-9a-f]{40})$/
+    )
+    ?.slice(1)
+    .find(Boolean)
   if (commit && state.archives.has(commit)) {
     response.writeHead(200, { 'content-type': 'application/x-gzip' })
     return response.end(state.archives.get(commit))
@@ -108,6 +122,89 @@ try {
   const url = 'https://github.com/acme/skills'
   const A = sha('a1'),
     B = sha('b2')
+
+  // A pinned Jakub recommendation keeps its Markdown references, but never stores
+  // the optional Codex display metadata. Other imports keep the strict refusal.
+  {
+    const commit = '60bf140e43c98b248e6594487384ec967e89d98a'
+    publish(commit, commit, {
+      LICENSE: MIT,
+      'skills/better-layout/SKILL.md': skill('better-layout'),
+      'skills/better-layout/grouping-and-alignment.md': '# Grouping\nUse shared edges.\n',
+      'skills/better-layout/agents/openai.yaml': 'interface:\n  display_name: Layout\n'
+    })
+    const result = ok(
+      await run({
+        url: 'https://github.com/jakubkrehel/skills',
+        ref: commit,
+        subpath: 'skills/better-layout'
+      })
+    )
+    assert.deepEqual(result.skipped, ['agents/openai.yaml'])
+    const body = ok(await fx.call('read', { skill: result.skill }))
+    assert.deepEqual(
+      body.references.map((file) => file.path),
+      ['LICENSE', 'grouping-and-alignment.md']
+    )
+    assert.equal(result.source.commit, commit)
+    assert.equal(result.source.license, 'MIT')
+  }
+
+  // The official unified folder exceeds Trezi's size and script limits. Its pinned
+  // static edition retains every selected Markdown reference and an adapted entry.
+  {
+    const commit = '5af4319c4e7a7ee3e5e2b9fe899bcfb21c6190cb'
+    const references = [
+      'adapt.md',
+      'adapt.native.md',
+      'android.md',
+      'animate.md',
+      'bolder.md',
+      'clarify.md',
+      'craft-floor.md',
+      'delight.md',
+      'distill.md',
+      'harden.md',
+      'ios.md',
+      'mode-operate.md',
+      'mode-persuade.md',
+      'mode-read.md',
+      'onboard.md',
+      'operate.md',
+      'quieter.md'
+    ]
+    const prefix = 'plugin/skills/impeccable/'
+    publish(commit, commit, {
+      LICENSE: APACHE,
+      [prefix + 'SKILL.md']: skill('impeccable', 'version: 4.8.0\nuser-invocable: true\n'),
+      ...Object.fromEntries(
+        references.map((name) => [
+          prefix + 'reference/' + name,
+          '# ' + name + '\nRead this playbook.\n'
+        ])
+      ),
+      [prefix + 'scripts/modern-screenshot.umd.js']: 'x'.repeat(1_100_013),
+      [prefix + 'scripts/impeccable']: '#!/bin/sh\nexit 1\n'
+    })
+    const result = ok(
+      await run({
+        url: 'https://github.com/pbakaus/impeccable',
+        ref: commit,
+        subpath: 'plugin/skills/impeccable'
+      })
+    )
+    assert.equal(result.name, 'impeccable')
+    assert.equal(result.source.commit, commit)
+    assert.equal(result.source.license, 'Apache-2.0')
+    assert.equal(result.source.licenseFile, 'LICENSE')
+    const body = ok(await fx.call('read', { skill: result.skill }))
+    assert.match(body.body, /static edition/)
+    assert.ok(!body.body.includes('scripts/impeccable'))
+    assert.deepEqual(
+      body.references.map((file) => file.path),
+      ['LICENSE', ...references.map((name) => 'reference/' + name)].sort()
+    )
+  }
 
   // --- Success: the ref is pinned to a commit and the archive fetched by that commit ---
   let imported

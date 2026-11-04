@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-516 — Curate Settings Skills recommendations for design craft
+
+- [x] Replace generic framework defaults with grouped Frontend Design, Emil Kowalski and Jakub Krehel recommendations, using reviewed paths, names, authors, licenses and pinned commits.
+- [x] Include Paul Bakaus's Impeccable as a clearly labeled, opt-in static edition with its checked Markdown playbooks and no launcher or runtime scripts.
+- [x] Keep instruction-only import limits, name matching, manual imports and installed library behavior; cover representative support-file imports and Settings rendering in existing fixtures.
+- [ ] Manager: required CI, independent review, PR merge and native Settings acceptance on main.
+
 ## LKM-515 — Concise installer progress and per-install log
 
 - [x] Keep dependency, compiler, signing and timing output in a local per-install log, with concise default phases and a `--verbose` option.

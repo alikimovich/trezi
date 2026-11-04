@@ -36,9 +36,11 @@ struct SkillsArchiveContents: Sendable {
 enum SkillsArchive {
     enum Failure: Error { case refused(String), invalid(String), tooLarge(String) }
 
-    static func read(_ gzip: Data, subpath: String, limits: SkillsArchiveLimits, cancelled: () -> Bool) throws -> SkillsArchiveContents {
+    static func read(_ gzip: Data, subpath: String, limits: SkillsArchiveLimits, omitOptionalProviderMetadata: Bool = false,
+                     onlyPaths: Set<String>? = nil, cancelled: () -> Bool) throws -> SkillsArchiveContents {
         guard gzip.count <= limits.compressed else { throw Failure.tooLarge("The archive is larger than \(limits.compressed / 1024 / 1024) MB.") }
-        var reader = TarReader(subpath: subpath, limits: limits)
+        var reader = TarReader(subpath: subpath, limits: limits, omitOptionalProviderMetadata: omitOptionalProviderMetadata,
+                               onlyPaths: onlyPaths)
         try gunzip(gzip, limit: limits.expanded, cancelled: cancelled) { try reader.feed($0) }
         return try reader.finish()
     }
@@ -87,6 +89,8 @@ struct TarReader {
 
     let subpath: String
     let limits: SkillsArchiveLimits
+    let omitOptionalProviderMetadata: Bool
+    let onlyPaths: Set<String>?
     private(set) var contents = SkillsArchiveContents()
     private var header: [UInt8] = []
     private var body: [UInt8] = []
@@ -98,7 +102,11 @@ struct TarReader {
     private var globals = 0
     private var seen = Set<String>()
 
-    init(subpath: String, limits: SkillsArchiveLimits) { self.subpath = subpath; self.limits = limits }
+    init(subpath: String, limits: SkillsArchiveLimits, omitOptionalProviderMetadata: Bool = false,
+         onlyPaths: Set<String>? = nil) {
+        self.subpath = subpath; self.limits = limits; self.omitOptionalProviderMetadata = omitOptionalProviderMetadata
+        self.onlyPaths = onlyPaths
+    }
 
     mutating func feed(_ chunk: UnsafeBufferPointer<UInt8>) throws {
         var index = 0
@@ -214,9 +222,20 @@ struct TarReader {
         case _ where !regular: throw Failure.refused("\(inside) is not a regular file.")
         default: break
         }
+        // A commit-pinned, explicitly adapted recommendation may select only its
+        // audited Markdown playbooks. Still reject links and special entries above;
+        // unselected scripts are streamed past without being read or executed.
+        if let onlyPaths, !onlyPaths.contains(inside) { return .skip }
         guard SkillsPackage.validPath(inside) else { throw Failure.invalid("“\(inside.prefix(80))” is not an allowed file path in a skill.") }
         guard mode & 0o111 == 0 else { throw Failure.refused("\(inside) is an executable file; imported skills hold plain text only.") }
         guard seen.insert(inside.lowercased()).inserted else { throw Failure.refused("\(inside) appears twice in the archive.") }
+        // The pinned Jakub folders ship Codex display metadata beside their Markdown
+        // references. It is neither an instruction nor needed by Trezi, and must never
+        // be stored or parsed as provider control. No other path is omitted here.
+        if omitOptionalProviderMetadata && inside == "agents/openai.yaml" {
+            contents.skipped.append(inside)
+            return .skip
+        }
         guard contents.files.count < SkillsLimits.maxFiles else { throw Failure.invalid("A skill holds at most \(SkillsLimits.maxFiles) files.") }
         guard size <= SkillsLimits.maxFileBytes, total + size <= SkillsLimits.maxPackageBytes else { throw Failure.invalid("\(inside) makes the skill larger than allowed.") }
         total += size

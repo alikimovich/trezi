@@ -127,6 +127,34 @@ struct SkillsGitHubFetcher: Sendable {
     static let deadline: TimeInterval = 120
     static let maxImports = 2
     static let maxJSONBytes = 1024 * 1024
+    /// Static Trezi edition of the official unified Impeccable distribution. The
+    /// upstream folder needs a launcher and exceeds the skills-only package limits;
+    /// these reference pages are complete, script-free workflows at this commit.
+    static let impeccableCommit = "5af4319c4e7a7ee3e5e2b9fe899bcfb21c6190cb"
+    static let impeccableReferences: Set<String> = Set([
+        "adapt.md", "adapt.native.md", "android.md", "animate.md", "bolder.md", "clarify.md",
+        "craft-floor.md", "delight.md", "distill.md", "harden.md", "ios.md", "mode-operate.md",
+        "mode-persuade.md", "mode-read.md", "onboard.md", "operate.md", "quieter.md"
+    ].map { "reference/" + $0 })
+    static let impeccableEntry = """
+    ---
+    name: impeccable
+    description: Apply Paul Bakaus's Impeccable design playbooks for UI refinement, motion, copy, resilience and responsive adaptation. Trezi's static Markdown edition excludes launcher-dependent workflows.
+    ---
+
+    # Impeccable — Trezi static edition
+
+    Adapted from the unified Impeccable skill by Paul Bakaus at the pinned source commit. This edition keeps its instruction-only playbooks; its launcher, detector, live browser, hooks and runtime workflows are unavailable here. Do not invoke an Impeccable script or assume those tools ran.
+
+    For a UI task, identify the surface and its purpose, inspect the project's current design system and the rendered or fixture evidence, then read the relevant playbook below. Preserve the user's brief and existing product behavior. Use only tools already available to the current agent, and verify the result with the project's normal checks.
+
+    - UI craft and operating surfaces: [craft floor](reference/craft-floor.md), [operate](reference/operate.md), [modes](reference/mode-operate.md).
+    - Motion and character: [animate](reference/animate.md), [delight](reference/delight.md), [bolder](reference/bolder.md), [quieter](reference/quieter.md).
+    - Content and resilience: [clarify](reference/clarify.md), [distill](reference/distill.md), [harden](reference/harden.md), [onboard](reference/onboard.md).
+    - Responsive and native adaptation: [adapt](reference/adapt.md), [native adapt](reference/adapt.native.md), [iOS](reference/ios.md), [Android](reference/android.md).
+
+    Where a playbook mentions an unavailable runtime operation, use its design guidance only and report that the runtime check did not run. This edition does not provide Impeccable's new-work direction generator, critique detector, live browser or asset pipeline.
+    """
 
     let endpoints: SkillsGitHubEndpoints
     let http: SkillsHTTP
@@ -162,8 +190,17 @@ struct SkillsGitHubFetcher: Sendable {
                                           limit: limits.compressed, what: "The archive") else {
             throw SkillsGitHubError.notFound("The archive of \(commit.prefix(12)) \(Self.missing)")
         }
-        let contents: SkillsArchiveContents
-        do { contents = try SkillsArchive.read(archive, subpath: target.subpath, limits: limits, cancelled: { Task.isCancelled }) }
+        let isImpeccable = address.repository == "pbakaus/impeccable"
+            && commit == Self.impeccableCommit && target.subpath == "plugin/skills/impeccable"
+        let onlyPaths = isImpeccable ? Self.impeccableReferences.union([SkillsPackage.entryFile]) : nil
+        var contents: SkillsArchiveContents
+        // These reviewed folders carry optional Codex display metadata. Drop that one
+        // file before package limits and scope checks; every instruction/reference stays.
+        let omitOptionalProviderMetadata = address.repository == "jakubkrehel/skills"
+            && commit == "60bf140e43c98b248e6594487384ec967e89d98a"
+            && target.subpath.hasPrefix("skills/better-")
+        do { contents = try SkillsArchive.read(archive, subpath: target.subpath, limits: limits,
+            omitOptionalProviderMetadata: omitOptionalProviderMetadata, onlyPaths: onlyPaths, cancelled: { Task.isCancelled }) }
         catch is CancellationError { throw SkillsGitHubError.cancelled }
         catch SkillsArchive.Failure.refused(let message) { throw SkillsPackageError.refused(message) }
         catch SkillsArchive.Failure.invalid(let message) { throw SkillsPackageError.invalid(message) }
@@ -173,6 +210,15 @@ struct SkillsGitHubFetcher: Sendable {
         guard contents.found, !contents.files.isEmpty else { throw SkillsGitHubError.notFound("\(address.repository) has no folder \(folder) at \(commit.prefix(12)).") }
         guard contents.files.contains(where: { $0.path == SkillsPackage.entryFile }) else {
             throw SkillsPackageError.invalid("\(folder) has no SKILL.md at its top level.")
+        }
+        if isImpeccable {
+            guard Set(contents.files.map(\.path)) == onlyPaths else {
+                throw SkillsPackageError.invalid("The pinned Impeccable archive is missing a static playbook; nothing was installed.")
+            }
+            contents.files = contents.files.map { file in
+                file.path == SkillsPackage.entryFile
+                    ? SkillFile(path: file.path, data: Data(Self.impeccableEntry.utf8)) : file
+            }
         }
         try SkillsScope.check(contents.files)
         let evidence = SkillsLicense.evidence(files: contents.files, subpath: target.subpath, rootLicenses: contents.rootLicenses)

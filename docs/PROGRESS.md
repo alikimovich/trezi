@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-516 design skills catalog and static Impeccable edition
+
+- Settings → Skills now recommends Frontend Design, Paul Bakaus's Impeccable, and a selective ordered set from Emil Kowalski and Jakub Krehel for UI craft, motion, typography, color, accessibility, layout, writing, variants, states and review. Rows are grouped by task and remain opt-in. Official SKILL.md names, paths, support files and root licenses were checked at the recorded commits. Writing and the three invocation-controlled exploration/review skills have honest disabled Install actions because Trezi's current scope cannot preserve their source behavior.
+- The pinned Jakub imports omit only optional Codex display metadata while retaining their Markdown references. Impeccable's official unified folder contains launcher/runtime files and exceeds Trezi's package limit, so the explicit static edition retains 17 script-free playbooks and an adapted entry, with runtime features clearly excluded. The ordinary scope and limits still vet the result; other GitHub and manual imports are unchanged. Focused catalog, loopback importer, rendered Settings and native fixture assertions cover provenance, support files, grouping and opt-in behavior. CI, independent review and native acceptance on main remain with the manager.
+
 ## 2026-11-04 — LKM-515 concise installer progress
 
 - The installer now saves dependency and build output in a fresh `~/Library/Logs/Trezi/install.*` file. Default output gives phase progress and a final version/build; `--verbose` streams the full output. A failed phase retains its command status and prints recent output plus the log path. Command stdin remains unchanged for piped installs and prompts.
