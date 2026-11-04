@@ -163,7 +163,11 @@ export class StartFlow {
       return { text: chat.error, actions: [{ label: 'Dismiss', action: 'error-dismiss' }] }
     const busy = chat.chat === HOME ? (this.workspace?.busy() ?? '') : ''
     if (busy) return { text: busy, progress: true, actions: [] }
-    if (!usable.length && this.choicesError) return { text: this.choicesError, actions: [] }
+    // A refresh retains the previous choices for other UI, but they cannot authorize
+    // a start notice until the current request settles.
+    if (this.choicesError) return { text: this.choicesError, actions: [] }
+    if (!this.choicesLoaded)
+      return { text: 'Checking provider sign-in…', progress: true, actions: [] }
     // No provider can answer: LKM-231's own sign-in card, here under the composer.
     const start = usable.length
       ? null

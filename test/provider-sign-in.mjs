@@ -456,19 +456,52 @@ const choicesController = new NativeChatController({
   effect: () => {}
 })
 choicesController.start.enabled = true
-choicesController.readiness.claude = readinessFromLogin(false)
+choicesController.readiness.claude = readinessFromLogin(true)
 choicesController.readiness.codex = readinessFromLogin(false)
+const loadedChoices = choicesController.refreshChoices()
+choiceRequests[0].resolve([seatChoice])
+await loadedChoices
+const cachedHome = choicesController.get('')
+cachedHome.settings.provider = 'codex'
+const cachedNotice = () =>
+  choicesController.start.state(cachedHome, choicesController.choices, choicesController.readiness)
+    .notice
+assert.match(
+  cachedNotice()?.text ?? '',
+  /Codex is not signed in/,
+  'loaded choices allow the existing sign-in notice'
+)
 const olderChoices = choicesController.refreshChoices()
 const currentChoices = choicesController.refreshChoices()
-choiceRequests[0].resolve([seatChoice])
+assert.equal(
+  choicesController.start.choicesLoaded,
+  false,
+  'refresh makes cached choices non-authoritative'
+)
+assert.equal(
+  cachedNotice()?.text,
+  'Checking provider sign-in…',
+  'cached usable choices cannot show sign-in while refresh is pending'
+)
+assert.deepEqual(cachedNotice()?.actions, [], 'pending metadata exposes no sign-in action')
+choiceRequests[1].resolve([geminiChoice])
 await olderChoices
 assert.equal(
   choicesController.start.choicesLoaded,
   false,
   'older choices cannot settle a newer request'
 )
-assert.deepEqual(choicesController.choices, [], 'older metadata stays unpublished')
-choiceRequests[1].reject(new Error('choice metadata failed'))
+assert.deepEqual(
+  choicesController.choices,
+  [seatChoice],
+  'older metadata cannot replace cached choices'
+)
+assert.equal(
+  cachedNotice()?.text,
+  'Checking provider sign-in…',
+  'older completion cannot reopen sign-in'
+)
+choiceRequests[2].reject(new Error('choice metadata failed'))
 await currentChoices
 assert.equal(choicesController.start.choicesLoaded, false, 'failed current request is not ready')
 assert.equal(
@@ -476,11 +509,10 @@ assert.equal(
   'Unable to load providers. Check your connection and retry.',
   'current metadata failure settles with a fixed error'
 )
-const failedHome = choicesController.get('')
-failedHome.error = undefined
-choicesController.changed(failedHome)
+cachedHome.error = undefined
+choicesController.changed(cachedHome)
 const dismissedNotice = choicesController.start.state(
-  failedHome,
+  cachedHome,
   choicesController.choices,
   choicesController.readiness
 ).notice
@@ -490,8 +522,15 @@ assert.equal(
   'dismiss keeps metadata error visible'
 )
 assert.equal(dismissedNotice?.progress, undefined, 'dismiss does not restart the spinner')
+assert.deepEqual(
+  dismissedNotice?.actions,
+  [],
+  'stale usable choices cannot hide the metadata failure'
+)
+const nextHome = newChat('')
+nextHome.settings.provider = 'codex'
 const nextNotice = choicesController.start.state(
-  newChat(''),
+  nextHome,
   choicesController.choices,
   choicesController.readiness
 ).notice
@@ -506,11 +545,17 @@ assert.equal(
   undefined,
   'retry clears the terminal metadata error'
 )
-choiceRequests[2].resolve([geminiChoice])
+assert.equal(cachedNotice()?.text, 'Checking provider sign-in…', 'retry waits for current metadata')
+choiceRequests[3].resolve([seatChoice])
 await retryChoices
 assert.equal(choicesController.start.choicesLoaded, true, 'current response settles choices')
 assert.equal(choicesController.start.choicesError, undefined, 'success leaves no metadata error')
-assert.equal(choicesController.choices[0].provider, 'gemini', 'only current choices are published')
+assert.equal(choicesController.choices[0].provider, 'claude', 'only current choices are published')
+assert.match(
+  cachedNotice()?.text ?? '',
+  /Codex is not signed in/,
+  'successful retry restores the expected sign-in notice'
+)
 const calls = []
 const controller = {
   services: {

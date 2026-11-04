@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-508 review repair: cached choices during refresh
+
+- The centered start notice now waits for the current provider-choice request before using retained choices to offer sign-in or a provider switch. A settled metadata failure stays visible after the chat error is dismissed or a new chat opens, even when the old choices remain usable; a successful retry restores the previous sign-in behavior. The provider fixture exercises a successful cached choice, overlapping refresh, failure, dismissal, new chat and retry. Native GUI acceptance remains for the post-merge run.
+
 ## 2026-11-04 — LKM-508 review repair: choice request ownership
 
 - The latest review found that overlapping model-choice requests could let an older response mark metadata ready, and a failed request could leave the centered start notice spinning after its chat error was dismissed. Choice refreshes now publish only from the current request. The start flow retains a fixed terminal metadata error across chat changes until a new request begins; successful current metadata clears it. The focused provider fixture resolves an older request while a newer one is pending, then covers current failure, dismissal, a new start chat and successful retry. Prior CI diagnostics concern a superseded head and canceled jobs; exact-head CI remains required.
