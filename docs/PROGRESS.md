@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-486 rejected Resolve handover
+
+- The chat controller now returns whether a follow-up send was admitted, queued, cancelled or rejected. An automatic Resolve whose follow-up send fails writes the held incident's support report and settles its status to one terminal Problem; it cannot remain at Checking indefinitely. A queued send waits only while another turn actually owns the chat, cancellation does not create a technical Problem, and a stale operation cannot publish a terminal result after recovery has cleared.
+- The focused automatic Resolve fixture rejects the agent send and requires one terminal card, a readable report with the admission reason, and no repeat recovery. The existing admitted and deferred-acknowledgement paths remain covered. Native chat acceptance remains for the manager after merge.
+
 ## 2026-11-04 — LKM-486 independent review repair
 
 - An acknowledged Resolve handover now starts the agent turn without a second support-report write. Report creation failures in a terminal request stay report failures and cannot turn a successful request into a failed recovery.

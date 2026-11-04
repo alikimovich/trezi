@@ -4,7 +4,7 @@ import type { ChatUiRecord } from '../shared/chat-ui'
 import type { NativeChatAction } from '../shared/native-chat'
 import { setupPrompt } from '../shared/setup-prompt'
 import { requestTarget } from './chat-agent-card'
-import type { NativeChatController } from './chat-controller'
+import type { NativeChatController, SendAdmission } from './chat-controller'
 import { loginAction } from './chat-login'
 import { editQueued, sendBlock } from './chat-queue'
 import { recoveryAction } from './chat-recovery'
@@ -45,7 +45,7 @@ export async function resolveHeld(controller: NativeChatController, chat: Chat) 
 }
 
 /** A request's follow-up that outlives the request (an agent turn); it gets no deadline. */
-type Handover = () => Promise<void>
+type Handover = () => Promise<SendAdmission>
 
 async function recoveryRequest(
   controller: NativeChatController,
@@ -153,7 +153,36 @@ async function recoveryRequest(
       }
     }
   }
-  if (handover) await handover()
+  if (handover) {
+    const admission = await handover()
+    if (admission.state === 'cancelled') {
+      if (chat.autoResolved === 'tried') chat.autoResolved = undefined
+      controller.changed(chat)
+      return
+    }
+    if (admission.state === 'admitted' || (admission.state === 'queued' && chat.isRunning)) return
+    if (chat.recoveryId !== id || chat.isolation !== 'parked') return
+    if (admission.state === 'queued')
+      chat.queue = chat.queue.filter((item) => item.id !== admission.id)
+    const reason =
+      admission.state === 'failed'
+        ? `The resolution turn could not start: ${admission.reason}`
+        : 'The resolution turn could not start while this chat still needs Resolve.'
+    chat.recoveryProblem = `Problem: ${reason}`
+    try {
+      const path = await writeRecoveryReport(chat, 'resolve handover', reason)
+      if (path && chat.recoveryId === id) chat.recoveryReport = path
+    } catch {
+      if (chat.recoveryId === id && chat.isolation === 'parked') {
+        chat.recoveryReport = undefined
+        chat.recoveryProblem += ' The support report could not be written.'
+      }
+    }
+    if (chat.recoveryId !== id || chat.isolation !== 'parked') return
+    if (chat.heldIncident) chat.heldIncident.attention = 'terminal'
+    controller.changed(chat)
+    throw new Error(reason)
+  }
 }
 
 /** Card actions call application services directly; shell effects only refresh web panels. */

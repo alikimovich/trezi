@@ -4,12 +4,16 @@
 import assert from 'node:assert/strict'
 import { incidents } from '../src/main/self-heal/incidents.ts'
 import { NativeChatController } from '../src/native/chat-controller.ts'
+import { readableRecoveryReport } from '../src/native/chat-recovery-report.ts'
 
 const tick = (ms = 10) => new Promise((resolve) => setTimeout(resolve, ms))
 const records = []
 incidents.report = (record) => records.push(record)
 
-function harness(autoResolve, { refuse = false, deferResolve = false } = {}) {
+function harness(
+  autoResolve,
+  { refuse = false, deferResolve = false, rejectSend = false, cancelSend = false } = {}
+) {
   const calls = []
   const renders = []
   let acknowledgeResolve
@@ -44,6 +48,11 @@ function harness(autoResolve, { refuse = false, deferResolve = false } = {}) {
             ? { ok: false, error: 'Nothing to resolve.' }
             : { ok: true, conflicted: ['src/a.tsx'], prompt: 'Resolve the markers.' })
         )
+      if (channel === 'agent:send' && rejectSend) throw new Error('Send admission refused.')
+      if (channel === 'agent:send' && cancelSend) {
+        controller.get('a').cancellation++
+        throw new Error('Message cancelled before sending.')
+      }
       return { ok: true }
     },
     render: (state) => renders.push(structuredClone(state)),
@@ -168,6 +177,41 @@ function harness(autoResolve, { refuse = false, deferResolve = false } = {}) {
   })
   await tick()
   assert.deepEqual(h.sent(), ['Resolve the markers.'])
+}
+
+// An acknowledged Resolve can still fail before the follow-up turn is admitted.
+// That exhausted handover must settle with its own report, not keep Checking.
+{
+  records.length = 0
+  const h = harness(true, { rejectSend: true })
+  await h.open()
+  await h.emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
+  const chat = h.controller.get('a')
+  assert.equal(chat.isRunning, false)
+  assert.equal(chat.autoResolved, 'failed')
+  assert.equal(h.resolves(), 1, 'the bounded recovery does not restart')
+  assert.deepEqual(
+    records.map((r) => r.outcome),
+    ['failed']
+  )
+  const problem = h.renders.at(-1).cards.filter((card) => card.title === 'Problem')
+  assert.equal(problem.length, 1, 'one terminal Problem replaces Checking')
+  assert.ok(problem[0].actions.some((action) => action.action === 'recovery-report'))
+  assert.match(readableRecoveryReport('a'), /Send admission refused/)
+}
+
+// Stop during admission is cancellation, not exhausted technical recovery.
+{
+  records.length = 0
+  const h = harness(true, { cancelSend: true })
+  await h.open()
+  await h.emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
+  assert.equal(h.controller.get('a').autoResolved, undefined)
+  assert.equal(
+    h.renders.at(-1).cards.some((card) => card.title === 'Problem'),
+    false
+  )
+  assert.deepEqual(records, [])
 }
 
 // 5. Off (the default, and the smoke suite): the card waits for the user.

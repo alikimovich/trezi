@@ -63,6 +63,11 @@ export interface ChatServices {
   /** LKM-225: a drift park is resolved once automatically (off where tests need the card). */
   autoResolve?: boolean
 }
+export type SendAdmission =
+  | { state: 'admitted' }
+  | { state: 'queued'; id: string }
+  | { state: 'cancelled' }
+  | { state: 'failed'; reason: string }
 /** Owns native conversation behavior. No browser, React, DOM or renderer stores. */
 export class NativeChatController {
   readonly chats = new Map<string, Chat>()
@@ -805,7 +810,7 @@ export class NativeChatController {
     }
     return held
   }
-  async run(chat: Chat, submission: Submission) {
+  async run(chat: Chat, submission: Submission): Promise<SendAdmission> {
     begin(chat)
     if (chat.heldIncident) chat.heldIncident.attention = 'owned'
     chat.stopping = false
@@ -850,6 +855,7 @@ export class NativeChatController {
       turn: submission.id,
       uptimeNs: process.hrtime.bigint().toString()
     })
+    let admission: SendAdmission = { state: 'admitted' }
     try {
       const plan = await planAttachments(
         attachments,
@@ -896,6 +902,7 @@ export class NativeChatController {
       // queues the same way, with no error turn or duplicate (LKM-169).
       const resolve = isResolveNeeded(error)
       if ((resolve || isChatBusy(error)) && cancellation === chat.cancellation) {
+        admission = { state: 'queued', id: submission.id }
         chat.messages = chat.messages.filter((m) => m.id !== userMessage && m.id !== reply)
         chat.queue.unshift(submission)
         chat.streamingId = null
@@ -916,6 +923,10 @@ export class NativeChatController {
           chat.operation = 'waiting'
         }
       } else {
+        admission =
+          cancellation !== chat.cancellation
+            ? { state: 'cancelled' }
+            : { state: 'failed', reason: error instanceof Error ? error.message : String(error) }
         chat.paused = true
         append(chat, `\n\nUnable to send: ${String(error)}`)
         finish(chat)
@@ -925,6 +936,7 @@ export class NativeChatController {
       this.changed(chat)
       void this.drain(chat)
     }
+    return admission
   }
   async drain(chat: Chat) {
     // Sends the next queued message once nothing blocks it (`sendBlock`): a stopped
