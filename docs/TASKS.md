@@ -89,6 +89,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 ## Mark up: real toggle, floating island, no "…" entry (LKM-448)
 
+- [x] LKM-503: acceptance fixture records pre/held/post-release Select and Mark up semantics, restores the exact resting baseline through normal actions, and distinguishes active Select from focused Select and stale accent in a focused regression. Native GREEN/RED remains pending on the reviewed merged SHA.
 - [x] LKM-455: self-contained `bun run acceptance:markup` and `--red=active-fill` fixture with opt-in smoke selection, per-step foreground PNG/JSON, tested SHA, and retained runs; no shipping behavior changed.
 - [ ] LKM-455 operator or watchdog: GREEN and RED on the merged SHA under the canonical shared native-desktop lease, inspect the retained PNG/JSON and record `markup-toggle-overlay-native`. Merge alone does not complete LKM-448.
 

@@ -3,6 +3,12 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildStamp } from './app-version'
 import type { NativeBridge } from './bridge'
+import {
+  assertMarkupAppearance,
+  assertMarkupBaseline,
+  assertPressedTransition,
+  type MarkupSemantic
+} from './markup-acceptance-state'
 import { markupToggleChecks } from './smoke-markup-toggle'
 import { waitFor } from './smoke-wait'
 
@@ -54,6 +60,28 @@ export async function checkMarkupAcceptance(host: NativeBridge) {
     assert.equal(reply.error, undefined, `${segment}: ${reply.error}`)
     assert.equal(reply.route, 'real event route', `${segment}: posted AppKit click`)
     return reply
+  }
+  const semantic = async (): Promise<MarkupSemantic> => {
+    const [s, m] = await Promise.all([shell(), markup()])
+    return {
+      selectMode: s.selectMode,
+      markupOpen: m.open,
+      selectAccent: s.selectSegmentProminent,
+      markupAccent: s.markupSegmentProminent
+    }
+  }
+  const restoreBaseline = async (label: string) => {
+    let state = await semantic()
+    if (state.markupOpen) {
+      await click('markup')
+      await waitFor(async () => !(await markup()).open, `${label}: Mark up cancel`)
+    }
+    state = await semantic()
+    if (state.selectMode) {
+      await click('select-object')
+      await waitFor(async () => !(await shell()).selectMode, `${label}: Select off`)
+    }
+    assertMarkupBaseline(label, await semantic())
   }
   const segments = [
     'select-object',
@@ -119,10 +147,12 @@ export async function checkMarkupAcceptance(host: NativeBridge) {
     for (const phase of ['idle', 'hover', 'pressed', 'focus', 'disabled'] as const) {
       const measuredStates: Record<string, any>[] = []
       for (const segment of segments) {
+        const label = `${appearance} ${phase} ${segment}`
+        await restoreBaseline(`${label} before`)
         const state = (await host.request('markupAcceptanceProbe', { segment, phase })) as Record<
           string,
           any
-        >
+        > & { prominent: boolean; focused: boolean; semantic: MarkupSemantic }
         assert.equal(state.error, undefined, `${appearance} ${phase} ${segment}: ${state.error}`)
         assert.equal(state.route, routes[phase], `${phase} route`)
         assert.ok(state.label && state.tooltip && state.glyph, `${segment}: identity and help`)
@@ -130,13 +160,29 @@ export async function checkMarkupAcceptance(host: NativeBridge) {
         if (phase === 'disabled')
           assert.equal(state.enabled, false, `${segment}: disabled appearance`)
         else assert.equal(state.enabled, true, `${segment}: enabled`)
-        // Pressed is the control's own highlight, never the accent that marks an active button.
-        assert.equal(state.prominent, false, `${appearance} ${phase} ${segment}: no accent`)
-        if (phase === 'focus') assert.equal(state.focused, true, `${segment}: keyboard focus`)
+        assertMarkupAppearance(label, segment, state, phase === 'focus')
+        if (phase !== 'pressed') assertMarkupBaseline(`${label} measured`, state.semantic)
         const { pressedPNG, ...measured } = state
         measuredStates.push(measured)
         ;(evidence.steps as Record<string, unknown>)[`${appearance}-${phase}-${segment}`] = measured
         if (phase === 'pressed') {
+          const observedAction = assertPressedTransition(
+            label,
+            segment,
+            state.before,
+            state,
+            state.after
+          )
+          const transition = {
+            before: state.before.semantic,
+            held: state.semantic,
+            after: state.after.semantic,
+            observedAction
+          }
+          ;(evidence.steps as Record<string, unknown>)[
+            `${appearance}-pressed-transition-${segment}`
+          ] = transition
+          record()
           assert.equal(state.released, true, `${segment}: the press ended before the next step`)
           assert.ok(
             state.segmentPixelsChanged > 0,
@@ -147,10 +193,16 @@ export async function checkMarkupAcceptance(host: NativeBridge) {
           writeFileSync(join(dir, `${name}.png`), Buffer.from(pressedPNG, 'base64'))
           ;(evidence.captures as Record<string, string>)[name] = `${name}.png`
           record()
-          assert.equal((await markup()).open, false, `${segment}: a held press runs no action`)
-          assert.equal((await shell()).markupSegmentProminent, false, `${segment}: no active fill`)
+          assert.deepEqual(
+            await semantic(),
+            state.after.semantic,
+            `${label}: observed release state`
+          )
+          // An outside release can complete Select's click. Its accent is then valid until
+          // the normal Select action turns it off for the next matrix step.
         } else await capture(`${appearance}-${phase}-${segment}`)
         await host.request('markupAcceptanceProbe', { segment, phase: 'reset' })
+        await restoreBaseline(`${label} after reset`)
       }
       sharedTreatment(`${appearance} ${phase}`, measuredStates)
     }

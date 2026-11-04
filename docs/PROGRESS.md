@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-503 Mark up acceptance state contract
+
+- The held-press probe now records semantic Select mode, overlay state and both accent images before down, while held and after the outside release. The matrix validates any completed Select or Mark up action and restores the resting state with the normal toolbar toggle before each step and after probe reset. Focus and disabled retain their labeled synthetic setup. A focused regression distinguishes active Select, focus without selection and a stale accent. The native GREEN/RED run remains for the reviewed merged SHA.
+
 ## 2026-11-04 — LKM-484 CI worktree cleanup race
 
 - The native core capture passed with the new glass, but the manager's CI run failed in `chat-new-instant`: `git worktree list` read an entry while asynchronous chat cleanup removed its `commondir`. The fixture now retries only that transient Git read until its existing cleanup deadline and still fails other Git errors. A synthetic regression assertion covers the retry and error boundary; the real fixture continues to require every chat worktree to be removed.

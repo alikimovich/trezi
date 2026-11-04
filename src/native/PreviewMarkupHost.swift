@@ -261,6 +261,8 @@ extension Host {
                 "iconFamily":"SF Symbols", "glyph":glyph, "symbolWeight":Double(ToolbarSymbolSpec.weight.rawValue),
                 "imageWidth":image?.size.width ?? 0, "imageHeight":image?.size.height ?? 0,
                 "prominent":image.map { !$0.isTemplate } ?? false, "enabled":item.isEnabled, "label":item.label, "tooltip":item.toolTip ?? "",
+                "semantic":["selectMode":shell.selecting, "markupOpen":markup?.overlay != nil,
+                            "selectAccent":shell.segmentProminent("select-object"), "markupAccent":shell.segmentProminent("markup")],
                 "axLabel":item.image?.accessibilityDescription ?? "",
                 "frame":["x":rect.minX, "y":rect.minY, "width":rect.width, "height":rect.height],
                 "windowFrame":["x":windowRect.minX, "y":windowRect.minY, "width":windowRect.width, "height":windowRect.height, "midY":windowRect.midY],
@@ -299,8 +301,8 @@ extension Host {
     }
 
     /// Mouse down on a segment, a baseline and a held capture, then a release that the probe
-    /// waits for, so one press never overlaps the next. The release lands outside the segment,
-    /// so no action runs. A fallback release (worker queue) only unblocks a tracking loop that
+    /// waits for, so one press never overlaps the next. The release lands outside the segment;
+    /// its actual semantic result is measured instead of assuming it cannot act. A fallback release only unblocks a tracking loop that
     /// holds the main actor; if it fires first, the press was not observable and this fails.
     @MainActor private func pressedProbe(owner: NSWindow, control: NSSegmentedControl, point: NSPoint, windowRect: NSRect,
                                          measure: (String) -> [String: Any], post: (NSEvent.EventType, NSPoint) -> Bool) async -> [String: Any] {
@@ -309,6 +311,7 @@ extension Host {
         guard post(.mouseMoved, point) else { return ["error":"Cannot post pointer move"] }
         try? await Task.sleep(nanoseconds: 100_000_000)
         guard let baseline = try? await captureOwnWindow(owner), let baselinePNG = baseline["png"] as? String else { return ["error":"Baseline foreground capture failed"] }
+        let before = measure("before mouse down")
         let gate = MarkupReleaseGate()
         guard post(.leftMouseDown, point) else { return ["error":"Cannot post mouse down"] }
         DispatchQueue.global().asyncAfter(deadline: .now() + 8.0) {
@@ -331,6 +334,8 @@ extension Host {
             if !settled { try? await Task.sleep(nanoseconds: 50_000_000) }
         }
         held["pressedPNG"] = png
+        held["before"] = before
+        held["after"] = measure("after mouse up")
         held["downConsumed"] = consumed
         held["released"] = settled
         held["segmentPixelsChanged"] = Host.changedPixels(baselinePNG, png, in: windowRect, window: owner.frame.size)
