@@ -163,7 +163,9 @@ final class WorkspaceLayout {
         // composer in that gap.
         let selected = (shellState["selected"] as? String)?.dropFirst(5)
         let matching = selected.map { String($0) == state["chat"] as? String } ?? true
-        let visible = (shellState["project"] is String || planning) && matching && shown > 60 && host.canvas.bounds.height > 30
+        // A rootless planning chat owns its frame even while the shell still names
+        // the project we came from. Ordinary project chats must still match.
+        let visible = (shellState["project"] is String || planning) && (planning || matching) && shown > 60 && host.canvas.bounds.height > 30
         state["visible"] = visible
         state["bounds"] = ["x":0.0, "y":0.0, "width":Double(full), "height":Double(host.canvas.bounds.height)]
         startComposer(&state, column: full)

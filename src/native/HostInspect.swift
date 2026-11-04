@@ -9,6 +9,15 @@ extension Host {
             if let action = c["action"] as? String { reply(id, PreviewInspector.perform(action, on: views["preview"])) }
             else { reply(id, previewInspectorReport()) }
         case "layoutInspect": reply(id, nativeLayout.inspect())
+        case "chatVisibilityProbe":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            let original = nativeLayout.shellState
+            var stale = original
+            stale["selected"] = c["selected"] as? String ?? "chat:other-project"
+            nativeLayout.shellState = stale
+            let visible = nativeLayout.nativeChatState()["visible"] as? Bool ?? false
+            nativeLayout.shellState = original
+            reply(id, ["visible":visible])
         case "deviceCorners":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             Task { @MainActor in do { reply(id, try await captureDeviceCorners(foreground: c["foreground"] as? Bool != false)) } catch { reply(id, error: error.localizedDescription) } }

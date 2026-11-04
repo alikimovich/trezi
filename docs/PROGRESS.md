@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-520 planning chat with an older shell selection
+
+- The open-project planning fixture now checks the reachable rootless planning state while the shell still selects the prior project chat. Native chat visibility follows the planning context in that state; ordinary chats retain the selected-chat guard. The fixture also checks a usable planning composer, cancellation back to the old chat and no project creation before destination confirmation. The earlier planning flow still exercises explicit destination confirmation. Focused native acceptance remains for the manager's post-merge run.
+
 ## 2026-11-04 — LKM-516 CI importer request-log repair
 
 - The PR-head unit log shows the demo import's request-log assertion included the two preceding pinned recommendation requests. The fixture now clears only its loopback request/override state before the demo case, retaining the two installed skills and their coverage. The other named failure is the unrelated tall chat recovery card fixture; its assertion trace has been identified for the owning ticket. Current-head CI remains required.
