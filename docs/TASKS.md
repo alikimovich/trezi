@@ -5,6 +5,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 ## Chat Problem attention (LKM-486)
 
+- [x] Independent review completion repair: fence recovery request `finally` after Stop and roll back an unsent recovery tracker entry before later terminal attribution.
 - [x] Independent review repair: fence failed-park report completion against Stop and changed held source, and recheck held/provider identity immediately before provider dispatch.
 - [x] Bind held work to producer operation, source and incarnation; distinguish send admission from accepted owner terminal and settle only from actual landing or discard.
 - [x] Keep Stop and changed-source callbacks from reviving an old Problem or clearing the current held incident in the focused controller fixture.

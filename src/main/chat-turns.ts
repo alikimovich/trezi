@@ -17,13 +17,18 @@ export async function acceptOwnerTerminal<
 export function dispatchCurrentRecovery(
   expected: { heldOperationId?: string; providerIncarnation?: string },
   current: () => { heldOperationId?: string; providerIncarnation?: string },
-  dispatch: () => void
+  dispatch: () => void,
+  rollback: () => void = () => {}
 ): void {
   const actual = current()
-  if (expected.providerIncarnation && actual.providerIncarnation !== expected.providerIncarnation)
+  if (expected.providerIncarnation && actual.providerIncarnation !== expected.providerIncarnation) {
+    rollback()
     throw new Error('The chat provider changed before this recovery turn began.')
-  if (expected.heldOperationId && actual.heldOperationId !== expected.heldOperationId)
+  }
+  if (expected.heldOperationId && actual.heldOperationId !== expected.heldOperationId) {
+    rollback()
     throw new Error('The held work changed. Refresh this chat before retrying.')
+  }
   dispatch()
 }
 

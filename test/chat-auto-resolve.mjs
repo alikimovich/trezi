@@ -2,7 +2,11 @@
 // own (the Resolve button's path), logged as one `conflict` incident: recovered when the
 // park clears, failed when it parks again. Off, the card waits for the user as before.
 import assert from 'node:assert/strict'
-import { acceptOwnerTerminal, dispatchCurrentRecovery } from '../src/main/chat-turns.ts'
+import {
+  acceptOwnerTerminal,
+  dispatchCurrentRecovery,
+  TurnTracker
+} from '../src/main/chat-turns.ts'
 import { incidents } from '../src/main/self-heal/incidents.ts'
 import { cardAction } from '../src/native/chat-actions.ts'
 import { NativeChatController } from '../src/native/chat-controller.ts'
@@ -13,6 +17,15 @@ const records = []
 incidents.report = (record) => records.push(record)
 // Synthetic owner receipts; the fixture does not claim live provider or Git evidence.
 const held = { id: 'held-a', incarnation: 'inc-a', generation: 1, source: 'tree-a' }
+const settlement = (outcome, attemptId) => ({
+  heldOperationId: held.id,
+  incarnation: held.incarnation,
+  outcome,
+  source: held.source,
+  candidate: outcome === 'merged' ? 'checked-tree-a' : null,
+  evidenceIds: outcome === 'merged' ? ['synthetic-check'] : [],
+  ...(attemptId ? { attemptId } : {})
+})
 
 // Synthetic owner IO: a provider observation is not accepted terminal proof.
 {
@@ -43,6 +56,9 @@ const held = { id: 'held-a', incarnation: 'inc-a', generation: 1, source: 'tree-
 for (const changed of ['heldOperationId', 'providerIncarnation', null]) {
   const expected = { heldOperationId: held.id, providerIncarnation: held.incarnation }
   const current = { ...expected }
+  const tracker = new TurnTracker()
+  tracker.push('unrelated', 0)
+  tracker.push('candidate', 0, expected.heldOperationId, 'attempt-a')
   let release
   const wait = new Promise((resolve) => {
     release = resolve
@@ -52,7 +68,8 @@ for (const changed of ['heldOperationId', 'providerIncarnation', null]) {
     dispatchCurrentRecovery(
       expected,
       () => current,
-      () => dispatched++
+      () => dispatched++,
+      () => tracker.drop('candidate')
     )
   )
   if (changed) current[changed] = `changed-${changed}`
@@ -60,6 +77,21 @@ for (const changed of ['heldOperationId', 'providerIncarnation', null]) {
   if (changed) await assert.rejects(sending, /changed/i)
   else await sending
   assert.equal(dispatched, changed ? 0 : 1, 'only the unchanged owner reaches provider dispatch')
+  assert.equal(tracker.attribute({ type: 'done' })?.turn, 'unrelated')
+  if (changed) {
+    assert.equal(tracker.current, null, 'the rejected entry did not consume a provider terminal')
+    current[changed] = expected[changed]
+    tracker.push('valid', 0, expected.heldOperationId, 'attempt-b')
+    dispatchCurrentRecovery(
+      expected,
+      () => current,
+      () => dispatched++
+    )
+    assert.equal(dispatched, 1, 'the next valid send reaches the provider once')
+    assert.equal(tracker.attribute({ type: 'done' })?.turn, 'valid')
+  } else {
+    assert.equal(tracker.attribute({ type: 'done' })?.turn, 'candidate')
+  }
 }
 
 // A delayed failed-park report cannot republish a Problem after Stop. The same
@@ -84,15 +116,56 @@ for (const stopped of [true, false]) {
   }
 }
 
-const settlement = (outcome, attemptId) => ({
-  heldOperationId: held.id,
-  incarnation: held.incarnation,
-  outcome,
-  source: held.source,
-  candidate: outcome === 'merged' ? 'checked-tree-a' : null,
-  evidenceIds: outcome === 'merged' ? ['synthetic-check'] : [],
-  ...(attemptId ? { attemptId } : {})
-})
+// A producer-confirmed merge may complete while Retry awaits its IPC response.
+// It clears the busy request without reopening the held Problem.
+{
+  const h = harness(false, { deferRetry: true })
+  await h.open()
+  await h.emit({ type: 'isolation', state: 'parked', reason: 'failed', files: ['src/a.tsx'] })
+  const chat = h.controller.get('a')
+  const request = cardAction(h.controller, chat, { action: 'landing-retry' })
+  await tick()
+  assert.equal(chat.recovery, 'retry')
+  await h.emit({
+    type: 'isolation',
+    state: 'merged',
+    settlement: settlement('merged', chat.recoveryId),
+    files: ['src/a.tsx']
+  })
+  h.acknowledgeRetry({ ok: true, state: 'isolated' })
+  await request
+  assert.equal(chat.recovery, undefined, 'matched settlement releases the request')
+  assert.equal(
+    h.renders.at(-1).cards.some((card) => card.title === 'Problem'),
+    false
+  )
+}
+
+// The recovery request's own finally branch must obey Stop after report IO.
+// Synthetic deferred IO exercises both the cancelled and uninterrupted paths.
+for (const stopped of [true, false]) {
+  const h = harness(false, { deferReport: true, rejectRetry: true })
+  await h.open()
+  await h.emit({ type: 'isolation', state: 'parked', reason: 'failed', files: ['src/a.tsx'] })
+  const chat = h.controller.get('a')
+  const request = cardAction(h.controller, chat, { action: 'landing-retry' })
+  await tick()
+  assert.equal(h.reportWrites(), 2, 'the failed retry writes one new report')
+  if (stopped) await h.controller.stop(chat)
+  const renderCount = h.renders.length
+  h.completeReport('/tmp/synthetic-retry-report.json')
+  await request
+  await tick()
+  if (stopped) {
+    assert.equal(chat.recoveryReport, undefined)
+    assert.notEqual(chat.heldIncident?.attention, 'terminal')
+    assert.equal(h.renders.length, renderCount, 'finally does not render after Stop')
+  } else {
+    assert.equal(chat.recoveryReport, '/tmp/synthetic-retry-report.json')
+    assert.equal(chat.heldIncident?.attention, 'terminal')
+    assert.equal(h.renders.at(-1).cards.filter((card) => card.title === 'Problem').length, 1)
+  }
+}
 
 function harness(
   autoResolve,
@@ -102,7 +175,9 @@ function harness(
     deferSend = false,
     rejectSend = false,
     cancelSend = false,
-    deferReport = false
+    deferReport = false,
+    rejectRetry = false,
+    deferRetry = false
   } = {}
 ) {
   const calls = []
@@ -124,6 +199,12 @@ function harness(
   const pendingReport = deferReport
     ? new Promise((resolve) => {
         completeReport = resolve
+      })
+    : null
+  let acknowledgeRetry
+  const pendingRetry = deferRetry
+    ? new Promise((resolve) => {
+        acknowledgeRetry = resolve
       })
     : null
   const controller = new NativeChatController({
@@ -165,6 +246,9 @@ function harness(
               })
         )
       if (channel === 'agent:held-operation') return held
+      if (channel === 'agent:retry-landing' && pendingRetry) return pendingRetry
+      if (channel === 'agent:retry-landing' && rejectRetry)
+        return { ok: false, error: 'Synthetic retry remained held.' }
       if (channel === 'agent:send' && rejectSend) throw new Error('Send admission refused.')
       if (channel === 'agent:send' && pendingSend) return pendingSend
       if (channel === 'agent:send' && cancelSend) {
@@ -187,6 +271,7 @@ function harness(
     acknowledgeResolve,
     acknowledgeSend,
     completeReport,
+    acknowledgeRetry,
     reportWrites: () => reportWrites,
     resolves: () => calls.filter((c) => c[0] === 'agent:resolve-conflict').length,
     sent: () => calls.filter((c) => c[0] === 'agent:send').map((c) => c[1]),

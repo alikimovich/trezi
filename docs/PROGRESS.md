@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-486 completion rollback repair
+
+- Recovery request report completion now checks the captured chat, cancellation epoch and held-source identity before its `finally` path changes status or renders. A stopped request cannot reopen a terminal Problem after delayed report IO; an uninterrupted request still publishes its one report. A matching producer-confirmed settlement also releases the request's busy state without reviving the held Problem.
+- A send rejected by the final held-operation or provider-incarnation check now removes its unsent turn tracker entry before another provider terminal can be attributed. The focused synthetic fixture defers both boundaries, checks Stop and identity changes, and confirms an unrelated turn plus the next valid send retain their own terminal attribution.
+
 ## 2026-11-04 — LKM-486 independent review await-boundary repair
 
 - A failed-park report now captures its chat object, cancellation epoch, held operation, source and chat incarnation before report IO. Completion publishes only while those facts still match, so Stop and later held work cannot reopen an old Problem. The existing report writer discards a stale private artifact.

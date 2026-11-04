@@ -88,13 +88,21 @@ async function recoveryRequest(
   chat.recoveryId = crypto.randomUUID()
   const id = chat.recoveryId
   const cancellation = chat.cancellation
-  const heldId = chat.heldOperation?.id
-  const current = () =>
+  const held = chat.heldOperation
+  const sameRequest = () =>
     controller.chats.get(chat.chat) === chat &&
     chat.cancellation === cancellation &&
+    !chat.stopping &&
     chat.recoveryId === id &&
-    (!heldId || chat.heldOperation?.id === heldId) &&
-    chat.isolation === 'parked'
+    chat.heldOperation?.id === held?.id &&
+    chat.heldOperation?.incarnation === held?.incarnation &&
+    chat.heldOperation?.source === held?.source
+  const current = () => sameRequest() && chat.isolation === 'parked'
+  const settled = () =>
+    sameRequest() &&
+    chat.isolation !== 'parked' &&
+    !!chat.recoverySettled &&
+    chat.recoverySettled !== 'parked'
   if (chat.heldIncident) {
     chat.heldIncident.operation = id
     chat.heldIncident.attention = 'owned'
@@ -142,7 +150,12 @@ async function recoveryRequest(
     // already available; a fresh report cannot be allowed to delay or abort the turn.
     if (!handover && chat.recoveryProblem) {
       try {
-        const path = await writeRecoveryReport(chat, kind, chat.recoveryProblem, current)
+        const path = await (controller.services.writeRecoveryReport ?? writeRecoveryReport)(
+          chat,
+          kind,
+          chat.recoveryProblem,
+          current
+        )
         if (path && current()) chat.recoveryReport = path
       } catch {
         if (current()) {
@@ -156,7 +169,12 @@ async function recoveryRequest(
     chat.recoveryTimedOut = timedOut
     chat.recoveryProblem = `Problem: ${error instanceof Error ? error.message : String(error)}`
     try {
-      const path = await writeRecoveryReport(chat, kind, chat.recoveryProblem, current)
+      const path = await (controller.services.writeRecoveryReport ?? writeRecoveryReport)(
+        chat,
+        kind,
+        chat.recoveryProblem,
+        current
+      )
       if (path && current()) chat.recoveryReport = path
     } catch {
       if (current()) {
@@ -164,6 +182,7 @@ async function recoveryRequest(
         chat.recoveryProblem += ' The support report could not be written.'
       }
     }
+    if (!current()) return
     if (chat.heldIncident) chat.heldIncident.attention = 'terminal'
     if (kind === 'resolve') throw error
   } finally {
@@ -172,7 +191,7 @@ async function recoveryRequest(
       // every card mutation locked until its actual IPC settles, without a spinner.
       void requestPromise
         .finally(() => {
-          if (chat.recoveryId === id) {
+          if (current() || settled()) {
             chat.recovery = undefined
             chat.recoveryTimedOut = false
             controller.changed(chat)
@@ -180,14 +199,13 @@ async function recoveryRequest(
         })
         .catch(() => {})
     } else {
-      if (chat.recoveryId === id) {
+      if (current() || settled()) {
         chat.recovery = undefined
         chat.recoveryTimedOut = false
       }
       // A handover starts its turn right away, which renders the running state itself.
-      if (!handover) {
-        if (chat.heldIncident && chat.isolation === 'parked')
-          chat.heldIncident.attention = 'terminal'
+      if (!handover && (current() || settled())) {
+        if (current() && chat.heldIncident) chat.heldIncident.attention = 'terminal'
         controller.changed(chat)
       }
     }

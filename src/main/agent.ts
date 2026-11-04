@@ -2223,6 +2223,14 @@ export function registerAgentIpc(
       // never follow a subsequent project or chat switch.
       runningKeys.add(key)
       reconciliation.begin(key)
+      const tracker = trackers.get(session)
+      let trackerPushed = false
+      let providerDispatched = false
+      const dropUnsent = () => {
+        if (!trackerPushed) return
+        tracker?.drop(id)
+        trackerPushed = false
+      }
       // Turn-start: sync the user's between-turn live edits into this chat's worktree
       // (serialized behind the chat's chain — waits out any in-flight merge). No-op for
       // a non-isolated chat.
@@ -2305,7 +2313,8 @@ export function registerAgentIpc(
           issue: dependencies,
           projectKey: key
         } satisfies AgentEvent)
-        trackers.get(session)?.push(id, 0, heldOperationId, attemptId)
+        tracker?.push(id, 0, heldOperationId, attemptId)
+        trackerPushed = !!tracker
         watchdog.touch(key)
         logTurnStart(key, id, session.options)
         // LKM-163/LKM-215: Full access Codex can write the live tree; compare it at the end.
@@ -2332,7 +2341,11 @@ export function registerAgentIpc(
             providerIncarnation:
               sessions.get(key) === session ? sessionIncarnations.get(session) : undefined
           }),
-          () => session.send(handoffPrompt(history, seedPrompt(restored, body)), images)
+          () => {
+            providerDispatched = true
+            session.send(handoffPrompt(history, seedPrompt(restored, body)), images)
+          },
+          dropUnsent
         )
         productLog.info('send-path', 'bun action=send stage=agent-handler-end', {
           chat: key,
@@ -2348,6 +2361,7 @@ export function registerAgentIpc(
           attemptId
         }
       } catch (error) {
+        if (!providerDispatched) dropUnsent()
         finishPeer(id, key)
         logTurnNotSent(key, id, error)
         runningKeys.delete(key)
