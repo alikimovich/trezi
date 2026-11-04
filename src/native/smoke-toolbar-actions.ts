@@ -222,6 +222,12 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
           const state = await shell()
           const image: State = await host.request('captureVisibleWindow')
           const name = `toolbar-actions-chat-new-${appearance}-${enabled ? 'idle' : 'disabled'}`
+          assert.equal(state.chatNewSystemGlass, true, `${name}: AppKit owns the glass surface`)
+          assert.equal(
+            state.chatNewGlassFrame,
+            state.chatNewFrame,
+            `${name}: glass follows New Chat's 32 pt frame`
+          )
           writeFileSync(join(artifacts, `${name}.png`), Buffer.from(image.png, 'base64'))
           const chat = glassInk(image, state.chatNewFrame)
           const neighbor = glassInk(image, state.chatNewNeighborFrame)

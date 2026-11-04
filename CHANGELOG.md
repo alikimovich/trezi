@@ -13,6 +13,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Fixed
 
 - Chat keeps technical check failures in a quiet held status while the agent or recovery owns them, then shows one reported Problem only if the work remains held (LKM-486).
+## [0.13.17] - 2026-11-04
+
+### Fixed
+
+- New Chat's toolbar capsule now renders in light and dark appearances (LKM-484).
 
 ## [0.13.16] - 2026-11-03
 

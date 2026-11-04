@@ -11,6 +11,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: settle a rejected Resolve follow-up send as a reported terminal incident instead of leaving Checking indefinitely.
 - [x] Review repair: settle an admitted Resolve turn's technical error as one reported terminal incident.
 - [ ] Manager: independent review, configured CI and post-merge native chat acceptance on main.
+## Native suite failure on main 17fbc17129bb (LKM-484)
+
+- [x] Embed New Chat as native AppKit glass content inside the chat title's custom toolbar item and preserve its existing segment behavior and visibility.
+- [x] Retry the transient Git metadata read during the new-chat cleanup fixture while retaining its worktree removal assertion.
+- [ ] Manager: confirm the native core suite and required gates on this tree.
 
 ## Native sidebar suite Restore capture (LKM-482)
 
