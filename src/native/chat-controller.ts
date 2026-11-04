@@ -70,6 +70,8 @@ export class NativeChatController {
   choices: ModelChoice[] = []
   readonly readiness = initialProviderReadiness()
   private readinessStarted = false
+  /** Only the newest provider-choice request may publish metadata or its terminal error. */
+  private choicesGeneration = 0
   /** LKM-232: the centered start composer and the no-project draft's handoff. */
   readonly start = new StartFlow()
   layout: NativeChatLayout = { visible: false, bounds: { x: 0, y: 0, width: 0, height: 0 } }
@@ -284,18 +286,23 @@ export class NativeChatController {
     void this.refreshReadiness()
   }
   async refreshChoices() {
-    if (this.start.choicesLoaded) {
-      this.start.choicesLoaded = false
-      this.changed()
-    }
+    const generation = ++this.choicesGeneration
+    const hadResult = this.start.choicesLoaded || !!this.start.choicesError
+    this.start.choicesLoaded = false
+    this.start.choicesError = undefined
+    if (hadResult) this.changed()
     try {
-      this.choices = await this.services.invoke('providers:choices')
+      const choices = await this.services.invoke('providers:choices')
+      if (generation !== this.choicesGeneration) return
+      this.choices = choices
       this.start.choicesLoaded = true
       // LKM-315: Gemini has a readiness only while it is on (its models are listed).
       if (!this.geminiListed()) delete this.readiness.gemini
       else if (this.readinessStarted && !this.readiness.gemini) void this.refreshReadiness('gemini')
       this.changed()
     } catch (error) {
+      if (generation !== this.choicesGeneration) return
+      this.start.choicesError = 'Unable to load providers. Check your connection and retry.'
       this.fail(this.get(this.active), error)
     }
   }

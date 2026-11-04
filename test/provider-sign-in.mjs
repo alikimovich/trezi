@@ -14,6 +14,7 @@ import {
   codexManagedLogin,
   signInProvider
 } from '../src/main/provider-sign-in.ts'
+import { NativeChatController } from '../src/native/chat-controller.ts'
 import { loginAction, loginCard, startLoginCard } from '../src/native/chat-login.ts'
 import { StartFlow } from '../src/native/chat-start.ts'
 import { newChat, reduce } from '../src/native/chat-state.ts'
@@ -445,6 +446,71 @@ homeReadiness.claude = readinessFromLogin(null)
 const failedNotice = flow.state(home, [seatChoice], homeReadiness).notice
 assert.equal(failedNotice?.text, homeReadiness.claude.detail, 'terminal provider error is visible')
 assert.equal(failedNotice?.progress, undefined, 'a failed check has no endless progress')
+const choiceRequests = []
+const choicesController = new NativeChatController({
+  invoke: async (channel) => {
+    if (channel !== 'providers:choices') return { ok: true }
+    return new Promise((resolve, reject) => choiceRequests.push({ resolve, reject }))
+  },
+  render: () => {},
+  effect: () => {}
+})
+choicesController.start.enabled = true
+choicesController.readiness.claude = readinessFromLogin(false)
+choicesController.readiness.codex = readinessFromLogin(false)
+const olderChoices = choicesController.refreshChoices()
+const currentChoices = choicesController.refreshChoices()
+choiceRequests[0].resolve([seatChoice])
+await olderChoices
+assert.equal(
+  choicesController.start.choicesLoaded,
+  false,
+  'older choices cannot settle a newer request'
+)
+assert.deepEqual(choicesController.choices, [], 'older metadata stays unpublished')
+choiceRequests[1].reject(new Error('choice metadata failed'))
+await currentChoices
+assert.equal(choicesController.start.choicesLoaded, false, 'failed current request is not ready')
+assert.equal(
+  choicesController.start.choicesError,
+  'Unable to load providers. Check your connection and retry.',
+  'current metadata failure settles with a fixed error'
+)
+const failedHome = choicesController.get('')
+failedHome.error = undefined
+choicesController.changed(failedHome)
+const dismissedNotice = choicesController.start.state(
+  failedHome,
+  choicesController.choices,
+  choicesController.readiness
+).notice
+assert.equal(
+  dismissedNotice?.text,
+  choicesController.start.choicesError,
+  'dismiss keeps metadata error visible'
+)
+assert.equal(dismissedNotice?.progress, undefined, 'dismiss does not restart the spinner')
+const nextNotice = choicesController.start.state(
+  newChat(''),
+  choicesController.choices,
+  choicesController.readiness
+).notice
+assert.equal(
+  nextNotice?.text,
+  choicesController.start.choicesError,
+  'new chat inherits terminal metadata state'
+)
+const retryChoices = choicesController.refreshChoices()
+assert.equal(
+  choicesController.start.choicesError,
+  undefined,
+  'retry clears the terminal metadata error'
+)
+choiceRequests[2].resolve([geminiChoice])
+await retryChoices
+assert.equal(choicesController.start.choicesLoaded, true, 'current response settles choices')
+assert.equal(choicesController.start.choicesError, undefined, 'success leaves no metadata error')
+assert.equal(choicesController.choices[0].provider, 'gemini', 'only current choices are published')
 const calls = []
 const controller = {
   services: {

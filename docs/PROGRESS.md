@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-508 review repair: choice request ownership
+
+- The latest review found that overlapping model-choice requests could let an older response mark metadata ready, and a failed request could leave the centered start notice spinning after its chat error was dismissed. Choice refreshes now publish only from the current request. The start flow retains a fixed terminal metadata error across chat changes until a new request begins; successful current metadata clears it. The focused provider fixture resolves an older request while a newer one is pending, then covers current failure, dismissal, a new start chat and successful retry. Prior CI diagnostics concern a superseded head and canceled jobs; exact-head CI remains required.
+
 ## 2026-11-04 — LKM-508 review repair: terminal readiness and conversation errors
 
 - Independent review found three remaining paths: a conversation snapshot failure left its unknown title animating, terminal provider-check failure kept the centered notice in progress, and signed-out seat checks could reveal the chooser before model choices arrived. The shell now stops the effect for a chat error. The start notice shows the provider's fixed failure detail without progress once checks settle, and both start and snapshot chooser paths wait for successful choice metadata. The existing title and provider fixtures assert these transitions. The supplied CI excerpt has a canceled unit shard and macOS jobs, with no actionable failing assertion; the next exact-head CI remains required.

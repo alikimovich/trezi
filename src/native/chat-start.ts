@@ -80,6 +80,8 @@ export class StartFlow {
   enabled = false
   /** Model choices may arrive after seat sign-in checks; the chooser waits for this metadata. */
   choicesLoaded = false
+  /** A completed choices request failed; unlike an in-flight request this must not spin. */
+  choicesError?: string
   /** The app-managed conversation that is planning a project before a repository exists. */
   planningKey: string | null = null
   /** The project chat to return to when New Project is cancelled. */
@@ -161,6 +163,7 @@ export class StartFlow {
       return { text: chat.error, actions: [{ label: 'Dismiss', action: 'error-dismiss' }] }
     const busy = chat.chat === HOME ? (this.workspace?.busy() ?? '') : ''
     if (busy) return { text: busy, progress: true, actions: [] }
+    if (!usable.length && this.choicesError) return { text: this.choicesError, actions: [] }
     // No provider can answer: LKM-231's own sign-in card, here under the composer.
     const start = usable.length
       ? null
