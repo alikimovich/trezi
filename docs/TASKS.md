@@ -10,6 +10,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Keep instruction-only import limits, name matching, manual imports and installed library behavior; cover representative support-file imports and Settings rendering in existing fixtures.
 - [x] Review repair: assert the first visible recommendation's Details row is contained and hittable in normal and minimum-width empty-library captures.
 - [x] CI repair: account for retained pinned example imports in the importer fixture and give the uncached host-warning compile a realistic CI timeout without changing its assertions.
+- [x] CI follow-up: clear prior pinned-example requests before asserting the demo import's exact loopback request sequence.
 - [ ] Manager: required CI, independent review, PR merge and native Settings acceptance on main.
 
 ## Owned recoverable failure presentation (LKM-509)

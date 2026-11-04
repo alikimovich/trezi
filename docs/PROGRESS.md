@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-516 CI importer request-log repair
+
+- The PR-head unit log shows the demo import's request-log assertion included the two preceding pinned recommendation requests. The fixture now clears only its loopback request/override state before the demo case, retaining the two installed skills and their coverage. The other named failure is the unrelated tall chat recovery card fixture; its assertion trace has been identified for the owning ticket. Current-head CI remains required.
+
 ## 2026-11-04 — LKM-516 CI fixture repair
 
 - The pinned Jakub and Impeccable importer examples now count as retained skills in the later demo import assertions; the demo's source is found by ID instead of list position. A concurrent CI shard also stopped the uncached host-warning Swift compile at the generic 120-second test cap without a diagnostic, so that existing warning check now has a 300-second compile budget while keeping every warning and canary assertion. Exact-head CI still needs to confirm both repairs.

@@ -207,6 +207,7 @@ try {
   }
   const recommendationCount = ok(await fx.call('list')).skills.length
   assert.equal(recommendationCount, 2, 'Both pinned recommendation imports remain installed')
+  reset()
 
   // --- Success: the ref is pinned to a commit and the archive fetched by that commit ---
   let imported
