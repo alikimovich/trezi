@@ -568,7 +568,7 @@ export class NativeChatController {
         chat.recoveryReport = undefined
         void writeRecoveryReport(chat, 'turn-end landing', reason).then(
           (path) => {
-            if (chat.recoveryId === id && chat.isolation === 'parked') {
+            if (path && chat.recoveryId === id && chat.isolation === 'parked') {
               chat.recoveryReport = path
               if (chat.heldIncident?.operation === id)
                 chat.heldIncident.attention = chat.isRunning ? 'owned' : 'terminal'

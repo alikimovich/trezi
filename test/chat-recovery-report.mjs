@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { logFileName } from '../src/main/product-log.ts'
-import { readableRecoveryReport, writeRecoveryReport } from '../src/native/chat-recovery-report.ts'
+import {
+  publishRecoveryReport,
+  readableRecoveryReport,
+  writeRecoveryReport
+} from '../src/native/chat-recovery-report.ts'
 import { newChat } from '../src/native/chat-state.ts'
 
 const dir = mkdtempSync(join(tmpdir(), 'trezi-recovery-report-test-'))
@@ -31,6 +35,17 @@ try {
   assert.match(content, /check failed/)
   assert.doesNotMatch(content, /chat=beta|unrelated|secret-value/)
   assert.match(content, /\[redacted\]/)
+  chat.recoveryId = 'operation-2'
+  const newer = await writeRecoveryReport(chat, 'retry', 'Problem: newer check failed')
+  const newerContent = readFileSync(newer, 'utf8')
+  const lateFolder = mkdtempSync(join(dir, 'late-report-'))
+  const latePath = join(lateFolder, 'support-report.json')
+  writeFileSync(latePath, content)
+  assert.equal(publishRecoveryReport(chat, 'operation-1', latePath), null)
+  assert.equal(existsSync(latePath), false, 'a stale artifact is removed')
+  assert.equal(readableRecoveryReport('alpha'), newerContent, 'Copy keeps the newer incident')
+  assert.match(newerContent, /operation-2/)
+  assert.match(newerContent, /newer check failed/)
 } finally {
   if (previous === undefined) delete process.env.TREZI_LOG_DIR
   else process.env.TREZI_LOG_DIR = previous

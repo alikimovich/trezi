@@ -9,9 +9,15 @@ const tick = (ms = 10) => new Promise((resolve) => setTimeout(resolve, ms))
 const records = []
 incidents.report = (record) => records.push(record)
 
-function harness(autoResolve, { refuse = false } = {}) {
+function harness(autoResolve, { refuse = false, deferResolve = false } = {}) {
   const calls = []
   const renders = []
+  let acknowledgeResolve
+  const pendingResolve = deferResolve
+    ? new Promise((resolve) => {
+        acknowledgeResolve = resolve
+      })
+    : null
   const controller = new NativeChatController({
     invoke: async (channel, ...args) => {
       calls.push([channel, ...args])
@@ -32,9 +38,12 @@ function harness(autoResolve, { refuse = false } = {}) {
           ]
         }
       if (channel === 'agent:resolve-conflict')
-        return refuse
-          ? { ok: false, error: 'Nothing to resolve.' }
-          : { ok: true, conflicted: ['src/a.tsx'], prompt: 'Resolve the markers.' }
+        return (
+          pendingResolve ??
+          (refuse
+            ? { ok: false, error: 'Nothing to resolve.' }
+            : { ok: true, conflicted: ['src/a.tsx'], prompt: 'Resolve the markers.' })
+        )
       return { ok: true }
     },
     render: (state) => renders.push(structuredClone(state)),
@@ -44,6 +53,7 @@ function harness(autoResolve, { refuse = false } = {}) {
   return {
     controller,
     renders,
+    acknowledgeResolve,
     resolves: () => calls.filter((c) => c[0] === 'agent:resolve-conflict').length,
     sent: () => calls.filter((c) => c[0] === 'agent:send').map((c) => c[1]),
     emit: async (event) => {
@@ -125,14 +135,39 @@ function harness(autoResolve, { refuse = false } = {}) {
 // 4. A running turn is not interrupted: the park waits for its done.
 {
   records.length = 0
-  const h = harness(true)
+  const h = harness(true, { deferResolve: true })
   await h.open()
   h.controller.get('a').isRunning = true
   await h.emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
   assert.equal(h.resolves(), 0)
   h.controller.get('a').isRunning = false
+  const beforeDone = h.renders.length
   await h.emit({ type: 'done' })
   assert.equal(h.resolves(), 1)
+  assert.ok(h.renders.length > beforeDone, 'the done-to-Resolve boundary rendered')
+  assert.deepEqual(
+    h.renders.at(-1).cards.find((card) => card.id === 'conflict'),
+    {
+      id: 'conflict',
+      title: 'Changes are still held',
+      detail: 'Checking the held changes. The project still has its previous source.',
+      actions: []
+    },
+    'deferred recovery has ordinary status without stale actions'
+  )
+  assert.ok(
+    h.renders
+      .slice(beforeDone)
+      .every((state) => state.cards.every((card) => card.title !== 'Problem')),
+    'no Problem flashes before deferred Resolve acknowledgement'
+  )
+  h.acknowledgeResolve({
+    ok: true,
+    conflicted: ['src/a.tsx'],
+    prompt: 'Resolve the markers.'
+  })
+  await tick()
+  assert.deepEqual(h.sent(), ['Resolve the markers.'])
 }
 
 // 5. Off (the default, and the smoke suite): the card waits for the user.

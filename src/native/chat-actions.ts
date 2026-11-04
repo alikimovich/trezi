@@ -104,14 +104,27 @@ async function recoveryRequest(
             ? 'Changes applied to the project.'
             : 'No changes remained to apply.'
     }
-    if (chat.recoveryProblem)
-      chat.recoveryReport = await writeRecoveryReport(chat, kind, chat.recoveryProblem)
+    // Acknowledged handover starts its agent turn immediately. The prior report is
+    // already available; a fresh report cannot be allowed to delay or abort the turn.
+    if (!handover && chat.recoveryProblem) {
+      try {
+        const path = await writeRecoveryReport(chat, kind, chat.recoveryProblem)
+        if (path && chat.recoveryId === id) chat.recoveryReport = path
+      } catch {
+        if (chat.recoveryId === id) {
+          chat.recoveryReport = undefined
+          chat.recoveryProblem += ' The support report could not be written.'
+        }
+      }
+    }
   } catch (error) {
     chat.recoveryTimedOut = timedOut
     chat.recoveryProblem = `Problem: ${error instanceof Error ? error.message : String(error)}`
     try {
-      chat.recoveryReport = await writeRecoveryReport(chat, kind, chat.recoveryProblem)
+      const path = await writeRecoveryReport(chat, kind, chat.recoveryProblem)
+      if (path && chat.recoveryId === id) chat.recoveryReport = path
     } catch {
+      chat.recoveryReport = undefined
       chat.recoveryProblem += ' The support report could not be written.'
     }
     if (chat.heldIncident) chat.heldIncident.attention = 'terminal'

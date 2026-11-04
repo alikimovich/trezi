@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-486 independent review repair
+
+- An acknowledged Resolve handover now starts the agent turn without a second support-report write. Report creation failures in a terminal request stay report failures and cannot turn a successful request into a failed recovery.
+- Report publication now checks the captured operation before replacing the chat's readable report. A late older artifact is removed; the Copy action continues to read the current incident's report. Focused fixtures cover that ordering, an unwritable report location during handover, and the render boundary while automatic Resolve awaits its acknowledgement.
+
 ## 2026-11-03 — LKM-486 chat Problem attention
 
 - A failed held check now records its turn and recovery operation before the support report is written. While the agent or retry owns that incident, the chat shows a quiet held status without stale actions; a terminal Problem appears only after its report is ready or report writing fails. The prior failure and report remain until a merged or discarded isolation confirms recovery, and the per-chat operation ID rejects late report completions.

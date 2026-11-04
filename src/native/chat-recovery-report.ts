@@ -10,7 +10,21 @@ import type { Chat } from './chat-state'
 
 /** A private artifact for one chat and one recovery attempt. No transcript or source. */
 const reports = new Map<string, string>()
+/** Publish only the operation that still owns this chat's held work. */
+export function publishRecoveryReport(chat: Chat, operation: string | undefined, path: string) {
+  if (!operation || chat.recoveryId !== operation || chat.isolation !== 'parked') {
+    rmSync(dirname(path), { recursive: true, force: true })
+    return null
+  }
+  const previous = reports.get(chat.chat)
+  reports.set(chat.chat, path)
+  if (previous) rmSync(dirname(previous), { recursive: true, force: true })
+  return path
+}
 export async function writeRecoveryReport(chat: Chat, requested: string, reason: string) {
+  const operation = chat.recoveryId
+  const turn = chat.turn ?? null
+  const startedAt = chat.recoveryStartedAt
   const st = states.get(chat.chat)
   const scope = st && { emitKey: chat.chat, root: st.wt.path, liveRoot: st.liveRoot }
   const gate = scope ? await integrationGate(scope).catch(() => null) : null
@@ -29,9 +43,9 @@ export async function writeRecoveryReport(chat: Chat, requested: string, reason:
         app: appVersion(),
         provider: chat.settings.provider,
         chat: chat.chat,
-        operation: chat.recoveryId,
-        turn: chat.turn ?? null,
-        startedAt: chat.recoveryStartedAt ? new Date(chat.recoveryStartedAt).toISOString() : null,
+        operation,
+        turn,
+        startedAt: startedAt ? new Date(startedAt).toISOString() : null,
         finishedAt: new Date().toISOString(),
         requested,
         reason,
@@ -51,10 +65,7 @@ export async function writeRecoveryReport(chat: Chat, requested: string, reason:
   writeFileSync(path, `${content}\n`, { mode: 0o600 })
   if (readFileSync(path, 'utf8') !== `${content}\n`)
     throw new Error('Support report could not be read back.')
-  const previous = reports.get(chat.chat)
-  reports.set(chat.chat, path)
-  if (previous) rmSync(dirname(previous), { recursive: true, force: true })
-  return path
+  return publishRecoveryReport(chat, operation, path)
 }
 
 export function readableRecoveryReport(chat: string): string | null {

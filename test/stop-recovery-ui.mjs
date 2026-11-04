@@ -3,6 +3,9 @@
 // preview-error card and paused-queue "Send now". The Git side (a stopped turn is held,
 // reverts byte-exact, keeps, finishes) is test/stop-recovery.mjs.
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { liveCheckoutEdit } from '../src/main/live-write-guard.ts'
 import { setRecoveryRequestDeadlineForTests } from '../src/native/chat-actions.ts'
 import { NativeChatController } from '../src/native/chat-controller.ts'
@@ -463,6 +466,8 @@ assert.equal(chat.recovery, undefined, 'the original IPC release unlocks mutatio
 // A Resolve handover to an agent turn is not a request in flight: the deadline covers
 // only the IPC, so a long agent turn is never timed out or reported as a Problem.
 emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
+await tick()
+assert.ok(chat.recoveryReport, 'the prior incident has a shareable report')
 const reportsBefore = calls.filter((call) => call[0] === 'recovery:copy-report').length
 answers['agent:resolve-conflict'] = {
   ok: true,
@@ -473,6 +478,10 @@ let admitTurn
 answers['agent:send'] = new Promise((resolve) => {
   admitTurn = resolve
 })
+const previousTmpdir = process.env.TMPDIR
+const missingReportRoot = join(tmpdir(), `trezi-no-report-${crypto.randomUUID()}`)
+assert.equal(existsSync(missingReportRoot), false)
+process.env.TMPDIR = missingReportRoot
 const handover = act('resolve', 'conflict')
 await new Promise((resolve) => setTimeout(resolve, 30)) // far past the 1 ms deadline
 assert.equal(chat.recoveryTimedOut, false, 'the handed-over turn never trips the request deadline')
@@ -484,7 +493,12 @@ assert.equal(card('conflict')?.title, 'Changes are still held', 'the agent owns 
 assert.deepEqual(card('conflict')?.actions, [], 'no stale actions while the agent runs')
 assert.equal(calls.filter((call) => call[0] === 'agent:send').at(-1)[1], 'Fix the conflict markers')
 admitTurn({ ok: true })
-await handover
+try {
+  await assert.doesNotReject(handover, 'a report write failure cannot abort an acknowledged turn')
+} finally {
+  if (previousTmpdir === undefined) delete process.env.TMPDIR
+  else process.env.TMPDIR = previousTmpdir
+}
 emit({ type: 'done' })
 await tick()
 assert.ok(chat.recoveryProblem, 'a done event alone does not clear an unlanded incident')
