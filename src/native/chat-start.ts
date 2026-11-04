@@ -193,7 +193,7 @@ export class StartFlow {
       }
     // The selected provider stopped answering while another still can: keep the draft.
     const lost = usable.length > 0 && !selectable(chat, usable)
-    if (lost && !checking(readiness)) {
+    if (lost) {
       const provider = chat.settings.provider
       const seat =
         !chat.settings.connectionId && (provider === 'claude' || provider === 'codex')
@@ -203,6 +203,15 @@ export class StartFlow {
       const gemini = !chat.settings.connectionId && provider === 'gemini'
       const label = seat ? SEAT[seat] : gemini ? 'Gemini' : 'This connection'
       const other = usable[0]
+      const selectedReadiness = seat ? readiness[seat] : gemini ? readiness.gemini : undefined
+      if (selectedReadiness?.status === 'failed')
+        return {
+          text:
+            selectedReadiness.detail ??
+            'Unable to check provider sign-in. Check your connection and retry.',
+          actions: [{ label: `Use ${other.label}`, action: 'start-provider', value: other.key }]
+        }
+      if (checking(readiness)) return undefined
       return {
         text:
           gemini && !readiness.gemini

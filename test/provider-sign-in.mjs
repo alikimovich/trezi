@@ -446,9 +446,55 @@ homeReadiness.claude = readinessFromLogin(null)
 const failedNotice = flow.state(home, [seatChoice], homeReadiness).notice
 assert.equal(failedNotice?.text, homeReadiness.claude.detail, 'terminal provider error is visible')
 assert.equal(failedNotice?.progress, undefined, 'a failed check has no endless progress')
+const selectedHome = newChat('')
+selectedHome.settings.provider = 'claude'
+selectedHome.text = 'draft remains'
+const codexChoice = { ...seatChoice, value: 'codex:default', provider: 'codex', group: 'Codex' }
+const selectedChoices = [seatChoice, codexChoice]
+const selectedReadiness = {
+  claude: readinessFromLogin(null),
+  codex: readinessFromLogin(true)
+}
+const selectedState = () => flow.state(selectedHome, selectedChoices, selectedReadiness)
+assert.equal(
+  selectedState().notice?.text,
+  selectedReadiness.claude.detail,
+  'a failed selected provider reports its settled error when another provider is ready'
+)
+assert.deepEqual(
+  selectedState().notice?.actions.map((action) => action.action),
+  ['start-provider'],
+  'a failed readiness check offers the ready provider without a false sign-in action'
+)
+assert.equal(selectedState().ready, false, 'failed selected provider cannot send the draft')
+assert.equal(
+  flow.holds({ choices: selectedChoices, readiness: selectedReadiness }, selectedHome),
+  true,
+  'failed selected provider keeps the draft held'
+)
+selectedChoices.push(geminiChoice)
+selectedReadiness.gemini = { status: 'checking' }
+assert.equal(
+  selectedState().notice?.text,
+  selectedReadiness.claude.detail,
+  'an unrelated provider check does not conceal the selected provider failure'
+)
+selectedChoices.pop()
+delete selectedReadiness.gemini
+selectedReadiness.claude = readinessFromLogin(false)
+assert.deepEqual(
+  selectedState().notice?.actions.map((action) => action.action),
+  ['sign-in-claude', 'start-provider'],
+  'confirmed sign-out keeps the existing authentication action'
+)
+selectedReadiness.claude = readinessFromLogin(true)
+assert.equal(selectedState().notice, undefined, 'successful readiness retry clears the notice')
+assert.equal(selectedState().ready, true, 'successful readiness retry restores send readiness')
 const choiceRequests = []
+let loginResult = null
 const choicesController = new NativeChatController({
   invoke: async (channel) => {
+    if (channel === 'providers:check-login') return { loggedIn: loginResult }
     if (channel !== 'providers:choices') return { ok: true }
     return new Promise((resolve, reject) => choiceRequests.push({ resolve, reject }))
   },
@@ -546,7 +592,7 @@ assert.equal(
   'retry clears the terminal metadata error'
 )
 assert.equal(cachedNotice()?.text, 'Checking provider sign-in…', 'retry waits for current metadata')
-choiceRequests[3].resolve([seatChoice])
+choiceRequests[3].resolve([seatChoice, codexChoice])
 await retryChoices
 assert.equal(choicesController.start.choicesLoaded, true, 'current response settles choices')
 assert.equal(choicesController.start.choicesError, undefined, 'success leaves no metadata error')
@@ -555,6 +601,36 @@ assert.match(
   cachedNotice()?.text ?? '',
   /Codex is not signed in/,
   'successful retry restores the expected sign-in notice'
+)
+await choicesController.refreshReadiness('codex')
+assert.equal(
+  cachedNotice()?.text,
+  choicesController.readiness.codex.detail,
+  'failed selected-provider report replaces the false sign-out notice'
+)
+assert.deepEqual(
+  cachedNotice()?.actions.map((action) => action.action),
+  ['start-provider'],
+  'a failed report keeps the ready alternative without sign-in'
+)
+assert.equal(
+  choicesController.start.state(cachedHome, choicesController.choices, choicesController.readiness)
+    .ready,
+  false,
+  'failed selected-provider report keeps send disabled'
+)
+loginResult = true
+await choicesController.refreshReadiness('codex')
+assert.equal(
+  cachedNotice(),
+  undefined,
+  'successful report retry clears the selected-provider error'
+)
+assert.equal(
+  choicesController.start.state(cachedHome, choicesController.choices, choicesController.readiness)
+    .ready,
+  true,
+  'successful report retry restores send readiness'
 )
 const calls = []
 const controller = {

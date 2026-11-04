@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-508 review repair: selected provider check failure
+
+- A failed readiness check for the selected provider was being presented as confirmed sign-out whenever another provider could answer. The centered notice now shows that check's settled recovery detail and offers the ready provider without a false sign-in action. Confirmed sign-out still offers sign-in, while a successful check retry restores send readiness. The provider fixture first reproduced the wrong message, then covers the settled report and retry through the controller; the previous choice-refresh and title lifecycle checks remain in place. Native GUI acceptance remains for the post-merge run.
+
 ## 2026-11-04 — LKM-508 review repair: cached choices during refresh
 
 - The centered start notice now waits for the current provider-choice request before using retained choices to offer sign-in or a provider switch. A settled metadata failure stays visible after the chat error is dismissed or a new chat opens, even when the old choices remain usable; a successful retry restores the previous sign-in behavior. The provider fixture exercises a successful cached choice, overlapping refresh, failure, dismissal, new chat and retry. Native GUI acceptance remains for the post-merge run.

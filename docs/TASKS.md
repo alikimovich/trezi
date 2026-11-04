@@ -12,6 +12,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Stop unknown-title motion on conversation error, report terminal provider-check failure, and wait for authoritative choice metadata.
 - [x] Keep overlapping choice refreshes owned by the newest request and retain terminal metadata failure after dismissal until retry.
 - [x] Hold centered sign-in notices while cached choices refresh, and keep a settled metadata error visible through dismissal and new chat.
+- [x] Show the selected provider's failed readiness report instead of a false sign-out, while preserving ready-provider choice and successful retry.
 - [ ] Manager: obtain native acceptance on main after review and CI.
 
 ## Native suite failure on main 17fbc17129bb (LKM-484)
