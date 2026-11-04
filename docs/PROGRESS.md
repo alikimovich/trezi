@@ -2,6 +2,10 @@
 
 Newest first. Append a dated entry when you finish a chunk of work.
 
+## 2026-11-03 — LKM-465 review repair: typecheck guidance
+
+- Independent review found one conflict: the `bun run typecheck` command row still said to run it after every change, while SELECTED feedback intentionally skips typechecks when the audited plan finds no TypeScript input. The row now describes the full manual command without requiring it on every edit. The proportional feedback and final CI rules remain below.
+
 ## 2026-11-03 — LKM-465 proportionate local verification feedback
 
 - Added `bun run check:feedback --base=origin/main`. It uses the audited changed-file selector, runs lint first, then applicable typechecks, then SELECTED unit tests. FULL runs static checks and emits a `FEEDBACK_RECEIPT` with the selection reason and remaining CI/native/review obligations; command failures stop the sequence.

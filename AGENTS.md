@@ -35,7 +35,7 @@ Use **Bun**, not npm/yarn. Native builds need macOS 13.3+ and the macOS 26 SDK. 
 | --- | --- |
 | `bun run dev` | Build and launch the native app |
 | `bun run build` | Build to `out/native/` |
-| `bun run typecheck` | Native/backend/shared + preview. Run after every change |
+| `bun run typecheck` | Full manual native/backend/shared + preview typecheck |
 | `bun run check:feedback --base=origin/main` | Proportionate local feedback: lint first, applicable typechecks, audited selected unit tests; FULL selection gets static checks and a partial-evidence receipt |
 | `bun run typecheck:native` | Native/backend/shared only |
 | `node test/run.mjs unit` | Unit tier, no desktop |
