@@ -177,7 +177,10 @@ function harness(
     cancelSend = false,
     deferReport = false,
     rejectRetry = false,
-    deferRetry = false
+    deferRetry = false,
+    restoredParked = false,
+    deferHeld = false,
+    settleActions = false
   } = {}
 ) {
   const calls = []
@@ -207,6 +210,12 @@ function harness(
         acknowledgeRetry = resolve
       })
     : null
+  let acknowledgeHeld
+  const pendingHeld = deferHeld
+    ? new Promise((resolve) => {
+        acknowledgeHeld = resolve
+      })
+    : null
   const controller = new NativeChatController({
     // Synthetic IO delay; the controller's real report-completion branch is exercised.
     writeRecoveryReport: deferReport
@@ -227,7 +236,10 @@ function harness(
                   sessionKey: 'a',
                   record: { transcript: [] },
                   isRunning: false,
-                  options: { provider: 'claude' }
+                  options: { provider: 'claude' },
+                  ...(restoredParked
+                    ? { isolation: { state: 'parked', reason: 'failed', files: ['src/a.tsx'] } }
+                    : {})
                 }
               ]
             }
@@ -245,7 +257,20 @@ function harness(
                 incarnation: held.incarnation
               })
         )
-      if (channel === 'agent:held-operation') return held
+      if (channel === 'agent:held-operation') return pendingHeld ?? held
+      if (settleActions && ['agent:retry-landing', 'agent:discard-conflict'].includes(channel)) {
+        controller.event({
+          projectKey: 'a',
+          type: 'isolation',
+          state: channel === 'agent:retry-landing' ? 'merged' : 'isolated',
+          files: ['src/a.tsx'],
+          settlement: settlement(
+            channel === 'agent:retry-landing' ? 'merged' : 'discarded',
+            args[2]
+          )
+        })
+        return { ok: true, state: 'isolated' }
+      }
       if (channel === 'agent:retry-landing' && pendingRetry) return pendingRetry
       if (channel === 'agent:retry-landing' && rejectRetry)
         return { ok: false, error: 'Synthetic retry remained held.' }
@@ -272,6 +297,7 @@ function harness(
     acknowledgeSend,
     completeReport,
     acknowledgeRetry,
+    acknowledgeHeld,
     reportWrites: () => reportWrites,
     resolves: () => calls.filter((c) => c[0] === 'agent:resolve-conflict').length,
     sent: () => calls.filter((c) => c[0] === 'agent:send').map((c) => c[1]),
@@ -304,6 +330,80 @@ function harness(
         }
       })
   }
+}
+
+// initialize() restores the parked state without a held operation. Each action
+// binds the producer identity after a deferred authoritative lookup, then settles.
+for (const [action, channel] of [
+  ['resolve', 'agent:resolve-conflict'],
+  ['landing-retry', 'agent:retry-landing'],
+  ['discard', 'agent:discard-conflict']
+]) {
+  const h = harness(false, { restoredParked: true, deferHeld: true, settleActions: true })
+  await h.open()
+  const chat = h.controller.get('a')
+  assert.equal(chat.isolation, 'parked')
+  assert.equal(chat.heldOperation, undefined)
+  const request = cardAction(h.controller, chat, { action })
+  await tick()
+  assert.equal(chat.recovery !== undefined, true, `${action} owns a provisional intent`)
+  assert.equal(
+    h.calls.some((call) => call[0] === channel),
+    false
+  )
+  h.acknowledgeHeld(held)
+  await request
+  assert.deepEqual(chat.heldOperation, held)
+  assert.equal(chat.recovery, undefined, `${action} releases its busy state`)
+  assert.equal(h.calls.filter((call) => call[0] === channel).length, 1)
+  assert.equal(h.calls.find((call) => call[0] === channel)?.[2], held.id)
+  if (action === 'resolve') assert.deepEqual(h.sent(), ['Resolve the markers.'])
+  else {
+    assert.equal(chat.heldIncident, undefined, `${action} clears a settled held incident`)
+    assert.equal(chat.recoveryId, undefined)
+  }
+}
+
+// A restored chat whose retry still fails publishes one report after binding.
+{
+  const h = harness(false, { restoredParked: true, deferHeld: true, rejectRetry: true })
+  await h.open()
+  const chat = h.controller.get('a')
+  const request = cardAction(h.controller, chat, { action: 'landing-retry' })
+  h.acknowledgeHeld(held)
+  await request
+  assert.equal(chat.recovery, undefined)
+  assert.equal(h.calls.filter((call) => call[0] === 'agent:retry-landing').length, 1)
+  assert.ok(chat.recoveryReport)
+  assert.match(readableRecoveryReport('a'), /Synthetic retry remained held/)
+  assert.equal(h.renders.at(-1).cards.filter((card) => card.title === 'Problem').length, 1)
+}
+
+// Stop or a newer held source during lookup cannot dispatch the stale action.
+for (const change of ['stop', 'held', 'source', 'provider', 'reopen']) {
+  const h = harness(false, { restoredParked: true, deferHeld: true })
+  await h.open()
+  const chat = h.controller.get('a')
+  const request = cardAction(h.controller, chat, { action: 'landing-retry' })
+  await tick()
+  if (change === 'stop') await h.controller.stop(chat)
+  if (change === 'held') chat.heldOperation = { ...held, id: 'held-new', generation: 2 }
+  if (change === 'source') chat.heldOperation = { ...held, source: 'tree-new' }
+  if (change === 'provider') chat.heldOperation = { ...held, incarnation: 'inc-new' }
+  if (change === 'reopen') {
+    h.controller.close('a')
+    assert.notEqual(h.controller.get('a'), chat)
+  }
+  const rendered = h.renders.length
+  h.acknowledgeHeld(held)
+  await request
+  assert.equal(
+    h.calls.some((call) => call[0] === 'agent:retry-landing'),
+    false
+  )
+  assert.equal(h.renders.length, rendered, 'stale lookup does not publish a Problem')
+  if (change !== 'reopen')
+    assert.equal(chat.recovery, undefined, 'stale lookup releases its provisional intent')
 }
 
 // Manual recovery actions carry the producer's exact held operation to main.

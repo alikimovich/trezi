@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-486 restored held-operation binding
+
+- A reopened parked chat can begin Resolve, Retry or Discard before its held operation is in native memory. The request now owns a provisional chat/cancellation/attempt intent, binds the authoritative held operation after lookup only while that intent and source still match, and uses the bound identity for completion and report guards. A matching producer settlement clears the busy request and held incident; Stop and changed source or provider identity cannot dispatch the stale action.
+- The existing synthetic chat fixture defers held-operation lookup for all three actions, a failed retry report, Stop, close/reopen and changed owner/source/provider cases. Focused checks and manager gates are recorded in the worker receipt, with native acceptance still pending after merge.
+
 ## 2026-11-04 — LKM-486 completion rollback repair
 
 - Recovery request report completion now checks the captured chat, cancellation epoch and held-source identity before its `finally` path changes status or renders. A stopped request cannot reopen a terminal Problem after delayed report IO; an uninterrupted request still publishes its one report. A matching producer-confirmed settlement also releases the request's busy state without reviving the held Problem.

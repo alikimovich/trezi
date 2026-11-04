@@ -19,20 +19,24 @@ export function setRecoveryRequestDeadlineForTests(ms: number | null) {
   recoveryRequestMs = ms ?? RECOVERY_REQUEST_MS
 }
 
-async function heldIdentity(controller: NativeChatController, chat: Chat) {
-  if (chat.heldOperation) return chat.heldOperation
+type Held = NonNullable<Chat['heldOperation']>
+
+async function heldIdentity(
+  controller: NativeChatController,
+  chat: Chat,
+  bind: (held: Held) => Held
+) {
+  if (chat.heldOperation) return bind(chat.heldOperation)
   const held = await controller.services.invoke('agent:held-operation', chat.chat)
-  if (!held?.id || chat.isolation !== 'parked' || controller.chats.get(chat.chat) !== chat)
-    throw new Error('The held work changed. Refresh this chat before retrying.')
-  chat.heldOperation = held
-  return held
+  if (!held?.id) throw new Error('The held work changed. Refresh this chat before retrying.')
+  return bind(held)
 }
 
 /** Resolve for a chat whose changes are held: the agent fixes the conflict markers in a turn. */
 export async function resolveHeld(controller: NativeChatController, chat: Chat) {
-  return recoveryRequest(controller, chat, 'resolve', async () => {
+  return recoveryRequest(controller, chat, 'resolve', async (bind) => {
     chat.paused = false
-    const held = await heldIdentity(controller, chat)
+    const held = await heldIdentity(controller, chat, bind)
     const result = await controller.services.invoke(
       'agent:resolve-conflict',
       chat.chat,
@@ -76,7 +80,7 @@ async function recoveryRequest(
   controller: NativeChatController,
   chat: Chat,
   kind: NonNullable<Chat['recovery']>,
-  request: () => Promise<Handover | void>
+  request: (bind: (held: Held) => Held) => Promise<Handover | void>
 ) {
   if (chat.isRunning || chat.sending || chat.recovery) return
   chat.recovery = kind
@@ -88,15 +92,34 @@ async function recoveryRequest(
   chat.recoveryId = crypto.randomUUID()
   const id = chat.recoveryId
   const cancellation = chat.cancellation
-  const held = chat.heldOperation
-  const sameRequest = () =>
+  const initialHeld = chat.heldOperation
+  let boundHeld: Held | undefined
+  const sameIntent = () =>
     controller.chats.get(chat.chat) === chat &&
     chat.cancellation === cancellation &&
     !chat.stopping &&
-    chat.recoveryId === id &&
-    chat.heldOperation?.id === held?.id &&
-    chat.heldOperation?.incarnation === held?.incarnation &&
-    chat.heldOperation?.source === held?.source
+    chat.recoveryId === id
+  const matches = (left: Held | undefined, right: Held | undefined) =>
+    left?.id === right?.id &&
+    left?.incarnation === right?.incarnation &&
+    left?.generation === right?.generation &&
+    left?.source === right?.source
+  const bind = (held: Held) => {
+    if (
+      boundHeld ||
+      !sameIntent() ||
+      chat.recoveryTimedOut ||
+      chat.isolation !== 'parked' ||
+      (initialHeld && !matches(initialHeld, held)) ||
+      (chat.heldOperation && !matches(chat.heldOperation, held))
+    )
+      throw new Error('The held work changed. Refresh this chat before retrying.')
+    boundHeld = held
+    chat.heldOperation = held
+    return held
+  }
+  const sameRequest = () => sameIntent() && matches(chat.heldOperation, boundHeld ?? initialHeld)
+  const ownsAttempt = () => controller.chats.get(chat.chat) === chat && chat.recoveryId === id
   const current = () => sameRequest() && chat.isolation === 'parked'
   const settled = () =>
     sameRequest() &&
@@ -115,7 +138,7 @@ async function recoveryRequest(
   try {
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      requestPromise = request()
+      requestPromise = request(bind)
       handover =
         (await Promise.race([
           requestPromise,
@@ -133,9 +156,11 @@ async function recoveryRequest(
     } finally {
       if (timer) clearTimeout(timer)
     }
-    if (!current()) return
+    if (!current() && !settled()) return
     if (!handover && !chat.isRunning && chat.recoverySettled && chat.recoverySettled !== 'parked') {
       chat.heldIncident = undefined
+      chat.recovery = undefined
+      chat.recoveryTimedOut = false
       chat.recoveryId = undefined
       chat.recoveryProblem = undefined
       chat.recoveryReport = undefined
@@ -145,6 +170,7 @@ async function recoveryRequest(
           : chat.recoverySettled === 'merged'
             ? 'Changes applied to the project.'
             : 'No changes remained to apply.'
+      controller.changed(chat)
     }
     // Acknowledged handover starts its agent turn immediately. The prior report is
     // already available; a fresh report cannot be allowed to delay or abort the turn.
@@ -191,15 +217,20 @@ async function recoveryRequest(
       // every card mutation locked until its actual IPC settles, without a spinner.
       void requestPromise
         .finally(() => {
-          if (current() || settled()) {
+          if (current() || settled() || ownsAttempt()) {
             chat.recovery = undefined
             chat.recoveryTimedOut = false
-            controller.changed(chat)
+            if (current() || settled()) controller.changed(chat)
           }
         })
         .catch(() => {})
     } else {
       if (current() || settled()) {
+        chat.recovery = undefined
+        chat.recoveryTimedOut = false
+      } else if (ownsAttempt()) {
+        // Stop or a changed held source invalidates this provisional intent.
+        // Release only its busy flag; the newer owner renders its own state.
         chat.recovery = undefined
         chat.recoveryTimedOut = false
       }
@@ -275,16 +306,16 @@ export async function cardAction(
   // cannot reach the backend while the first request is still in flight.
   if (action.action === 'resolve') return resolveHeld(controller, chat).catch(() => {})
   if (action.action === 'discard')
-    return recoveryRequest(controller, chat, 'discard', async () => {
+    return recoveryRequest(controller, chat, 'discard', async (bind) => {
       chat.paused = false
-      const held = await heldIdentity(controller, chat)
+      const held = await heldIdentity(controller, chat, bind)
       const result = await invoke('agent:discard-conflict', chat.chat, held.id, chat.recoveryId)
       if (!result.ok && result.error) throw new Error(result.error)
     })
   if (action.action === 'landing-retry')
-    return recoveryRequest(controller, chat, 'retry', async () => {
+    return recoveryRequest(controller, chat, 'retry', async (bind) => {
       chat.paused = false
-      const held = await heldIdentity(controller, chat)
+      const held = await heldIdentity(controller, chat, bind)
       const result = await invoke('agent:retry-landing', chat.chat, held.id, chat.recoveryId)
       if (!result.ok) throw new Error(result.error ?? 'Unable to retry the landing.')
       if (result.state === 'parked' && chat.isolation === 'parked')
