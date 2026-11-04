@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native chat during project opening (LKM-475)
+
+- [x] Keep the selected chat column, header, transcript and draft beside the preview through opening and failed-open states; keep Opening and error in the preview.
+- [x] Disable Send before project readiness and reject early composer Send/Return; restore existing actions when ready.
+- [x] Extend the `chat-gate` disposable-profile fixture for opening, failed-open, retry and explicit Hide/Restore captures and assertions.
+- [x] Review follow-up: seed a synthetic selected transcript and assert its nonzero native count and rendered row through opening and failed opening at normal and narrow widths.
+- [ ] Manager: independent review, CI and native sidebar acceptance on the merged SHA.
+
 ## Native suite failure on main 743c0a82c263 (LKM-469)
 
 - [x] `toolbar-address`: match wide block size to the host-based preferred width introduced in LKM-467.

@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+
+- The selected chat column, title and draft remain visible while a project opens or reports an opening error; Send waits until the project is ready (LKM-475).
+
 ## [0.13.12] - 2026-11-03
 
 ### Fixed

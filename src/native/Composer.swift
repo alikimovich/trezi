@@ -267,6 +267,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         if sending.shown { return key == "Enter" }
         let hasSuggestions = !(state["suggestions"] as? [Any] ?? []).isEmpty
         let shift = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+        if key == "Enter" && !shift && !hasSuggestions && state["ready"] as? Bool != true { return true }
         if key == "Enter" && !shift || hasSuggestions {
             var action: [String: Any] = ["key":key]
             if key == "Enter" && !shift && !hasSuggestions { action["attempt"] = sending.begin() }
@@ -292,7 +293,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         attachments.locked = look != nil
         plus.isEnabled = look == nil
         let label = look?.label ?? state["sendLabel"] as? String ?? "Send"
-        sendButton.isEnabled = look.map(\.stop) ?? (state["enabled"] as? Bool ?? false)
+        sendButton.isEnabled = state["ready"] as? Bool == true && (look.map(\.stop) ?? (state["enabled"] as? Bool ?? false))
         let symbol = look?.symbol ?? (state["stop"] as? Bool == true ? "stop.fill" : "arrow.up")
         sendButton.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
         sendButton.setAccessibilityLabel(label)

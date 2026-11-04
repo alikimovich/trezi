@@ -19,6 +19,7 @@ import { islandPreviewPort } from './island-preview'
 import { LandingChecks, placeLandingCheck, previewLandingHost } from './landing-check'
 import { dispatchIPC, type NativeView, serviceEvents, views } from './platform'
 import { TurnBoundaries } from './turn-boundaries'
+import { nativeWorkspace } from './workspace-runtime'
 
 export let nativeIslands: ChatIslands
 const boundaries = new TurnBoundaries()
@@ -172,6 +173,15 @@ export function installNativeChat(
     close(key)
   }
   host.on('composer-action', (action) => {
+    const active = nativeWorkspace?.active
+    if (
+      active &&
+      active.activeSessionKey === action.chat &&
+      (nativeWorkspace.state.loadedKey !== active.key ||
+        nativeWorkspace.state.status.kind === 'error') &&
+      (action.action === 'send' || (action.action === 'key' && action.key === 'Enter'))
+    )
+      return
     if (action.action === 'send')
       productLog.info('send-path', 'bun action=send stage=received', {
         chat: action.chat,
