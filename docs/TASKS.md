@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## New Chat native glass follow-up (LKM-481)
+
+- [x] Reuse the toolbar island segmented control for the chat header's single momentary New Chat action.
+- [x] Extend the disposable-profile toolbar fixture with foreground light/dark idle and disabled pixel comparisons, geometry receipts and disabled input rejection.
+- [ ] Manager: independent review, CI and post-merge native core/sidebar acceptance on main.
 ## Native suite failure on main efe3c3843087 (LKM-480)
 
 - [x] Treat the 16 pt address-to-right-group gap at the 850 pt window minimum as a measured pinned layout; retain the 20 pt sizing target when space allows.
