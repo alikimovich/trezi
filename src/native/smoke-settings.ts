@@ -198,17 +198,7 @@ export async function checkVisibleSettings(
   assert.equal((await inspect()).values.agentMerge, 'false')
   await choose('agentMerge', 'true')
   await reopen()
-  // LKM-152: Show Activity automatically defaults to problems that need the user and persists.
-  assert.equal(
-    initial.values.activityAutoOpen,
-    'problems',
-    'Show Activity automatically defaults to For problems that need me'
-  )
-  await choose('activityAutoOpen', 'never')
-  await reopen()
-  assert.equal((await inspect()).values.activityAutoOpen, 'never')
-  await choose('activityAutoOpen', 'problems')
-  await reopen()
+  assert.equal(initial.values.activityAutoOpen, undefined, 'Activity has no automatic open setting')
   // LKM-221: the quit alert's "Don't ask again" shows here, defaults to asking and persists.
   assert.equal(initial.values.quitDontAsk, 'false', 'Quit while agents work defaults to Ask first')
   await choose('quitDontAsk', 'true')

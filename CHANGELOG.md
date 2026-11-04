@@ -13,6 +13,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Changed
 
 - The preview address keeps its host visible in a compact block, device and expand controls sit beside it, and the chat title has a New Chat button (LKM-467).
+## [0.13.10] - 2026-11-03
+
+### Changed
+
+- Activity stays closed until you open it, including for errors, agent requests, and startup recovery; unread indicators continue to show new attention (LKM-468).
 
 ## [0.13.9] - 2026-11-03
 

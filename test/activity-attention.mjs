@@ -1,13 +1,6 @@
-// LKM-152: Activity opens only when attention is needed. Severity classification,
-// once-per-kind automatic opening, collapsed gray recovery notices, the unread marker
-// and the Show Activity automatically setting.
+// Activity records events and marks unread attention; only manual actions show the feed.
 import assert from 'node:assert/strict'
-import {
-  ACTIVITY_AUTO_OPEN_CHOICES,
-  activityAutoOpen,
-  NativeActivityController,
-  severityOf
-} from '../src/native/activity-controller.ts'
+import { NativeActivityController, severityOf } from '../src/native/activity-controller.ts'
 import {
   reportConversationRecovery,
   reportRepositoryRecovery,
@@ -16,18 +9,15 @@ import {
 import { NativePreviewSupervisor, RESTART_DELAYS } from '../src/native/preview-supervisor.ts'
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 70))
-const make = (mode = 'problems') => {
+const make = () => {
   const sent = []
-  const settings = { mode }
   const log = new NativeActivityController(
     (method, value) => sent.push([method, structuredClone(value)]),
-    (text) => text,
-    () => activityAutoOpen(settings.mode)
+    (text) => text
   )
   return {
     log,
     sent,
-    settings,
     states: () => sent.filter(([m]) => m === 'activityState').map(([, v]) => v),
     unread: () =>
       sent
@@ -58,22 +48,9 @@ assert.deepEqual(
   ['info', 'info', 'info', 'info', 'warning', 'warning', 'needs-action']
 )
 
-// Settings: default "For problems that need me"; unknown values fall back to it.
-assert.deepEqual(
-  ACTIVITY_AUTO_OPEN_CHOICES.map((c) => [c.value, c.label]),
-  [
-    ['never', 'Never'],
-    ['problems', 'For problems that need me'],
-    ['always', 'Always']
-  ]
-)
-assert.equal(activityAutoOpen(null), 'problems')
-assert.equal(activityAutoOpen('bogus'), 'problems')
-assert.equal(activityAutoOpen('never'), 'never')
-
-// Startup recovery notices and dev-server output never open the window, in any mode.
-for (const mode of ['never', 'problems', 'always']) {
-  const { log, states } = make(mode)
+// Startup recovery notices and dev-server output never open the window.
+{
+  const { log, states } = make()
   reportConversationRecovery(log, [chat('a'), chat('b', 'restored', true), chat('c'), chat('d')])
   reportSourceRecovery(log, {
     interrupted: [
@@ -99,9 +76,9 @@ for (const mode of ['never', 'problems', 'always']) {
   })
   for (const line of VITE) log.append(line, 'server')
   await flush()
-  assert.equal(log.visible, false, `${mode}: recovery notices and Vite output do not open Activity`)
-  assert.equal(states().length, 0, `${mode}: nothing is rendered while hidden`)
-  assert.equal(log.unread, 0, `${mode}: info lines are not unread`)
+  assert.equal(log.visible, false, 'recovery notices and Vite output do not open Activity')
+  assert.equal(states().length, 0, 'nothing is rendered while hidden')
+  assert.equal(log.unread, 0, 'info lines are not unread')
 }
 
 // Repeated recovery notices collapse into one gray summary line with the correct count.
@@ -154,36 +131,34 @@ for (const mode of ['never', 'problems', 'always']) {
   assert.equal(source.log.lines[0].summary, 'Rolled back 3 interrupted source changes.')
 }
 
-// A needs-action event opens the window exactly once per event kind per session.
+// Background work, progress, errors, agent requests and startup damage cannot open the feed.
 {
-  const { log, states } = make()
-  log.append('The dev server crashed', 'needs-action', { event: 'devserver-crash-loop' })
-  assert.equal(log.visible, true, 'needs-action opens Activity')
-  await flush()
-  assert.equal(states().at(-1).raise, true, 'an automatic open orders the window front')
-  assert.equal(states().at(-1).focus, undefined, 'without taking the key window')
-  log.action('hide')
-  log.append('The dev server crashed again', 'needs-action', { event: 'devserver-crash-loop' })
-  assert.equal(log.visible, false, 'a repeat of the same kind does not reopen it')
-  assert.equal(log.unread, 1, 'the repeat is unread instead')
-  assert.equal(log.unreadLevel, 'needs-action')
-  log.append('Could not open Repo', 'needs-action', { event: 'project-open-failed' })
-  assert.equal(log.visible, true, 'another kind opens it once')
-  log.action('hide')
-  log.append('Could not open Repo again', 'needs-action', { event: 'project-open-failed' })
-  assert.equal(log.visible, false)
-  // Ordinary errors and warnings are logged, never opened, under the default.
+  const { log, states, unread } = make()
+  log.append('Task started', 'info')
+  log.append('Agent is working', 'server')
+  log.append('Progress', 'success')
   log.append('Download failed', 'error')
-  log.append('Recovery ref missing', 'warning')
-  assert.equal(log.visible, false)
-  assert.deepEqual([...log.opened].sort(), ['devserver-crash-loop', 'project-open-failed'])
-  // An open window still comes to front once for a new kind.
-  log.action('show')
-  const before = states().length
-  log.append('Source journal: damaged', 'needs-action', { event: 'source-journal' })
+  log.append('Agent needs approval', 'needs-action', { event: 'agent-request' })
+  reportSourceRecovery(log, { interrupted: [], journal: 'damaged' })
   await flush()
-  assert.equal(states().length, before + 1)
-  assert.equal(states().at(-1).raise, true, 'a visible window is raised for a new kind')
+  assert.equal(log.visible, false, 'incoming events leave Activity closed')
+  assert.equal(states().length, 0, 'incoming events cannot raise or focus Activity')
+  assert.equal(log.lines.length, 6, 'all events remain recorded')
+  assert.deepEqual(unread(), { count: 3, level: 'needs-action' })
+  log.action('show')
+  assert.equal(log.visible, true, 'manual show opens Activity')
+  assert.equal(states().at(-1).focus, true, 'manual show focuses Activity')
+  assert.equal(states().at(-1).lines.length, 6, 'manual show presents recorded events')
+  assert.deepEqual(unread(), { count: 0, level: 'info' })
+  log.append('Another request', 'needs-action', { event: 'agent-request' })
+  await flush()
+  assert.equal(log.visible, true, 'incoming events leave an open feed open')
+  assert.equal(states().at(-1).focus, undefined, 'incoming events do not take focus')
+  assert.equal(states().at(-1).raise, undefined, 'incoming events do not raise the feed')
+  log.action('hide')
+  log.append('Hidden request', 'needs-action', { event: 'agent-request' })
+  assert.equal(log.visible, false, 'an event cannot reopen a manually closed feed')
+  assert.equal(log.unread, 1)
 }
 
 // Unread marker: warnings and needs-action lines while hidden; cleared once viewed.
@@ -206,30 +181,6 @@ for (const mode of ['never', 'problems', 'always']) {
   log.append('Hidden failure', 'error')
   log.action('toggle')
   assert.equal(log.unread, 0, 'toggling Activity open views it too')
-}
-
-// Show Activity automatically: Never suppresses every automatic open; Always keeps the
-// pre-LKM-152 behavior (every error opens a hidden window); the setting is read live.
-{
-  const never = make('never')
-  never.log.append('Crash loop', 'needs-action', { event: 'devserver-crash-loop' })
-  never.log.append('Failure', 'error')
-  assert.equal(never.log.visible, false, 'Never suppresses all automatic opening')
-  assert.equal(never.log.unread, 2, 'the marker still shows')
-  const always = make('always')
-  always.log.append('Failure', 'error')
-  assert.equal(always.log.visible, true, 'Always opens for an error')
-  always.log.action('hide')
-  always.log.append('Failure again', 'error')
-  assert.equal(always.log.visible, true, 'Always reopens for each error, as before')
-  always.log.action('hide')
-  always.log.append('Recovery ref missing', 'warning')
-  assert.equal(always.log.visible, false, 'Always keeps warnings closed, as before')
-  const live = make('never')
-  live.log.append('Crash loop', 'needs-action', { event: 'devserver-crash-loop' })
-  live.settings.mode = 'problems'
-  live.log.append('Could not open', 'needs-action', { event: 'project-open-failed' })
-  assert.equal(live.log.visible, true, 'a changed setting applies at once')
 }
 
 // The preview supervisor reports the crash loop it gives up on.
@@ -260,25 +211,21 @@ for (const mode of ['never', 'problems', 'always']) {
   assert.deepEqual(gaveUp, ['Exited with code 1'], 'giving up on a crash loop is reported once')
 }
 
-// Verification reset: after a first auto-open (and an unread marker), `reset` hides, clears and
-// forgets the once-per-kind latch, so the same needs-action event opens the window again.
+// Verification reset hides and clears the feed and unread status.
 {
-  const { log, unread } = make('problems')
+  const { log, unread } = make()
   const open = () =>
     log.append('Could not open Folder', 'needs-action', { event: 'project-open-failed' })
   open()
-  assert.equal(log.visible, true, 'the first failed open brings Activity to front')
-  log.action('hide')
-  open()
-  assert.equal(log.visible, false, 'the latch keeps a repeat of the event from opening it again')
+  assert.equal(log.visible, false, 'the failed open leaves Activity hidden')
   assert.equal(log.unread, 1)
   log.action('reset')
-  assert.deepEqual([log.visible, log.lines.length, log.unread, log.opened.size], [false, 0, 0, 0])
+  assert.deepEqual([log.visible, log.lines.length, log.unread], [false, 0, 0])
   assert.equal(unread().count, 0, 'reset clears the unread marker')
   open()
-  assert.equal(log.visible, true, 'after reset the event opens the window again')
+  assert.equal(log.visible, false, 'after reset the event still leaves Activity hidden')
 }
 
 console.log(
-  'Activity attention: severity, once-per-kind auto-open, collapsed recovery notices, unread marker and the setting passed'
+  'Activity attention: manual visibility, background events, startup recovery, unread marker and recording passed'
 )

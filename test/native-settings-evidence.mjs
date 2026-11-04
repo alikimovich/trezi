@@ -150,7 +150,6 @@ for (const width of [680, 780]) {
       control('agentGitAccess', 'Managed'),
       control('agentMerge', 'On'),
       control('workspaceIdle', '7 days'),
-      control('activityAutoOpen', 'For problems that need me'),
       control('quitDontAsk', 'Ask first'),
       control('buildCheck', 'On')
     ],

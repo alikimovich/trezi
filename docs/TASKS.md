@@ -1462,6 +1462,8 @@ Why: the agent cannot verify a change mid-turn (the live checkout, which the pre
 
 ## Activity opens only when attention is needed (LKM-152)
 
+- [x] LKM-468: Activity visibility is manual; background and startup events stay recorded and unread without opening or focusing the feed. The obsolete automatic-open control is removed; the saved key is left untouched. Native acceptance runs after merge.
+
 - [x] Every Activity line has a severity (info, warning, needs-action); only needs-action opens the window, once per event kind per session (`src/native/activity-controller.ts`). Needs-action: failed project open, dev-server crash loop (`NativePreviewSupervisor` gave up), damaged repository/source journals.
 - [x] Startup recovery notices are gray `notice` lines; restored chats and rolled-back source changes collapse into one summary line (`src/native/activity-startup.ts`).
 - [x] Unread dot in the sidebar and a badge on Window → Activity (⌘L, replaces Actions → Toggle Logs); viewing Activity clears both (`src/native/ActivityIndicator.swift`).
