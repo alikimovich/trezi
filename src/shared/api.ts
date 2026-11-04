@@ -562,6 +562,8 @@ export type AgentEvent = (
       reason?: 'interrupted' | 'reverted' | 'failed'
       /** On a 'failed' park: why the landing failed, for the chat's Retry card. */
       error?: string
+      /** Recovery request that produced this park, when one owns the operation. */
+      recoveryId?: string
     }
 ) & {
   /** Which project's session emitted this — set by main so the renderer routes it

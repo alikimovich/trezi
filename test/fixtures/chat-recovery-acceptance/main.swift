@@ -44,8 +44,8 @@ func conflict(busy: String?, report: Bool = false, full: Bool = false, enabled: 
         ["label": busy == "resolve" ? "Resolving…" : "Resolve", "action": "resolve", "disabled": disabled]
     ]
     if report { actions.append(["label": "Copy support report", "action": "recovery-report"]) }
-    var card: [String: Any] = ["id": "conflict", "title": report ? "Problem" : "This turn’s changes didn’t land",
-                               "detail": report ? "Problem: Fixture recovery failed" : "The project changed under them, so Trezi held them instead of overwriting.\nfixture.ts",
+    var card: [String: Any] = ["id": "conflict", "title": busy == "retry" ? "Retrying the check…" : busy == "resolve" ? "Resolving changes…" : report ? "Problem" : "This turn’s changes didn’t land",
+                               "detail": busy != nil ? "Trezi is working on the held changes." : report ? "Problem: Fixture recovery failed" : "The project changed under them, so Trezi held them instead of overwriting.\nfixture.ts",
                                "busy": busy != nil, "actions": actions]
     if full { card["fullDetail"] = "/fixture/project/fixture.ts" }
     return card

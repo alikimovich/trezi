@@ -148,7 +148,14 @@ assert.equal(state.activity.detail, chat.activityDetail, 'tooltip keeps the full
 const error = state.cards.find((card) => card.id === 'error')
 assert.equal(error.detail, `Could not apply ${TEMPORARY_PATCH}`)
 assert.equal(error.fullDetail, chat.error, 'Copy keeps the full path')
-const conflict = state.cards.find((card) => card.id === 'conflict')
+assert.equal(
+  state.cards.find((card) => card.id === 'conflict').detail,
+  'Trezi is working on the held changes.',
+  'a running turn presents the owned park as status'
+)
+const conflict = snapshot({ ...chat, isRunning: false }, []).cards.find(
+  (card) => card.id === 'conflict'
+)
 const held = 'The project changed under them, so Trezi held them instead of overwriting.'
 assert.equal(conflict.detail, `${held}\nsrc/App.tsx\nsrc/b.ts`)
 assert.equal(conflict.fullDetail, [held, ...chat.isolationFiles].join('\n'))

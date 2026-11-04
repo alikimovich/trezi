@@ -416,7 +416,12 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       value.cardStates.some((card: any) => card.id === 'conflict' && card.busy === true)
     )
     const busyCard = busy.cardStates.find((card: any) => card.id === 'conflict')
-    if (!busyCard.actions.includes('Retrying…') || !busyCard.disabled.every(Boolean))
+    if (
+      busyCard.title !== 'Retrying the check…' ||
+      busyCard.detail.startsWith('Problem:') ||
+      !busyCard.actions.includes('Retrying…') ||
+      !busyCard.disabled.every(Boolean)
+    )
       throw new Error(`Retry was not visibly busy before its reply: ${JSON.stringify(busyCard)}`)
     await host.request('chatPerform', { action: 'landing-retry', card: 'conflict' })
     if (retryCalls !== 1) throw new Error(`Retry double click sent ${retryCalls} requests`)
@@ -470,7 +475,12 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       value.cardStates.some((card: any) => card.id === 'conflict' && card.busy === true)
     )
     const resolvingCard = resolving.cardStates.find((card: any) => card.id === 'conflict')
-    if (!resolvingCard.actions.includes('Resolving…') || !resolvingCard.disabled.every(Boolean))
+    if (
+      resolvingCard.title !== 'Resolving changes…' ||
+      resolvingCard.detail.startsWith('Problem:') ||
+      !resolvingCard.actions.includes('Resolving…') ||
+      !resolvingCard.disabled.every(Boolean)
+    )
       throw new Error(
         `Resolve was not visibly busy before its reply: ${JSON.stringify(resolvingCard)}`
       )

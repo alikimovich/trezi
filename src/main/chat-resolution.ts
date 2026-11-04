@@ -75,7 +75,9 @@ export async function holdForDecision(
   turn: SessionTranscriptEntry[],
   message: string,
   terminal: TurnTerminalOutcome,
-  gate: PeerGateNote
+  gate: PeerGateNote,
+  originTurn?: string,
+  recoveryId?: string
 ): Promise<boolean> {
   const pending = st.resolution
   if (!pending || (terminal !== 'success' && !st.decision)) return false
@@ -121,7 +123,9 @@ export async function holdForDecision(
     undefined,
     'failed',
     error,
-    held.question
+    held.question,
+    recoveryId,
+    originTurn
   )
   // Always announced: a re-hold must pause the queue again. Only the repeat is skipped.
   st.decisionShown = true

@@ -97,6 +97,12 @@ export interface Chat extends NativeChatMirror {
   /** LKM-151: a stopped turn's work is on hold ('held', live never had it) or the user
    *  reverted it ('reverted', undoable until the next turn starts). */
   stopped?: 'held' | 'reverted'
+  /** The turn whose Stop settled, with or without an interrupted park. */
+  stoppedTurn?: string
+  /** An explicit Keep request owns the stopped hold until its IPC settles. */
+  keepingStopped?: boolean
+  /** The stopped turn whose explicit Keep result is now authoritative. */
+  settledStoppedKeep?: { turn?: string }
   /** LKM-225: the automatic Resolve of a drift park ran once ('tried'), then gave up ('failed'). */
   autoResolved?: 'tried' | 'failed'
   /** LKM-165: why the last landing failed; its work is held until Retry or Resolve. */
@@ -337,6 +343,33 @@ function placeLiveChange(chat: Chat) {
 }
 /** A terminal event that cannot belong to the turn this chat is running (S11). */
 export function late(chat: Chat, event: AgentEvent) {
+  // A stopped Keep's result owns its turn. During a new recovery request only a
+  // parked callback tagged by that request can supersede it; older Stop events
+  // have no request id. A fresh turn clears the Keep settlement separately.
+  if (event.type === 'isolation' && event.state === 'parked') {
+    const ownedRecovery =
+      !!chat.recovery &&
+      !chat.recoveryTimedOut &&
+      !!event.recoveryId &&
+      event.recoveryId === chat.recoveryId
+    // The producer captures the originating turn before it queues a landing.
+    // A Resolve handover may replace chat.turn while that old landing finishes.
+    if (event.turn && chat.turn && event.turn !== chat.turn) return true
+    if (event.recoveryId && !ownedRecovery) return true
+    if (
+      chat.keepingStopped ||
+      (chat.settledStoppedKeep && chat.settledStoppedKeep.turn === chat.turn && !ownedRecovery)
+    )
+      return true
+    if (
+      event.reason !== 'interrupted' &&
+      !chat.isRunning &&
+      !ownedRecovery &&
+      chat.stoppedTurn != null &&
+      chat.stoppedTurn === chat.turn
+    )
+      return true
+  }
   if (!['done', 'error', 'landing-finished', 'reconciliation-started'].includes(event.type))
     return false
   if (event.type === 'done' && event.stale) return true
@@ -474,6 +507,7 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
           : event.reason === 'reverted'
             ? 'reverted'
             : undefined
+      if (event.reason === 'interrupted') chat.stoppedTurn = chat.turn
       chat.landingError =
         event.reason === 'failed' ? (event.error ?? 'The landing failed.') : undefined
       chat.decision =

@@ -55,6 +55,8 @@ const measure = (over = {}) => ({
 const busy = (kind) => {
   const label = kind === 'retry' ? 'Retrying…' : 'Resolving…'
   return measure({
+    title: kind === 'retry' ? 'Retrying the check…' : 'Resolving changes…',
+    detail: 'Trezi is working on the held changes.',
     busy: true,
     actions: kind === 'retry' ? ['Discard', label, 'Resolve'] : ['Discard', 'Retry', label],
     disabled: [true, true, true],
@@ -77,7 +79,7 @@ assert.deepEqual(
   []
 )
 // RED: what a delayed or missing busy state looks like at the held boundary.
-assert.match(busyProblems(measure(), 'retry').join('; '), /not busy.*Retrying….*spinner/)
+assert.match(busyProblems(measure(), 'retry').join('; '), /status.*not busy.*Retrying….*spinner/)
 assert.match(busyProblems(busy('retry'), 'resolve').join('; '), /no Resolving…/)
 const enabled = busy('retry')
 enabled.buttons[0].disabled = false

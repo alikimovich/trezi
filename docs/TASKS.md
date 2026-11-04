@@ -3,6 +3,20 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Owned recoverable failure presentation (LKM-509)
+
+- [x] Derive the held card's status from the running turn or recovery request and start automatic Resolve before publishing its parked snapshot.
+- [x] Keep user decisions visible and terminal reports/actions intact; extend controller and native consumer fixtures for status, recovery, and Stop.
+- [x] Review repair: retain settled Stop against a late failed park for its turn, and assert the active-turn parked status before automatic Resolve.
+- [x] CI repair: update the offscreen recovery card constructor's busy status and check display paths in the terminal state while retaining an active status assertion.
+- [x] Review repair: keep an older failed park visible during an unrelated turn and reject late decision parks for the settled Stop turn.
+- [x] Review repair: preserve Stop settled by turn-state without a terminal event against late failed or decision parks; retain its paused queue action.
+- [x] Review repair: distinguish explicit Keep settlements from old Stop callbacks; show genuine failed-check report and Retry, and retain Revert and Finish outcomes.
+- [x] Review repair: retain the explicit Keep settlement across all old parked callbacks, including interrupted; allow a fresh turn and user Retry to own later outcomes.
+- [x] Review repair: classify empty-file and rejected Keep failures through the terminal Problem, report, and Retry path before retaining the authoritative settlement.
+- [x] Review repair: distinguish old Stop callbacks from a new Resolve request during its active window with the initiating recovery request ID.
+- [x] Review repair: correlate stopped-generation landings with their originating turn across Resolve handover and tag genuine Retry callbacks with the admitted recovery request ID.
+- [ ] Manager: exact-head CI, independent review, and post-merge native acceptance on main.
 ## LKM-515 — Concise installer progress and per-install log
 
 - [x] Keep dependency, compiler, signing and timing output in a local per-install log, with concise default phases and a `--verbose` option.

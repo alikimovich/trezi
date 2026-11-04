@@ -21,9 +21,10 @@ interface ReconciliationDeps {
     message: string,
     transcript: SessionTranscriptEntry[],
     terminal: TurnTerminalOutcome,
-    reconcile: boolean
+    reconcile: boolean,
+    turn?: string
   ) => Promise<string[] | null>
-  showParked: (key: string) => void
+  showParked: (key: string, turn?: string) => void
   // The conversation owner's transitions (S11). Absent in unit tests of the policy alone.
   /** landing → running for the continuation run; false when the owner refuses it. */
   continued?: (key: string, turn: string, run: number) => Promise<boolean>
@@ -62,7 +63,7 @@ export class ReconciliationCoordinator {
     const finish = async (): Promise<void> => {
       if (!current()) return
       this.resolving.delete(key)
-      d.showParked(key)
+      d.showParked(key, turn)
       const completedAt =
         turn && d.landed ? await d.landed(key, turn).catch(() => undefined) : undefined
       if (!current()) return
@@ -81,7 +82,8 @@ export class ReconciliationCoordinator {
         message,
         session?.record.transcript ?? [],
         preparation.cancelled ? 'failed' : terminal,
-        !wasResolving
+        !wasResolving,
+        turn
       )
       if (!current()) return
       const next = run + 1
