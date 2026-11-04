@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-467 CI build repair: More inspection
+
+- The next ad hoc TreziHost build reached a second Swift type-check timeout in `moreInspect()`. It now computes menu titles, visibility and each segment list as separately typed values, assigns the original inspection keys, then merges Mark up inspection. The toolbar action fixture also checks that the neighboring More menu remains enabled with its three actions. The exact-head CI build is needed to confirm the compiler repair; native GUI fixture execution remains with the manager.
+
 ## 2026-11-03 — LKM-467 CI build repair: inspection expression
 
 - The ad hoc TreziHost build timed out while Swift type-checked the large `Shell.inspect()` dictionary. Split its existing keys into typed sidebar, toolbar and chat sections, precomputed the project-cell edges, and merged sections in the original order. This preserves the pipe-only inspection payload while giving the compiler smaller expressions to check. The exact-head CI app build remains the final confirmation.

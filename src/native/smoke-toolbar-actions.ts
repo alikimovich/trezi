@@ -207,6 +207,12 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
       'the Mark up button is ready'
     )
     assert.equal(rest.markupActive, false, 'the button rests while no overlay is open')
+    assert.equal(rest.moreEnabled, true, 'the neighboring More menu stays enabled')
+    assert.deepEqual(
+      rest.moreMenu,
+      ['Reload Without Cache', 'Restart Dev Server (clean cache)', 'Switch JS / Native Preview'],
+      'the neighboring More menu keeps its actions'
+    )
     assert.ok(!rest.moreMenu.includes('Mark up'), 'the … menu has no Mark up entry')
     const cover = (await markup()).cover
     await click('markup')
