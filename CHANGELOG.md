@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.13.19] - 2026-11-04
+
 ### Changed
 
 - Installer progress is concise by default, with `--verbose` and a per-install log for build diagnostics (LKM-515).
