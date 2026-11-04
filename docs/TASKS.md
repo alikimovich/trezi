@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Ordinary private check recovery (LKM-478)
+
+- [x] Trace the ordinary completion gate on `origin/main` and reuse the existing private check runner before exact-tree landing.
+- [x] Cover missing and stale evidence, failed checks, Stop, and terminal settlement with focused fixtures; add an ordinary recovery assertion to the disposable-profile native integration fixture.
+- [x] Review repair: track in-flight `preview_verify` through receipt settlement and assert ordinary completion uses that single browser receipt.
+- [x] CI repair: update peer and lesson fixtures for ordinary automatic checks while retaining Stop and lesson deduplication assertions.
+- [ ] Manager: independent review, configured CI and native acceptance on the merged source.
 ## Native chat during project opening (LKM-475)
 
 - [x] Keep the selected chat column, header, transcript and draft beside the preview through opening and failed-open states; keep Opening and error in the preview.
