@@ -18,8 +18,11 @@ posts mouse-down, captures a resting baseline and a held frame, reads the segmen
 while held and after release outside the segment. The fixture records Select mode,
 overlay state and both accent images at all three points. A completed Select or
 Mark up action is validated and restored through its normal toolbar click before
-the next step. Every idle, hover, focus and disabled step starts and ends at the
-asserted resting semantic baseline; focus and disabled are synthetic setup. A
+the next step. Overlay panel, Code/source, Layers, desktop/mobile viewport,
+expanded layout and speed are also recorded; a completed action is checked against
+its segment and restored by the ordinary toolbar or speed-menu route. Every idle,
+hover, focus and disabled step starts and ends with exact resting semantics,
+preview geometry and page viewport/scroll; focus and disabled are synthetic setup. A
 pressed image is allowed only while its matching semantic state is active. The
 fixture fails if the held crop is identical to the baseline or the press overlaps
 the next step. "One shared treatment" is measured,

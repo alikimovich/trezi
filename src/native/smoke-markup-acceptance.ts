@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import { buildStamp } from './app-version'
 import type { NativeBridge } from './bridge'
 import {
@@ -61,27 +62,118 @@ export async function checkMarkupAcceptance(host: NativeBridge) {
     assert.equal(reply.route, 'real event route', `${segment}: posted AppKit click`)
     return reply
   }
-  const semantic = async (): Promise<MarkupSemantic> => {
-    const [s, m] = await Promise.all([shell(), markup()])
+  const readState = async (): Promise<{
+    semantic: MarkupSemantic
+    geometry: Record<string, unknown>
+  }> => {
+    const [s, m, overlay, source, layers, layout, speed] = (await Promise.all([
+      shell(),
+      markup(),
+      host.request('previewOverlayInspect'),
+      host.request('sourceInspect'),
+      host.request('layersInspect'),
+      host.request('layoutInspect'),
+      host.request('previewSpeedInspect')
+    ])) as Record<string, any>[]
     return {
-      selectMode: s.selectMode,
-      markupOpen: m.open,
-      selectAccent: s.selectSegmentProminent,
-      markupAccent: s.markupSegmentProminent
+      semantic: {
+        selectMode: s.selectMode,
+        markupOpen: m.open,
+        selectAccent: s.selectSegmentProminent,
+        markupAccent: s.markupSegmentProminent,
+        overlayPanel: overlay.panelShown,
+        codeOpen: s.codeOpen,
+        sourceVisible: source.visible,
+        layersVisible: layers.visible,
+        viewport: s.viewport,
+        chatHidden: layout.chatHidden,
+        speed: speed.speed
+      },
+      geometry: m.geometry
     }
   }
-  const restoreBaseline = async (label: string) => {
-    let state = await semantic()
-    if (state.markupOpen) {
+  const restoreBaseline = async (
+    label: string,
+    geometry?: Record<string, unknown>,
+    viewport?: Record<string, unknown>
+  ) => {
+    let current = (await readState()).semantic
+    if (current.overlayPanel) {
+      await click('overlay')
+      await waitFor(
+        async () =>
+          !((await host.request('previewOverlayInspect')) as { panelShown: boolean }).panelShown,
+        `${label}: overlay panel closed`
+      )
+    }
+    current = (await readState()).semantic
+    if (current.markupOpen) {
       await click('markup')
       await waitFor(async () => !(await markup()).open, `${label}: Mark up cancel`)
     }
-    state = await semantic()
-    if (state.selectMode) {
+    current = (await readState()).semantic
+    if (current.codeOpen !== current.sourceVisible)
+      current = await waitFor(async () => {
+        const seen = (await readState()).semantic
+        return seen.codeOpen === seen.sourceVisible ? seen : false
+      }, `${label}: Code panel and action agree`)
+    if (current.codeOpen || current.sourceVisible) {
+      await click('code')
+      await waitFor(
+        async () => !((await host.request('sourceInspect')) as { visible: boolean }).visible,
+        `${label}: Code closed`
+      )
+    }
+    current = (await readState()).semantic
+    if (current.layersVisible) {
+      await click('layers')
+      await waitFor(
+        async () => !((await host.request('layersInspect')) as { visible: boolean }).visible,
+        `${label}: Layers closed`
+      )
+    }
+    current = (await readState()).semantic
+    if (current.chatHidden) {
+      await click('expand')
+      await waitFor(
+        async () => !((await host.request('layoutInspect')) as { chatHidden: boolean }).chatHidden,
+        `${label}: layout restored`
+      )
+    }
+    current = (await readState()).semantic
+    if (current.viewport !== 'desktop') {
+      await click('device')
+      await waitFor(
+        async () => (await shell()).viewport === 'desktop',
+        `${label}: desktop viewport`
+      )
+    }
+    current = (await readState()).semantic
+    if (current.selectMode) {
       await click('select-object')
       await waitFor(async () => !(await shell()).selectMode, `${label}: Select off`)
     }
-    assertMarkupBaseline(label, await semantic())
+    current = (await readState()).semantic
+    if (current.speed !== 1) {
+      assert.equal(
+        await host.request('shellPerform', { action: 'preview-speed', row: '1' }),
+        true,
+        `${label}: normal speed route`
+      )
+      await waitFor(async () => (await readState()).semantic.speed === 1, `${label}: normal speed`)
+    }
+    const restored = await readState()
+    assertMarkupBaseline(label, restored.semantic)
+    if (geometry)
+      await waitFor(
+        async () => isDeepStrictEqual((await readState()).geometry, geometry),
+        `${label}: exact preview geometry`
+      )
+    if (viewport)
+      await waitFor(
+        async () => isDeepStrictEqual(await page(), viewport),
+        `${label}: exact page viewport and scroll`
+      )
   }
   const segments = [
     'select-object',
@@ -144,11 +236,14 @@ export async function checkMarkupAcceptance(host: NativeBridge) {
   }
   const matrix = async (appearance: string, toggle: ReturnType<typeof markupToggleChecks>) => {
     await host.request('shellPerform', { action: 'window-appearance', row: appearance })
+    await restoreBaseline(`${appearance} matrix start`)
+    const baselineGeometry = (await readState()).geometry
+    const baselinePage = await page()
     for (const phase of ['idle', 'hover', 'pressed', 'focus', 'disabled'] as const) {
       const measuredStates: Record<string, any>[] = []
       for (const segment of segments) {
         const label = `${appearance} ${phase} ${segment}`
-        await restoreBaseline(`${label} before`)
+        await restoreBaseline(`${label} before`, baselineGeometry, baselinePage)
         const state = (await host.request('markupAcceptanceProbe', { segment, phase })) as Record<
           string,
           any
@@ -166,18 +261,21 @@ export async function checkMarkupAcceptance(host: NativeBridge) {
         measuredStates.push(measured)
         ;(evidence.steps as Record<string, unknown>)[`${appearance}-${phase}-${segment}`] = measured
         if (phase === 'pressed') {
+          const settled = await readState()
           const observedAction = assertPressedTransition(
             label,
             segment,
             state.before,
             state,
-            state.after
+            state.after,
+            settled.semantic
           )
           const transition = {
-            before: state.before.semantic,
-            held: state.semantic,
-            after: state.after.semantic,
-            observedAction
+            before: { semantic: state.before.semantic, geometry: state.before.geometry },
+            held: { semantic: state.semantic, geometry: state.geometry },
+            after: { semantic: state.after.semantic, geometry: state.after.geometry },
+            settled,
+            ...observedAction
           }
           ;(evidence.steps as Record<string, unknown>)[
             `${appearance}-pressed-transition-${segment}`
@@ -193,16 +291,11 @@ export async function checkMarkupAcceptance(host: NativeBridge) {
           writeFileSync(join(dir, `${name}.png`), Buffer.from(pressedPNG, 'base64'))
           ;(evidence.captures as Record<string, string>)[name] = `${name}.png`
           record()
-          assert.deepEqual(
-            await semantic(),
-            state.after.semantic,
-            `${label}: observed release state`
-          )
           // An outside release can complete Select's click. Its accent is then valid until
           // the normal Select action turns it off for the next matrix step.
         } else await capture(`${appearance}-${phase}-${segment}`)
         await host.request('markupAcceptanceProbe', { segment, phase: 'reset' })
-        await restoreBaseline(`${label} after reset`)
+        await restoreBaseline(`${label} after reset`, baselineGeometry, baselinePage)
       }
       sharedTreatment(`${appearance} ${phase}`, measuredStates)
     }

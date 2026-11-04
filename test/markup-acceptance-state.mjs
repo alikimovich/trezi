@@ -23,12 +23,46 @@ assertMarkupAppearance('active Select', 'select-object', {
 const before = { prominent: false, focused: false, semantic: rest }
 const selected = { prominent: true, focused: false, semantic: active }
 assert.equal(
-  assertPressedTransition('Select release', 'select-object', before, before, selected),
+  assertPressedTransition('Select release', 'select-object', before, before, selected)
+    .observedAction,
   'select-object'
 )
 assert.equal(
-  assertPressedTransition('focus release', 'select-object', before, before, before),
+  assertPressedTransition('focus release', 'select-object', before, before, before).observedAction,
   'none'
+)
+const codeOpen = { ...rest, codeOpen: true, sourceVisible: true }
+assert.equal(
+  assertPressedTransition('Code release', 'code', before, before, {
+    prominent: false,
+    focused: false,
+    semantic: codeOpen
+  }).observedAction,
+  'code'
+)
+assert.equal(
+  assertPressedTransition('delayed Code', 'code', before, before, before, codeOpen).observedAction,
+  'code'
+)
+assert.throws(() => assertMarkupBaseline('Code leftover', codeOpen), /exact resting baseline/)
+assert.equal(
+  assertPressedTransition(
+    'transient Overlay',
+    'overlay',
+    before,
+    { prominent: false, focused: false, semantic: { ...rest, overlayPanel: true } },
+    before
+  ).observedAction,
+  'overlay'
+)
+assert.throws(
+  () =>
+    assertPressedTransition('wrong owner', 'expand', before, before, {
+      prominent: false,
+      focused: false,
+      semantic: codeOpen
+    }),
+  /codeOpen action owner/
 )
 assert.throws(
   () =>

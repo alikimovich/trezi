@@ -5,13 +5,27 @@ export type MarkupSemantic = {
   markupOpen: boolean
   selectAccent: boolean
   markupAccent: boolean
+  overlayPanel: boolean
+  codeOpen: boolean
+  sourceVisible: boolean
+  layersVisible: boolean
+  viewport: string
+  chatHidden: boolean
+  speed: number
 }
 
 export const restingMarkupSemantic: MarkupSemantic = {
   selectMode: false,
   markupOpen: false,
   selectAccent: false,
-  markupAccent: false
+  markupAccent: false,
+  overlayPanel: false,
+  codeOpen: false,
+  sourceVisible: false,
+  layersVisible: false,
+  viewport: 'desktop',
+  chatHidden: false,
+  speed: 1
 }
 
 // The accent belongs to an active semantic state, never to focus or a stale image.
@@ -53,13 +67,51 @@ export function assertPressedTransition(
   segment: string,
   before: { prominent: boolean; focused: boolean; semantic: MarkupSemantic },
   held: { prominent: boolean; focused: boolean; semantic: MarkupSemantic },
-  after: { prominent: boolean; focused: boolean; semantic: MarkupSemantic }
+  after: { prominent: boolean; focused: boolean; semantic: MarkupSemantic },
+  settled = after.semantic
 ) {
   assertMarkupBaseline(`${label} before down`, before.semantic)
   assertMarkupAppearance(`${label} held`, segment, held)
   assertMarkupAppearance(`${label} released`, segment, after)
-  if (after.semantic.selectMode)
-    assert.equal(segment, 'select-object', `${label}: Select action owner`)
-  if (after.semantic.markupOpen) assert.equal(segment, 'markup', `${label}: Mark up action owner`)
-  return after.semantic.selectMode ? 'select-object' : after.semantic.markupOpen ? 'markup' : 'none'
+  assert.equal(
+    after.semantic.selectAccent,
+    after.semantic.selectMode,
+    `${label}: Select release accent`
+  )
+  assert.equal(
+    after.semantic.markupAccent,
+    after.semantic.markupOpen,
+    `${label}: Mark up release accent`
+  )
+  assert.equal(settled.selectAccent, settled.selectMode, `${label}: settled Select accent`)
+  assert.equal(settled.markupAccent, settled.markupOpen, `${label}: settled Mark up accent`)
+  const owners: Partial<Record<keyof MarkupSemantic, string>> = {
+    selectMode: 'select-object',
+    markupOpen: 'markup',
+    codeOpen: 'code',
+    sourceVisible: 'code',
+    layersVisible: 'layers',
+    viewport: 'device',
+    chatHidden: 'expand',
+    speed: 'speed'
+  }
+  const changes = (Object.keys(owners) as (keyof MarkupSemantic)[]).filter(
+    (key) =>
+      before.semantic[key] !== held.semantic[key] ||
+      before.semantic[key] !== after.semantic[key] ||
+      before.semantic[key] !== settled[key]
+  )
+  for (const key of changes) assert.equal(segment, owners[key], `${label}: ${key} action owner`)
+  if (held.semantic.overlayPanel || after.semantic.overlayPanel || settled.overlayPanel)
+    assert.equal(segment, 'overlay', `${label}: overlay panel action owner`)
+  return {
+    observedAction:
+      changes.length ||
+      held.semantic.overlayPanel ||
+      after.semantic.overlayPanel ||
+      settled.overlayPanel
+        ? segment
+        : 'none',
+    changes
+  }
 }
