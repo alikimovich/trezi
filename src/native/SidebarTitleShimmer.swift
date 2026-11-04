@@ -1,5 +1,55 @@
 import AppKit
 
+/// Transient title treatment while a selected project's conversation title is unknown.
+/// The model keeps its real title; only these labels receive changing fixed-width glyphs.
+final class LoadingChatTitle: NSObject {
+    static let placeholder = "••••••••"
+    private static let glyphs = Array("◇◈○◌□▢△▽")
+    private weak var label: NSTextField?
+    private var timer: Timer?
+    private let originalFont: NSFont
+    private var active = false
+    private(set) var mode = "off"
+
+    init(label: NSTextField) {
+        self.label = label
+        originalFont = label.font ?? .systemFont(ofSize: NSFont.systemFontSize)
+        super.init()
+        label.font = .monospacedSystemFont(ofSize: originalFont.pointSize, weight: .regular)
+        label.setAccessibilityLabel("Loading conversation")
+        label.stringValue = Self.placeholder
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(motionChanged), name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+    }
+    deinit { stop(); NSWorkspace.shared.notificationCenter.removeObserver(self) }
+
+    func refresh(active: Bool = true) {
+        self.active = active
+        timer?.invalidate(); timer = nil
+        guard active else { mode = "off"; return }
+        guard label?.window != nil, !SidebarMarqueeTitle.reduceMotion else {
+            label?.stringValue = Self.placeholder
+            mode = "still"
+            return
+        }
+        mode = "deciphering"
+        tick()
+        let timer = Timer(timeInterval: 0.18, repeats: true) { [weak self] _ in self?.tick() }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+    @objc private func motionChanged() { refresh(active: active) }
+    private func tick() {
+        guard active, label?.window != nil, !SidebarMarqueeTitle.reduceMotion else { refresh(active: active); return }
+        label?.stringValue = String((0..<8).map { _ in Self.glyphs.randomElement()! })
+    }
+    func stop() {
+        active = false
+        timer?.invalidate(); timer = nil
+        mode = "off"
+        label?.font = originalFont
+    }
+}
+
 /// LKM-389: the in-chat status line's shimmer (`ChatActivity`) on a sidebar chat title, with the
 /// same band and timing. The chat lays a primary copy of its text over a secondary one and masks
 /// the copy; here the label is the only text, so it keeps its vibrancy, selection colour,

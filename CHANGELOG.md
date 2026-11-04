@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+
+- Unknown chat titles decipher during opening, and provider sign-in choices wait for confirmed signed-out status (LKM-485).
+
 ## [0.13.16] - 2026-11-03
 
 ### Fixed

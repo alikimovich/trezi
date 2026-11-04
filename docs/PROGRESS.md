@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-03 — LKM-485 pending conversation titles
+
+- The shell now marks only unknown titles in the selected project while conversation or project hydration is pending. AppKit renders fixed-width transient glyphs in those rows and the selected header; it stops the timer on resolution, error, row removal and window detach. Reduce Motion holds a static placeholder and accessibility reads “Loading conversation.” Cached titles and ready untitled chats retain their ordinary text.
+- The initial provider card waits for a ready chat and confirmed signed-out metadata for both built-in seats. Failed or checking metadata does not imply signed out. Focused unit state assertions and a disposable-profile `chat-gate` loading-to-resolved fixture cover the presentation; native capture acceptance remains for the manager after merge.
+
 ## 2026-11-03 — LKM-482 sidebar Restore capture
 
 - The native `chat-gate` fixture captured immediately after Restore made the chat column visible, while its 240 ms width animation was still running. The failed receipt showed a status origin of 354.6 pt with the expected final leading edge at 440 pt. The fixture now waits for the layout's final fraction before checking and capturing the restored error state; the opening and failed-open geometry assertions remain in place.

@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Pending chat titles and provider choice (LKM-485)
+
+- [x] Show transient deciphering title glyphs only for unknown active-project chats during hydration, with stable accessibility and Reduce Motion treatment.
+- [x] Defer the initial provider choice until both built-in sign-in checks confirm signed out; retain the authenticated and ready paths.
+- [x] Cover state changes in focused unit checks and loading-to-resolved captures in the disposable-profile `chat-gate` fixture.
+- [ ] Manager: independent review, CI and post-merge native sidebar acceptance on main.
+
 ## Native sidebar suite Restore capture (LKM-482)
 
 - [x] Wait for the chat column's Restore animation to finish before asserting and capturing the preview status geometry.

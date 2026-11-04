@@ -19,6 +19,7 @@ final class SidebarChatCell: SourceListCell {
     private var chevron: NSImageView?
     /// Only while the chat's model is at work (`SidebarTitleShimmer.swift`).
     private(set) var shimmer: SidebarTitleShimmer?
+    private(set) var loadingTitle: LoadingChatTitle?
     private(set) var hovered = false
     private var tracking: NSTrackingArea?
     private var resting: NSLayoutConstraint?, hovering: NSLayoutConstraint?
@@ -52,7 +53,8 @@ final class SidebarChatCell: SourceListCell {
         } else {
             let title = SidebarMarqueeTitle(title: row.title)
             self.title = title; textField = title.label; content = title
-            toolTip = row.title
+            toolTip = row.loadingTitle ? "Loading conversation" : row.title
+            if row.loadingTitle { loadingTitle = LoadingChatTitle(label: title.label) }
             if row.kind == "history" {
                 let detail = NSTextField(labelWithString: row.detail)
                 detail.font = .systemFont(ofSize: NSFont.smallSystemFontSize); detail.textColor = .tertiaryLabelColor
@@ -63,7 +65,7 @@ final class SidebarChatCell: SourceListCell {
                                 title.trailingAnchor.constraint(lessThanOrEqualTo: detail.leadingAnchor, constant: -6)]
                 setAccessibilityLabel(row.detail.isEmpty ? row.title : "\(row.title), \(row.detail)")
             } else {
-                setAccessibilityLabel(row.running ? "\(row.title), Running" : row.unread ? "\(row.title), Unread answer" : row.title)
+                setAccessibilityLabel(row.loadingTitle ? "Loading conversation" : row.running ? "\(row.title), Running" : row.unread ? "\(row.title), Unread answer" : row.title)
                 let resting = title.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8)
                 constraints.append(resting); self.resting = resting
                 if canArchive {
@@ -74,7 +76,7 @@ final class SidebarChatCell: SourceListCell {
                     archive.symbolConfiguration = .init(pointSize: 11, weight: .regular)
                     archive.toolTip = "Archive Chat"
                     // LKM-379: VoiceOver gets the button's cell, so the label goes there.
-                    archive.cell?.setAccessibilityLabel("Archive \(row.title)")
+                    archive.cell?.setAccessibilityLabel(row.loadingTitle ? "Archive loading conversation" : "Archive \(row.title)")
                     archive.alphaValue = 0
                     self.archive = archive; views.append(archive)
                     hovering = title.trailingAnchor.constraint(lessThanOrEqualTo: archive.leadingAnchor, constant: -4)
@@ -105,6 +107,7 @@ final class SidebarChatCell: SourceListCell {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         shimmer?.refresh()
+        loadingTitle?.refresh(active: window != nil)
     }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -271,6 +274,8 @@ extension NativeShell {
         case "marquee-reduce-motion":
             SidebarMarqueeTitle.reduceMotionOverride = id == nil ? nil : id == "on"
             for index in 0..<outline.numberOfRows { (outline.view(atColumn: 0, row: index, makeIfNecessary: false) as? SidebarChatCell)?.shimmer?.refresh() }
+            for index in 0..<outline.numberOfRows { (outline.view(atColumn: 0, row: index, makeIfNecessary: false) as? SidebarChatCell)?.loadingTitle?.refresh() }
+            chatTitleLoading?.refresh()
             return true
         default: return nil
         }
@@ -291,6 +296,7 @@ extension NativeShell {
             var item: [String: Any] = ["id": row.id, "kind": row.kind, "title": row.title, "project": row.project, "parent": parent?.id ?? "",
                     "selected": outline.selectedRow == index, "selectable": outlineView(outline, shouldSelectItem: row),
                     "running": row.running, "thinking": row.thinking, "shimmer": cell.shimmer?.inspect() ?? ["mode": "none"],
+                    "loadingTitle": row.loadingTitle, "titleLoadingMode": cell.loadingTitle?.mode ?? "off",
                     "unread": row.unread, "unreadDot": !cell.dot.isHidden,
                     "detail": cell.detail?.stringValue ?? "", "hovered": cell.hovered,
                     "archive": cell.archive != nil, "archiveVisible": (cell.archive?.alphaValue ?? 0) > 0,

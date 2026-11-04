@@ -86,6 +86,7 @@ struct SidebarHistoryState {
 final class ShellRow: NSObject {
     let id: String, title: String, kind: String, project: String
     let running: Bool
+    let loadingTitle: Bool
     /// The turn's model is at work (LKM-389): a chat row's title shimmers.
     let thinking: Bool
     let unread: Bool
@@ -110,6 +111,7 @@ final class ShellRow: NSObject {
         id = data["id"] as? String ?? ""; title = data["title"] as? String ?? ""
         kind = data["kind"] as? String ?? "chat"; project = data["project"] as? String ?? ""
         running = data["running"] as? Bool ?? false
+        loadingTitle = data["loadingTitle"] as? Bool ?? false
         thinking = data["thinking"] as? Bool ?? false
         unread = data["unread"] as? Bool ?? false
         detail = data["detail"] as? String ?? ""

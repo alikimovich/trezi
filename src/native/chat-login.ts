@@ -36,17 +36,14 @@ const signInActions = (chat: Chat) =>
 
 export function startLoginCard(chat: Chat, readiness: ProviderReadinessMap): NativeChatCard | null {
   if (
+    (chat.chat !== '' && !chat.ready) ||
     chat.messages.length ||
     chat.login ||
-    readiness.claude.status === 'ready' ||
-    readiness.codex.status === 'ready'
+    readiness.claude.status !== 'signed_out' ||
+    readiness.codex.status !== 'signed_out'
   )
     return null
-  const detail =
-    chat.signInMessage ??
-    (readiness.claude.status === 'checking' || readiness.codex.status === 'checking'
-      ? 'Checking provider sign-in…'
-      : 'Sign in to either provider to start chatting.')
+  const detail = chat.signInMessage ?? 'Sign in to either provider to start chatting.'
   return {
     id: 'provider-start',
     title: 'Choose a provider',

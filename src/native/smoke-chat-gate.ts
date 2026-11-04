@@ -176,6 +176,54 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
   )
   const gammaChat = nativeChat.get(gamma.activeSessionKey)
   await until(() => gammaChat.ready, 'selected chat initialized during opening')
+  // Hold the existing chat's title unknown while the project opens. This is a presentation
+  // probe only: no record, title, or credential is written to the disposable profile.
+  gammaChat.ready = false
+  gammaChat.title = ''
+  nativeChat.changed(gammaChat)
+  await until(
+    async () =>
+      (await host.request('shellInspect')).sidebarChats?.some(
+        (row: { id: string; loadingTitle: boolean }) =>
+          row.id === `chat:${gamma.activeSessionKey}` && row.loadingTitle
+      ),
+    'unknown title reaches sidebar'
+  )
+  const pendingTitle = await host.request('shellInspect')
+  const pendingRow = pendingTitle.sidebarChats.find(
+    (row: { id: string }) => row.id === `chat:${gamma.activeSessionKey}`
+  )
+  assert.equal(pendingRow.label, 'Loading conversation')
+  assert.equal(pendingTitle.chatTitleAccessibility, 'Loading conversation')
+  assert.equal(pendingRow.titleLoadingMode, 'deciphering')
+  assert.equal(pendingTitle.chatTitleLoadingMode, 'deciphering')
+  await captureChatGate(host, artifacts, 'title-loading', true, false)
+  await host.request('shellPerform', { action: 'marquee-reduce-motion', row: 'on' })
+  const reducedTitle = await host.request('shellInspect')
+  assert.equal(
+    reducedTitle.sidebarChats.find(
+      (row: { id: string }) => row.id === `chat:${gamma.activeSessionKey}`
+    ).titleLoadingMode,
+    'still'
+  )
+  assert.equal(reducedTitle.chatTitle, '••••••••')
+  await host.request('shellPerform', { action: 'marquee-reduce-motion', row: 'off' })
+  gammaChat.ready = true
+  gammaChat.title = 'Resolved chat'
+  nativeChat.changed(gammaChat)
+  await until(
+    async () => (await host.request('shellInspect')).chatTitle === 'Resolved chat',
+    'resolved title replaces glyphs'
+  )
+  const resolvedTitle = await host.request('shellInspect')
+  assert.equal(resolvedTitle.chatTitleLoadingMode, 'off')
+  assert.equal(
+    resolvedTitle.sidebarChats.find(
+      (row: { id: string }) => row.id === `chat:${gamma.activeSessionKey}`
+    ).titleLoadingMode,
+    'off'
+  )
+  await captureChatGate(host, artifacts, 'title-resolved', true, false)
   const transcriptID = 'chat-gate-existing-message'
   const transcriptText = 'An existing reply in this selected chat.'
   gammaChat.messages.push({

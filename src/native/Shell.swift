@@ -89,6 +89,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
     let chatHeader = ChatToolbarView()
     private let chatTitle = NSTextField(labelWithString: "Chat")
+    var chatTitleLoading: LoadingChatTitle?
     // The toolbar islands paint their own glass through this control; a standalone NSButton
     // inside a custom toolbar item has no such material, even with a textured bezel.
     private let chatNewButton = IslandSegmentedControl(images: [toolbarSymbol("square.and.pencil", "New Chat") ?? NSImage()], trackingMode: .momentary, target: nil, action: nil)
@@ -422,8 +423,17 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         for (key, item) in toolbarItems {
             item.isEnabled = key == "chat" ? true : key == "code" || key == "expand" ? currentProject != nil : key == "branch" ? previewState["branch"] is String : ready
         }
-        chatTitle.stringValue = allRows.first(where: { $0.id == selectedID })?.title ?? "Chat"
-        chatTitle.toolTip = chatTitle.stringValue
+        let selected = allRows.first(where: { $0.id == selectedID })
+        if selected?.loadingTitle == true {
+            if chatTitleLoading == nil { chatTitleLoading = LoadingChatTitle(label: chatTitle) }
+            chatTitleLoading?.refresh(active: currentProject != nil && !chatHidden)
+            chatTitle.toolTip = "Loading conversation"
+        } else {
+            chatTitleLoading?.stop(); chatTitleLoading = nil
+            chatTitle.stringValue = selected?.title ?? "Chat"
+            chatTitle.toolTip = chatTitle.stringValue
+            chatTitle.setAccessibilityLabel(chatTitle.stringValue)
+        }
         if chatHeaderWidth != nil {
             alignChatHeader()
         }
@@ -666,7 +676,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             "enabled":toolbarItems.mapValues { $0.isEnabled }
         ]
         let chatInspect: [String: Any] = [
-            "chatTitle":chatTitle.stringValue, "chatTitlePlain":toolbarItems["chat"]?.action == nil,
+            "chatTitle":chatTitle.stringValue, "chatTitleLoadingMode":chatTitleLoading?.mode ?? "off", "chatTitleAccessibility":chatTitle.accessibilityLabel() ?? "", "chatTitlePlain":toolbarItems["chat"]?.action == nil,
             "chatNewVisible":!chatNewButton.isHidden, "chatNewEnabled":chatNewButton.isEnabled,
             "chatNewSegmented":chatNewButton.segmentCount == 1, "chatNewTextured":chatNewButton.segmentStyle == .texturedRounded,
             "chatNewMomentary":chatNewButton.trackingMode == .momentary,
