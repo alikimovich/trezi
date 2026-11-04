@@ -303,8 +303,15 @@ const stoppedGenerationParks = [
   { reason: 'failed', error: 'late Stop check' },
   { decision: 'Keep ours?' }
 ]
+const stoppedGeneration = chat.turn
 const oldPark = (parked) =>
-  emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'], ...parked })
+  emit({
+    type: 'isolation',
+    state: 'parked',
+    files: ['src/a.tsx'],
+    turn: stoppedGeneration,
+    ...parked
+  })
 const freshHeldTurn = async () => {
   await controller.run(chat, {
     id: crypto.randomUUID(),
@@ -368,6 +375,34 @@ for (const parked of stoppedGenerationParks) {
   assert.equal(chat.recoveryReport, failedKeepReport)
   assert.ok(card('conflict').actions.some((action) => action.action === 'landing-retry'))
 }
+// Retry is a new user operation on the same held turn. Its callback must replace
+// the Keep failure before the owner returns, while an old Stop callback cannot.
+let retryStage
+answers['agent:retry-landing'] = (_chat, requestId) => {
+  const beforeOldPark = chat.version
+  oldPark({ reason: 'failed', error: 'late Stop callback' })
+  const afterOldPark = chat.version
+  emit({
+    type: 'isolation',
+    state: 'parked',
+    files: ['src/retry.tsx'],
+    reason: 'failed',
+    error: 'The new Retry check failed.',
+    recoveryId: requestId
+  })
+  retryStage = { requestId, beforeOldPark, afterOldPark, error: chat.landingError }
+  return { ok: true, state: 'parked', error: 'The new Retry check failed.' }
+}
+await act('landing-retry', 'conflict')
+assert.equal(retryStage.requestId, chat.recoveryId, 'Retry passes its admitted request id')
+assert.equal(retryStage.afterOldPark, retryStage.beforeOldPark)
+assert.equal(retryStage.error, 'The new Retry check failed.')
+assert.deepEqual(chat.isolationFiles, ['src/retry.tsx'])
+assert.equal(card('conflict')?.title, 'Problem')
+assert.match(card('conflict').detail, /The new Retry check failed/)
+assert.ok(chat.recoveryReport)
+assert.ok(card('conflict').actions.some((action) => action.action === 'landing-retry'))
+delete answers['agent:retry-landing']
 // Resolve is a new user action on the failed hold. A failed staging check emits
 // its parked result before the owner returns, without starting an agent turn.
 let resolveStage
@@ -420,6 +455,15 @@ await act('resolve', 'conflict')
 assert.equal(chat.isRunning, true, 'Resolve handed off to its agent turn')
 assert.equal(chat.landingError, 'Resolve staging check failed.')
 assert.equal(card('conflict')?.title, 'Working on held changes…', 'the admitted turn owns its hold')
+const handedOffTurn = chat.turn
+oldPark({ reason: 'failed', error: 'late Stop after Resolve handover' })
+assert.equal(chat.turn, handedOffTurn)
+assert.equal(
+  chat.landingError,
+  'Resolve staging check failed.',
+  'old Stop cannot overwrite the new turn'
+)
+assert.equal(card('conflict')?.title, 'Working on held changes…')
 emit({ type: 'done' })
 emit({
   type: 'isolation',
@@ -711,7 +755,7 @@ await pendingRetry
 assert.equal(card('conflict').actions[1].label, 'Retry')
 await act('landing-retry', 'conflict')
 await tick()
-assert.deepEqual(calls.at(-1), ['agent:retry-landing', 'a'])
+assert.deepEqual(calls.at(-1), ['agent:retry-landing', 'a', chat.recoveryId])
 emit({ type: 'isolation', state: 'merged', files: ['src/a.tsx'], group: 'chat:w:3' })
 assert.equal(card('conflict'), undefined, 'a landed retry clears the card')
 assert.equal(chat.landingError, undefined)

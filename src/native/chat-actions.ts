@@ -174,7 +174,7 @@ export async function cardAction(
   if (action.action === 'landing-retry')
     return recoveryRequest(controller, chat, 'retry', async () => {
       chat.paused = false
-      const result = await invoke('agent:retry-landing', chat.chat)
+      const result = await invoke('agent:retry-landing', chat.chat, chat.recoveryId)
       if (!result.ok) throw new Error(result.error ?? 'Unable to retry the landing.')
       if (result.state === 'parked' && chat.isolation === 'parked')
         chat.recoveryProblem =

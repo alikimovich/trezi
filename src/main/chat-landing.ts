@@ -96,7 +96,8 @@ export function holdTurn(
   verdict: GateVerdict | null,
   turn: SessionTranscriptEntry[] = [],
   recoveryFailure?: string,
-  recoveryId?: string
+  recoveryId?: string,
+  originTurn?: string
 ): string {
   const reason =
     recoveryFailure &&
@@ -129,7 +130,8 @@ export function holdTurn(
     'failed',
     reason,
     undefined,
-    recoveryId
+    recoveryId,
+    originTurn
   )
   return reason
 }

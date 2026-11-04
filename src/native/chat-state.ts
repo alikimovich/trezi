@@ -352,6 +352,10 @@ export function late(chat: Chat, event: AgentEvent) {
       !chat.recoveryTimedOut &&
       !!event.recoveryId &&
       event.recoveryId === chat.recoveryId
+    // The producer captures the originating turn before it queues a landing.
+    // A Resolve handover may replace chat.turn while that old landing finishes.
+    if (event.turn && chat.turn && event.turn !== chat.turn) return true
+    if (event.recoveryId && !ownedRecovery) return true
     if (
       chat.keepingStopped ||
       (chat.settledStoppedKeep && chat.settledStoppedKeep.turn === chat.turn && !ownedRecovery)

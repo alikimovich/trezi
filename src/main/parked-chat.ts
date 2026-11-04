@@ -18,7 +18,7 @@ import { retireWorktreeBranch } from './worktrees'
  */
 
 /** Restore the fallback after an automatic attempt was cancelled or unavailable. */
-export function showParkedChat(sessionKey: string): void {
+export function showParkedChat(sessionKey: string, turn?: string): void {
   const st = states.get(sessionKey)
   // LKM-406: the hold that ended this reconciliation announced its decision already; only
   // this repeat is skipped, so a re-hold or a later restore still reaches the chat.
@@ -34,7 +34,9 @@ export function showParkedChat(sessionKey: string): void {
       undefined,
       st.landingError ? 'failed' : st.interrupted ? 'interrupted' : undefined,
       st.landingError,
-      st.decision
+      st.decision,
+      undefined,
+      turn
     )
 }
 

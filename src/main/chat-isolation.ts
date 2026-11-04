@@ -303,7 +303,9 @@ export function afterTurn(
   transcript: SessionTranscriptEntry[] = [],
   terminal: TurnTerminalOutcome = 'success',
   reconcile = false,
-  ordinaryCompletion = false
+  ordinaryCompletion = false,
+  originTurn?: string,
+  recoveryId?: string
 ): Promise<string[] | null> {
   const st = states.get(sessionKey)
   if (!st) return Promise.resolve(null)
@@ -342,7 +344,17 @@ export function afterTurn(
       admitted = true
       st.lastUsed = Date.now()
       if (st.reclaimed) return null
-      const batch = landBatch(sessionKey, st, message, turn, terminal, reconcile, recoveryFailure)
+      const batch = landBatch(
+        sessionKey,
+        st,
+        message,
+        turn,
+        terminal,
+        reconcile,
+        recoveryFailure,
+        originTurn,
+        recoveryId
+      )
       batch.then(
         () => {
           settled = 'ok'
@@ -361,24 +373,32 @@ export function afterTurn(
     })
     .catch(async (error) => {
       if (!(error instanceof LandingEnded)) {
-        await landingFailed(sessionKey, st, error, turn)
+        await landingFailed(sessionKey, st, error, turn, () => false, originTurn, recoveryId)
         return null
       }
       if (!admitted) {
-        await landingFailed(sessionKey, st, error, turn)
+        await landingFailed(sessionKey, st, error, turn, () => false, originTurn, recoveryId)
         return null
       }
       // An admitted batch owns the lease until its real Git work finishes. Stop
       // ends the visible wait, but never interrupts a write partway through apply.
       draining.add(sessionKey)
       try {
-        await landingFailed(sessionKey, st, error, turn, () => settled !== 'pending')
+        await landingFailed(
+          sessionKey,
+          st,
+          error,
+          turn,
+          () => settled !== 'pending',
+          originTurn,
+          recoveryId
+        )
         const late = await write.then(
           (files) => ({ files }),
           (cause) => ({ cause })
         )
         if ('cause' in late) {
-          await landingFailed(sessionKey, st, late.cause, turn)
+          await landingFailed(sessionKey, st, late.cause, turn, () => false, originTurn, recoveryId)
           return null
         }
         return late.files
@@ -427,7 +447,9 @@ async function landBatch(
   turn: SessionTranscriptEntry[],
   terminal: TurnTerminalOutcome,
   reconcile: boolean,
-  recoveryFailure?: string
+  recoveryFailure?: string,
+  originTurn?: string,
+  recoveryId?: string
 ): Promise<string[] | null> {
   await settleReverted(st)
   const turnNo = ++st.turnNo
@@ -444,7 +466,19 @@ async function landBatch(
     prompt: message,
     reply: finalReply(turn)
   })
-  if (await holdForDecision(sessionKey, st, turn, described.text, terminal, gate)) return null
+  if (
+    await holdForDecision(
+      sessionKey,
+      st,
+      turn,
+      described.text,
+      terminal,
+      gate,
+      originTurn,
+      recoveryId
+    )
+  )
+    return null
   // A resolved tree is new source: the gate wants its checks passed on exactly that tree.
   let combined = !!st.resolution && terminal === 'success'
   // The answer passed the turn-end check above: the question is settled.
@@ -513,7 +547,7 @@ async function landBatch(
     const peers = landingPeers(gate, combined, verdict?.candidate ?? null)
     st.lastLanding = { outcome: 'merged', files: outcome.files, at, ...peers }
   } else if (outcome.outcome === 'held' && outcome.hold?.reason !== 'live-changed') {
-    holdTurn(sessionKey, st, outcome, verdict, turn, recoveryFailure)
+    holdTurn(sessionKey, st, outcome, verdict, turn, recoveryFailure, recoveryId, originTurn)
   } else if (outcome.outcome === 'parked' || outcome.outcome === 'held') {
     // A stopped or failed turn holds its work (LKM-151); a drift park (live moved since
     // the fork point) stays a conflict even when a later turn on top of it is stopped.
@@ -542,7 +576,10 @@ async function landBatch(
         undefined,
         undefined,
         st.interrupted ? 'interrupted' : replayFailure ? 'failed' : undefined,
-        replayFailure
+        replayFailure,
+        undefined,
+        recoveryId,
+        originTurn
       )
   } else if (outcome.newBase) {
     clearPark(st)
@@ -551,7 +588,20 @@ async function landBatch(
     if (terminal === 'success') st.lastLanding = { outcome: 'unchanged', files: outcome.files, at }
     // Setup may only restore an excluded helper; config can already be wired.
     // Acknowledge the no-op so it can restart and verify instead of waiting forever.
-    if (terminal === 'success') emitIsolation(sessionKey, 'merged', st.wt.branch, [])
+    if (terminal === 'success')
+      emitIsolation(
+        sessionKey,
+        'merged',
+        st.wt.branch,
+        [],
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        recoveryId,
+        originTurn
+      )
   }
   return reconcileFiles
 }
@@ -564,7 +614,9 @@ async function landingFailed(
   st: ChatState,
   error: unknown,
   turn: SessionTranscriptEntry[] = [],
-  superseded: () => boolean = () => false
+  superseded: () => boolean = () => false,
+  originTurn?: string,
+  recoveryId?: string
 ): Promise<void> {
   const reason = (error instanceof Error ? error.message : String(error)).slice(0, 500)
   logLandingFailed(sessionKey, st.wt.branch, reason)
@@ -588,7 +640,10 @@ async function landingFailed(
     undefined,
     undefined,
     'failed',
-    st.landingError
+    st.landingError,
+    undefined,
+    recoveryId,
+    originTurn
   )
 }
 
@@ -599,17 +654,19 @@ async function landingFailed(
  * is not retried here: its own card offers Keep.
  */
 export function retryLanding(
-  sessionKey: string
+  sessionKey: string,
+  recoveryId?: string
 ): Promise<{ ok: boolean; state: 'isolated' | 'parked'; error?: string }> {
   return exclusive(
     sessionKey,
     (error) => ({ ok: false, state: 'parked' as const, error }),
-    () => retryHeldLanding(sessionKey)
+    () => retryHeldLanding(sessionKey, recoveryId)
   )
 }
 
 async function retryHeldLanding(
-  sessionKey: string
+  sessionKey: string,
+  recoveryId?: string
 ): Promise<{ ok: boolean; state: 'isolated' | 'parked'; error?: string }> {
   const st = states.get(sessionKey)
   if (!st) return { ok: false, state: 'isolated', error: 'That chat is no longer open.' }
@@ -632,7 +689,18 @@ async function retryHeldLanding(
       st.landingError = undefined
       st.landingHold = undefined
       st.resolvingFiles = prep.conflicted
-      emitIsolation(sessionKey, 'parked', st.wt.branch, prep.conflicted)
+      emitIsolation(
+        sessionKey,
+        'parked',
+        st.wt.branch,
+        prep.conflicted,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        recoveryId
+      )
       return { ok: true, state: 'parked' }
     }
   }
@@ -640,7 +708,16 @@ async function retryHeldLanding(
   // since its last edit): the host runs the session's checks that passed before again.
   const { failures } = await arrangeChecks(chatGateScope(sessionKey, st))
   // Its outcome reaches the chat as the usual isolation event (merged, or the card again).
-  await afterTurn(sessionKey, 'Land held chat changes', [], 'success')
+  await afterTurn(
+    sessionKey,
+    'Land held chat changes',
+    [],
+    'success',
+    false,
+    false,
+    undefined,
+    recoveryId
+  )
   // Still held after Trezi tried to arrange the evidence: say why it is missing.
   if (st.parked && st.landingError && failures.length) {
     st.landingError = `${st.landingError} Trezi's own check did not pass: ${failures.join('; ')}`
@@ -653,7 +730,9 @@ async function retryHeldLanding(
       undefined,
       undefined,
       'failed',
-      st.landingError
+      st.landingError,
+      undefined,
+      recoveryId
     )
   }
   return {

@@ -399,8 +399,8 @@ const reconciliation = new ReconciliationCoordinator({
   preparations: preparingTurns,
   currentSession: (key) => sessions.get(key),
   begin: () => {},
-  land: (key, message, transcript, terminal, reconcile) =>
-    afterTurn(key, message, transcript, terminal, reconcile, true),
+  land: (key, message, transcript, terminal, reconcile, turn) =>
+    afterTurn(key, message, transcript, terminal, reconcile, true, turn),
   resolutionContext: parkedResolution,
   showParked: showParkedChat,
   continued: (key, turn, run) => conversation().continueTurn(key, turn, run),
@@ -2539,9 +2539,9 @@ export function registerAgentIpc(
 
   // LKM-165 landing card — "Retry": land the held batch again; the outcome reaches the
   // chat as the usual isolation event.
-  ipcMain.handle('agent:retry-landing', async (_e, sessionKey = activeKey) =>
+  ipcMain.handle('agent:retry-landing', async (_e, sessionKey = activeKey, recoveryId?: string) =>
     sessionKey
-      ? retryLanding(sessionKey)
+      ? retryLanding(sessionKey, recoveryId)
       : { ok: false, state: 'isolated' as const, error: 'no-session' }
   )
 
