@@ -205,6 +205,8 @@ try {
       ['LICENSE', ...references.map((name) => 'reference/' + name)].sort()
     )
   }
+  const recommendationCount = ok(await fx.call('list')).skills.length
+  assert.equal(recommendationCount, 2, 'Both pinned recommendation imports remain installed')
 
   // --- Success: the ref is pinned to a commit and the archive fetched by that commit ---
   let imported
@@ -224,7 +226,7 @@ try {
     })
     assert.equal(imported.attribution, 'LICENSE')
     assert.deepEqual(imported.skipped, ['.DS_Store'])
-    assert.equal(reply.snapshot.skills.length, 1)
+    assert.equal(reply.snapshot.skills.length, recommendationCount + 1)
     assert.deepEqual(state.log, ['/api/repos/acme/skills/commits/main', archivePath(A)])
     const body = ok(await fx.call('read', { skill: imported.skill }))
     assert.deepEqual(
@@ -237,7 +239,10 @@ try {
       path: 'LICENSE'
     })
     assert.equal(ok(license).text, MIT)
-    assert.deepEqual(ok(await fx.call('list')).skills[0].source, imported.source)
+    assert.deepEqual(
+      ok(await fx.call('list')).skills.find((entry) => entry.id === imported.skill)?.source,
+      imported.source
+    )
 
     // The default branch when no ref is given; a full commit is fetched as itself.
     reset()
@@ -371,7 +376,7 @@ try {
     })
     assert.equal((await failure({ url, ref: 'slip', subpath: 'skills/demo' })).code, 'unauthorized')
     assert.deepEqual(tree(registry(dir)), before)
-    assert.equal(ok(await fx.call('list')).skills.length, 1)
+    assert.equal(ok(await fx.call('list')).skills.length, recommendationCount + 1)
     console.log(
       'SKILLS-GITHUB-IMPORT bad pins, redirects, HTTP failures and hostile content leave no install PASS'
     )

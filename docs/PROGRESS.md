@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-516 CI fixture repair
+
+- The pinned Jakub and Impeccable importer examples now count as retained skills in the later demo import assertions; the demo's source is found by ID instead of list position. A concurrent CI shard also stopped the uncached host-warning Swift compile at the generic 120-second test cap without a diagnostic, so that existing warning check now has a 300-second compile budget while keeping every warning and canary assertion. Exact-head CI still needs to confirm both repairs.
+
 ## 2026-11-04 — LKM-516 review repair: visible recommendation action
 
 - The Skills overview fixture now captures the empty library at normal and minimum Settings widths and checks the first recommendation's rendered Details row is contained and hittable. Synthetic evidence rejects clipped and unhittable rows at both widths. This closes the independent review's layout evidence gap; native acceptance remains for the manager's post-merge run.
