@@ -264,10 +264,10 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
   )
   await captureChatGate(host, artifacts, 'manually-hidden', false)
   assert.equal(await host.request('shellPerform', { action: 'expand' }), true)
-  await until(
-    async () => !(await host.request('layoutInspect')).chatColumnHidden,
-    'manual Restore shows chat'
-  )
+  await until(async () => {
+    const layout = await host.request('layoutInspect')
+    return !layout.chatColumnHidden && layout.fraction === 1
+  }, 'manual Restore finishes showing chat')
   await captureChatGate(host, artifacts, 'restored-after-error', true, false)
   // The failure is recorded and marked unread without opening or focusing Activity.
   await until(

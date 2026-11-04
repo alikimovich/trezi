@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## Native sidebar suite Restore capture (LKM-482)
+
+- [x] Wait for the chat column's Restore animation to finish before asserting and capturing the preview status geometry.
+- [ ] Manager: confirm the native sidebar suite and required gates on this tree.
+
 ## New Chat native glass follow-up (LKM-481)
 
 - [x] Reuse the toolbar island segmented control for the chat header's single momentary New Chat action.
