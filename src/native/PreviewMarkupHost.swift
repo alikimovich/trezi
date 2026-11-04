@@ -257,6 +257,7 @@ extension Host {
         func measure(_ route: String) -> [String: Any] {
             let image = control.image(forSegment: segmentIndex)
             let rect = anchor.rect
+            let shellState = shell.inspect()
             var state: [String: Any] = ["route":route, "phase":phase, "segment":name,
                 "iconFamily":"SF Symbols", "glyph":glyph, "symbolWeight":Double(ToolbarSymbolSpec.weight.rawValue),
                 "imageWidth":image?.size.width ?? 0, "imageHeight":image?.size.height ?? 0,
@@ -264,9 +265,9 @@ extension Host {
                 "semantic":["selectMode":shell.selecting, "markupOpen":markup?.overlay != nil,
                             "selectAccent":shell.segmentProminent("select-object"), "markupAccent":shell.segmentProminent("markup"),
                             "overlayPanel":previewOverlay?.popover.isShown ?? false,
-                            "codeOpen":shell.previewState["codeOpen"] as? Bool ?? false,
+                            "codeOpen":shellState["codeOpen"] as? Bool ?? false,
                             "sourceVisible":sourceEditors[sourceRoot]?.state["visible"] as? Bool ?? false,
-                            "layersVisible":!layers.isHidden, "viewport":shell.previewState["viewport"] as? String ?? "desktop",
+                            "layersVisible":!layers.isHidden, "viewport":shellState["viewport"] as? String ?? "desktop",
                             "chatHidden":chat.isHidden, "speed":speedBadge.speed],
                 "geometry":previewMarkupGeometry(),
                 "axLabel":item.image?.accessibilityDescription ?? "",
