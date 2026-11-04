@@ -99,6 +99,8 @@ export interface Chat extends NativeChatMirror {
   stopped?: 'held' | 'reverted'
   /** LKM-225: the automatic Resolve of a drift park ran once ('tried'), then gave up ('failed'). */
   autoResolved?: 'tried' | 'failed'
+  /** The admitted follow-up turn that owns an automatic Resolve attempt. */
+  autoResolveTurn?: string
   /** LKM-165: why the last landing failed; its work is held until Retry or Resolve. */
   landingError?: string
   /** A chat-scoped recovery request, distinct from an agent turn. */

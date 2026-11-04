@@ -214,6 +214,40 @@ function harness(
   assert.deepEqual(records, [])
 }
 
+// An admitted Resolve can still end with an agent error. The held attempt gets one
+// terminal report; the earlier Checking state cannot outlive its owner turn.
+{
+  records.length = 0
+  const h = harness(true)
+  await h.open()
+  await h.emit({ type: 'isolation', state: 'parked', files: ['src/a.tsx'] })
+  const chat = h.controller.get('a')
+  const turn = chat.turn
+  assert.ok(turn, 'the follow-up send was admitted')
+  assert.equal(chat.autoResolveTurn, turn)
+  await h.emit({ type: 'error', turn, message: 'Browser check could not complete.' })
+  assert.equal(chat.autoResolved, 'failed')
+  assert.equal(chat.isRunning, false)
+  assert.equal(h.resolves(), 1, 'automatic Resolve remains bounded')
+  assert.deepEqual(
+    records.map((record) => record.outcome),
+    ['failed']
+  )
+  const conflict = h.renders.at(-1).cards.filter((card) => card.id === 'conflict')
+  assert.equal(conflict.length, 1, 'one held incident card')
+  assert.equal(conflict[0].title, 'Problem', 'terminal error replaces Checking')
+  assert.match(conflict[0].detail, /Browser check could not complete/)
+  assert.ok(conflict[0].actions.some((action) => action.action === 'recovery-report'))
+  assert.match(readableRecoveryReport('a'), /Browser check could not complete/)
+  await h.emit({ type: 'error', turn, message: 'Browser check could not complete.' })
+  assert.deepEqual(
+    records.map((record) => record.outcome),
+    ['failed'],
+    'one failed incident'
+  )
+  assert.equal(h.renders.at(-1).cards.filter((card) => card.id === 'conflict').length, 1)
+}
+
 // 5. Off (the default, and the smoke suite): the card waits for the user.
 {
   records.length = 0

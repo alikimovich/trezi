@@ -9,6 +9,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Keep user decisions visible and cover active failure, retry, terminal report and per-chat clearing in the focused chat fixture.
 - [x] Review repair: keep a report failure out of an acknowledged Resolve handover, reject stale report publication, and assert the deferred automatic Resolve render boundary.
 - [x] Review repair: settle a rejected Resolve follow-up send as a reported terminal incident instead of leaving Checking indefinitely.
+- [x] Review repair: settle an admitted Resolve turn's technical error as one reported terminal incident.
 - [ ] Manager: independent review, configured CI and post-merge native chat acceptance on main.
 
 ## Native sidebar suite Restore capture (LKM-482)

@@ -24,7 +24,7 @@ import {
 } from '../shared/provider-readiness'
 import { cardAction } from './chat-actions'
 import { planAttachments } from './chat-attachments'
-import { autoResolve } from './chat-auto-resolve'
+import { autoResolve, autoResolveTurnError } from './chat-auto-resolve'
 import { menuQuery, withReferences } from './chat-island-refs'
 import { needsResolve, sendBlock } from './chat-queue'
 import { writeRecoveryReport } from './chat-recovery-report'
@@ -544,6 +544,8 @@ export class NativeChatController {
     )
       chat.unreadAnswer = true
     reduce(chat, event)
+    if (event.type === 'error' && !event.code)
+      autoResolveTurnError(this, chat, event.turn, event.message)
     if (event.type === 'isolation' && !chat.recovery) {
       // Landed or discarded: the held problem and its report are history.
       if (event.state !== 'parked') {

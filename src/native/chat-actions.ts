@@ -156,11 +156,18 @@ async function recoveryRequest(
   if (handover) {
     const admission = await handover()
     if (admission.state === 'cancelled') {
-      if (chat.autoResolved === 'tried') chat.autoResolved = undefined
+      if (chat.autoResolved === 'tried') {
+        chat.autoResolved = undefined
+        chat.autoResolveTurn = undefined
+      }
       controller.changed(chat)
       return
     }
-    if (admission.state === 'admitted' || (admission.state === 'queued' && chat.isRunning)) return
+    if (admission.state === 'admitted') {
+      if (chat.autoResolved === 'tried' && chat.recoveryId === id) chat.autoResolveTurn = chat.turn
+      return
+    }
+    if (admission.state === 'queued' && chat.isRunning) return
     if (chat.recoveryId !== id || chat.isolation !== 'parked') return
     if (admission.state === 'queued')
       chat.queue = chat.queue.filter((item) => item.id !== admission.id)

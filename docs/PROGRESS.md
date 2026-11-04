@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-486 admitted Resolve turn failure
+
+- An admitted automatic Resolve follow-up now records its owning turn. If that turn ends with a technical agent error while its changes remain held, the controller settles the attempt once, retains the error in the transcript, writes a shareable support report, and replaces Checking with one terminal Problem after report publication. Login errors, Stop, stale turns and a successful merge keep their existing paths.
+- The focused automatic Resolve fixture covers an admitted send followed by an agent error, report readability, terminal card deduplication and bounded recovery. Native chat acceptance remains for the manager after merge.
+
 ## 2026-11-04 — LKM-486 rejected Resolve handover
 
 - The chat controller now returns whether a follow-up send was admitted, queued, cancelled or rejected. An automatic Resolve whose follow-up send fails writes the held incident's support report and settles its status to one terminal Problem; it cannot remain at Checking indefinitely. A queued send waits only while another turn actually owns the chat, cancellation does not create a technical Problem, and a stale operation cannot publish a terminal result after recovery has cleared.
