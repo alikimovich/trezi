@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-527 — Native suite failure on main a8687a1b6a94
+
+- [x] Wait for the manual chat collapse to reach its final native layout before asserting status placement, so the smoke restores its window and sidebar state.
+- [x] Compare New Chat's painted glass with its own chat header in dark and light appearances; keep the neighboring island's painted-glass check.
+- [ ] Confirm the failing chat, core, settings and sidebar native groups on the repaired tree.
+
 ## LKM-523 — Loading titles, sidebar typography and New Chat
 
 - [x] Drive a per-glyph monospace loading reveal in unknown sidebar and header titles, with stable accessibility text, Reduce Motion fallback and title lifecycle cleanup.
