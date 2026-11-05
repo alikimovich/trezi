@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-529 artifact verifier census classification
+
+- Classified the updater controller's read-only Git and bundle proof as a WorkflowOwner helper in the Swift backend retirement census. The verifier still checks the exact source revision, build number and host/service artifact before restart; the approved update flow and safeguards are unchanged. The exact-head retirement-census CI failure prompted this documentation repair; fresh review, CI and post-merge native acceptance remain with the manager.
+
 ## 2026-11-04 — LKM-529 visible checking-state proof
 
 - The existing update-controller fixture now holds the owner's check response, asserts the live sheet says “Checking for updates” with no actions, and confirms a second open cannot start another check. Settling the promise then shows the current state. Existing fixtures cover available, updating, failure, unavailable, dirty and diverged states; product source is unchanged. Independent review, exact-head CI and post-merge native acceptance remain with the manager.

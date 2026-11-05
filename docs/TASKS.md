@@ -15,6 +15,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: match Git's possibly extended commit abbreviation and distinguish failed or unavailable update checks from a confirmed current build.
 - [x] Review proof: exercise the real owner update with clean, dirty and diverged disposable checkouts; unsafe trees refuse before install/build and preserve local work.
 - [x] Review proof: hold an owner check pending and assert the visible action-free checking sheet before its truthful current result.
+- [x] Classify the read-only artifact verifier process effect in the Swift backend retirement census.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
 ## LKM-538 — Remove Custom from selected-element inspector
 
