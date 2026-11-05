@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-536 review repair: preview IPC and stale Code
+
+- The preview IPC now accepts the bounded structured 3D Code action only from the preview, for its current published 3D session and source-backed selection. It clears that context on close, load and readiness, then forwards the exact source and page to the existing inspector route. The 3D fixture now uses an unstamped connected layer between two distinct stamped layers, checks that Code cannot reopen a prior file there, and injects an old-session Code action after route navigation and reload. Native execution remains a post-merge gate.
+
+
 ## 2026-11-04 — LKM-536 review repair: selected 3D source
 
 - The 3D Code event now carries the resolved layer's own source and page. The inspector runtime checks the active page before opening that exact source, so an asynchronous selection update cannot reuse the previous layer's file. The existing native 3D fixture gives the root and heading distinct valid fixture files, checks both Code targets in sequence, measures the rendered monospace title and adjacent Back control, and checks URL, project and selection after Back. Native execution remains for the post-merge run.

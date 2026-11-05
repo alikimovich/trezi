@@ -28,7 +28,7 @@ function identity(el: Element, scope: ParentNode): () => Element | null {
 export function createThreeDInspector(options: {
   select: (element: Element, open: boolean) => void
   hasSource: (element: Element) => boolean
-  code: (element: Element) => void
+  code: (element: Element, session: string, revision: number) => void
   lost: () => void
   close: () => void
   publish: (state: ThreeDState | null) => void
@@ -255,7 +255,7 @@ export function createThreeDInspector(options: {
           break
         case 'code': {
           const element = resolveSelected?.()
-          if (element && options.hasSource(element)) options.code(element)
+          if (element && options.hasSource(element)) options.code(element, session, revision)
           break
         }
         case 'layer':

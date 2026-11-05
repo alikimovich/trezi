@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { PREVIEW_THREE_D_ACTION } from '../shared/preview-channels'
+import { PREVIEW_THREE_D_ACTION, PREVIEW_TOOLBAR_ACTION } from '../shared/preview-channels'
 import type { NativeBridge } from './bridge'
+import { dispatchIPC } from './platform'
 import { preparePreviewInput } from './smoke-input'
 import { waitFor } from './smoke-wait'
 
@@ -24,9 +25,8 @@ const CARD = `(() => {
   sibling.id = 'three-d-sibling';
   const card = document.createElement('section');
   card.id = 'three-d-card';
-  card.setAttribute('data-trezi-source', 'index.html:3:1');
   card.style.cssText = 'margin:12px;padding:16px;width:320px;background:#f4e3c1;border-radius:12px';
-  card.innerHTML = '<div id="three-d-head" style="padding:8px;background:#2f6fde;color:#fff"><h2 id="three-d-heading" data-trezi-source="about.html:3:1" style="margin:0;font:600 18px system-ui">Layered card</h2></div><p id="three-d-copy" style="margin:12px 0 0">Nested copy <b id="three-d-bold">bold</b></p>';
+  card.innerHTML = '<div id="three-d-head" style="padding:8px;background:#2f6fde;color:#fff"><h2 id="three-d-heading" data-trezi-source="about.html:3:1" style="margin:0;font:600 18px system-ui">Layered card</h2></div><p id="three-d-copy" style="margin:12px 0 0">Nested copy <b id="three-d-bold" data-trezi-source="index.html:3:1">bold</b></p>';
   document.body.prepend(sibling, card);
   card.scrollIntoView({ block: 'nearest' });
   return true;
@@ -280,12 +280,12 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
     async () => (await host.request('inspectorInspect')).visible,
     'clicking a layer opens the inspector'
   )
-  assert.equal((await inspect()).code, true, 'the fixture has a source-backed root')
+  assert.equal((await inspect()).code, true, 'the selected leaf has an exact source stamp')
   assert.equal(await host.request('shellPerform', { action: 'nested-code' }), true)
   await waitFor(async () => {
     const editor = await host.request('sourceInspect')
     return editor.visible && editor.source === 'index.html' && editor
-  }, 'the inherited root source opens index.html')
+  }, 'the selected leaf source opens index.html')
   await host.request('sourcePerform', { action: { root: fixture, action: 'hide' } })
   await waitFor(async () => !(await host.request('sourceInspect')).visible, 'first source hidden')
   const heading = opened.layers.indexOf('h2#three-d-heading')
@@ -322,6 +322,19 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
     await host.request('sourcePerform', { action: { root: fixture, action: 'hide' } })
     await waitFor(async () => !(await host.request('sourceInspect')).visible, 'editor hidden again')
   }
+  const unmapped = opened.layers.indexOf('p#three-d-copy')
+  await perform('layer', unmapped)
+  await waitFor(async () => {
+    const state = await inspect()
+    return state.selected === unmapped && !state.code && state
+  }, 'connected layer without a source mapping is selected')
+  assert.equal((await host.request('shellInspect')).nestedCodeEnabled, false)
+  assert.equal(await host.request('shellPerform', { action: 'nested-code' }), false)
+  assert.equal(
+    (await host.request('sourceInspect')).visible,
+    false,
+    'unmapped layer cannot reopen the previous file'
+  )
   const withPanels = await inspect()
   for (const [hidden, frame] of [
     [withPanels.inspectorHidden, withPanels.inspectorRect],
@@ -452,6 +465,25 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
       (await page(`document.querySelectorAll('[data-trezi-three-d]').length`, true)) === 0,
     'same-document URL change closes the modal scene'
   )
+  await dispatchIPC('preview', {
+    type: 'send',
+    channel: PREVIEW_TOOLBAR_ACTION,
+    args: [
+      {
+        action: 'three-d-code',
+        source: 'index.html:3:1',
+        page: parentUrl,
+        session: samePage.session,
+        revision: samePage.revision
+      }
+    ]
+  })
+  await page('true', true)
+  assert.equal(
+    (await host.request('sourceInspect')).visible,
+    false,
+    'stale Code after route navigation cannot open the old file'
+  )
 
   const third = await open('#native-title')
   await page(`(() => {
@@ -493,5 +525,24 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   const cleared = await inspect()
   assert.ok(cleared.headerHidden && cleared.footerHidden && cleared.sceneHidden)
   await waitFor(() => page(`!!document.querySelector('#native-title')`), 'fixture after navigation')
+  await dispatchIPC('preview', {
+    type: 'send',
+    channel: PREVIEW_TOOLBAR_ACTION,
+    args: [
+      {
+        action: 'three-d-code',
+        source: 'about.html:3:1',
+        page: parentUrl,
+        session: third.session,
+        revision: third.revision
+      }
+    ]
+  })
+  await page('true', true)
+  assert.equal(
+    (await host.request('sourceInspect')).visible,
+    false,
+    'stale Code after navigation cannot reopen the prior file'
+  )
   assert.deepEqual(await page('({width:innerWidth,height:innerHeight})'), viewport)
 }
