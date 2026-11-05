@@ -48,6 +48,7 @@ The annotation composite/Send check runs in ordinary native core and full select
 For a narrow run, use `bun run dev:native --test --only=core --annotation-composite-acceptance`.
 Run native checks only under the manager's shared desktop lock, after merge. It uses a disposable
 fixture project and the normal outbound Send interception; it makes no provider call.
+Ordinary background runs skip this foreground capture; the narrow opt-in still requires foreground.
 Inspect `test/artifacts/native/annotation-composite-send/` for foreground PNGs, state,
 the retained native composite and `send-payload.json`. A fixture merge is not native
 acceptance; the operator records that verdict separately.

@@ -38,6 +38,7 @@ import {
 import { smokeFocusHooks } from './smoke-focus'
 import { checkGitUpdates } from './smoke-git-updates'
 import {
+  ANNOTATION_COMPOSITE_FLAG,
   CHAT_RECOVERY_ACCEPTANCE_CHECK,
   CHAT_RECOVERY_ACCEPTANCE_FLAG,
   DREAMER_ACCEPTANCE_CHECK,
@@ -1343,6 +1344,13 @@ export async function runNativeCoreSmoke(
       name: 'annotation-composite-send-native',
       dependsOn: ['chat-ready'],
       run: async () => {
+        if (
+          process.env.TREZI_NATIVE_BACKGROUND_TEST === '1' &&
+          !process.argv.includes(ANNOTATION_COMPOSITE_FLAG)
+        ) {
+          console.log('SKIP annotation composite/Send foreground capture: background test')
+          return
+        }
         await checkAnnotationCompositeSend(host, page, artifacts)
         await restorePreviewMarkup(host, page)
         await wait(

@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-544 background smoke compatibility
+
+- Independent review found that ordinary reduced-coverage background runs would reach the foreground-only composite/Send scenario and fail. Ordinary background selection now skips that check with an explicit log; the narrow opt-in still requires foreground capture. The pure fixture checks the guard before execution. Manager review, exact-head CI and post-merge foreground native acceptance remain pending.
+
 ## 2026-11-05 — LKM-544 successful smoke handoff repair
 
 - Independent review found that the smoke runner calls a check's cleanup hook only after failure. The composite/Send check now restores its synthetic preview after success, waits for the fixture page to disappear and checks the overlay is closed before text editing starts. Its failure cleanup hook remains. The pure selection fixture checks this ordering and bounded handoff; manager review, exact-head CI and post-merge native acceptance remain pending.

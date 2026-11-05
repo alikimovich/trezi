@@ -300,8 +300,13 @@ assert.ok(
 )
 assert.match(
   source,
-  /name: 'annotation-composite-send-native',\n\s*dependsOn: \['chat-ready'\],\n\s*run: async \(\) => \{\n\s*await checkAnnotationCompositeSend\(host, page, artifacts\)\n\s*await restorePreviewMarkup\(host, page\)/,
+  /name: 'annotation-composite-send-native',\n\s*dependsOn: \['chat-ready'\],\n\s*run: async \(\) => \{[\s\S]*?await checkAnnotationCompositeSend\(host, page, artifacts\)\n\s*await restorePreviewMarkup\(host, page\)/,
   'a successful composite check restores the preview before text-edit'
+)
+assert.match(
+  source,
+  /name: 'annotation-composite-send-native',[\s\S]*?if \(\s*process\.env\.TREZI_NATIVE_BACKGROUND_TEST === '1' &&\s*!process\.argv\.includes\(ANNOTATION_COMPOSITE_FLAG\)\s*\) \{\s*console\.log\('SKIP annotation composite\/Send foreground capture: background test'\)\s*return\s*\}\s*await checkAnnotationCompositeSend/,
+  'ordinary background runs skip the foreground check, while the narrow opt-in keeps its foreground guard'
 )
 assert.match(
   source,
