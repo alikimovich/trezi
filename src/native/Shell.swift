@@ -45,6 +45,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     func toolbarButtonFrame(_ key: String) -> NSRect? { toolbarButtonAnchor(key).flatMap { mainFrame($0.view, rect: $0.rect) } }
     var toolbar: NSToolbar!
     private var toolbarLayout: ToolbarLayout!
+    private var insertingChatItems = false
     weak var window: NSWindow?
     private(set) var toolbarItems: [String: NSToolbarItem] = [:]
     private let items = [ "chat", "chat-new", "address", "viewport", "interaction", "tools", "more", "publish"] + ToolbarIslands.interaction + ToolbarIslands.viewport + ToolbarIslands.tools
@@ -100,6 +101,24 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     var sidebarDecipherStarts: [String: CFTimeInterval] = [:]
     // Disposable-profile appearance fixture toggles only this control, then restores readiness.
     func testChatNewEnabled(_ enabled: Bool) { toolbarItems["chat-new"]?.isEnabled = enabled }
+    private var chatNewVisible: Bool {
+        guard toolbar.visibleItems?.contains(where: { $0.itemIdentifier.rawValue == "chat-new" }) == true else { return false }
+        if #available(macOS 15, *) { return !(toolbarItems["chat-new"]?.isHidden ?? true) }
+        return true
+    }
+    /// NSToolbarItem.isHidden arrived after Trezi's macOS 13.3 minimum. On older
+    /// systems the standalone item leaves/rejoins the toolbar beside its title.
+    private func setChatNewVisible(_ visible: Bool) {
+        guard let item = toolbarItems["chat-new"] else { return }
+        if #available(macOS 15, *) { item.isHidden = !visible; return }
+        guard !insertingChatItems else { return }
+        let index = toolbar.items.firstIndex { $0.itemIdentifier.rawValue == "chat-new" }
+        if !visible, let index { toolbar.removeItem(at: index) }
+        else if visible, index == nil,
+                let title = toolbar.items.firstIndex(where: { $0.itemIdentifier.rawValue == "chat" }) {
+            toolbar.insertItem(withItemIdentifier: NSToolbarItem.Identifier("chat-new"), at: title + 1)
+        }
+    }
     /// The selected project's History section (`SidebarChats.swift`).
     var sidebarHistory = SidebarHistoryState()
     // The address block and its layout (`ToolbarAddress.swift`).
@@ -238,7 +257,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             let reserve = max(32, min(60, advance)) + 4
             let width = min(max(100, target - leading - reserve), max(100, addressLayout.chatLimit(windowWidth: windowWidth, chatLeading: leading, addressPreferred: addressPreferredWidth) - reserve))
             chatTitle.isHidden = currentProject == nil || chatHidden || width < 150
-            if #available(macOS 15, *) { toolbarItems["chat-new"]?.isHidden = chatTitle.isHidden }
+            setChatNewVisible(!chatTitle.isHidden)
             if abs(chatHeaderWidth.constant - width) > 0.5 { chatHeaderWidth.constant = width }
             chatTrailing = leading + width + reserve
             let formerChat = min(max(100, target - leading), max(100, windowWidth - leading - 500))
@@ -285,8 +304,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             item.target = self; item.action = #selector(headerNewChat(_:))
             item.isBordered = true; item.visibilityPriority = .high
             item.autovalidates = false
+            item.isEnabled = chatReady && currentProject != nil
             toolbarItems[key] = item
-            updateToolbar()
             return item
         }
         item.image = key == "markup" ? ToolbarIslands.markupImage(active: markupActive) : toolbarSymbol(symbols[key] ?? "circle", item.label)
@@ -459,7 +478,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             alignChatHeader()
         }
         chatTitle.isHidden = currentProject == nil || chatHidden || (chatHeaderWidth?.constant ?? 0) < 150
-        if #available(macOS 15, *) { toolbarItems["chat-new"]?.isHidden = chatTitle.isHidden }
+        setChatNewVisible(!chatTitle.isHidden)
         toolbarItems["chat-new"]?.isEnabled = chatReady && currentProject != nil
         address.isEnabled = ready
         if address.currentEditor() == nil { showAddress() }
@@ -584,8 +603,10 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         if !showChat, let index = chatIndex { toolbar.removeItem(at: index) }
         else if showChat && chatIndex == nil {
             let index = toolbar.items.firstIndex { $0.itemIdentifier.rawValue == "viewport" } ?? 0
+            insertingChatItems = true
             toolbar.insertItem(withItemIdentifier: NSToolbarItem.Identifier("chat"), at: index)
             toolbar.insertItem(withItemIdentifier: NSToolbarItem.Identifier("chat-new"), at: index + 1)
+            insertingChatItems = false
             // LKM-296: narrow the block and lay the toolbar out now: with the block still wide, the
             // inserted chat header went to the overflow menu until the next layout pass.
             alignChatHeader(); layoutToolbar()
@@ -700,14 +721,17 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             "toolGroup":(toolbar.items.first(where: { $0.itemIdentifier.rawValue == "tools" }) as? NSToolbarItemGroup)?.subitems.map { $0.itemIdentifier.rawValue } ?? [],
             "enabled":toolbarItems.mapValues { $0.isEnabled }
         ]
+        let chatNewAX = nativeToolbarButton("chat-new").flatMap { AccessibilityElementInspect.element(of: $0) }
         let chatInspect: [String: Any] = [
             "chatTitle":chatTitle.stringValue, "chatTitlePlain":toolbarItems["chat"]?.action == nil,
-            "chatNewVisible":(toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "chat-new" } ?? false) && !(toolbarItems["chat-new"]?.isHidden ?? true),
+            "chatNewVisible":chatNewVisible,
             "chatNewEnabled":toolbarItems["chat-new"]?.isEnabled ?? false,
             "chatNewStandalone":toolbarItems["chat-new"]?.view == nil,
             "chatNewBordered":toolbarItems["chat-new"]?.isBordered ?? false,
             "chatNewToolTip":toolbarItems["chat-new"]?.toolTip ?? "",
             "chatNewGlyph":toolbarItems["chat-new"]?.image?.accessibilityDescription ?? "",
+            "chatNewAccessibilityRole":chatNewAX?.accessibilityRole()?.rawValue ?? "",
+            "chatNewAccessibilityLabel":chatNewAX?.accessibilityLabel() ?? "",
             "chatNewFrame":NSStringFromRect(toolbarFrames["chat-new"] ?? .zero),
             "chatNewNeighborFrame":NSStringFromRect(toolbarButtonFrame("device") ?? .zero),
             "chatNewMoreFrame":NSStringFromRect(toolbarFrames["more"] ?? .zero),
@@ -753,8 +777,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             sidebarItem.isCollapsed.toggle(); split.view.layoutSubtreeIfNeeded(); return true
         }
         if action == "new-chat" { return startNewChat() }
-        if action == "header-new-chat", let item = toolbarItems["chat-new"], item.isEnabled,
-           toolbar.visibleItems?.contains(where: { $0.itemIdentifier.rawValue == "chat-new" }) == true {
+        if action == "header-new-chat", let item = toolbarItems["chat-new"], item.isEnabled, chatNewVisible {
             headerNewChat(item); return true
         }
         if action == "selection-trail-reset" { selection.reset(); noteSelection(); return true }

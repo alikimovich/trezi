@@ -3,26 +3,29 @@ import AppKit
 /// Disposable-profile probe of AppKit's own toolbar buttons. It invokes each native
 /// control's state callbacks directly; no event is posted to the app or system.
 extension NativeShell {
-    @MainActor func toolbarInteractionProbe(_ stage: String) -> [String: Any] {
+    /// The actual AppKit control inside a standard toolbar item, shared by the
+    /// foreground interaction probe and the VoiceOver inspection.
+    func nativeToolbarButton(_ id: String) -> NSButton? {
         guard let host = toolbarWindow, let root = host.contentView?.superview ?? host.contentView else {
-            return ["error":"Toolbar window unavailable"]
+            return nil
         }
+        let itemKey = NSSelectorFromString("item")
+        func descendant(_ view: NSView) -> NSButton? {
+            if let button = view as? NSButton { return button }
+            return view.subviews.lazy.compactMap(descendant).first
+        }
+        func walk(_ view: NSView) -> NSButton? {
+            if NSStringFromClass(type(of: view)).contains("Toolbar"), view.responds(to: itemKey),
+               let item = view.value(forKey: "item") as? NSToolbarItem,
+               item.itemIdentifier.rawValue == id { return descendant(view) }
+            return view.subviews.lazy.compactMap(walk).first
+        }
+        return walk(root)
+    }
+    @MainActor func toolbarInteractionProbe(_ stage: String) -> [String: Any] {
+        guard let host = toolbarWindow else { return ["error":"Toolbar window unavailable"] }
         let ids = ["chat-new", "more", NSToolbarItem.Identifier.toggleSidebar.rawValue]
-        func nativeButton(_ id: String) -> NSButton? {
-            let itemKey = NSSelectorFromString("item")
-            func descendant(_ view: NSView) -> NSButton? {
-                if let button = view as? NSButton { return button }
-                return view.subviews.lazy.compactMap(descendant).first
-            }
-            func walk(_ view: NSView) -> NSButton? {
-                if NSStringFromClass(type(of: view)).contains("Toolbar"), view.responds(to: itemKey),
-                   let item = view.value(forKey: "item") as? NSToolbarItem,
-                   item.itemIdentifier.rawValue == id { return descendant(view) }
-                return view.subviews.lazy.compactMap(walk).first
-            }
-            return walk(root)
-        }
-        let found = ids.compactMap { id -> (String, NSButton)? in nativeButton(id).map { (id, $0) } }
+        let found = ids.compactMap { id -> (String, NSButton)? in nativeToolbarButton(id).map { (id, $0) } }
         guard found.count == ids.count else {
             return ["error":"Native toolbar buttons missing", "found":found.map(\.0)]
         }

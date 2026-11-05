@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-535 review repair: older macOS visibility and VoiceOver
+
+- On macOS 13/14, New Chat now leaves or rejoins the toolbar beside the title when the title hides or returns; macOS 15+ keeps the system item hidden property. The chat resize fixture asserts the button and title share the same visibility rule.
+- The sidebar-chat fixture now reads the rendered toolbar button's unignored accessibility element and asserts AXButton and New Chat, alongside its existing action, tooltip and glyph checks. The cited CI aggregate had canceled unit shards, not a failing test assertion; exact-head CI remains the manager's gate.
+
 ## 2026-11-04 — LKM-535 review repair: foreground interaction evidence
 
 - The disposable-profile toolbar fixture now captures New Chat, More and the sidebar toggle at normal and narrower widths in light and dark appearances at idle, hover, press and keyboard focus. A native-button test seam invokes the existing AppKit hover callback pattern, native highlight and responder chain directly, without posting input. Each foreground capture has a recorded path, control state and pixel-change assertion against its idle image. The registered unit fixture checks that the shared pixel detector sees hover fill and an exterior focus ring. Agent OS still owns the post-merge native run and acceptance.

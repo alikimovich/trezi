@@ -131,6 +131,12 @@ function assertTitles(state: Toolbar, stage: string) {
 /** LKM-148 frame assertions for one laid-out toolbar. */
 export function assertToolbar(state: Toolbar, stage: string) {
   const detail = JSON.stringify(pick(state))
+  if (state.chatHeaderContentVisible !== undefined && state.toolbar.includes('chat'))
+    assert.equal(
+      state.chatNewVisible,
+      state.chatHeaderContentVisible,
+      `Toolbar ${stage}: New Chat follows the title's visibility on every supported macOS: ${detail}`
+    )
   assert.ok(
     state.addressVisible,
     `Toolbar ${stage}: the address block stays in the toolbar: ${detail}`

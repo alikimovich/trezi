@@ -155,6 +155,16 @@ export async function checkSidebarChats(host: NativeBridge, artifacts: string) {
   assert.equal(header.chatNewVisible, true, 'the chat header shows New Chat')
   assert.equal(header.chatNewEnabled, true, 'the chat header New Chat is enabled for the project')
   assert.equal(header.chatNewStandalone, true, 'New Chat is a standalone system toolbar item')
+  assert.equal(
+    header.chatNewAccessibilityRole,
+    'AXButton',
+    'VoiceOver reads toolbar New Chat as a button'
+  )
+  assert.equal(
+    header.chatNewAccessibilityLabel,
+    'New Chat',
+    'VoiceOver receives the New Chat label'
+  )
   assert.equal(header.chatNewToolTip, 'New Chat', 'New Chat keeps its tooltip')
   assert.equal(header.chatNewGlyph, 'New Chat', 'New Chat keeps its symbol description')
   const rect = (value: string) => (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)

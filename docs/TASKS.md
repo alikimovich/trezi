@@ -8,6 +8,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Move New Chat from the title's custom glass view to a standalone system-rendered AppKit toolbar item, retaining its guarded action, label, tooltip and visibility.
 - [x] Reserve the native item's measured width beside the resizable chat title and update layout and appearance fixture assertions.
 - [x] Review repair: assert foreground hover, pressed and keyboard-focus painting for New Chat beside More and the sidebar toggle in both appearances, with capture paths in the fixture receipt.
+- [x] Review repair: keep New Chat's title-driven visibility on macOS 13/14 and assert the rendered toolbar button's VoiceOver role and label.
 - [ ] Manager: independent review, exact-head CI, PR to main and post-merge foreground native acceptance in light and dark modes.
 
 ## LKM-532 — Native preview-markup foreground failure on main
