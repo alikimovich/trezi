@@ -28,6 +28,41 @@
 ## 2026-11-04 — LKM-537 native accepted-card capture repair
 
 - The chat UI foreground capture now reveals the accepted component's containing message after each width change. At 320 points, pressing Latest parked that older card outside the lazy stack's realized viewport, so its measured frame was zero before the pair geometry assertions could run. The capture retries the message reveal while layout settles and still requires a visible card and measured answer lines at each width. The wide fixture uses 460 points because the native test window caps chat width at 466. No user-facing layout changed; quick and native verification remain the final worker gates.
+## 2026-11-04 — LKM-529 artifact verifier census classification
+
+- Classified the updater controller's read-only Git and bundle proof as a WorkflowOwner helper in the Swift backend retirement census. The verifier still checks the exact source revision, build number and host/service artifact before restart; the approved update flow and safeguards are unchanged. The exact-head retirement-census CI failure prompted this documentation repair; fresh review, CI and post-merge native acceptance remain with the manager.
+
+## 2026-11-04 — LKM-529 visible checking-state proof
+
+- The existing update-controller fixture now holds the owner's check response, asserts the live sheet says “Checking for updates” with no actions, and confirms a second open cannot start another check. Settling the promise then shows the current state. Existing fixtures cover available, updating, failure, unavailable, dirty and diverged states; product source is unchanged. Independent review, exact-head CI and post-merge native acceptance remain with the manager.
+
+## 2026-11-04 — LKM-529 owner update safety proof
+
+- The real Swift workflow-owner fixture now runs the update path on disposable dirty and diverged source checkouts, alongside its existing clean success case. It asserts each unsafe update is refused before the fake package manager sees install or build, while HEAD and local file content and status remain intact. No product source changed; independent review, exact-head CI and post-merge native acceptance remain with the manager.
+
+## 2026-11-04 — LKM-529 update-check and commit-stamp repair
+
+- Artifact proof now reads the same `git rev-parse --short=7` abbreviation as build stamping, including Git's longer unique abbreviation, and still compares both built bundles before restart. A disposable source and app fixture proves a nine-character stamp passes and a truncated service stamp fails.
+- The workflow owner now reports failed fetches and missing remotes as unavailable rather than current. The update sheet shows a retryable check error; the focused Swift owner and controller fixtures cover those states. Exact-head CI, independent review and post-merge native acceptance remain with the manager.
+
+## 2026-11-04 — LKM-529 signing and artifact proof repair
+
+- The guided updater now requires the build script's final identity signer line. An ad hoc fallback or missing signer proof fails the owner workflow before restart, with an actionable signing and Keychain access message; the existing build warning and failure journal remain available. The fake package manager supplies the signer line, and the focused Swift workflow-owner fixture covers a valid identity, ad hoc downgrade and absent proof without touching a real keychain.
+- The update-controller fixture now calls the real artifact verifier on a disposable Git source and app bundle. Matching version, build, commit and host/service executables pass; a mismatched service stamp and a missing executable each block the restart callback. PR CI, independent review and post-merge native acceptance remain pending.
+
+## 2026-11-04 — LKM-529 review repair: read the updater's journaled step
+
+- The prior phase mapping read `workflow.step`, but the update owner only records `pull`, `install` and `build` as journaled `intent` steps. Routine progress now derives its short label from the latest running journal step; raw command output remains confined to the existing error path. The focused fixture uses owner-shaped summaries with completed earlier steps and a verbose current command output. Post-merge native acceptance remains pending.
+
+## 2026-11-04 — LKM-529 review repair: concise progress and connected native fixture
+
+- The update poll now uses the workflow owner's pull, install and build phase to show short progress text. Raw compiler and package-manager lines remain available to the existing failure result and journal, and repeated polls do not resend the same phase. The focused update fixture checks that verbose owner output cannot appear in the sheet's routine progress.
+- The native badge fixture now presses the visible Update action after replacing only its callback with a disposable owner. It asserts the resulting progress sheet and stub restart callback, then restores the production callback; no production pull, build or restart runs in the fixture. Native acceptance still awaits the post-merge run.
+
+## 2026-11-04 — LKM-529 guided Trezi update
+
+- The build badge now opens a short availability sheet with Update and Not Now; technical details remain in its existing tooltip, About credits and Copy Commit menu. A known behind state enters the owner update directly, while the general Updates menu shows a checking state first. The owner still refuses dirty trees and non-fast-forward pulls and runs its journaled install/build workflow.
+- Update and check actions share an in-flight guard. Update progress remains in the sheet, errors retain the useful owner output, and restart waits for active work to clear. The running app must resolve to the source build, and its built host/service Info.plists and executables must match the updated source version and commit before restart. Focused unit fixtures and the native badge dialog fixture cover the affected states; exact-head CI, independent review and post-merge native acceptance remain.
 ## 2026-11-04 — LKM-538 CI marquee fixture timing repair
 
 - The unrelated sidebar marquee unit fixture now uses its sample's measured clock if a loaded macOS runner takes the scheduled-before sample after the 0.7-second delay. It still requires an exact zero offset when sampled during the delay and checks 30 points per second afterward. No sidebar product behavior changed; current-head CI must rerun the shard.

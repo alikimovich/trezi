@@ -14,6 +14,12 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 - New Chat stays at the chat column edge when the preview address needs to compress in a narrow toolbar (LKM-537).
 - Publish keeps its full trigger width when the toolbar is narrow (LKM-537).
+## [0.13.29] - 2026-11-05
+
+### Changed
+
+- Update availability now offers a concise guided update with guarded progress and a source artifact check before restart (LKM-529).
+
 ## [0.13.28] - 2026-11-04
 
 ### Removed

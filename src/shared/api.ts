@@ -1608,14 +1608,15 @@ export type ThreeDAction =
 /**
  * Self-update status pushed from main (`update:status`). Trezi is distributed
  * as a git checkout; the updater compares HEAD to the tracked remote.
- * - `idle`      — up to date, or not a git checkout / offline / no upstream.
+ * - `idle`      — a completed check found no newer tracked commit.
+ * - `unavailable` — no source remote, offline, or a failed fetch/count.
  * - `available` — `behind` commits behind the remote; `subject` is the newest.
  * - `updating`  — an in-app "Update & Restart" is running; `progress` is the
  *                 latest output line.
  * - `error`     — a check or apply failed; `error` is the message.
  */
 export interface UpdateStatus {
-  status: 'idle' | 'available' | 'updating' | 'error'
+  status: 'idle' | 'unavailable' | 'available' | 'updating' | 'error'
   behind: number
   subject?: string
   progress?: string

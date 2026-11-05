@@ -12,6 +12,7 @@ import type { NativeBridge } from './bridge'
 import { nativeBuildStatus } from './build-status-controller'
 import { preparePreviewInput } from './smoke-input'
 import { waitFor } from './smoke-wait'
+import { NativeUpdateController } from './update-controller'
 
 const SHA = '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d'
 const NEXT = '5e6f708192a3b4c5d6e7f8091a2b3c4d1a2b3c4d'
@@ -204,7 +205,7 @@ async function showState(
 
 /**
  * LKM-226: the sidebar footer's build badge in every state (text, dot, tooltip and a
- * capture), About Trezi's credits, and the behind badge's click (update steps).
+ * capture), About Trezi's credits, and the behind badge's update decision.
  * LKM-301: dot/text alignment, accessibility, and a narrow sidebar with a long branch.
  */
 export async function checkBuildBadge(host: NativeBridge, artifacts: string) {
@@ -263,26 +264,84 @@ export async function checkBuildBadge(host: NativeBridge, artifacts: string) {
     await showState(host, 'behind-dark', behind.status, behind.text, behind.tone)
     const dark = await host.request('buildBadgeInspect', { capture: 'dark' })
     writeFileSync(join(artifacts, 'build-badge-behind-dark.png'), Buffer.from(dark.png, 'base64'))
-    // Clicking the behind badge opens the details with the update steps.
+    // Clicking the behind badge offers the update without terminal instructions.
     await host.request('buildBadgeInspect', { perform: true })
     const sheet = await waitFor(async () => {
       const value = await host.request('sheetInspect')
-      return value.visible && value.title === 'A newer Trezi is on main' && value
-    }, 'build details sheet')
-    assert.ok(
-      sheet.detail.includes('git pull') && sheet.detail.includes('bun run build'),
-      'update steps'
-    )
-    assert.ok(sheet.detail.includes('Behind main by 3 commits'), sheet.detail)
-    for (const action of ['cancel', 'copy-commit', 'check', 'update'])
-      assert.ok(sheet.actions.includes(action), `details sheet lacks ${action}`)
+      return value.visible && value.title === 'Trezi update available' && value
+    }, 'build update sheet')
+    assert.ok(sheet.detail.includes('3 changes behind main'), sheet.detail)
+    assert.ok(!sheet.detail.includes('git pull') && !sheet.detail.includes('Commit:'), sheet.detail)
+    assert.deepEqual(sheet.actions, ['cancel', 'update'])
     writeFileSync(
       join(artifacts, 'build-badge-details.png'),
       Buffer.from(await host.request('captureSheet'), 'base64')
     )
     evidence.details = { title: sheet.title, detail: sheet.detail, actions: sheet.actions }
-    await host.request('sheetPerform', { action: 'cancel' })
-    await waitFor(async () => !(await host.request('sheetInspect')).visible, 'details sheet closed')
+    // Route this visible Update action to a disposable owner before pressing it.
+    // The production updater cannot be called by this fixture.
+    let finishUpdate: ((result: { ok: boolean }) => void) | undefined
+    let restartRequested = false
+    const disposable = new NativeUpdateController(
+      controller.sheets,
+      '/disposable/trezi',
+      () => {
+        restartRequested = true
+      },
+      {
+        updateCheck: async () => ({ status: 'available', behind: 1 }),
+        update: async (_root, progress) => {
+          progress?.('Building Trezi…')
+          return new Promise((resolve) => {
+            finishUpdate = resolve
+          })
+        }
+      },
+      () => null,
+      () => null
+    )
+    const liveOpenUpdates = controller.openUpdates
+    let pending: Promise<void> | undefined
+    const disposableAction = () => {
+      pending = disposable.apply()
+    }
+    Object.defineProperty(controller, 'openUpdates', {
+      value: disposableAction,
+      configurable: true
+    })
+    try {
+      assert.equal(
+        controller.openUpdates,
+        disposableAction,
+        'badge Update targets the disposable owner'
+      )
+      await host.request('sheetPerform', { action: 'update' })
+      const progress = await waitFor(async () => {
+        const value = await host.request('sheetInspect')
+        return (
+          value.visible &&
+          value.title === 'Updating Trezi' &&
+          value.message === 'Building Trezi…' &&
+          value
+        )
+      }, 'badge Update opens disposable progress')
+      assert.ok(pending, 'the badge Update action entered the disposable controller')
+      assert.deepEqual(progress.actions, [])
+      finishUpdate?.({ ok: true })
+      await pending
+      assert.ok(restartRequested, 'proved disposable update reaches restart callback')
+      evidence.progress = {
+        title: progress.title,
+        message: progress.message,
+        actions: progress.actions
+      }
+    } finally {
+      Object.defineProperty(controller, 'openUpdates', {
+        value: liveOpenUpdates,
+        configurable: true
+      })
+      controller.sheets.close()
+    }
     writeFileSync(join(artifacts, 'build-badge.json'), JSON.stringify(evidence, null, 2))
   } finally {
     await host
