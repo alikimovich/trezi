@@ -6,6 +6,7 @@ extension NativeShell {
         (0..<outline.numberOfRows).compactMap { outline.view(atColumn: 0, row: $0, makeIfNecessary: false) as? ProjectCell }
     }
     @MainActor func verifySidebar(_ command: [String: Any]) -> [String: Any] {
+        if command["stationaryProjectHover"] as? Bool == false { ProjectCell.scriptedPointer = nil }
         if let hover = command["hover"] as? String {
             for index in 0..<outline.numberOfRows {
                 guard let row = outline.item(atRow: index) as? ShellRow,
@@ -15,7 +16,11 @@ extension NativeShell {
                         context: nil, eventNumber: 0, trackingNumber: 0, userData: nil) else { continue }
                 if row.id == hover, let title = cell.title {
                     cell.layoutSubtreeIfNeeded()
-                    cell.pointer(at: NSPoint(x: title.frame.minX + 2, y: title.frame.midY))
+                    let point = NSPoint(x: title.frame.minX + 2, y: title.frame.midY)
+                    cell.pointer(at: point)
+                    if command["stationaryProjectHover"] as? Bool == true {
+                        ProjectCell.scriptedPointer = cell.convert(point, to: nil)
+                    }
                 } else { cell.mouseExited(with: event) }
             }
         }

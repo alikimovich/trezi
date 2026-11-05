@@ -181,7 +181,7 @@ extension NativeShell {
         return nil
     }
     func restoreSidebarProjectHover(_ hover: (id: String, scroll: CFTimeInterval?)?) {
-        guard let pointer = outline.window?.mouseLocationOutsideOfEventStream else { return }
+        guard let pointer = ProjectCell.scriptedPointer ?? outline.window?.mouseLocationOutsideOfEventStream else { return }
         for index in 0..<outline.numberOfRows {
             guard let row = outline.item(atRow: index) as? ShellRow, row.kind == "project",
                   let cell = outline.view(atColumn: 0, row: index, makeIfNecessary: true) as? ProjectCell else { continue }
@@ -236,9 +236,11 @@ extension NativeShell {
         let wasApplying = applying
         applying = true; defer { applying = wasApplying }
         let hover = sidebarHover()
+        let projectHover = sidebarProjectHover()
         outline.reloadItem(row, reloadChildren: true)
         outline.expandItem(row)
         restoreSidebarHover(hover)
+        restoreSidebarProjectHover(projectHover)
         if let target = sidebarTarget() {
             let index = outline.row(forItem: target)
             if index >= 0 && outline.selectedRow != index { outline.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false) }

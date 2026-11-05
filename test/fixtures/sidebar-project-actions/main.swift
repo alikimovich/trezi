@@ -109,6 +109,8 @@ for button in [cell.more, cell.newChat] { _ = AccessibilityElementInspect.elemen
 report["presses"] = shell.presses
 report["order"] = cell.subviews.compactMap { $0.identifier?.rawValue }
 
+// This checks the marquee's own lifecycle, independent of the runner's Reduce Motion setting.
+SidebarMarqueeTitle.reduceMotionOverride = false
 let long = ProjectCell(frame: NSRect(x: 0, y: 0, width: 260, height: 28))
 long.installActions(title: "A long project title that overflows the sidebar", project: "q", target: shell,
                     newChatAction: #selector(NativeShell.sidebarNewChat(_:)), moreAction: #selector(NativeShell.sidebarMore(_:)))
@@ -147,6 +149,7 @@ report["stationaryReload"] = ["visible": replacement.more.alphaValue == 1,
                               "selected": replacement.selected]
 replacement.mouseExited(with: event(.mouseExited))
 report["stationaryReloadExit"] = replacement.more.alphaValue == 0 && replacement.title!.bounds.width > 200
+SidebarMarqueeTitle.reduceMotionOverride = nil
 
 // The persistent pill as it was: the check above must see it.
 let pill = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 28, height: 24), pullsDown: true)

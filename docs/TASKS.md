@@ -9,6 +9,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Reveal from the actual title, retain the controls across pointer travel, and restore the title and marquee on exit.
 - [x] Extend the project action fixture and sidebar geometry assertions for hover, crossing, exit, width and marquee reset.
 - [x] Review repair: restore project-title hover across a stationary-pointer row reload and assert that opening another project's menu preserves the selected project and visible chats.
+- [x] Review repair: carry hover through the nested History reload; assert that path in the sidebar fixture and make the marquee fixture independent of the runner's Reduce Motion preference.
 - [ ] Manager: independent review, exact-head CI and post-merge native sidebar pointer/rendered acceptance.
 ## LKM-532 — Native preview-markup foreground failure on main
 

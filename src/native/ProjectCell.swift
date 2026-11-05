@@ -21,6 +21,8 @@ final class ProjectMoreButton: ProjectActionButton {
 /// Keep project selection on the row and its actions on separate hover controls: the "…" menu
 /// and, as in the retired Electron rail, New chat at the trailing edge.
 final class ProjectCell: SourceListCell {
+    /// Pipe fixture only: a stationary pointer while a project row is replaced.
+    static var scriptedPointer: NSPoint?
     let more = ProjectMoreButton()
     let newChat = ProjectActionButton()
     private(set) var title: SidebarMarqueeTitle?

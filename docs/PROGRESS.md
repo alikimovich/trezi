@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-531 nested reload and CI fixture repair
+
+- The History reload path now carries project hover through `reloadNested`, using the same pointer and marquee restoration as the full outline reload. The existing sidebar History smoke fixes a pipe-only pointer on the title, opens Show History to exercise that path, and checks the replacement row retains its active title exclusion until hover exit.
+- PR CI's sidebar project-action fixture failed because its marquee assertion inherited the runner's Reduce Motion preference. The offscreen fixture now uses its existing motion override for the marquee lifecycle section and restores it afterward; no system preference changes. A separate native Changes fixture failure in that prior-head run concerns Git HEAD state outside this ticket. Exact-head CI remains required.
+
 ## 2026-11-04 — LKM-531 review repair: project hover across reload
 
 - Project-row replacement now rechecks the stationary pointer against the new title and the prior overlay region, carrying the marquee start for the same hovered project. The existing offscreen action fixture replaces a row under a fixed pointer and checks that its controls and title width stay active until exit.

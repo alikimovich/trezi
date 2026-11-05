@@ -169,7 +169,17 @@ export async function checkSidebarHistory(
     await restoreSidebarFocus(host, 'History menu')
 
     // Show History reveals this project's closed chats and the count, and only here.
+    // Show History calls reloadNested rather than reloadData. The pipe keeps the window pointer
+    // fixed on this title while that row is replaced, then checks the replacement before exit.
+    await verify({ hover: `project:${full}`, stationaryProjectHover: true })
     await menu(full, { pick: 'Show History' })
+    const reloadedTitle = assertActionsMatch(await verify(), full, 'nested reload')
+    assert.equal(reloadedTitle.more.alpha, 1, 'stationary title hover survives nested reload')
+    assert.ok(
+      Math.abs(reloadedTitle.titleRightInset - 56) < 1,
+      'replacement keeps action exclusion'
+    )
+    await verify({ hover: '', stationaryProjectHover: false })
     const revealed = await expectHistory('revealed', full, 3, [full])
     const [header] = rows(revealed, 'history-toggle')
     assert.equal(header.label, 'History, 4 closed chats, expanded', 'the header keeps the count')
@@ -254,6 +264,7 @@ export async function checkSidebarHistory(
     await restoreSidebarFocus(host, 'empty History')
     await capture('empty')
   } finally {
+    await verify({ stationaryProjectHover: false }).catch(() => {})
     for (const key of (await shell()).historyOpen ?? [])
       await menu(key, { pick: 'Hide History' }).catch(() => {})
     nativeWorkspace.services.invoke = original
