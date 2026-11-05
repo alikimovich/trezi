@@ -36,6 +36,16 @@ export const pick = (state: Toolbar) => ({
   chatHeaderTrailing: state.chatHeaderTrailing,
   chatNewFrame: state.chatNewFrame,
   chatTitleFrame: state.chatTitleFrame,
+  chatTitleFont: state.chatTitleFont,
+  addressFont: state.addressFont,
+  branchFont: state.branchFont,
+  branchTitleFont: state.branchTitleFont,
+  publishFont: state.publishFont,
+  publishTitleFits: state.publishTitleFits,
+  publishControlGlass: state.publishControlGlass,
+  publishGlassHover: state.publishGlassHover,
+  publishControlWidth: state.publishControlWidth,
+  publishIntrinsicWidth: state.publishIntrinsicWidth,
   chatNewStandalone: state.chatNewStandalone,
   detailLeading: state.detailLeading,
   chatWidth: state.chatWidth,
@@ -131,6 +141,25 @@ function assertTitles(state: Toolbar, stage: string) {
 /** LKM-148 frame assertions for one laid-out toolbar. */
 export function assertToolbar(state: Toolbar, stage: string) {
   const detail = JSON.stringify(pick(state))
+  for (const key of ['chatTitle', 'address', 'branch', 'branchTitle', 'publish']) {
+    assert.match(
+      state[`${key}Font`],
+      /Mono/i,
+      `Toolbar ${stage}: ${key} uses system monospace: ${detail}`
+    )
+    assert.equal(
+      state[`${key}FontSize`],
+      key.startsWith('branch') ? state.topBarSmallFontSize : state.topBarSystemFontSize,
+      `Toolbar ${stage}: ${key} keeps its native point size: ${detail}`
+    )
+  }
+  assert.ok(
+    state.publishControlGlass &&
+      state.publishGlassHover &&
+      state.publishTitleFits &&
+      state.publishControlWidth + 0.5 >= state.publishIntrinsicWidth,
+    `Toolbar ${stage}: Publish keeps native glass and its full monospace label: ${detail}`
+  )
   if (state.chatHeaderContentVisible !== undefined && state.toolbar.includes('chat'))
     assert.equal(
       state.chatNewVisible,

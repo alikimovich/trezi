@@ -72,10 +72,8 @@ extension NativeShell {
     }
     /// A wider Publish label moves the right groups left: make room before the toolbar
     /// lays out, then re-measure the real position.
-    func republished(_ title: String) {
-        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
-        func width(_ text: String) -> CGFloat { NSAttributedString(string: text, attributes: [.font:font]).size().width }
-        addressLayout.rightInset += max(0, width(title) - width(publishTitle))
+    func republished(_ title: String, widthGrowth: CGFloat) {
+        addressLayout.rightInset += max(0, widthGrowth)
         publishTitle = title
         alignChatHeader()
         DispatchQueue.main.async { [weak self] in self?.layoutToolbar(); self?.measureToolbar() }
@@ -126,6 +124,7 @@ extension NativeShell {
                       "chatHeaderWidth":chatHeader.bounds.width, "chatHeaderTrailing":mainFrame(chatHeader)?.maxX ?? chatHeader.bounds.maxX,
                       "addressVisible":toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "address" } ?? false]) { _, new in new }
             .merging(titleAlignment()) { _, new in new }
+            .merging(topBarFontInspect()) { _, new in new }
             .merging(publishTrailingInspect()) { _, new in new }
     }
 }

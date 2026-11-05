@@ -1,5 +1,21 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-530 real Publish control compile repair
+
+- The LKM-535 New Chat change removed the segmented control's glass hover and full-frame alignment behavior, but Publish still used both. Restored those behaviors on the real `IslandSegmentedControl` while leaving standalone New Chat and other island controls at their defaults. The Publish fixture now compiles the real toolbar control instead of a local stub and checks its hover, disabled, and alignment behavior. Exact-head CI, independent review, and post-merge rendered inspection remain manager gates.
+
+## 2026-11-04 — LKM-530 Unreleased placement after 0.13.26 sync
+
+- The new 0.13.26 release landed while this ticket was open. Its merge left the LKM-530 entry adjacent to the dated heading again; a section separator now keeps the entry visibly under Unreleased. Exact-head CI and post-merge native inspection remain manager gates.
+
+## 2026-11-04 — LKM-530 changelog review repair
+
+- The LKM-530 Unreleased entry is separated from the 0.13.25 release heading so its placement is unambiguous. The earlier PR CI evidence includes canceled jobs and a chat-new-instant failure on a prior head; exact-head CI remains the manager's gate.
+
+## 2026-11-04 — LKM-530 top bar typography
+
+- The chat title, preview address and branch/status label now use native system monospace at their existing sizes and weights. The loading title remains fixed width; address truncation and branch spacing use their actual font. Publish remains a standard native `NSMenuToolbarItem`, whose public API has no font property; the trigger's typography needs a product choice if its glass and action behavior must remain native.
+- Follow-up authorization resolves Publish with a custom glass-backed AppKit segmented control. Its primary segment uses system monospace and still dispatches the toolbar Publish action; the chevron opens the existing menu, and an active publish routes the primary segment to that menu. The original spinner frames, menu entries and enablement remain. The toolbar fixture now checks the Publish font, size, glass and label fit; post-merge rendered inspection remains required.
 ## 2026-11-04 — LKM-525 credential removal and pinned feedback repair
 
 - A successful Claude token or Gemini key removal now sends a one-update clear signal to the native Settings form, which discards both its typed secure value and matching retained draft. Failed removal leaves the draft intact; unrelated provider drafts still restore. The synthetic Settings fixture covers removal, Back, reopen and blocked resubmission for each credential. Validation and service messages now render beside the pinned action above long scrolling Settings forms, with windowless geometry and accessibility assertions. Current-head CI, independent review and native acceptance remain manager gates.
