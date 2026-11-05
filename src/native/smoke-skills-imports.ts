@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { SKILL_RECOMMENDATIONS } from '../shared/skills-catalog'
 import type { NativeBridge } from './bridge'
 import { bodyField, GITHUB_FIELDS, nativeSkills } from './settings-skills'
 import { SETTINGS_DEFAULT_SIZE } from './settings-verification'
@@ -18,8 +17,8 @@ import type { SkillsEvidence, SkillsExpectation } from './skills-verification'
  * imported through the folder action (the open panel replaced by
  * `nativeSkills.pickFolder`); a GitHub folder pinned to tag `v1` and the
  * `frontend-design` and static Impeccable recommendations are imported from loopback GitHub
- * (`skills-github-fixture.ts`) by the real service importer. A recommendation that
- * cannot be imported shows a disabled Install that the runtime refuses.
+ * (`skills-github-fixture.ts`) by the real service importer. Unsupported catalog
+ * entries stay out of the normal list.
  */
 
 export const SKILLS_FOLDER_NAME = 'trezi-smoke-folder'
@@ -32,7 +31,6 @@ description: Sample folder skill from the Trezi native smoke.
 
 Follow references/checklist.md.
 `
-const UNIMPORTABLE = SKILL_RECOMMENDATIONS.find((r) => !r.importable)
 
 interface Steps {
   registry: SkillsRegistry
@@ -218,23 +216,11 @@ export async function checkSkillsImports(
   assert.ok(impeccableBody.references.every((file) => !file.path.startsWith('scripts/')))
   report.push({ action: 'install-impeccable', skill: impeccable })
 
-  // An entry that cannot be imported: Install is shown disabled, and refused if sent.
-  assert.ok(UNIMPORTABLE, 'The catalog has an entry that cannot be imported')
+  // Unsupported catalog entries do not occupy list space.
   await host.request('sheetPerform', { action: 'skill-back' })
-  await until('library', (s) => s.actions.includes('skill-github'))
-  await host.request('settingsVerification', { press: `skill-recommendation:${UNIMPORTABLE.id}` })
-  await until('unimportable', (s) => !!s.disabledActions?.includes('skill-install'))
-  const before = (await registry.list()).revision
-  await host.request('sheetPerform', { action: 'skill-install' })
-  const refused = await until('install refused', (s) => !s.busy)
-  assert.equal(refused.message, '', 'A disabled Install does nothing')
-  assert.deepEqual((await registry.list()).revision, before, 'Nothing was installed')
-  await shoot(
-    '13-recommendation-unavailable',
-    { view: 'recommendation', id: UNIMPORTABLE.id, status: 'Can’t be installed' },
-    normal
-  )
-  await host.request('sheetPerform', { action: 'skill-back' })
+  const visible = await until('library', (s) => s.actions.includes('skill-github'))
+  for (const id of ['better-writing', 'variant', 'state-machine', 'interface-review'])
+    assert.ok(!visible.fields.includes(`recommendation:${id}`), `${id} is hidden from the list`)
   const library = await installed()
   await until('final library', (s) =>
     s.rows.some((r) => r.action === `skill-open:${recommended.id}`)
@@ -244,6 +230,6 @@ export async function checkSkillsImports(
     installed: library,
     recommended: [entry, SKILLS_FIXTURE_IMPECCABLE.id]
   })
-  report.push({ action: 'refuse-unimportable', id: UNIMPORTABLE.id })
+  report.push({ action: 'hide-unimportable' })
   return report
 }

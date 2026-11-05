@@ -138,6 +138,26 @@ export async function checkSkillsSettings(host: NativeBridge, artifacts: string)
       )
       assert.ok(image.width >= width && image.height >= evidence.height, 'Nonempty Skills pixels')
       assertSkillsEvidence(evidence, width, expect)
+      if (expect.view === 'detail' && expect.github) {
+        await host.request('settingsVerification', { scrollFormToEnd: true })
+        const scrolled: SkillsEvidence = await until(
+          `long Skills detail scrolled at ${width}`,
+          (s) => s.formScrollY > 0
+        )
+        for (const action of ['skill-back', 'skill-save']) {
+          const button = scrolled.headerActions.find((entry) => entry.action === action)
+          assert.ok(
+            button?.contained && button.enabled && button.hitTarget,
+            `${action} stays visible and hittable after scrolling the long Skills detail`
+          )
+        }
+        if (width === SETTINGS_DEFAULT_SIZE.width) {
+          const afterScroll = await host.request('captureVisibleSheet')
+          const scrolledStem = join(artifacts, `skills-${step}-scrolled-${width}`)
+          writeFileSync(`${scrolledStem}.png`, Buffer.from(afterScroll.png, 'base64'))
+          writeFileSync(`${scrolledStem}.json`, JSON.stringify(scrolled, null, 2))
+        }
+      }
       report.push({ capture: `${stem}.png`, view: expect.view, width, message: evidence.message })
       save()
     }
@@ -163,7 +183,7 @@ export async function checkSkillsSettings(host: NativeBridge, artifacts: string)
   await shoot('1-overview-empty', { view: 'overview', installed: [] })
 
   // Manual add: the template, then the sample typed over it in the rendered editor.
-  await host.request('sheetPerform', { action: 'skill-add' })
+  await host.request('settingsVerification', { pressHeader: 'skill-add' })
   await until(
     'add view',
     (s) => s.fields.includes(NEW_SKILL_FIELD) && s.editors[0]?.text === NEW_SKILL_TEMPLATE
@@ -209,7 +229,14 @@ export async function checkSkillsSettings(host: NativeBridge, artifacts: string)
   // Edit and save a new local revision.
   await host.request('settingsVerification', { editorText: SKILLS_EDIT })
   await until('edit typed', (s) => s.values[field] === SKILLS_EDIT)
-  await host.request('sheetPerform', { action: 'skill-save' })
+  await host.request('settingsVerification', { section: 'general' })
+  await until('general during edit', (s) => s.section === 'general')
+  await host.request('settingsVerification', { section: 'skills' })
+  await until(
+    'draft after Skills reentry',
+    (s) => s.section === 'skills' && s.editors[0]?.text === SKILLS_EDIT
+  )
+  await host.request('settingsVerification', { pressHeader: 'skill-save' })
   const saved = await until('saved', (s) => !s.busy && s.message.startsWith('Saved revision'))
   const edited = await sample()
   assert.notEqual(edited.revision, created.revision, 'Save makes a new revision')
@@ -255,7 +282,7 @@ export async function checkSkillsSettings(host: NativeBridge, artifacts: string)
   assert.equal(restored.revision, edited.revision, 'Restore keeps the edited revision')
   report.push({ action: 'remove-restore', skill: restored })
 
-  await host.request('sheetPerform', { action: 'skill-back' })
+  await host.request('settingsVerification', { pressHeader: 'skill-back' })
   await until('library', (s) => s.rows.some((r) => r.action === `skill-open:${created.id}`))
   report.push(...(await checkSkillsImports(host, artifacts, { registry, until, shoot })))
   report.push({ action: 'done' })

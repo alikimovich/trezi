@@ -11,12 +11,37 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: separate the LKM-530 Unreleased changelog entry from the dated release heading.
 - [ ] Manager: exact-head CI, independent review and post-merge native inspection.
 
+## LKM-525 — Nested Settings navigation and actions
+
+- [x] Keep Skills overview actions and nested Skills/provider Back, context and actions visible above scrolling forms, with the sidebar section retained.
+- [x] Cover Skills parent/detail/back paths and section reentry in the existing fixture.
+- [x] Preserve unsaved draft values on Back and reopen within the same Settings window; clear them on successful save/create/remove paths.
+- [x] Show enabled installed skills first from the saved skill state, retain unavailable installed records, label On/Off, and hide unavailable recommendations and empty groups.
+- [x] Extend Skills list and rendered-state fixtures for filtering, ordering, enabled state, and installed records.
+- [x] Review repair: remove repeated nested Skills headings and assert pinned controls after form scroll plus the rendered first enabled On status.
+- [x] Put Add provider alone in the overview header; reach selected provider, Claude, and Gemini configuration through rows, keep Gemini On/Off separate, and retain Remove in provider detail with confirmation.
+- [x] Review repair: exclude destructive pinned actions from Return and assert Back and Save Revision remain usable after long Skills detail scrolling.
+- [x] Review repair: open selected provider Remove confirmation from editor state without a provider picker value.
+- [x] Review repair: return from provider Remove confirmation to the selected editor with its unsaved draft, including sidebar reentry, and clear that draft on confirmed removal.
+- [x] CI fixture repair: assert Undo restores the exact captured prior memory in `resolved-lessons`.
+- [x] Security repair: scope provider drafts and Remove return context by stable provider ID, and reject same-label credential crossover in the existing Settings fixtures.
+- [x] Review repair: clear native Claude/Gemini secure values and retained drafts after successful removal, preserving failed-removal and unrelated drafts.
+- [x] Review repair: show exact validation and service messages beside pinned Settings actions above long scrolling forms.
+- [ ] Manager: current-head CI, independent review and post-merge native Settings acceptance.
 ## LKM-533 — Stack accepted question and answer pairs
 
 - [x] Render each accepted form question immediately above its answer, leading-aligned across the card width.
 - [x] Capture a synthetic long-answer example in the existing chat UI smoke fixture and retain submitted-value assertions.
 - [x] Review repair: assert the rendered accepted-card pair geometry and wrapping at narrow, ordinary and wide chat widths; save PNG and frame JSON for each.
 - [ ] Manager: independent review, exact-head CI and post-merge native chat acceptance.
+## LKM-531 — Project title hover actions
+
+- [x] Give project titles the full resting row width and constrain them only while their action overlay is visible.
+- [x] Reveal from the actual title, retain the controls across pointer travel, and restore the title and marquee on exit.
+- [x] Extend the project action fixture and sidebar geometry assertions for hover, crossing, exit, width and marquee reset.
+- [x] Review repair: restore project-title hover across a stationary-pointer row reload and assert that opening another project's menu preserves the selected project and visible chats.
+- [x] Review repair: carry hover through the nested History reload; assert that path in the sidebar fixture and make the marquee fixture independent of the runner's Reduce Motion preference.
+- [ ] Manager: independent review, exact-head CI and post-merge native sidebar pointer/rendered acceptance.
 ## LKM-532 — Native preview-markup foreground failure on main
 
 - [x] Bound the posted-event seam's foreground activation wait and retry activation while AppKit settles; retain the no-sheet guard and report focus state on failure.

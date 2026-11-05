@@ -75,6 +75,8 @@ const settings = new NativeSettingsController(sheets, preferences, () => notifie
 const action = (name, values = {}) =>
   sheets.action({ id: sheets.current.state.id, action: name, values })
 const field = (id) => sheets.current.state.fields.find((f) => f.id === id)
+const providerContext = () =>
+  sheets.current.state.sections.find((section) => section.id === 'providers').draftContext
 await settings.open()
 // One sidebar window: General, AI Providers (inline, no separate sheet), Skills and Experimental.
 assert.deepEqual(
@@ -89,6 +91,7 @@ assert.deepEqual(
   ]
 )
 assert.equal(sheets.current.state.section, 'general', 'first open shows General')
+assert.equal(providerContext(), 'overview', 'the provider list has a stable draft context')
 assert.deepEqual(
   sheets.current.state.fields.map((f) => [f.id, f.section]),
   [
@@ -397,8 +400,19 @@ assert.equal(connections.length, 1)
 assert.deepEqual(connections[0].models, ['a', 'b'])
 assert.equal(sheets.current.state.id, inPlace)
 assert.equal(field('connection').value, 'connection-1')
+assert.equal(field('connection-detail').action, 'edit', 'selected provider opens its details')
+assert.deepEqual(
+  sheets.current.state.actions.filter((a) => a.primary).map((a) => a.id),
+  ['add'],
+  'only Add is a section-wide provider action'
+)
 await action('edit', { connection: 'connection-1' })
+assert.equal(providerContext(), 'provider:connection-1', 'the editor uses the selected provider ID')
 assert.equal(field('key').help, 'Leave blank to keep the current key.')
+assert.ok(
+  sheets.current.state.actions.some((a) => a.id === 'delete'),
+  'Remove is in provider detail'
+)
 await action('save-provider', { ...draft, url: 'https://different.example/v1', key: '' })
 assert.match(sheets.current.state.message, /API key/)
 await action('save-provider', { ...draft, key: '' })
@@ -406,10 +420,38 @@ assert.ok(
   !('apiKey' in calls.filter((c) => c[0] === 'providers:save').at(-1)[1]),
   'blank key preserves same-origin credentials'
 )
-await action('delete', { connection: 'connection-1' })
+await action('edit', { connection: 'connection-1' })
+await action('delete')
+assert.equal(providerContext(), 'provider:connection-1', 'Remove keeps the editor identity')
 assert.equal(connections.length, 1, 'deletion requires confirmation screen')
 assert.match(field('remove-confirm').label, /Remove Test\?/)
+assert.deepEqual(
+  sheets.current.state.actions.filter((a) => a.section === 'providers').map((a) => a.id),
+  ['back', 'remove'],
+  'Remove from the editor opens the selected provider confirmation without a connection field'
+)
+await sheets.action({ id: inPlace, action: 'section', values: {}, section: 'general' })
+await sheets.action({ id: inPlace, action: 'section', values: {}, section: 'providers' })
+assert.match(field('remove-confirm').label, /Remove Test\?/)
+await action('back')
+assert.equal(
+  providerContext(),
+  'provider:connection-1',
+  'confirmation Back restores the same identity'
+)
+assert.equal(
+  sheets.current.state.sections.find((section) => section.id === 'providers').navigationTitle,
+  'Edit Test',
+  'Back from Remove returns to the selected provider editor'
+)
+assert.equal(field('key').help, 'Leave blank to keep the current key.')
+assert.ok(sheets.current.state.actions.some((item) => item.id === 'delete'))
+await action('delete')
 await action('remove')
+assert.ok(
+  calls.some((call) => call[0] === 'providers:remove' && call[1] === 'connection-1'),
+  'confirmed removal still targets the selected provider'
+)
 assert.equal(connections.length, 0)
 assert.equal(field('connections').value, 'None')
 assert.equal(sheets.current.state.id, inPlace)

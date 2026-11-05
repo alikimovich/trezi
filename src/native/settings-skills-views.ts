@@ -4,7 +4,10 @@ import {
   SKILL_RECOMMENDATIONS,
   type SkillRecommendation
 } from '../shared/skills-catalog'
-import { SKILL_RECOMMENDATION_IMPORTS } from '../shared/skills-recommendations'
+import {
+  recommendationImport,
+  SKILL_RECOMMENDATION_IMPORTS
+} from '../shared/skills-recommendations'
 import {
   type SkillBody,
   type SkillSummary,
@@ -152,7 +155,11 @@ export function overview(pane: Pane) {
   ]
   const row = (field: Omit<NativeSheetField, 'kind'>) => fields.push({ kind: 'readonly', ...field })
   const skills = pane.list?.skills ?? []
-  const installed = skills.filter((s) => !s.removed),
+  // The persisted enabled bit orders the library; it says nothing about revisions
+  // already pinned by a running conversation.
+  const installed = skills
+      .filter((s) => !s.removed)
+      .sort((a, b) => Number(b.enabled) - Number(a.enabled)),
     removed = skills.filter((s) => s.removed)
   // One row ID while loading, failed or empty: the window's values stay the same either way.
   if (pane.error) {
@@ -201,7 +208,9 @@ export function overview(pane: Pane) {
     help: 'Each recommendation names a GitHub folder and its license. Install adds it to the library.',
     value: ''
   })
-  for (const entry of SKILL_RECOMMENDATIONS) {
+  for (const entry of SKILL_RECOMMENDATIONS.filter(
+    (candidate) => recommendationImport(candidate) && SKILL_RECOMMENDATION_IMPORTS[candidate.id]
+  )) {
     const taken = installedFrom(pane.list, entry)
     const category = SKILL_RECOMMENDATION_IMPORTS[entry.id]?.category ?? 'Start here'
     row({
@@ -212,10 +221,8 @@ export function overview(pane: Pane) {
       value: taken
         ? taken.removed
           ? 'Removed'
-          : 'Installed'
-        : entry.importable
-          ? `${entry.publisher} · ${entry.license}`
-          : 'Not importable',
+          : `Installed · ${taken.enabled ? 'On' : 'Off'}`
+        : `${entry.publisher} · ${entry.license}`,
       action: `skill-recommendation:${entry.id}`,
       actionLabel: 'Details…'
     })

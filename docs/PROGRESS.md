@@ -8,6 +8,41 @@
 
 - The chat title, preview address and branch/status label now use native system monospace at their existing sizes and weights. The loading title remains fixed width; address truncation and branch spacing use their actual font. Publish remains a standard native `NSMenuToolbarItem`, whose public API has no font property; the trigger's typography needs a product choice if its glass and action behavior must remain native.
 - Follow-up authorization resolves Publish with a custom glass-backed AppKit segmented control. Its primary segment uses system monospace and still dispatches the toolbar Publish action; the chevron opens the existing menu, and an active publish routes the primary segment to that menu. The original spinner frames, menu entries and enablement remain. The toolbar fixture now checks the Publish font, size, glass and label fit; post-merge rendered inspection remains required.
+## 2026-11-04 — LKM-525 credential removal and pinned feedback repair
+
+- A successful Claude token or Gemini key removal now sends a one-update clear signal to the native Settings form, which discards both its typed secure value and matching retained draft. Failed removal leaves the draft intact; unrelated provider drafts still restore. The synthetic Settings fixture covers removal, Back, reopen and blocked resubmission for each credential. Validation and service messages now render beside the pinned action above long scrolling Settings forms, with windowless geometry and accessibility assertions. Current-head CI, independent review and native acceptance remain manager gates.
+
+## 2026-11-04 — LKM-525 provider draft identity security repair
+
+- Retained provider form drafts now use the selected provider's stable ID, section and field ID instead of the displayed navigation title. Remove confirmation keeps the same identity through Back and clears only that provider's draft after confirmed removal. The existing windowless Settings fixture first reproduced a same-label collision, then checks that provider B cannot receive or submit provider A's synthetic key, URL or models while A's own draft still restores. The controller fixture checks that list, editor and confirmation states send the matching stable context; current-head CI and native acceptance remain with the manager.
+
+## 2026-11-04 — LKM-525 CI fixture repair
+
+- The `resolved-lessons` unit fixture now checks that Undo restores the exact captured prior memory and that a real memory update occurred. Its old assertion rejected any prior content containing the word “lesson,” which could fail without showing an Undo regression. No memory owner or Settings product behavior changed; current-head CI must rerun this fixture.
+
+## 2026-11-04 — LKM-525 provider removal confirmation Back repair
+
+- Remove confirmation now returns to its immediate selected provider editor. The native sheet retains that editor's unsaved fields across confirmation and sidebar reentry, and clears the obsolete draft after a successful removal. Focused controller and windowless Settings fixtures cover the route, exact synthetic draft restoration and confirmed-remove cleanup; current-head CI and post-merge native acceptance remain with the manager.
+
+## 2026-11-04 — LKM-525 selected provider Remove route repair
+
+- The editor's Remove action now uses the provider already selected when the editor opened. Its form has no provider picker, so reading a connection value from that form blocked the confirmation. The existing confirmation and removal handler remain unchanged; the focused provider route fixture invokes Remove without a synthetic connection value and checks the confirmation actions before its stand-in removal.
+
+## 2026-11-04 — LKM-525 provider hierarchy and review repair
+
+- AI Providers now has one pinned overview action, Add provider. The selected custom provider, Claude, and Gemini use labeled configuration rows, with Gemini On/Off still a separate choice. Remove moves to the selected provider editor and keeps its existing confirmation and service handler; credentials, default-model choices, and autosave paths are unchanged. The pinned native button again excludes destructive actions from Return. The long Skills detail fixture now scrolls the outer form before checking Back and Save Revision geometry, and the Settings viewport fixture checks the provider overview hierarchy. Focused unit and windowless fixtures cover the paths; manager-owned native acceptance and current-head CI remain pending.
+
+## 2026-11-04 — LKM-525 review repair: nested headings and scroll evidence
+
+- Nested Skills forms now omit a group heading when it repeats the pinned navigation title, retaining distinct field groups and help. The windowless Settings fixture scrolls a long provider form before checking Back and the primary action remain visible and hittable. The Skills rendered-state fixture inspects the first enabled installed row's native On label within the ordinary viewport. Post-merge native visual acceptance remains with the manager.
+
+## 2026-11-04 — LKM-525 Skills list follow-up
+
+- The normal recommendations list now includes only importable, path-verified catalog entries with recorded import evidence. Empty categories disappear, while catalog provenance and any installed library record remain intact. Installed rows use persisted enabled state for ordering and On/Off labels; matching recommendation rows show both Installed and On/Off. Focused list/evidence fixtures cover unavailable entries, an installed unavailable source, state changes and the existing native viewport assertions. Native GUI acceptance remains with the manager after merge.
+
+## 2026-11-04 — LKM-525 nested Settings header
+
+- Skills overview and nested Skills/provider panes now use the existing section and action state to keep registered actions in a fixed header. Nested panes show Back and context; the grouped form holds metadata and help below it, and the large section title stays only on overviews. Unsaved draft values survive Back and reopen in the same window, scoped to their pane context. Skills and windowless native fixtures cover parent/detail/back, draft preservation and section reentry; native visual acceptance remains for the manager after merge.
 ## 2026-11-04 — LKM-533 review repair: accepted-card geometry evidence
 
 - The existing chat UI native smoke now records SwiftUI question and answer line frames for synthetic accepted forms at 320, 400 and 520 point chat widths. It asserts pair order, leading alignment, card-width use, bounds, and long-answer wrapping, and writes a PNG plus geometry JSON for each width. The manager's post-merge native chat run remains the visual acceptance gate.
@@ -15,6 +50,20 @@
 ## 2026-11-04 — LKM-533 accepted answer layout
 
 - Accepted form cards now stack each question and answer in field order, with leading alignment and available-width wrapping. The existing header, status and pending controls remain on their prior paths. The chat UI smoke uses a synthetic long answer in its accepted-card foreground capture and checks that the submitted note reaches the turn. Native visual acceptance remains with the post-merge run.
+## 2026-11-04 — LKM-531 nested reload and CI fixture repair
+
+- The History reload path now carries project hover through `reloadNested`, using the same pointer and marquee restoration as the full outline reload. The existing sidebar History smoke fixes a pipe-only pointer on the title, opens Show History to exercise that path, and checks the replacement row retains its active title exclusion until hover exit.
+- PR CI's sidebar project-action fixture failed because its marquee assertion inherited the runner's Reduce Motion preference. The offscreen fixture now uses its existing motion override for the marquee lifecycle section and restores it afterward; no system preference changes. A separate native Changes fixture failure in that prior-head run concerns Git HEAD state outside this ticket. Exact-head CI remains required.
+
+## 2026-11-04 — LKM-531 review repair: project hover across reload
+
+- Project-row replacement now rechecks the stationary pointer against the new title and the prior overlay region, carrying the marquee start for the same hovered project. The existing offscreen action fixture replaces a row under a fixed pointer and checks that its controls and title width stay active until exit.
+- The sidebar History fixture now opens another project's action menu without choosing an item and checks that the selected project, selected row and visible chats remain unchanged. Native pointer/rendered acceptance, exact-head CI and independent review remain with the manager.
+
+## 2026-11-04 — LKM-531 project title hover actions
+
+- Project titles now occupy the available row width at rest. Hovering the actual title reveals the existing project buttons over its trailing space, with a continuous pointer path into them; leaving restores the width. The title uses the existing marquee with the active width and stops it on exit or removal.
+- The offscreen project action fixture covers background, title, bridge, control and exit states, width restoration and long-title marquee reset. Sidebar verification records the resting and active title inset for the post-merge native check; independent review and exact-head CI remain required.
 ## 2026-11-04 — LKM-532 Mark up foreground activation in native smoke
 
 - The `preview-markup` posted-event seam now waits up to five seconds for the host window to become key in the active app, re-requesting activation every half second. The prior single 90 ms wait could fail before AppKit completed activation after another native smoke. Events still require a foreground window without a sheet; failure now reports active, key, sheet and frontmost state. This changes only the disposable-profile smoke seam, so there is no user-visible changelog entry.
