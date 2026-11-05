@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-530 Unreleased placement after 0.13.26 sync
+
+- The new 0.13.26 release landed while this ticket was open. Its merge left the LKM-530 entry adjacent to the dated heading again; a section separator now keeps the entry visibly under Unreleased. Exact-head CI and post-merge native inspection remain manager gates.
+
 ## 2026-11-04 — LKM-530 changelog review repair
 
 - The LKM-530 Unreleased entry is separated from the 0.13.25 release heading so its placement is unambiguous. The earlier PR CI evidence includes canceled jobs and a chat-new-instant failure on a prior head; exact-head CI remains the manager's gate.
