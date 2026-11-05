@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-523 — Loading titles, sidebar typography and New Chat
+
+- [x] Drive a per-glyph monospace loading reveal in unknown sidebar and header titles, with stable accessibility text, Reduce Motion fallback and title lifecycle cleanup.
+- [x] Use system monospace in sidebar rows and keep the New Chat action in native glass with pointer and keyboard feedback.
+- [x] Extend the lock-free Swift fixture for staged glyphs, motion fallback and sidebar font; keep toolbar interaction regression coverage.
+- [ ] Manager: independent review, exact-head CI and post-merge native chat/sidebar/core acceptance with foreground captures.
+
 ## LKM-521 — Native chat and Settings suite failure
 
 - [x] Reveal the first rendered Skills overview row before checking its viewport geometry after returning from a long detail editor.

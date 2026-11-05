@@ -92,3 +92,76 @@ final class SidebarTitleShimmer: NSObject {
          "masked": label.layer?.mask === mask, "animated": band.animation(forKey: "shimmer") != nil]
     }
 }
+
+/// The reference decipher effect, driven by an unknown title's loading lifetime. The real title
+/// is never guessed: this resolves to a readable loading label while the conversation hydrates.
+final class SidebarTitleDecipher: NSObject {
+    static let text = "Loading chat"
+    static let alphabet = Array("abcdefghijklmnopqrstuvwxyz0123456789<>/{}[]:=+*")
+    let label: NSTextField
+    private var timer: Timer?
+    private var started: CFTimeInterval = 0
+    private(set) var mode = "off"
+    private(set) var resolved = 0
+
+    init(label: NSTextField) {
+        self.label = label
+        super.init()
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(refresh),
+            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+        refresh()
+    }
+
+    private static func hash(_ value: Double) -> Double {
+        let n = sin(value * 127.1 + 311.7) * 43758.5453
+        return n - floor(n)
+    }
+
+    @objc func refresh() {
+        guard label.window != nil else { stopClock(); mode = "off"; label.stringValue = Self.text; return }
+        if SidebarMarqueeTitle.reduceMotion {
+            stopClock(); mode = "still"; label.stringValue = Self.text; resolved = Self.text.count
+            return
+        }
+        if mode == "decipher" { return }
+        if mode == "resolved" { label.stringValue = Self.text; return }
+        mode = "decipher"; started = CACurrentMediaTime(); resolved = 0
+        tick()
+        let timer = Timer(timeInterval: 1.0 / 30, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
+        RunLoop.main.add(timer, forMode: .common); self.timer = timer
+    }
+
+    @objc private func tick() {
+        render(elapsed: max(0, CACurrentMediaTime() - started))
+    }
+
+    /// Deterministic fixture seam: stages are sampled without waiting for the timer.
+    func render(elapsed: CFTimeInterval) {
+        let progress = 1 - exp(-6 * elapsed)
+        let letters = Array(Self.text)
+        let output = NSMutableAttributedString(string: "")
+        var count = 0
+        for (column, letter) in letters.enumerated() {
+            let threshold = 0.12 + Double(column) / Double(max(32, letters.count)) * 0.62 + Self.hash(Double(column + 11)) * 0.12
+            let done = progress > threshold
+            if done { count += 1 }
+            let decoding = !done && progress > threshold - 0.14
+            let frequency = decoding ? 14.0 : 0.15 + Self.hash(Double(column + 3)) * 0.5
+            let step = floor(elapsed * frequency)
+            let glyph = letter == " " ? letter : done ? letter : Self.alphabet[Int(Self.hash(Double(column * 37) + step) * Double(Self.alphabet.count))]
+            let opacity: CGFloat = done ? 1 : decoding ? 0.88 : 0.72
+            output.append(NSAttributedString(string: String(glyph), attributes: [
+                .font: label.font ?? NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
+                .foregroundColor: (label.textColor ?? .labelColor).withAlphaComponent(opacity)
+            ]))
+        }
+        resolved = count
+        label.attributedStringValue = output
+        if count == letters.count { stopClock(); mode = "resolved"; label.stringValue = Self.text }
+    }
+
+    private func stopClock() { timer?.invalidate(); timer = nil }
+    func stop() { stopClock(); mode = "off"; label.stringValue = Self.text }
+    deinit { NSWorkspace.shared.notificationCenter.removeObserver(self); stopClock() }
+    func inspect() -> [String: Any] { ["mode": mode, "resolved": resolved, "text": label.stringValue, "animated": timer != nil] }
+}

@@ -94,23 +94,25 @@ export async function captureChatGate(
       `Chat gate ${stage}: selected chat owns column`
     )
     assert.ok(shell.chatTitle.length > 0, `Chat gate ${stage}: selected title is present`)
-    const selectedRow = shell.rows.find((row: { id: string }) => row.id === shell.selected)
-    assert.equal(
-      shell.chatTitle,
-      selectedRow?.title,
-      `Chat gate ${stage}: header follows selected row`
+    const selectedRow = shell.rows.find(
+      (row: { id: string; title: string; loadingTitle?: boolean }) => row.id === shell.selected
     )
-    if (shell.chatTitle === '••••••••') {
+    if (selectedRow?.loadingTitle) {
       assert.equal(
         shell.chatTitleLabel,
         'Loading conversation',
         `Chat gate ${stage}: loading label`
       )
       assert.ok(
-        ['sweep', 'still', 'none'].includes(shell.chatTitleMode),
+        ['decipher', 'resolved', 'still', 'off'].includes(shell.chatTitleMode),
         `Chat gate ${stage}: loading title mode`
       )
     } else {
+      assert.equal(
+        shell.chatTitle,
+        selectedRow?.title,
+        `Chat gate ${stage}: header follows selected row`
+      )
       assert.equal(shell.chatTitleLabel, shell.chatTitle, `Chat gate ${stage}: known title label`)
       assert.equal(shell.chatTitleMode, 'none', `Chat gate ${stage}: known title stops animating`)
     }
@@ -208,7 +210,7 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
         const shell = await host.request('shellInspect')
         return (
           shell.selected === `chat:${nativeWorkspace.active?.activeSessionKey}` &&
-          shell.chatTitle === '••••••••'
+          ['decipher', 'resolved', 'still'].includes(shell.chatTitleMode)
         )
       },
       'unknown selected title during opening',
@@ -216,10 +218,10 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
       () => host.request('shellInspect')
     )
     const shell = await host.request('shellInspect')
-    assert.equal(shell.chatTitle, '••••••••', 'Unknown header title is redacted')
+    assert.ok(!shell.chatTitle.includes('••••'), 'Unknown header title uses decipher glyphs')
     assert.equal(shell.chatTitleLabel, 'Loading conversation', 'Unknown header has stable label')
     assert.ok(
-      ['sweep', 'still'].includes(shell.chatTitleMode),
+      ['decipher', 'resolved', 'still'].includes(shell.chatTitleMode),
       'Unknown header has active or reduced-motion effect'
     )
     loadingTitle = {

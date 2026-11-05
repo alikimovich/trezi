@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-523 loading titles, sidebar type and New Chat
+
+- The read-only decipher reference snapshot at `/Users/panda/dev/hephaestus/reports/trezi-decipher-reference` was available with its source manifest. Unknown titles now use a native fixed-width per-glyph reveal in the sidebar and selected header, with a static Reduce Motion label and stable accessibility text. Authoritative ready/error titles replace the effect immediately; a running chat retains its separate shimmer.
+- Sidebar labels use the system monospace family. New Chat keeps its native glass and momentary control while its AppKit bezel responds to hover and keyboard focus. The offscreen sidebar fixture covers beginning, middle and resolved glyphs, static motion fallback, accessibility and font; the existing toolbar fixture compiles the shared control. Foreground appearance and interaction captures remain for the operator-owned post-merge native run.
+
 ## 2026-11-04 — LKM-521 native chat and Settings suite repair
 
 - The Skills smoke now scrolls its first overview row into view before asserting that the rendered button is unclipped and hittable. Returning from a long GitHub detail editor could leave the overview at the editor's scroll offset, making the row geometry check depend on earlier navigation. The first native run progressed past that row, then timed out waiting for the Impeccable import; dependent chat checks were skipped. The Impeccable wait now stops on a visible import rejection and reports its reason; both the Skills wait and code-link reveal wait include their last inspected state on timeout. The native chat and Settings groups remain the acceptance gate.

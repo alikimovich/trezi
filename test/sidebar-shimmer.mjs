@@ -148,10 +148,17 @@ if (process.platform !== 'darwin') {
     assert.ok(Math.abs(actual - expected) <= slack, `${label}: ${actual}, expected ${expected}`)
   const { idle, thinking, waiting, unread, history } = report
   assert.equal(report.loadingTitle.label, 'Loading conversation')
-  assert.equal(report.loadingTitle.mode, 'sweep')
+  assert.equal(report.loadingTitle.mode, 'decipher')
+  assert.ok(report.loadingEarly.decipher.resolved < report.loadingMiddle.decipher.resolved)
+  assert.ok(report.loadingMiddle.decipher.resolved < report.loadingResolved.decipher.resolved)
+  assert.equal(report.loadingResolved.text, 'Loading chat')
+  assert.equal(report.loadingResolved.decipher.animated, false)
+  assert.equal(report.loadingMiddle.label, 'Loading conversation')
   assert.equal(report.loadingReduced.mode, 'still')
-  assert.equal(report.loadingStopped.shimmer.animated, false)
+  assert.equal(report.loadingReduced.text, 'Loading chat')
+  assert.equal(report.loadingStopped.decipher.animated, false)
   assert.equal(report.loadingStopped.alpha, 1)
+  assert.match(report.idle.font, /Mono/i, 'sidebar rows use system monospace')
 
   // State: only `thinking` shimmers; a waiting row stays Running without it.
   assert.equal(thinking.mode, 'sweep')

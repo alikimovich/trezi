@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Changed
+
+- Unknown chat titles now decipher into a readable loading label; sidebar text uses system monospace, and New Chat gains native toolbar hover and focus feedback (LKM-523).
+
 ## [0.13.22] - 2026-11-04
 
 ### Fixed

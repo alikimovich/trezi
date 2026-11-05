@@ -126,6 +126,34 @@ final class IslandSegmentedControl: NSSegmentedControl {
     /// New Chat sits over its own 32 pt glass view; its frame, not AppKit's inset
     /// alignment rect, must meet that view's edges. Toolbar groups keep system alignment.
     var alignsFullFrame = false
+    /// The one segment embedded in the chat header's own glass has no cell bezel at rest.
+    /// Restore AppKit's textured bezel for pointer and keyboard interaction so it has the
+    /// same native hover, pressed and focus feedback as the neighboring toolbar segments.
+    var usesGlassHover = false
+    private var glassHovered = false
+    private var glassTracking: NSTrackingArea?
+    override var isEnabled: Bool { didSet { updateGlassBezel() } }
+    private func updateGlassBezel() {
+        guard usesGlassHover else { return }
+        cell?.isBordered = isEnabled && (glassHovered || window?.firstResponder === self)
+        needsDisplay = true
+    }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let glassTracking { removeTrackingArea(glassTracking) }
+        guard usesGlassHover else { return }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area); glassTracking = area
+    }
+    override func mouseEntered(with event: NSEvent) { super.mouseEntered(with: event); glassHovered = true; updateGlassBezel() }
+    override func mouseExited(with event: NSEvent) { super.mouseExited(with: event); glassHovered = false; updateGlassBezel() }
+    override func mouseDown(with event: NSEvent) {
+        if usesGlassHover && isEnabled { cell?.isBordered = true; needsDisplay = true }
+        super.mouseDown(with: event)
+        updateGlassBezel()
+    }
+    override func becomeFirstResponder() -> Bool { let accepted = super.becomeFirstResponder(); updateGlassBezel(); return accepted }
+    override func resignFirstResponder() -> Bool { let accepted = super.resignFirstResponder(); updateGlassBezel(); return accepted }
     override var alignmentRectInsets: NSEdgeInsets {
         alignsFullFrame ? NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0) : super.alignmentRectInsets
     }

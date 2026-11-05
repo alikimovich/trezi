@@ -39,7 +39,8 @@ func spinners(_ view: NSView) -> Int { (view is NSProgressIndicator ? 1 : 0) + v
 func describe(_ cell: SidebarChatCell) -> [String: Any] {
     let title = cell.title!, label = title.label
     return ["titleX": title.frame.minX, "titleWidth": title.frame.width, "labelX": label.frame.minX, "labelWidth": label.frame.width,
-            "mode": cell.shimmer?.mode ?? "none", "shimmer": cell.shimmer?.inspect() ?? [:], "spinners": spinners(cell),
+            "mode": cell.decipher?.mode ?? cell.shimmer?.mode ?? "none", "shimmer": cell.shimmer?.inspect() ?? [:],
+            "decipher": cell.decipher?.inspect() ?? [:], "font": label.font?.familyName ?? "", "spinners": spinners(cell),
             "label": cell.accessibilityLabel() ?? "", "alpha": label.alphaValue, "dot": !cell.dot.isHidden,
             "truncates": label.lineBreakMode == .byTruncatingTail, "text": label.stringValue, "archive": cell.archive != nil]
 }
@@ -95,12 +96,18 @@ report["idle"] = describe(idle); report["thinking"] = describe(thinking); report
 report["unread"] = describe(unread); report["history"] = describe(history)
 let loading = make(["loadingTitle": true], title: "••••••••")
 report["loadingTitle"] = describe(loading)
+loading.decipher?.render(elapsed: 0.025)
+report["loadingEarly"] = describe(loading)
+loading.decipher?.render(elapsed: 0.08)
+report["loadingMiddle"] = describe(loading)
+loading.decipher?.render(elapsed: 1)
+report["loadingResolved"] = describe(loading)
 SidebarMarqueeTitle.reduceMotionOverride = true
-loading.shimmer?.refresh()
+loading.decipher?.refresh()
 report["loadingReduced"] = describe(loading)
 SidebarMarqueeTitle.reduceMotionOverride = false
-loading.shimmer?.refresh()
-loading.shimmer?.stop()
+loading.decipher?.refresh()
+loading.decipher?.stop()
 report["loadingStopped"] = describe(loading)
 
 // The sweep, its mask at several phases, and on a selected row.
