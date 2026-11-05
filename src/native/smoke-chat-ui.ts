@@ -6,6 +6,7 @@ import { chatUiTool } from '../main/chat-ui'
 import type { AgentEvent } from '../shared/api'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
+import { cleanSharedChat } from './smoke-shared-chat'
 import { inspectUntil, waitFor } from './smoke-wait'
 
 type ChatUiState = {
@@ -107,6 +108,7 @@ export async function checkChatUi(host: NativeBridge, artifacts: string) {
     return result
   }
   let originalChatWidth: number | undefined
+  let reset: unknown
   try {
     await inspectUntil(request, 'composerInspect', (s) => s.queueCount === 0)
     await inspectUntil(request, 'chatInspect', (s) => !s.activity)
@@ -202,13 +204,14 @@ export async function checkChatUi(host: NativeBridge, artifacts: string) {
     assert.match(sent[2], /- Corner radius: 12 px/)
     assert.match(sent[2], /- Anything else: Keep the card calm and easy to scan\./)
     await inspectUntil(request, 'chatInspect', (s) => component(s, form.id)?.answered === true)
-    // Measure rendered SwiftUI line frames at narrow, ordinary and wide supported widths.
+    // Measure rendered SwiftUI line frames at narrow, ordinary and wide widths.
+    // The test window caps the chat at 466 pt (canvas width minus preview minimum).
     // The synthetic answer must wrap inside the card at all three sizes.
     let previousCardWidth = 0
     for (const [name, width] of [
       ['narrow', 320],
       ['ordinary', 400],
-      ['wide', 520]
+      ['wide', 460]
     ] as const) {
       const layout = await host.request('chatAcceptance', { prepare: true, width })
       assert.ok(Math.abs(layout.chatWidth - width) <= 1, `${name}: chat width ${layout.chatWidth}`)
@@ -266,6 +269,16 @@ export async function checkChatUi(host: NativeBridge, artifacts: string) {
       `Chat UI: options shown mid-turn with skeletons (${filled.images.length} preview images, ${filled.missing.length} missing), form; light and dark captures; pick and submit sent structured turns with their summaries.`
     )
   } finally {
+    // A timed-out capture can leave the stubbed provider's real backend turn
+    // running. End it before the following checks reuse this shared chat.
+    reset = await cleanSharedChat(
+      host,
+      {
+        state: () => nativeChat.services.invoke('agent:turn-state', chat),
+        controller: () => nativeChat.get(chat)
+      },
+      () => emit({ type: 'done' })
+    )
     if (originalChatWidth !== undefined)
       await host.request('chatAcceptance', { prepare: true, width: originalChatWidth })
     await host.request('chatUi', { restore: true })
@@ -274,4 +287,5 @@ export async function checkChatUi(host: NativeBridge, artifacts: string) {
     // Like smoke-chat: keep the stub if nothing was sent, so a late send never escapes.
     if (sent.length) provider.restore()
   }
+  if (reset) throw reset
 }

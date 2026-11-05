@@ -104,6 +104,9 @@ final class ChatModel: ObservableObject {
     /// Answer components (ChatUi.swift) by record id, for inspection and captures.
     var chatUiFrames: [String: CGRect] = [:]
     var chatUiAcceptedLineFrames: [String: CGRect] = [:]
+    /// Ephemeral chat UI capture: reveal the containing lazy message after a width change.
+    var chatUiCaptureMessage = ""
+    @Published var chatUiCaptureRevision = 0
     var bottomPosition: CGFloat = 0
     var latestButtonFrame = CGRect.zero
     /// What the conversation's SwiftUI views read (see ChatAccessibilityEcho).
@@ -499,6 +502,10 @@ struct ChatConversation: View {
                     .onChange(of: model.revealRevision) { _ in
                         follows = false; sticky = nil
                         reveal(proxy, readingHeight: readingHeight, viewportHeight: viewport.size.height)
+                    }
+                    .onChange(of: model.chatUiCaptureRevision) { _ in
+                        follows = false; sticky = nil
+                        proxy.scrollTo(model.chatUiCaptureMessage, anchor: .top)
                     }
                     .onChange(of: model.controlInteraction) { _ in follows = false }
                     .onChange(of: model.followRevision) { _ in if follows { proxy.scrollTo("bottom", anchor: bottomAnchor); pinRequest += 1; settleContent() } }

@@ -1919,16 +1919,40 @@ function setFrame(on: boolean): void {
   positionFrame()
 }
 
+const threeDRouteTrace = {
+  received: 0,
+  direct: 0,
+  callbacks: 0,
+  sent: 0,
+  lastAction: null as null | { session: string; revision: number; result: boolean; reason: string },
+  lastCallback: null as null | {
+    source: string | null
+    page: string
+    session: string
+    revision: number
+    selected: number
+    reason: string
+  }
+}
 const threeD = createThreeDInspector({
   publish: (state: ThreeDState | null) => ipcRenderer.send(PREVIEW_THREE_D_STATE, state),
   hasSource: (el) => !!findSource(el),
   code: (el, session, revision, selected) => {
+    threeDRouteTrace.callbacks++
     selectedEl = el
     const picked = describe(el)
+    threeDRouteTrace.lastCallback = {
+      source: picked.source ?? null,
+      page: location.href,
+      session,
+      revision,
+      selected,
+      reason: picked.source ? 'source-described' : 'description-has-no-source'
+    }
     ipcRenderer.send(PICKED, picked)
     // Selection processing can await preview cleanup. Carry this inspected layer's
     // source instead of asking the controller for whichever selection settled last.
-    if (picked.source)
+    if (picked.source) {
       ipcRenderer.send(TOOLBAR_ACTION, {
         action: 'three-d-code',
         source: picked.source,
@@ -1937,6 +1961,9 @@ const threeD = createThreeDInspector({
         revision,
         selected
       })
+      threeDRouteTrace.sent++
+      threeDRouteTrace.lastCallback.reason = 'toolbar-action-sent'
+    }
   },
   select: (el, open) => {
     clearStylePreview()
@@ -2070,12 +2097,43 @@ if (!IS_SIM_BRIDGE) {
   )
   // After the listeners above, which see the shield as overlay and drop the hover box.
   nativeCover.install()
-  ipcRenderer.on(PREVIEW_THREE_D_ACTION, (_e, action: ThreeDAction) => threeD.action(action))
+  ipcRenderer.on(PREVIEW_THREE_D_ACTION, (_e, action: ThreeDAction) => {
+    if (action?.action !== 'code') {
+      threeD.action(action)
+      return
+    }
+    threeDRouteTrace.received++
+    const result = threeD.action(action)
+    threeDRouteTrace.lastAction = {
+      session: action.session,
+      revision: action.revision,
+      result,
+      reason: threeD.codeStatus()
+    }
+  })
   // The host paints atlas pages here and snapshots only when this answers true (LKM-227).
   // A global of the isolated world: the page cannot reach it.
   ;(globalThis as { __treziThreeDAction?: (action: unknown) => boolean }).__treziThreeDAction = (
     action
-  ) => threeD.action(action as ThreeDAction)
+  ) => {
+    if ((action as ThreeDAction)?.action !== 'code') return threeD.action(action as ThreeDAction)
+    threeDRouteTrace.direct++
+    const result = threeD.action(action as ThreeDAction)
+    threeDRouteTrace.lastAction = {
+      session: (action as ThreeDAction).session,
+      revision: (action as ThreeDAction).revision,
+      result,
+      reason: threeD.codeStatus()
+    }
+    return result
+  }
+  // This function exists only in the isolated content world; the page cannot invoke it.
+  ;(globalThis as { __treziThreeDTrace?: () => typeof threeDRouteTrace }).__treziThreeDTrace =
+    () => ({
+      ...threeDRouteTrace,
+      lastAction: threeDRouteTrace.lastAction && { ...threeDRouteTrace.lastAction },
+      lastCallback: threeDRouteTrace.lastCallback && { ...threeDRouteTrace.lastCallback }
+    })
   // Main sends them on every load and whenever the host's layout changes them.
   ipcRenderer.on(PREVIEW_COVERED, (_e, rects: unknown) => nativeCover.set(rects))
   // The pointer entered a native island: WebKit may not deliver the move the shield would clear on.

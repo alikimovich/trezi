@@ -131,6 +131,17 @@ async function webkitBrowser(key: string, root: string, isolated = false): Promi
       .catch(() => null)
     return typeof value === 'number' ? value : null
   }
+  const loadedTimeOrigin = async () => {
+    // WKWebView can emit didFinish before its isolated content world accepts an
+    // evaluation. Keep the load record pending until we have a real document start;
+    // identity still compares it with a fresh read and fails closed on mismatch.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const started = await timeOrigin()
+      if (started !== null) return started
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    return null
+  }
   const begin = () => {
     const server = agentRuntime(id)
     pending = {
@@ -152,7 +163,7 @@ async function webkitBrowser(key: string, root: string, isolated = false): Promi
             ...pending,
             navigation: browser.navigation,
             after: snapshotOf(root),
-            started: timeOrigin()
+            started: loadedTimeOrigin()
           }
         : null
       pending = null

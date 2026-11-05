@@ -33,11 +33,12 @@ function glassInk(image: State, frame: string) {
   const [, , windowWidth, windowHeight] = numbers(image.geometry.window)
   const [cropX, cropY] = numbers(image.geometry.crop)
   const scale = Number(image.geometry.image.match(/^(\d+)x/)?.[1]) / windowWidth
+  const offsetX = image.captureOffsetX ?? 0
   assert.ok(
     width >= 24 && height >= 24 && Number.isFinite(scale),
     'glass pixels have measured native geometry'
   )
-  const px = (offset: number) => Math.round((x + offset) * scale - cropX)
+  const px = (offset: number) => Math.round((x + offset) * scale - cropX + offsetX)
   const py = (offset: number) => Math.round((windowHeight - y - offset) * scale - cropY)
   const sample = (offset: number) => {
     const sx = px(offset),
@@ -49,9 +50,16 @@ function glassInk(image: State, frame: string) {
     return pixels.rgb(sx, sy)
   }
   const inside = sample(5),
-    outside = sample(-5)
+    outside = sample(-5),
+    border = sample(0)
   const brightness = (rgb: number[]) => rgb.reduce((sum, value) => sum + value, 0) / 3
-  return { inside, outside, lift: brightness(inside) - brightness(outside) }
+  return {
+    inside,
+    outside,
+    border,
+    lift: brightness(inside) - brightness(outside),
+    borderLift: brightness(border) - brightness(outside)
+  }
 }
 
 /** Compare the same native button's painted pixels in two foreground captures. The
@@ -60,7 +68,16 @@ function buttonPaintChange(before: State, after: State, frame: string) {
   const first = decodePng(Buffer.from(before.png, 'base64'))
   const second = decodePng(Buffer.from(after.png, 'base64'))
   assert.equal(before.geometry.window, after.geometry.window, 'interaction captures share geometry')
-  return paintedButtonDifference(first, second, before.geometry, frame)
+  return paintedButtonDifference(
+    first,
+    second,
+    {
+      ...before.geometry,
+      captureOffsetX: before.captureOffsetX,
+      secondCaptureOffsetX: after.captureOffsetX
+    },
+    frame
+  )
 }
 
 function toolbarButtonMeasure(frame: string) {
@@ -76,7 +93,12 @@ function toolbarButtonMeasure(frame: string) {
 export function paintedButtonDifference(
   first: { width: number; height: number; rgb: (x: number, y: number) => number[] },
   second: { width: number; height: number; rgb: (x: number, y: number) => number[] },
-  geometry: { window: string; crop: string },
+  geometry: {
+    window: string
+    crop: string
+    captureOffsetX?: number
+    secondCaptureOffsetX?: number
+  },
   frame: string
 ) {
   const numbers = (value: string) => (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
@@ -95,11 +117,22 @@ export function paintedButtonDifference(
     samples = 0
   for (let yy = -4; yy <= height + 4; yy += 2)
     for (let xx = -4; xx <= width + 4; xx += 2) {
-      const px = Math.round((x + xx) * scale - cropX)
+      const px = Math.round((x + xx) * scale - cropX + (geometry.captureOffsetX ?? 0))
+      const secondX = Math.round(
+        (x + xx) * scale - cropX + (geometry.secondCaptureOffsetX ?? geometry.captureOffsetX ?? 0)
+      )
       const py = Math.round((windowHeight - y - yy) * scale - cropY)
-      if (px < 0 || px >= first.width || py < 0 || py >= first.height) continue
+      if (
+        px < 0 ||
+        px >= first.width ||
+        secondX < 0 ||
+        secondX >= second.width ||
+        py < 0 ||
+        py >= first.height
+      )
+        continue
       const a = first.rgb(px, py),
-        b = second.rgb(px, py)
+        b = second.rgb(secondX, py)
       const difference = Math.max(...a.map((value, index) => Math.abs(value - b[index])))
       if (difference >= 3) changed++
       peak = Math.max(peak, difference)
@@ -274,7 +307,7 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
 
     // Capture each interaction beside More and the sidebar toggle at normal and narrower
     // widths. The narrower case collapses the sidebar so all three items stay visible.
-    const originalWidth = (await host.request('toolbarInspect')).windowWidth
+    const originalWidth = (await host.request('shellInspect')).windowWidth
     const originalSidebarCollapsed = (await shell()).sidebarCollapsed
     for (const { layout, appearance } of [
       { layout: 'normal', appearance: 'light' },
@@ -303,8 +336,24 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
         for (const enabled of [true, false]) {
           await host.request('chatNewAppearanceTest', { enabled })
           const state = await shell()
-          const image: State = await host.request('captureVisibleWindow')
           const name = `toolbar-actions-chat-new-${layout}-${appearance}-${enabled ? 'idle' : 'disabled'}`
+          // ScreenCaptureKit can pad a narrowed window with black pixels on its
+          // left. Find the first painted column and use the measured translation
+          // for every frame-based sample; reject a crop with no visible window.
+          const image: State = await host.request('captureVisibleWindow')
+          const pixels = decodePng(Buffer.from(image.png, 'base64'))
+          const centerY = Math.floor(pixels.height / 2)
+          let captureOffsetX = 0
+          while (
+            captureOffsetX < pixels.width / 4 &&
+            pixels.rgb(captureOffsetX, centerY).every((channel) => channel === 0)
+          )
+            captureOffsetX++
+          assert.ok(
+            captureOffsetX < pixels.width / 4,
+            `${name}: foreground window occupies capture`
+          )
+          image.captureOffsetX = captureOffsetX
           assert.equal(
             state.chatNewStandalone,
             true,
@@ -327,6 +376,7 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
           }
           results[name] = {
             capture: join(artifacts, `${name}.png`),
+            captureOffsetX,
             state,
             geometry: image.geometry,
             chat,
@@ -345,8 +395,8 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
             )
           }
           assert.ok(
-            Math.abs(neighbor.lift) >= 5,
-            `${name}: neighboring glass is visibly painted: ${JSON.stringify(neighbor)}`
+            Math.max(Math.abs(neighbor.lift), Math.abs(neighbor.borderLift)) >= 5,
+            `${name}: neighboring glass has visible interior or border: ${JSON.stringify(neighbor)}`
           )
           // These controls sit over different surfaces: New Chat is on the dark chat
           // header while the neighboring island is on the light preview toolbar.

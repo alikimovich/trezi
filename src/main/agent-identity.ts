@@ -132,6 +132,11 @@ export async function privateIdentity(page: {
       reason,
       ...(reason === 'snapshot-unavailable' && unavailable?.reason
         ? { detail: unavailable.reason }
+        : {}),
+      ...(reason === 'document-replaced'
+        ? {
+            detail: `recorded=${recordedStart ?? 'unavailable'}, current=${started ?? 'unavailable'}`
+          }
         : {})
     }
   }

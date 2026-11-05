@@ -191,14 +191,21 @@ export function assertToolbar(state: Toolbar, stage: string) {
     const rect = (value: string) => (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
     const [titleX, , titleWidth] = rect(state.chatTitleFrame)
     const [buttonX, , buttonWidth] = rect(state.chatNewFrame)
+    const columnEdge = state.detailLeading + state.chatWidth - 4
+    // At the minimum toolbar width the viewport already starts before the chat
+    // column ends. The button must stop before that adjacent item; a column-edge
+    // assertion there would require the two native toolbar items to overlap.
+    const columnEdgeFits = columnEdge <= state.viewportLeading
     assert.ok(
       state.chatNewStandalone &&
         buttonWidth >= 28 &&
         buttonWidth <= 48 &&
         buttonX >= titleX + titleWidth + 7 &&
         buttonX >= state.chatHeaderTrailing &&
-        Math.abs(buttonX + buttonWidth - (state.detailLeading + state.chatWidth - 4)) <= 3,
-      `Toolbar ${stage}: New Chat stays on the chat column's trailing edge without clipping the title: ${detail}`
+        (columnEdgeFits
+          ? Math.abs(buttonX + buttonWidth - columnEdge) <= 3
+          : buttonX + buttonWidth <= state.viewportLeading),
+      `Toolbar ${stage}: New Chat stays in its available chat slot without clipping the title: ${detail}`
     )
   }
   assert.equal(
@@ -273,8 +280,12 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
     await new Promise((resolve) => setTimeout(resolve, 300))
     const settled: Toolbar = await waitFor(async () => {
       const state = await host.request('shellInspect')
-      return Math.abs(state.windowWidth - width) < 1 && state
-    }, `toolbar ${name} window width`)
+      return (
+        Math.abs(state.windowWidth - width) < 1 &&
+        (!state.chatNewVisible || state.chatNewFrame !== '{{0, 0}, {0, 0}}') &&
+        state
+      )
+    }, `toolbar ${name} window width and laid-out New Chat`)
     assertToolbar(live, `${name} (inside the resize)`)
     assertToolbar(settled, name)
     // LKM-319: slow motion left or came back with this width; the islands still show no divider.
@@ -291,6 +302,10 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
         Math.abs(live[key] - settled[key]) <= 1,
         `Toolbar ${name}: ${key} is final in the resize pass (no reflow later): ${JSON.stringify({ live: pick(live), settled: pick(settled) })}`
       )
+    assert.ok(
+      Math.abs(live.chatHeaderWidth - settled.chatHeaderWidth) <= 1,
+      `Toolbar ${name}: chat header width is final in the resize pass: ${JSON.stringify({ live: pick(live), settled: pick(settled) })}`
+    )
     const inset = settled.windowWidth - settled.rightGroupLeading
     const moreShown = Boolean(settled.moreVisible)
     assert.equal(

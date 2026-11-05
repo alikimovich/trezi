@@ -35,6 +35,9 @@ if (process.platform !== 'darwin') {
   // Idle: no spinner, nothing to reserve.
   assert.equal(report.idle.busy, false, dump)
   assert.equal(report.idle.mode, 'inline', dump)
+  assert.equal(report.idle.cut && !report.idle.dotVisible && report.idle.kept === 0, true, dump)
+  const idleGap = report.idle.runs.at(-1)[0] - report.idle.runs.at(-2)[1]
+  assert.ok(idleGap >= 1 && idleGap <= 16, `a cut title without a dot meets its chevron: ${dump}`)
   // The check can fail: the spinner moved over the ellipsis is not clear of the text.
   assert.equal(report.spinnerOverText.fits, false, `a spinner over the text does not fit: ${dump}`)
   // LKM-440: AppKit's tail truncation dropped the dot's en-space slot as trailing whitespace,
@@ -53,5 +56,15 @@ if (process.platform !== 'darwin') {
   // Untightened, the cut and the drawing agree: a title that fits is drawn whole.
   assert.equal(whole.cut || whole.kept > 0, false, `the whole title fits at 94.5 pt: ${dump}`)
   assert.ok(gap(whole.runs) >= 1 && gap(whole.runs) <= 6.5, `untruncated chevron gap: ${dump}`)
+  const host = report.hostCompact
+  assert.equal(
+    host.cut && host.kept === 0 && !host.dotVisible,
+    true,
+    `host title cuts before its dot: ${dump}`
+  )
+  assert.ok(
+    gap(host.runs) >= 1 && gap(host.runs) <= 16,
+    `monospace 98 pt title meets its chevron: ${dump}`
+  )
   console.log('BRANCH-SPINNER PASS')
 }
