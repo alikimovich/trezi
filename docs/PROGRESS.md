@@ -12,6 +12,77 @@
 
 - Registered the existing synthetic annotation composite/Send scenario in the ordinary core check list, immediately after preview Mark up and before text editing. The narrow opt-in still filters to this check and the disposable-project prelude. Pure selection assertions cover default and core runs, the narrow route, incompatible opt-ins, and the existing cleanup hook; the scenario still intercepts outbound Send and restores the preview before later checks. Independent review, exact-head CI, and post-merge serialized native acceptance remain manager gates.
 
+## 2026-11-05 — LKM-537 stale 3D Code after a same-document route change
+
+- Manager native chat/core on candidate `66949fe3` passed 60 of 62 checks. The 3D negative failed because preview IPC allowed any local page URL, so a Code action from the old hash route could pass while the WebKit view had already moved to a new route and its scene-clear message was still in flight. The IPC guard now compares the action page with the current preview view URL before forwarding. The existing non-GUI state-relay fixture exercises a valid Code, a stale old-route Code with the scene still active, a changed selection and a closed scene. The inspector's prior running-server versus page fix remains intact.
+- The other native failure is `core/agent-integration`: a private WebKit browser receipt passed its `Other by B` text check but reported `source-not-verified: document-replaced` after a reload. That is a separate private-browser document freshness path; no 3D routing change or shared cause was shown. Manager exact-final-tree native chat/core, independent review, current-head CI and acceptance remain pending.
+
+## 2026-11-05 — LKM-537 live Code refusal and compact toolbar constraint
+
+- The locked core trace showed a native Code event, isolated WebKit callback with `index.html:3:1`, and preview IPC acceptance for the same session, revision, selection and page. The inspector alone refused `status-page-mismatch`: its runtime status URL identifies the running dev server while WebKit had navigated to `/?lkm219=c`. Code now relies on the host's current page, ready root, running status and preview IPC's exact scene identity; stale page, session, revision, selection and root controls remain. The original 10-second native assertion is unchanged.
+- The 950-point toolbar has a 152-point chat header model and constraint inside its 950-point container. New Chat ends at x438, immediately before the viewport at x442; its nominal chat-column target x546 would overlap the viewport and address. The smoke checks the exact column edge where it fits and bounds New Chat before the viewport when space forces compression. The offscreen width fixture records the measured compact case. Final-tree quick and native confirmation remain to be evaluated after these edits.
+
+## 2026-11-05 — LKM-537 live 3D Code boundary discriminator
+
+- The retained worker native trace had a valid selected leaf (`index.html:3:1`, selected 4, session `1793879201965-0.4927457621267335`, revision 3, page `http://127.0.0.1:7777/?lkm219=c`, no turn) and reported that the direct preview action returned true while an unrelated `wrap-sample.ts` editor stayed open. The existing failure-only direct toolbar probe now runs regardless of that unrelated editor. To distinguish the first live refusal, bounded diagnostics record the native Code producer, Bun forward, isolated preload receipt/callback/send, preview IPC guard, inspector readiness/page guard and editor request/result, with identity and refusal reason but no file contents. The original 10-second assertion and all routing guards remain intact.
+- At width 950 the retained native report places New Chat at x438 versus the chat-column target x546. The width model is capped at 152 by address space; the measured viewport starts x442, address x527 and right group x627. Shell inspection now includes the header's actual width constraint, frame and container frame so a locked run can distinguish model sizing from AppKit placement. No speculative toolbar reflow or assertion change was made. Focused checks, quick verification and the manager's native/review/CI gates remain pending on this edited tree.
+
+## 2026-11-05 — LKM-537 source route composition and narrow toolbar boundary
+
+- A task-local, non-GUI composition used the real 3D inspector action, preview IPC registration, inspector event handler and source editor open/read consumer with the retained `index.html:3:1` target and selected layer 4. It opened `index.html` through one source tree/read pair; wrong page, session, revision, selection and active root did not forward or read. The preload callback and native Shell-to-WebKit delivery were not executed by this fixture, so the installed 3D timeout still has no proven drop boundary and no product guard was changed.
+- The retained 950-point native report measured a 152-point chat header constraint, New Chat ending at x438, and a chat-column target of x546. A task-local offscreen AppKit fixture with the real width model reproduced model width 152, constraint 152, container 950 and button x438. This identifies the competing toolbar bounds but does not prove a safe reflow; the existing New Chat product placement remains pending native acceptance.
+- The prior failure-only 3D tracer skipped its direct toolbar probe because an unrelated `wrap-sample.ts` editor was visible. It now always sends the exact selected source after the original assertion fails and records the resulting editor and scene state. This repairs the diagnostic gap without changing the passing interaction, 10-second assertion or stale guards. Manager native chat/core, review and CI remain pending.
+
+## 2026-11-05 — LKM-537 selected 3D Code route trace
+
+- The retained native artifacts show the selected `index.html` leaf and a Code timeout, but no action, page/readiness, or source-editor state at the refusal boundary. The 3D smoke now captures the selected session, revision, page, source editor for both default and fixture roots, and inspector state only if the original 10-second assertion fails. It then probes the current scene's Code action directly in the isolated preview and, if no editor opens, sends the same source through the preview toolbar IPC. These failure-only observations distinguish host relay, preview selection, and downstream inspector/editor routing without changing passing interaction or guards. A single worker native call and manager acceptance remain pending.
+
+## 2026-11-05 — LKM-537 resized New Chat measurement and 3D route discriminator
+
+- The retained native sidebar-340 frame placed New Chat at x679 rather than the chat edge x692. `alignChatHeader` reserved the button in the header width and again in the address limit, even though `ToolbarAddressLayout.measure` records the address offset after the button and viewport. The header now applies the button reserve only against the chat edge and passes its actual trailing edge to the address. The offscreen chat-lead fixture uses the saved 340-point sidebar geometry to check the 13-point correction; native placement remains to be verified.
+- A task-local non-GUI discriminator through the real inspector event handler accepted the exact `index.html:3:1` source after readiness and rejected pre-readiness and stale-page actions. The existing Swift relay and preview IPC fixture accepted current selected source and rejected stale selection/closed state. These controlled results do not identify where the live 3D Code action stopped in the saved native timeout, so no 3D product guard or timeout was changed. Native chat/core and manager acceptance remain pending.
+
+## 2026-11-05 — LKM-537 host-width branch cut and chat smoke cleanup
+
+- The saved native run measured a 19.375-point gap between the cut branch title and chevron in the 1320-point toolbar. A 98-point popup fixture using the host's monospaced font reproduced the same gap. The branch cell now moves only the trailing ellipsis into the spare room when no status-dot slot fits; the prefix and dot/spinner placement remain unchanged. The focused fixture keeps the 1–16-point rendered-ink assertion.
+- The same native run timed out in chat-ui with a live backend turn, then parallel-stream rejected that busy shared chat and quit-alert waited on its activity. Chat-ui now uses the established shared-chat cleanup in `finally` so a failing check ends its stubbed turn before later checks. The initial timeout cause remains to be established by native verification; this cleanup does not count that timeout as a pass.
+
+## 2026-11-05 — LKM-537 truncated branch title and chevron
+
+- Manager native verification passed 61 of 62 checks on the candidate and failed toolbar-address at the default 1320-point width. The measured branch title was cut, its dot slot was not retained, and AppKit left 19.375 points between the ellipsis and chevron. The branch cell now uses its existing explicit longest-prefix truncation even when no dot slot fits. The offscreen branch fixture checks the rendered ink gap for that case; final-tree quick and native chat/core verification remain the gates.
+
+## 2026-11-05 — LKM-537 synchronous toolbar resize measurement
+
+- The latest native core failure showed the resize snapshot at 950 points with a 144-point chat header, followed by a settled 100-point header and a 44-point address shift. One synchronous measurement still failed: it left a 152-point header and New Chat visible, then AppKit hid New Chat and shifted the address 96 points. The test resize now completes bounded layout and measurement passes so the item visibility change is reflected before its snapshot. The existing address-position assertion remains, and a new header-width assertion catches this ordering regression directly. Quick and native chat/core acceptance are pending on this tree.
+
+## 2026-11-04 — LKM-537 native fixture geometry follow-up
+
+- The native call showed that the narrow capture's black left band persisted for five seconds. The fixture now measures that band and translates glass and enabled/disabled pixel coordinates by the same offset; it records the offset with every PNG. A focused pixel test proves the translation reaches a painted button outside the unshifted sample area. The glass reference keeps a visible interior-or-border assertion because the saved light capture had a distinct capsule edge but little center contrast. Toolbar-address waits for New Chat's nonzero rendered frame after resize, then keeps its exact edge and title checks. Publish-progress tests a full failed-CI label at 1800 points while the branch-dot fixture still covers 1320 and 850 points. These changes require the manager's next native run; the current worker's native call limit is exhausted.
+- The enabled and disabled captures can carry different left padding, so the paint comparison uses each capture's own measured offset. The focused pixel fixture covers that case as well.
+
+## 2026-11-04 — LKM-537 foreground toolbar capture repair
+
+- The saved narrow light toolbar-actions capture had a 271-pixel black band at the left edge even though its geometry reported a full-width window. Frame-based glass samples therefore read white background away from the controls. The existing normal/narrow, light/dark, enabled/disabled fixture now waits for a foreground capture whose left interior is painted, records the sampled edge beside each PNG, and keeps its original glass, alignment, paint-change and interaction assertions. The manager's exact-tree native run must confirm the repaired capture and the remaining chat/core paths.
+
+## 2026-11-04 — LKM-537 native follow-up from candidate check
+
+- The first worker native run got past the original Publish-width, unsupported-command and private receipt assertions, then reported later core failures. The test resize now lays out the window's view tree before taking its synchronous toolbar snapshot. The Publish progress check waits for the restored 1320-point width and a fitting failed-CI title before asserting it. The narrow light glass capture showed white interior and exterior samples at the fixture's current points; its paint failure remains unresolved without another native run. The manager's native acceptance is still required.
+
+## 2026-11-04 — LKM-537 candidate core native repair
+
+- The preserved candidate native log identified four core failures in addition to the earlier chat capture. Publish now gives its custom toolbar view its intrinsic frame when created and when its label changes; the toolbar fixture still requires a measured full-width control. Toolbar actions use the host's supported shell inspection command. The branch-dot fixture reads the title rect's actual slot and ellipsis clearance instead of a fixed 90-point proxy. Private WebKit load recording retries a temporarily unavailable document-start read and reports both starts if exact-source verification still rejects a replacement. The existing exact-source comparison remains required. Quick and native chat/core checks are pending the final tree.
+
+## 2026-11-04 — LKM-537 review toolbar layout root cause
+
+- The deferred-frame wait showed a stable 87-point New Chat offset from the chat column edge, not a transient AppKit placement delay. The chat header was reserving the preview address's preferred 180-point width when the toolbar could only fit that address at its existing 80-point floor. Header sizing now reserves the floor; the address still chooses its own preferred width whenever it fits. The fixture keeps its exact edge and title-clearance assertion and reports measured frames on failure.
+
+## 2026-11-04 — LKM-537 review native toolbar timing repair
+
+- The review native chat run passed the accepted-card capture on the current tree but stopped earlier in sidebar-chats when its standalone New Chat geometry was sampled before AppKit's deferred toolbar alignment. The existing sidebar fixture now waits for the same exact edge, width and title-clearance conditions and reports all relevant frames if they never settle. This is a fixture timing repair for the review gate; no toolbar layout or user behavior changed.
+
+## 2026-11-04 — LKM-537 native accepted-card capture repair
+
+- The chat UI foreground capture now reveals the accepted component's containing message after each width change. At 320 points, pressing Latest parked that older card outside the lazy stack's realized viewport, so its measured frame was zero before the pair geometry assertions could run. The capture retries the message reveal while layout settles and still requires a visible card and measured answer lines at each width. The wide fixture uses 460 points because the native test window caps chat width at 466. No user-facing layout changed; quick and native verification remain the final worker gates.
 ## 2026-11-05 — LKM-543 posted canvas text fixture repair
 
 - The opt-in acceptance now clicks the canvas and types new and revised text through AppKit's posted event route. The host seam only reads the opened editor and focuses the overlay to commit; it no longer invokes the canvas drawing handler directly. This restores the existing markup routing invariant. A source-audit false match in the fixture label was also removed. The focused routing and controller checks pass locally; current-head CI and post-merge native execution remain manager gates.

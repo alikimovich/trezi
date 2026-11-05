@@ -31,6 +31,7 @@ final class PublishToolbarControl: NSView {
     }
     init() {
         super.init(frame: .zero)
+        setFrameSize(intrinsicContentSize)
         if #available(macOS 26.0, *), let effect = glass as? NSGlassEffectView {
             effect.style = .regular; effect.cornerRadius = 16; effect.contentView = segments
         } else { glass.addSubview(segments) }
@@ -67,6 +68,7 @@ final class PublishToolbarControl: NSView {
         segments.setAccessibilityLabel(title)
         spinnerView.isHidden = !busy
         invalidateIntrinsicContentSize()
+        setFrameSize(intrinsicContentSize)
     }
     func setSpinner(_ image: NSImage?) { spinnerView.image = image; spinnerView.isHidden = image == nil }
     @objc private func activate(_ sender: NSSegmentedControl) {

@@ -38,6 +38,7 @@ export function createThreeDInspector(options: {
   close: () => void
   selected: () => Element | null
   action: (action: ThreeDAction) => boolean
+  codeStatus: () => string
   key: (event: KeyboardEvent) => void
 } {
   let host: HTMLDivElement | null = null
@@ -45,6 +46,7 @@ export function createThreeDInspector(options: {
   let resolveSelected: (() => Element | null) | null = null
   let runAction: ((action: ThreeDAction) => boolean) | null = null
   let handleKey: ((event: KeyboardEvent) => void) | null = null
+  let codeStatus = 'not-run'
   const close = (): void => {
     if (!host) return
     cleanup?.()
@@ -242,8 +244,12 @@ export function createThreeDInspector(options: {
         }, 300)
     }
     runAction = (message) => {
-      if (disposed) return false
+      if (disposed) {
+        if (message?.action === 'code') codeStatus = 'disposed'
+        return false
+      }
       if (!threeDActionAllowed(message, session, revision, surfaces.length, pages.length)) {
+        codeStatus = 'session-or-revision-refused'
         // A rejected action for the live session (a stale revision after a refresh) re-publishes
         // the scene so the native controls show what the scene actually has.
         if ((message as { session?: unknown } | null)?.session === session) publish()
@@ -256,8 +262,13 @@ export function createThreeDInspector(options: {
         case 'code': {
           const element = resolveSelected?.()
           const index = surfaces.findIndex((surface) => surface.element === element)
-          if (element && index >= 0 && options.hasSource(element))
+          if (!element) codeStatus = 'selection-unresolved'
+          else if (index < 0) codeStatus = 'selection-not-captured'
+          else if (!options.hasSource(element)) codeStatus = 'source-unavailable'
+          else {
+            codeStatus = 'callback-called'
             options.code(element, session, revision, index)
+          }
           break
         }
         case 'layer':
@@ -354,7 +365,11 @@ export function createThreeDInspector(options: {
     open,
     close,
     selected: () => resolveSelected?.() ?? null,
-    action: (message) => runAction?.(message) ?? false,
+    action: (message) => {
+      if (!runAction && message?.action === 'code') codeStatus = 'not-active'
+      return runAction?.(message) ?? false
+    },
+    codeStatus: () => codeStatus,
     key: (event) => handleKey?.(event)
   }
 }

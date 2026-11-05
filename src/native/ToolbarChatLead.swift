@@ -7,6 +7,12 @@ import CoreGraphics
 /// address block into the overflow menu for a frame. The header follows the column, so while its
 /// frame has not moved with it, it starts at the column plus the offset learned at rest.
 struct ToolbarChatLead {
+    /// The measured address offset already includes New Chat and the viewport.
+    /// Reserve New Chat only against the column edge, not again against the address limit.
+    static func width(target: CGFloat, leading: CGFloat, newChatAdvance: CGFloat, addressLimit: CGFloat) -> CGFloat {
+        let reserve = max(32, min(60, newChatAdvance)) + 4
+        return min(max(100, target - leading - reserve), max(100, addressLimit))
+    }
     /// The chat header's leading edge minus the detail column's, at rest.
     private(set) var offset: CGFloat = 0
     /// The detail column's and the header's leading edges when `offset` was last learned.

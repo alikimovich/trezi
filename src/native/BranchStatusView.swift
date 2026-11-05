@@ -60,6 +60,10 @@ final class BranchPopUpButton: NSPopUpButton {
         let title = fullTitle
         return NSRect(x: title.minX + width(dotPrefix), y: title.minY, width: width(BranchStatusDot.slot), height: title.height)
     }
+    var dotCanKeepCutTitle: Bool {
+        let title = cell?.titleRect(forBounds: bounds) ?? bounds
+        return dotSlot.maxX + width("…") <= title.maxX
+    }
     override func layout() {
         super.layout()
         let full = fullTitle, slot = dotSlot, size = BranchStatusDot.diameter, side = Self.spinnerSize
@@ -75,7 +79,7 @@ final class BranchPopUpButton: NSPopUpButton {
         // Tail truncation keeps the slot only while it and the ellipsis still fit; clipping has none.
         let title = cell?.titleRect(forBounds: bounds) ?? bounds
         titleCut = width(itemTitle(at: 0)) > title.width
-        dot.isHidden = spinnerMode != .clipped && titleCut && slot.maxX + width("…") > title.maxX
+        dot.isHidden = spinnerMode != .clipped && titleCut && !dotCanKeepCutTitle
         // Inline, a cut title already leaves the spinner's slot and the ellipsis room (`spinnerMode`).
         let kept = spinnerMode == .inline && !progress.isHidden ? progressPrefix + BranchStatusDot.slot : dotPrefix + BranchStatusDot.slot
         keptSlots = titleCut && !dot.isHidden ? (kept as NSString).length : 0
@@ -99,6 +103,7 @@ final class BranchPopUpButton: NSPopUpButton {
                 "branchProgressFits":fullTitle.contains(progress.frame) && spinnerClear(),
                 "branchAccessibilityValue":accessibilityValue() as? String ?? ""]
             .merging(dot.inspect(slot: dotSlot, in: self)) { _, new in new }
+            .merging(["branchDotCanKeepCutTitle":dotCanKeepCutTitle]) { _, new in new }
     }
     override var intrinsicContentSize: NSSize {
         let size = super.intrinsicContentSize
@@ -121,9 +126,10 @@ final class BranchPopUpCell: NSPopUpButtonCell {
     /// LKM-440: AppKit's tail truncation drops the whitespace before its "…", the dot's en-space slot
     /// with it, so the ellipsis ran into the drawn dot and the chevron fell up to 18 pt behind. The
     /// title is cut at the longest start that fits with "…" and keeps its first `kept` UTF-16 units;
-    /// whitespace after them is dropped as AppKit does. Nil when the title fits or that start does not.
+    /// whitespace after them is dropped as AppKit does. With no kept dot slot, the same cut
+    /// keeps the ellipsis close to the chevron. Nil when the title fits or no start fits.
     static func cut(_ title: NSAttributedString, width: CGFloat, keeping kept: Int) -> NSAttributedString? {
-        guard kept > 0, title.length > kept, title.size().width > width else { return nil }
+        guard kept >= 0, title.length > kept, title.size().width > width else { return nil }
         let text = title.string as NSString
         var end = title.length
         while end > kept {
@@ -132,8 +138,19 @@ final class BranchPopUpCell: NSPopUpButtonCell {
             var stop = end
             while stop > kept, let scalar = UnicodeScalar(text.character(at: stop - 1)), CharacterSet.whitespaces.contains(scalar) { stop -= 1 }
             let candidate = NSMutableAttributedString(attributedString: title.attributedSubstring(from: NSRange(location: 0, length: stop)))
-            candidate.append(NSAttributedString(string: "…", attributes: title.attributes(at: stop - 1, effectiveRange: nil)))
-            if candidate.size().width <= width { return candidate }
+            candidate.append(NSAttributedString(string: "…", attributes: title.attributes(at: max(0, stop - 1), effectiveRange: nil)))
+            if candidate.size().width <= width {
+                // At the host's 98 pt monospaced popup the last whole prefix leaves a
+                // glyph's worth of unused room. Move only the trailing ellipsis into
+                // that room; the prefix and any retained status-dot slot stay put.
+                if kept == 0 && stop > 0 {
+                    let room = max(0, width - candidate.size().width - 2)
+                    let nudge = min(5, room)
+                    let last = (candidate.string as NSString).rangeOfComposedCharacterSequence(at: stop - 1)
+                    candidate.addAttribute(.kern, value: nudge, range: last)
+                }
+                return candidate
+            }
         }
         return nil
     }

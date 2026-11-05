@@ -276,12 +276,15 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             // The separate native item follows this title item. Measure AppKit's actual
             // inter-item advance once laid out; reserve it inside the chat column.
             let advance = (toolbarFrames["chat-new"]?.maxX).map { $0 - (mainFrame(chatHeader)?.maxX ?? 0) } ?? 40
-            let reserve = max(32, min(60, advance)) + 4
-            let width = min(max(100, target - leading - reserve), max(100, addressLayout.chatLimit(windowWidth: windowWidth, chatLeading: leading, addressPreferred: addressPreferredWidth) - reserve))
+            // Keep New Chat at the chat column edge before giving the address its
+            // preferred width. The address can compress to its existing floor.
+            let width = ToolbarChatLead.width(target: target, leading: leading, newChatAdvance: advance, addressLimit: addressLayout.chatLimit(windowWidth: windowWidth, chatLeading: leading, addressPreferred: ToolbarAddressLayout.floor))
             chatTitle.isHidden = currentProject == nil || chatHidden || width < 150
             setChatNewVisible(!chatTitle.isHidden)
             if abs(chatHeaderWidth.constant - width) > 0.5 { chatHeaderWidth.constant = width }
-            chatTrailing = leading + width + reserve
+            // chatOffset was measured from this header edge to the address block;
+            // adding New Chat here would reserve the button a second time.
+            chatTrailing = leading + width
             let formerChat = min(max(100, target - leading), max(100, windowWidth - leading - 500))
             // 400 was the former layout's reserve for the right groups; they gained a 32 pt button (LKM-430).
             addressLayout.formerWidth = min(180, max(80, windowWidth - leading - formerChat - 432))
@@ -787,6 +790,9 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             "chatNewSidebarRenderedFrame":NSStringFromRect(nativeToolbarButtonFrame(NSToolbarItem.Identifier.toggleSidebar.rawValue) ?? .zero),
             "chatTitleFrame":NSStringFromRect(mainFrame(chatTitle) ?? .zero),
             "chatHeaderWidth":chatHeader.bounds.width,
+            "chatHeaderWidthConstraint":chatHeaderWidth?.constant ?? 0,
+            "chatHeaderFrame":NSStringFromRect(mainFrame(chatHeader) ?? .zero),
+            "chatHeaderContainerFrame":NSStringFromRect(mainFrame(chatHeader.superview) ?? .zero),
             "chatHeaderTrailing":chatHeader.convert(NSPoint(x: chatHeader.bounds.maxX, y: 0), to: nil).x,
             "detailLeading":split.splitViewItems[1].viewController.view.convert(.zero, to: nil).x,
             "chatWidth":previewState["chatWidth"] ?? 0
@@ -821,7 +827,14 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
         if action == "window-width", let width = Double(id ?? ""), let window, width >= 850 && width <= 2000 {
             var frame = window.frame; frame.size.width = width; window.setFrame(frame, display: true)
-            // Read before returning to the run loop: no deferred alignment has run yet.
+            // The first measurement can change chat-new visibility. AppKit then needs
+            // another layout to remove its slot before the header and address are final.
+            // Finish those bounded layout/measurement passes in this resize operation.
+            for _ in 0..<4 {
+                layoutToolbar()
+                measureToolbar()
+            }
+            layoutToolbar()
             resizeSnapshot = toolbarInspect(); return true
         }
         // Test captures force the window's own appearance (nil: follow the system); system settings are never touched.
