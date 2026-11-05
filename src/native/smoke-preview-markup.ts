@@ -18,7 +18,8 @@ export async function checkAnnotationCompositeSend(
   page: Page,
   artifacts: string
 ) {
-  assert.notEqual(process.env.TREZI_NATIVE_BACKGROUND_TEST, '1', 'foreground capture required')
+  const { TREZI_NATIVE_BACKGROUND_TEST: background } = process.env
+  assert.notEqual(background, '1', 'foreground capture required')
   const folder = join(artifacts, 'annotation-composite-send')
   mkdirSync(folder, { recursive: true })
   const inspect = (): Promise<State> => host.request('previewMarkupInspect')
@@ -74,16 +75,16 @@ export async function checkAnnotationCompositeSend(
   )
   const x = opened.image.width * 0.15,
     y = opened.image.height * 0.45
-  const created = await host.request('previewMarkupTest', {
-    action: 'annotationEditText',
+  const created = await event({
+    action: 'canvasText',
     x,
     y,
     text: 'Canvas note'
   })
   assert.equal(created.previous, '', 'canvas creates a new editor')
   assert.equal(created.text, 'Canvas note')
-  const edited = await host.request('previewMarkupTest', {
-    action: 'annotationEditText',
+  const edited = await event({
+    action: 'canvasText',
     x,
     y,
     text: 'Revised note'
@@ -98,7 +99,7 @@ export async function checkAnnotationCompositeSend(
   await event({ action: 'toolbarSegment', segment: 'select-object' })
   const suspended = await record('select')
   const selectShell = await host.request('shellInspect')
-  assert.equal(suspended.suspended, true, 'Select suspends the annotated snapshot')
+  assert.equal(suspended.suspended, true, 'Select suspends the marked snapshot')
   assert.equal(selectShell.selectSegmentProminent, true)
   assert.equal(selectShell.markupSegmentProminent, false, 'selection is exclusive')
   assert.deepEqual(suspended.marks, beforeSelect.marks, 'Select retains the edited text')
