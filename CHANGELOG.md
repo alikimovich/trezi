@@ -13,6 +13,18 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Changed
 
 - Update availability now offers a concise guided update with guarded progress and a source artifact check before restart (LKM-529).
+## [0.13.28] - 2026-11-04
+
+### Removed
+
+- The selected-element inspector no longer offers a Custom tab or controls request field; Props and Styles remain available (LKM-538).
+
+## [0.13.27] - 2026-11-04
+
+### Changed
+
+- Chat title, preview address, branch, status and Publish trigger text in the top bar use system monospace (LKM-530).
+
 ## [0.13.26] - 2026-11-04
 
 ### Changed
@@ -25,6 +37,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 - Removed Claude and Gemini credentials no longer reappear as unsaved Settings drafts; validation and service messages stay visible beside pinned Settings actions (LKM-525).
 
+### Changed
+
+- New Chat is a standalone native toolbar button with system-managed Liquid Glass and interaction states (LKM-535).
 ## [0.13.25] - 2026-11-04
 
 ### Fixed

@@ -123,18 +123,14 @@ final class ToolbarLayout {
 /// order and the bezel are the system's. macOS 26 and earlier keep their look.
 final class IslandSegmentedControl: NSSegmentedControl {
     static var hidesDividers: Bool { if #available(macOS 27.0, *) { return true } else { return false } }
-    /// New Chat sits over its own 32 pt glass view; its frame, not AppKit's inset
-    /// alignment rect, must meet that view's edges. Toolbar groups keep system alignment.
+    /// Publish fills its glass capsule; the toolbar islands retain AppKit's alignment inset.
     var alignsFullFrame = false
-    /// The one segment embedded in the chat header's own glass has no cell bezel at rest.
-    /// Restore AppKit's textured bezel for pointer and keyboard interaction so it has the
-    /// same native hover, pressed and focus feedback as the neighboring toolbar segments.
+    /// Publish draws its glass at rest and restores the native textured bezel for interaction.
     var usesGlassHover = false
     private var glassHovered = false
     private var glassPressed = false
     private var glassTracking: NSTrackingArea?
     override var isEnabled: Bool { didSet { updateGlassBezel() } }
-    /// Shared state path for AppKit events and the offscreen control fixture.
     func setGlassInteraction(hovered: Bool? = nil, pressed: Bool? = nil) {
         if let hovered { glassHovered = hovered }
         if let pressed { glassPressed = pressed }

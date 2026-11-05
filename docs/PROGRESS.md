@@ -31,6 +31,42 @@
 
 - The build badge now opens a short availability sheet with Update and Not Now; technical details remain in its existing tooltip, About credits and Copy Commit menu. A known behind state enters the owner update directly, while the general Updates menu shows a checking state first. The owner still refuses dirty trees and non-fast-forward pulls and runs its journaled install/build workflow.
 - Update and check actions share an in-flight guard. Update progress remains in the sheet, errors retain the useful owner output, and restart waits for active work to clear. The running app must resolve to the source build, and its built host/service Info.plists and executables must match the updated source version and commit before restart. Focused unit fixtures and the native badge dialog fixture cover the affected states; exact-head CI, independent review and post-merge native acceptance remain.
+## 2026-11-04 — LKM-538 CI marquee fixture timing repair
+
+- The unrelated sidebar marquee unit fixture now uses its sample's measured clock if a loaded macOS runner takes the scheduled-before sample after the 0.7-second delay. It still requires an exact zero offset when sampled during the delay and checks 30 points per second afterward. No sidebar product behavior changed; current-head CI must rerun the shard.
+
+## 2026-11-04 — LKM-538 retirement census CI repair
+
+- The revised native inspector smoke checks the two-tab UI without writing a fixture file. Its old test-effect row is removed from the executable retirement census; the Bun-owned retirement gate remains open. Current-head CI must rerun the census and unit shards.
+
+## 2026-11-04 — LKM-538 provider rule review repair
+
+- Provider rules no longer tell an agent to answer a retired Inspector Custom request with a `trezi-controls` block. The control-capable providers continue to use the existing `chat_island` guidance; rules version 49 and the rules fixture cover the changed prompt. Current-head CI and post-merge native acceptance remain manager gates.
+
+## 2026-11-04 — LKM-538 documentation review repair
+
+- After the 0.13.27 sync, the Custom removal entry is separated from the dated release heading under Unreleased. The provider guide now describes the retired inspector request route while retaining historical control parsing and saved panels. Current-head CI and post-merge native acceptance remain manager gates.
+
+## 2026-11-04 — LKM-538 inspector Custom removal
+
+- The selected-element inspector now offers Props and Styles only. Old Custom tab selections resolve to Styles, and its request, comment, cancel, remove and Create controls routes no longer run. The Swift request view is removed from the native build, while saved panel data and shared control parsing remain intact. The existing controller and core native inspector fixtures now check the two-tab surface and legacy fallback; focused verification and manager gates are reported separately.
+
+## 2026-11-04 — LKM-530 real Publish control compile repair
+
+- The LKM-535 New Chat change removed the segmented control's glass hover and full-frame alignment behavior, but Publish still used both. Restored those behaviors on the real `IslandSegmentedControl` while leaving standalone New Chat and other island controls at their defaults. The Publish fixture now compiles the real toolbar control instead of a local stub and checks its hover, disabled, and alignment behavior. Exact-head CI, independent review, and post-merge rendered inspection remain manager gates.
+
+## 2026-11-04 — LKM-530 Unreleased placement after 0.13.26 sync
+
+- The new 0.13.26 release landed while this ticket was open. Its merge left the LKM-530 entry adjacent to the dated heading again; a section separator now keeps the entry visibly under Unreleased. Exact-head CI and post-merge native inspection remain manager gates.
+
+## 2026-11-04 — LKM-530 changelog review repair
+
+- The LKM-530 Unreleased entry is separated from the 0.13.25 release heading so its placement is unambiguous. The earlier PR CI evidence includes canceled jobs and a chat-new-instant failure on a prior head; exact-head CI remains the manager's gate.
+
+## 2026-11-04 — LKM-530 top bar typography
+
+- The chat title, preview address and branch/status label now use native system monospace at their existing sizes and weights. The loading title remains fixed width; address truncation and branch spacing use their actual font. Publish remains a standard native `NSMenuToolbarItem`, whose public API has no font property; the trigger's typography needs a product choice if its glass and action behavior must remain native.
+- Follow-up authorization resolves Publish with a custom glass-backed AppKit segmented control. Its primary segment uses system monospace and still dispatches the toolbar Publish action; the chevron opens the existing menu, and an active publish routes the primary segment to that menu. The original spinner frames, menu entries and enablement remain. The toolbar fixture now checks the Publish font, size, glass and label fit; post-merge rendered inspection remains required.
 ## 2026-11-04 — LKM-525 credential removal and pinned feedback repair
 
 - A successful Claude token or Gemini key removal now sends a one-update clear signal to the native Settings form, which discards both its typed secure value and matching retained draft. Failed removal leaves the draft intact; unrelated provider drafts still restore. The synthetic Settings fixture covers removal, Back, reopen and blocked resubmission for each credential. Validation and service messages now render beside the pinned action above long scrolling Settings forms, with windowless geometry and accessibility assertions. Current-head CI, independent review and native acceptance remain manager gates.
@@ -66,6 +102,30 @@
 ## 2026-11-04 — LKM-525 nested Settings header
 
 - Skills overview and nested Skills/provider panes now use the existing section and action state to keep registered actions in a fixed header. Nested panes show Back and context; the grouped form holds metadata and help below it, and the large section title stays only on overviews. Unsaved draft values survive Back and reopen in the same window, scoped to their pane context. Skills and windowless native fixtures cover parent/detail/back, draft preservation and section reentry; native visual acceptance remains for the manager after merge.
+## 2026-11-04 — LKM-535 review repair: rendered toolbar button geometry
+
+- The toolbar inspection now exposes the actual AppKit NSButton bounds for New Chat, More and the sidebar toggle, converted to the main window's coordinates. The existing toolbar item frames retain their layout and pixel-sampling meanings.
+- The normal/narrow, light/dark foreground fixture now asserts height and vertical-center alignment from those rendered button frames and records the measurements beside each capture. The prior enabled/disabled paint-delta assertion remains. Native acceptance still runs in the manager's post-merge pipeline.
+
+## 2026-11-04 — LKM-535 review repair: enabled paint and toolbar alignment evidence
+
+- The existing light/dark foreground fixture now compares New Chat's enabled and disabled PNG pixels at normal and narrow widths, asserting a visible change and recording the measured difference with both capture paths.
+- The same captures now record each native button's height and vertical center, and assert New Chat aligns with More and the sidebar toggle at both widths. Foreground native execution remains the manager's post-merge acceptance gate.
+
+## 2026-11-04 — LKM-535 review repair: older macOS visibility and VoiceOver
+
+- On macOS 13/14, New Chat now leaves or rejoins the toolbar beside the title when the title hides or returns; macOS 15+ keeps the system item hidden property. The chat resize fixture asserts the button and title share the same visibility rule.
+- The sidebar-chat fixture now reads the rendered toolbar button's unignored accessibility element and asserts AXButton and New Chat, alongside its existing action, tooltip and glyph checks. The cited CI aggregate had canceled unit shards, not a failing test assertion; exact-head CI remains the manager's gate.
+
+## 2026-11-04 — LKM-535 review repair: foreground interaction evidence
+
+- The disposable-profile toolbar fixture now captures New Chat, More and the sidebar toggle at normal and narrower widths in light and dark appearances at idle, hover, press and keyboard focus. A native-button test seam invokes the existing AppKit hover callback pattern, native highlight and responder chain directly, without posting input. Each foreground capture has a recorded path, control state and pixel-change assertion against its idle image. The registered unit fixture checks that the shared pixel detector sees hover fill and an exterior focus ring. Agent OS still owns the post-merge native run and acceptance.
+
+## 2026-11-04 — LKM-535 standalone New Chat toolbar item
+
+- New Chat is now its own system-rendered AppKit toolbar item beside the conversation title. The title reserves the measured native item advance so the action follows the chat column across resizing and sidebar changes. The custom glass wrapper, full-frame alignment and hover/bezel emulation are gone; shared island divider behavior remains.
+- Existing toolbar fixtures now assert the standalone item, action and chat-column geometry. Foreground light/dark captures still inspect painted appearance; independent review, exact-head CI and post-merge native acceptance remain with Agent OS.
+
 ## 2026-11-04 — LKM-533 review repair: accepted-card geometry evidence
 
 - The existing chat UI native smoke now records SwiftUI question and answer line frames for synthetic accepted forms at 320, 400 and 520 point chat widths. It asserts pair order, leading alignment, card-width use, bounds, and long-answer wrapping, and writes a PNG plus geometry JSON for each width. The manager's post-merge native chat run remains the visual acceptance gate.

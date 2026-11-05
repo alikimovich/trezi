@@ -225,9 +225,7 @@ export async function runNativeCoreSmoke(
   const customSmoke: CustomSmoke = {
     host,
     fixture,
-    artifacts,
     inspector,
-    invoke,
     select: async (source) => {
       await page(
         `document.querySelector('#native-title').setAttribute('data-trezi-source',${JSON.stringify(source)})`
@@ -662,7 +660,7 @@ export async function runNativeCoreSmoke(
         // after island buttons were used (read in the live toolbar; the capture is evidence).
         await assertIslandDividers(host, 'shell-layout at rest', shell)
         assert.ok(
-          shell.sidebarContainsTrafficLights && shell.chatTitlePlain && shell.publishStandard
+          shell.sidebarContainsTrafficLights && shell.chatTitlePlain && shell.publishNativeGlass
         )
         await page(
           `(()=>{document.documentElement.style.backgroundColor='rgb(40,80,120)';document.body.style.backgroundColor='transparent'})()`
