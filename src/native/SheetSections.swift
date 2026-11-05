@@ -33,14 +33,36 @@ struct SectionedSheetContent: View {
         var named: [String] = []
         for case let group? in fields.map(\.group) where !named.contains(group) { named.append(group) }
         let groups: [String?] = (named.isEmpty || fields.contains { $0.group == nil } ? [nil] : []) + named
-        return Form {
+        let nested = section.navigationTitle != nil
+        return VStack(spacing: 0) {
+        if nested {
+            VStack(spacing: 6) {
+                HStack(spacing: 10) {
+                    ForEach(actions.filter { $0.id == "back" || $0.id == "skill-back" }) { headerButton($0) }
+                    Text(section.navigationTitle ?? "").font(.headline).lineLimit(1).accessibilityAddTraits(.isHeader)
+                    Spacer(minLength: 8)
+                    ForEach(actions.filter { $0.primary == true }) { headerButton($0) }
+                    if state.busy { ProgressView().controlSize(.small).accessibilityLabel("Working") }
+                }
+                let secondary = actions.filter { $0.id != "back" && $0.id != "skill-back" && $0.primary != true }
+                if !secondary.isEmpty {
+                    HStack(spacing: 10) {
+                        Spacer(minLength: 0)
+                        ForEach(secondary) { headerButton($0) }
+                    }
+                }
+            }
+            .padding(.horizontal, 20).padding(.vertical, 10)
+            Divider()
+        }
+        Form {
             ForEach(Array(groups.enumerated()), id: \.offset) { index, group in
                 Section {
                     ForEach(fields.filter { $0.group == group }) { row($0) }
                 } header: {
                     VStack(alignment: .leading, spacing: 6) {
                         if index == 0 {
-                            Text(section.label).font(.largeTitle.weight(.bold)).foregroundStyle(.primary)
+                            if !nested { Text(section.label).font(.largeTitle.weight(.bold)).foregroundStyle(.primary) }
                             if let detail = section.detail, !detail.isEmpty {
                                 Text(detail).font(.body).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                             }
@@ -50,12 +72,17 @@ struct SectionedSheetContent: View {
                         }
                     }.textCase(nil).padding(.bottom, index == 0 ? 8 : 2)
                 } footer: {
-                    if index == groups.count - 1 { footer(actions) }
+                    if index == groups.count - 1 { footer(nested ? [] : actions) }
                 }
             }
         }
         .formStyle(.grouped).disabled(state.busy)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+    func headerButton(_ action: SheetAction) -> some View {
+        SheetHeaderButton(action: action, busy: state.busy, perform: model.perform)
+            .fixedSize()
     }
     func footer(_ actions: [SheetAction]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -127,6 +154,33 @@ struct SectionedSheetContent: View {
         default:
             TextField(text: form.binding(field), prompt: Text(field.placeholder ?? "")) { label(field) }
         }
+    }
+}
+
+/// AppKit controls make the pinned actions keyboard reachable and measurable even
+/// when the grouped form has scrolled far below its first row.
+struct SheetHeaderButton: NSViewRepresentable {
+    let action: SheetAction
+    let busy: Bool
+    let perform: (String) -> Void
+    final class Coordinator: NSObject {
+        var press: () -> Void = {}
+        @objc func pressed(_ sender: NSButton) { press() }
+    }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton(title: action.label, target: context.coordinator, action: #selector(Coordinator.pressed(_:)))
+        button.bezelStyle = .rounded
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        return button
+    }
+    func updateNSView(_ button: NSButton, context: Context) {
+        context.coordinator.press = { [perform, action] in perform(action.id) }
+        button.title = action.label
+        button.identifier = NSUserInterfaceItemIdentifier("sheet-action:\(action.id)")
+        button.setAccessibilityLabel(action.label)
+        button.isEnabled = !busy && action.disabled != true
+        button.keyEquivalent = action.primary == true && action.disabled != true ? "\r" : ""
     }
 }
 

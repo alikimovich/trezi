@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Changed
+
+- Nested Settings panes keep Back, their context and their existing actions above scrolling content (LKM-525).
+
 ## [0.13.23] - 2026-11-04
 
 ### Fixed

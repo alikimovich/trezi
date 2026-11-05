@@ -31,6 +31,8 @@ export interface NativeSheetSection {
   label: string
   symbol: string
   detail?: string
+  /** Context for a nested pane; keeps its actions above the scrolling form. */
+  navigationTitle?: string
 }
 export interface NativeSheetState {
   id: string

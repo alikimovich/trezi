@@ -25,6 +25,14 @@ export interface SkillsEvidence extends SettingsEvidence {
     contained: boolean
     hitTarget: boolean
   }[]
+  /** AppKit buttons in the pinned nested header, measured after form scrolling. */
+  headerActions: {
+    action: string
+    label: string
+    enabled: boolean
+    contained: boolean
+    hitTarget: boolean
+  }[]
   /** Rendered editable text views of the shown pane. */
   editors: { text: string; contained: boolean; hitTarget: boolean }[]
   /** The shown pane's field and footer action IDs, and the footer actions shown disabled. */
@@ -104,6 +112,25 @@ export function assertSkillsEvidence(
   if (expect.view !== 'recommendation') {
     assert.deepEqual(evidence.actions, ACTIONS[expect.view], `Skills ${expect.view} actions`)
     assert.deepEqual(evidence.disabledActions ?? [], [], `No disabled ${expect.view} actions`)
+  }
+  if (expect.view !== 'overview') {
+    assert.deepEqual(
+      evidence.headerActions.map((button) => button.action).sort(),
+      [...evidence.actions].sort(),
+      'Nested actions render in the pinned header'
+    )
+    for (const button of evidence.headerActions) {
+      assert.ok(
+        button.contained && button.hitTarget,
+        `Visible, hittable header action: ${button.action}`
+      )
+      assert.ok(button.label, `Accessible header action: ${button.action}`)
+      assert.equal(
+        button.enabled,
+        !evidence.disabledActions.includes(button.action),
+        `Header action enablement: ${button.action}`
+      )
+    }
   }
   if (expect.view === 'overview') {
     const removed = expect.removed ?? []

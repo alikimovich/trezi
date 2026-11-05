@@ -21,8 +21,13 @@ let generalFields: [[String: Any]] = [
     ["id":"projectUi", "section":"experimental", "label":"Gen UI", "kind":"choice", "value":"false", "help":"Generate UI using your project’s existing components and styles. Experimental; supports React and Svelte.", "choices":[["value":"false", "label":"Off"], ["value":"true", "label":"On"]]],
     ["id":"engine", "section":"experimental", "label":"UI layout method", "kind":"choice", "value":"agent", "visibleWhen":["field":"projectUi", "value":"true"], "help":"Chat model uses your selected chat model to arrange components. Jev uses a separate layout model and requires an AI Gateway API key.", "choices":[["value":"agent", "label":"Chat model"], ["value":"jev", "label":"Jev layout engine"]]]
 ]
-func settingsState(_ providers: [[String: Any]], _ actions: [[String: Any]]) throws -> SheetState {
-    let raw: [String: Any] = ["id":"fixture", "title":"Settings", "detail":"", "busy":false, "autosave":true, "sections":sections, "section":"general",
+func settingsState(_ providers: [[String: Any]], _ actions: [[String: Any]], nested: Bool = false) throws -> SheetState {
+    let shownSections = sections.map { entry -> [String: Any] in
+        var section = entry
+        if nested && entry["id"] as? String == "providers" { section["navigationTitle"] = "Add a provider" }
+        return section
+    }
+    let raw: [String: Any] = ["id":"fixture", "title":"Settings", "detail":"", "busy":false, "autosave":true, "sections":shownSections, "section":"general",
                               "fields":generalFields + providers, "actions":actions]
     return try JSONDecoder().decode(SheetState.self, from: JSONSerialization.data(withJSONObject: raw))
 }
@@ -104,10 +109,18 @@ sheets.model.update(try settingsState([
     ["id":"url", "section":"providers", "draft":true, "label":"API base URL", "kind":"text", "value":"https://ai-gateway.vercel.sh/v1"],
     ["id":"key", "section":"providers", "draft":true, "label":"API key", "kind":"secure", "value":""],
     ["id":"models", "section":"providers", "draft":true, "label":"Model IDs (one per line)", "kind":"multiline", "value":""]
-], [["id":"back", "label":"Back", "section":"providers"], ["id":"connect", "label":"Load models", "section":"providers"], ["id":"save-provider", "label":"Add provider", "primary":true, "section":"providers"]]))
+], [["id":"back", "label":"Back", "section":"providers"], ["id":"connect", "label":"Load models", "section":"providers"], ["id":"save-provider", "label":"Add provider", "primary":true, "section":"providers"]], nested: true))
 settle()
 require(sheets.model.values["label"] == "AI Gateway" && sheets.model.values["connection"] == nil && sheets.model.values["projectUi"] == "false", "In-place pane swap seeds and forgets only its own fields")
 require(sheets.model.section == "providers", "An in-place update keeps the selected section")
+let header = try report()["headerActions"] as! [[String: Any]]
+require(Set(header.compactMap { $0["action"] as? String }) == Set(["back", "connect", "save-provider"]), "Nested provider actions move to the pinned header")
+require(header.allSatisfy { $0["contained"] as? Bool == true && $0["hitTarget"] as? Bool == true && $0["enabled"] as? Bool == true }, "Nested provider actions are visible and hittable")
+sheets.model.setValue("label", "Draft provider")
+try select("general"); try select("providers")
+require(sheets.model.values["label"] == "Draft provider", "Sidebar reentry preserves the unsaved provider draft")
+_ = try report(["pressHeader":"back"])
+require(emitted.last?["action"] as? String == "back" && emitted.last?["section"] as? String == "providers", "Rendered Back returns through the existing provider route")
 snapshot("providers-editor-780")
 sheets.model.update(state); settle()
 try select("experimental")

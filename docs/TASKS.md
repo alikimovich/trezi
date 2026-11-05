@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-525 — Nested Settings navigation and actions
+
+- [x] Keep nested Skills and provider Back, context and existing actions visible above scrolling forms, with the sidebar section retained.
+- [x] Cover Skills parent/detail/back paths and section reentry in the existing fixture.
+- [ ] Manager: current-head CI, independent review and post-merge native Settings acceptance.
+
 ## LKM-519 — Feedback: review logs
 
 - [x] Forward Trezi's assigned port and host to Yarn, Bun and pnpm Vite/SvelteKit scripts without npm's literal separator; fail on port conflicts.

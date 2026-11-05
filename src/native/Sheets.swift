@@ -5,7 +5,7 @@ struct SheetChoice: Decodable, Identifiable { let value: String; let label: Stri
 struct SheetFieldCondition: Decodable { let field: String; let value: String }
 struct SheetField: Decodable, Identifiable { let id: String; let label: String; let kind: String; let value: String; let choices: [SheetChoice]?; let help: String?; let visibleWhen: SheetFieldCondition?; let section: String?; let draft: Bool?; let placeholder: String?; let action: String?; let actionLabel: String?; let group: String?; let height: Double? }
 struct SheetAction: Decodable, Identifiable { let id: String; let label: String; let primary: Bool?; let destructive: Bool?; let section: String?; let cancel: Bool?; let copy: String?; let disabled: Bool? }
-struct SheetSection: Decodable, Identifiable { let id: String; let label: String; let symbol: String; let detail: String? }
+struct SheetSection: Decodable, Identifiable { let id: String; let label: String; let symbol: String; let detail: String?; let navigationTitle: String? }
 struct SheetState: Decodable { let id: String; let title: String; let detail: String; let fields: [SheetField]; let actions: [SheetAction]; let busy: Bool; let autosave: Bool?; let dismissible: Bool?; let message: String?; let sections: [SheetSection]?; let section: String?; let alert: Bool? }
 final class SheetModel: ObservableObject {
     @Published var state: SheetState?

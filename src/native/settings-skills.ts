@@ -87,6 +87,22 @@ function show(sheets: NativeSheetController, sheet: Sheet, pane: Pane) {
     ...next.fields.map((field) => ({ ...field, section: SKILLS_SECTION, draft: true }))
   ]
   sheet.state.actions = [...sheet.state.actions.filter((a) => !owns(a.id)), ...next.actions]
+  const section = sheet.state.sections?.find((s) => s.id === SKILLS_SECTION)
+  if (section) {
+    section.navigationTitle =
+      view.kind === 'detail' && skill
+        ? skill.name
+        : view.kind === 'add'
+          ? 'Add a Skill'
+          : view.kind === 'github'
+            ? 'Import from GitHub'
+            : view.kind === 'recommendation' && entry
+              ? entry.title
+              : undefined
+    section.detail = section.navigationTitle
+      ? undefined
+      : 'Manage skills here without changing your project or global files'
+  }
   if (sheets.current === sheet) sheets.refresh()
 }
 

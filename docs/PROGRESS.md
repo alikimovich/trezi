@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-525 nested Settings header
+
+- Nested Skills and provider panes now use the existing section and action state to show Back, context and registered actions in a fixed header. The grouped form holds metadata and help below it; the large section title stays on overview panes. Skills fixture assertions cover parent/detail/back and section reentry; native visual acceptance remains for the manager after merge.
+
 ## 2026-11-04 — LKM-519 review repair: assigned private URL
 
 - The runtime-owner socket fixture now launches a Yarn 4 style script that preserves literal `--`, records its Vite arguments and serves a real page on the forwarded port. It checks the private runtime's returned and recorded URL against the assigned port and fetches the page. The unit tier runs this section where loopback binding is available; CI and post-merge acceptance remain with the manager.

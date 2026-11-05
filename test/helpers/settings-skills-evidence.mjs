@@ -23,6 +23,8 @@ const button = (action, title, label, extra = {}) => ({
   hitTarget: true,
   ...extra
 })
+const header = (actions, disabled = []) =>
+  actions.map((action) => button(action, action, action, { enabled: !disabled.includes(action) }))
 const base = {
   foreground: true,
   width: 680,
@@ -44,7 +46,8 @@ const base = {
   text: [],
   message: '',
   busy: false,
-  disabledActions: []
+  disabledActions: [],
+  headerActions: []
 }
 const reject = (evidence, expect, mutate, width = 680) => {
   const bad = structuredClone(evidence)
@@ -125,7 +128,8 @@ const add = {
   rows: [],
   editors: [{ text: sample, contained: true, hitTarget: true }],
   fields: [NEW_SKILL_FIELD],
-  actions: ['skill-back', 'skill-create']
+  actions: ['skill-back', 'skill-create'],
+  headerActions: header(['skill-back', 'skill-create'])
 }
 assertSkillsEvidence(add, 680, { view: 'add', text: sample })
 reject(add, { view: 'add', text: sample }, (e) => (e.editors[0].text = 'other'))
@@ -136,7 +140,8 @@ const detail = {
   ...add,
   values: { 'skill-chats': 'Claude: native · Codex: compatibility · Gemini: experimental' },
   fields: ['skill-status', 'skill-source', 'skill-revision', 'skill-chats', detailField],
-  actions: ['skill-back', 'skill-toggle', 'skill-remove', 'skill-save']
+  actions: ['skill-back', 'skill-toggle', 'skill-remove', 'skill-save'],
+  headerActions: header(['skill-back', 'skill-toggle', 'skill-remove', 'skill-save'])
 }
 const expectDetail = { view: 'detail', field: detailField, text: sample }
 assertSkillsEvidence(detail, 680, expectDetail)
@@ -146,6 +151,9 @@ reject(detail, expectDetail, (e) => (e.values['skill-chats'] = 'Codex: native'))
 reject(detail, expectDetail, (e) => e.actions.pop())
 reject(detail, expectDetail, (e) => (e.fields = e.fields.slice(0, 4)))
 reject(detail, expectDetail, (e) => e.fields.push('skill-commit'))
+reject(detail, expectDetail, (e) => (e.headerActions[0].contained = false))
+reject(detail, expectDetail, (e) => (e.headerActions[3].hitTarget = false))
+reject(detail, expectDetail, (e) => (e.headerActions[3].enabled = false))
 const commit = 'a'.repeat(40)
 const pinned = {
   ...detail,
@@ -163,7 +171,8 @@ const form = {
   rows: [],
   editors: [],
   fields: ['skill-github-url', 'skill-github-ref', 'skill-github-subpath', 'skill-github-checks'],
-  actions: ['skill-back', 'skill-github-import']
+  actions: ['skill-back', 'skill-github-import'],
+  headerActions: header(['skill-back', 'skill-github-import'])
 }
 assertSkillsEvidence(form, 680, { view: 'github' })
 reject(form, { view: 'github' }, (e) => (e.fields = e.fields.slice(1)))
@@ -182,7 +191,8 @@ const recommendation = {
     'recommendation-status': 'Can’t be installed'
   },
   actions: ['skill-back', 'skill-install'],
-  disabledActions: ['skill-install']
+  disabledActions: ['skill-install'],
+  headerActions: header(['skill-back', 'skill-install'], ['skill-install'])
 }
 const expectUnavailable = { view: 'recommendation', id: entry.id, status: 'Can’t be installed' }
 assertSkillsEvidence(recommendation, 680, expectUnavailable)
@@ -201,7 +211,8 @@ const available = {
     'recommendation-license': importable.license,
     'recommendation-status': 'Not installed'
   },
-  disabledActions: []
+  disabledActions: [],
+  headerActions: header(['skill-back', 'skill-install'])
 }
 const expectAvailable = { view: 'recommendation', id: importable.id, status: 'Not installed' }
 assertSkillsEvidence(available, 680, expectAvailable)
@@ -210,7 +221,8 @@ reject(available, expectAvailable, (e) => (e.actions = ['skill-back']))
 const taken = {
   ...available,
   values: { ...available.values, 'recommendation-status': 'Installed' },
-  actions: ['skill-back']
+  actions: ['skill-back'],
+  headerActions: header(['skill-back'])
 }
 const expectTaken = { ...expectAvailable, status: 'Installed' }
 assertSkillsEvidence(taken, 680, expectTaken)

@@ -95,6 +95,7 @@ const defaultChoices = (choices: ModelChoice[]) => [
 /** The AI Providers pane: its fields are drafts, submitted only by the pane's own actions. */
 interface Pane {
   detail: string
+  navigationTitle?: string
   fields: Omit<NativeSheetField, 'section' | 'draft'>[]
   actions: NativeSheetState['actions']
 }
@@ -403,7 +404,10 @@ export class NativeSettingsController {
       ...pane.actions
     ]
     const section = sheet.state.sections?.find((s) => s.id === 'providers')
-    if (section) section.detail = pane.detail
+    if (section) {
+      section.detail = pane.detail
+      section.navigationTitle = pane.navigationTitle
+    }
     sheet.state.message = undefined
     this.sheets.refresh()
   }
@@ -464,6 +468,7 @@ export class NativeSettingsController {
   private removal(connection: ProviderConnection): Pane {
     return {
       detail: PROVIDERS,
+      navigationTitle: `Remove ${connection.label}`,
       fields: [
         {
           id: 'remove-confirm',
@@ -487,6 +492,7 @@ export class NativeSettingsController {
   }
   private editor(connection?: ProviderConnection): Pane {
     return {
+      navigationTitle: connection ? `Edit ${connection.label}` : 'Add a provider',
       detail: `${connection ? `Edit ${connection.label}` : 'Add a provider'}: enter its API base URL and key, then load its models or enter model IDs below. The provider must support the Responses API.`,
       fields: [
         {

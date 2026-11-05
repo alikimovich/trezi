@@ -191,8 +191,10 @@ try {
   assert.equal(field('recommendation-license').value, 'Apache-2.0')
   assert.equal(field('recommendation-status').value, 'Not installed')
   assert.deepEqual(footer(), ['skill-back', 'skill-install'])
+  assert.equal(state().sections.find((s) => s.id === 'skills').navigationTitle, 'Frontend Design')
   assert.deepEqual(disabled(), [])
   await act('skill-back')
+  assert.equal(state().sections.find((s) => s.id === 'skills').navigationTitle, undefined)
   await act('skill-recommendation:impeccable')
   assert.equal(field('recommendation-status').value, 'Not installed')
   assert.equal(field('recommendation-source').value, 'pbakaus/impeccable/plugin/skills/impeccable')
@@ -217,6 +219,7 @@ try {
   // Manual add: a template, a refused SKILL.md keeps the draft, then the real one.
   await act('skill-add')
   assert.deepEqual(footer(), ['skill-back', 'skill-create'])
+  assert.equal(state().sections.find((s) => s.id === 'skills').navigationTitle, 'Add a Skill')
   assert.equal(field(NEW_SKILL_FIELD).value, NEW_SKILL_TEMPLATE)
   assert.equal(field(NEW_SKILL_FIELD).kind, 'multiline')
   await act('skill-create', { [NEW_SKILL_FIELD]: '# no front matter\n' })
@@ -257,6 +260,12 @@ try {
   assert.equal(field('skill-source').value, 'Added manually')
   assert.ok(!ids().includes('skill-commit'), 'A local skill has no pinned commit')
   assert.deepEqual(footer(), ['skill-back', 'skill-toggle', 'skill-remove', 'skill-save'])
+  assert.equal(state().sections.find((s) => s.id === 'skills').navigationTitle, 'ui-notes')
+  await sheets.action({ id: state().id, action: 'section', values: {}, section: 'general' })
+  assert.equal(state().section, 'general')
+  await sheets.action({ id: state().id, action: 'section', values: {}, section: 'skills' })
+  assert.equal(state().sections.find((s) => s.id === 'skills').navigationTitle, 'ui-notes')
+  assert.equal(field(editor).value, text, 'Section reentry retains the opened detail')
 
   // Save: unchanged text is not a revision; an edit is.
   await act('skill-save', { [editor]: text })

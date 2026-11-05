@@ -13,6 +13,9 @@ extension NativeSheets {
     private func rowButtons(in view: NSView) -> [NSButton] {
         rendered(NSButton.self, in: view).filter { $0.identifier?.rawValue.hasPrefix("sheet-row:") == true && !$0.isHiddenOrHasHiddenAncestor }
     }
+    private func headerButtons(in view: NSView) -> [NSButton] {
+        rendered(NSButton.self, in: view).filter { $0.identifier?.rawValue.hasPrefix("sheet-action:") == true && !$0.isHiddenOrHasHiddenAncestor }
+    }
     /// Geometry of a rendered control in `content`: inside the pane, unclipped, and the top hit there.
     private func placement(_ control: NSView, in content: NSView) -> [String: Any] {
         let rect = control.convert(control.bounds, to: content)
@@ -90,10 +93,20 @@ extension NativeSheets {
                   button.isEnabled else { throw failure("Rendered Settings row unavailable: \(action)") }
             button.performClick(nil)
         }
+        if let action = command["pressHeader"] as? String {
+            content.layoutSubtreeIfNeeded()
+            guard let button = headerButtons(in: content).first(where: { $0.identifier?.rawValue == "sheet-action:\(action)" }),
+                  button.isEnabled else { throw failure("Rendered Settings header action unavailable: \(action)") }
+            button.performClick(nil)
+        }
         content.layoutSubtreeIfNeeded()
         content.displayIfNeeded()
         let rows: [[String: Any]] = rowButtons(in: content).map { button in
             ["action": String((button.identifier?.rawValue ?? "").dropFirst("sheet-row:".count)), "title": button.title,
+             "label": button.accessibilityLabel() ?? "", "enabled": button.isEnabled].merging(placement(button, in: content)) { _, new in new }
+        }
+        let headerActions: [[String: Any]] = headerButtons(in: content).map { button in
+            ["action": String((button.identifier?.rawValue ?? "").dropFirst("sheet-action:".count)), "title": button.title,
              "label": button.accessibilityLabel() ?? "", "enabled": button.isEnabled].merging(placement(button, in: content)) { _, new in new }
         }
         let editors: [[String: Any]] = rendered(NSTextView.self, in: content).filter { !$0.isHiddenOrHasHiddenAncestor && $0.isEditable }.map { editor in
@@ -133,7 +146,7 @@ extension NativeSheets {
         }
         return ["foreground": panel.isVisible && panel.isKeyWindow && NSApp.isActive,
                 "width": content.bounds.width, "height": content.bounds.height,
-                "minimumWidth": panel.contentMinSize.width, "minimumHeight": panel.contentMinSize.height, "controls": controls, "rows": rows, "editors": editors,
+                "minimumWidth": panel.contentMinSize.width, "minimumHeight": panel.contentMinSize.height, "controls": controls, "rows": rows, "editors": editors, "headerActions": headerActions,
                 "fields": model.state!.fields.filter { $0.section == shown }.map(\.id),
                 "actions": model.state!.actions.filter { $0.section == shown }.map(\.id), "message": model.state!.message ?? "",
                 "disabledActions": model.state!.actions.filter { $0.section == shown && $0.disabled == true }.map(\.id),
