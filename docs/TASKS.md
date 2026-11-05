@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-548 — Native suite failure on main 54c8d14f14b3
+
+- [x] `project-switching` (sidebar): read the page hover box by `[data-trezi-hover]`, not overlay child index 1, which LKM-541 made the always-shown spacing-grips layer; same fix in `smoke-sent-attachments`.
+- [ ] Manager: quick and locked native sidebar verification, independent review, exact-head CI and merge.
+
 ## LKM-541 — Selection mode direct manipulation and Layers selection lifecycle
 
 - [x] Feasibility probe: padding and flex/grid gap map to the existing source-owned Styles fields; text editing already maps through stamped plain-text leaves.

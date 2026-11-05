@@ -233,7 +233,7 @@ export async function checkSentAttachments(host: NativeBridge, artifacts: string
       const alternate = target?.parentElement;
       const metrics = globalThis.__treziPreviewTimings;
       if (!target || !alternate || !metrics) throw new Error('Preview timing fixture missing');
-      const box = document.querySelector('[data-trezi-overlay]')?.shadowRoot?.children[1];
+      const box = document.querySelector('[data-trezi-overlay]')?.shadowRoot?.querySelector('[data-trezi-hover]');
       target.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
       window.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
       await new Promise(resolve => requestAnimationFrame(resolve));
