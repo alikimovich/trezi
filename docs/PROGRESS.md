@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-545 native composer and inspector recovery
+
+- The failing composer capture was pinned at the document end with no measured latest row; parallel-stream also found no realized row after returning to a chat. The latest-row realization target now uses the reading edge above the overlaid composer, as the existing bottom marker and follow anchor already do. The offscreen settle fixture checks that anchor and its first-row fallback.
+- The inspector hover failure had select mode and the overlay present, but its synthetic page moves produced no hover. Its first and repeated moves now cross from the island to the page through the existing native pointer path, like the later boundary assertion. Quick and locked native results remain to be checked on this tree.
+
 ## 2026-11-05 — LKM-544 background smoke compatibility
 
 - Independent review found that ordinary reduced-coverage background runs would reach the foreground-only composite/Send scenario and fail. Ordinary background selection now skips that check with an explicit log; the narrow opt-in still requires foreground capture. The pure fixture checks the guard before execution. Manager review, exact-head CI and post-merge foreground native acceptance remain pending.

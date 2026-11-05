@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-545 — Native suite failure on main 109acab68c80
+
+- [x] Realize the latest lazy chat row at the reading edge above the overlaid composer, with a targeted anchor check.
+- [x] Cross from the inspector island into the page on initial and repeated synthetic hover moves.
+- [ ] Manager: quick and locked native composer/core verification, independent review, exact-head CI and merge.
+
 ## LKM-544 — Include annotation composite Send proof in normal native smoke
 
 - [x] Register the existing synthetic composite/Send check once in ordinary core and full selection, retaining the narrow opt-in route.

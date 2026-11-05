@@ -121,9 +121,12 @@ enum ChatLatestSettle: Equatable {
     /// whose estimates are far off can stay empty at the latest row; every
     /// fourth step goes to the first row, whose position it knows exactly, and
     /// the next one comes back to the latest from there.
-    static func realizeTarget(latest: String, first: String?, stuck: Int) -> (id: String, anchor: UnitPoint) {
+    static func realizeTarget(latest: String, first: String?, stuck: Int, readingHeight: CGFloat, viewportHeight: CGFloat) -> (id: String, anchor: UnitPoint) {
         if stuck % 4 == 3, let first { return (first, .top) }
-        return (latest, .bottom)
+        // The viewport extends beneath the overlaid composer. Realizing at its
+        // bottom can leave a short latest row hidden there while AppKit is pinned
+        // to the document end and the lazy stack reports no visible row.
+        return (latest, UnitPoint(x: 0.5, y: readingHeight / max(1, viewportHeight)))
     }
     /// Steps once per frame while `current`; returns the attempts used. Settled
     /// counts only when the next frame measures it again, so a reading taken

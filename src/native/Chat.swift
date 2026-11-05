@@ -423,7 +423,8 @@ struct ChatConversation: View {
                 // the clip off the end and the next chunk's pin moves it back.
                 if case .realize(let id) = action, unresolvedSettles <= ChatLatestSettle.unresolvedRestarts {
                     realizingLatest = true; latestNudge.toggle(); stuck += 1; model.latestRealizes += 1
-                    let target = ChatLatestSettle.realizeTarget(latest: id, first: model.snapshot?.messages.first?.id, stuck: stuck)
+                    let target = ChatLatestSettle.realizeTarget(latest: id, first: model.snapshot?.messages.first?.id, stuck: stuck,
+                                                               readingHeight: readingHeight(), viewportHeight: viewportHeight)
                     proxy.scrollTo(target.id, anchor: target.anchor)
                 } else {
                     stuck = 0; realizingLatest = false

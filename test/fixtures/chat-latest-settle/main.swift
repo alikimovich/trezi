@@ -62,7 +62,8 @@ struct Conversation: View {
                 if case .realize = action { relayouts = 0 }
                 if case .realize(let id) = action {
                     realizingLatest = true; latestNudge.toggle(); stuck += 1
-                    let target = ChatLatestSettle.realizeTarget(latest: id, first: model.rows.first?.id, stuck: stuck)
+                    let target = ChatLatestSettle.realizeTarget(latest: id, first: model.rows.first?.id, stuck: stuck,
+                                                               readingHeight: readingHeight(), viewportHeight: viewportHeight)
                     proxy.scrollTo(target.id, anchor: target.anchor)
                 } else {
                     stuck = 0; realizingLatest = false
@@ -124,6 +125,8 @@ if CommandLine.arguments.contains("--cases") {
         ChatLatestSettle.escalated(.bottom, unresolved: unresolved) == .bottom ? "bottom" : "relayout"
     }
     let cases: [String: Any] = [
+        "realizeReadingAnchor": ChatLatestSettle.realizeTarget(latest: "latest", first: "old", stuck: 1, readingHeight: 570, viewportHeight: 776).anchor.y,
+        "realizeFirstAnchor": ChatLatestSettle.realizeTarget(latest: "latest", first: "old", stuck: 3, readingHeight: 570, viewportHeight: 776).anchor.y,
         "atEdge": step(rows, bottom: 369), "markerBelow": step(rows, bottom: 900),
         // The failure on candidate: the marker read at the edge, the latest row 650 pt below it.
         "latestBelowEdge": step(below, bottom: 560), "latestUnrealized": step(unrealized, bottom: 560),

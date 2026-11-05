@@ -56,6 +56,8 @@ if (process.platform !== 'darwin') {
     // is re-measured after a relayout), an unresolved pin escalates to a
     // relayout, and history footers are 28 pt.
     const cases = JSON.parse(run([binary, '--cases']))
+    assert.ok(Math.abs(cases.realizeReadingAnchor - 570 / 776) < 0.001)
+    assert.equal(cases.realizeFirstAnchor, 0)
     assert.equal(cases.atEdge, 'settled')
     assert.equal(cases.markerBelow, 'bottom')
     assert.equal(
