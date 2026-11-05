@@ -790,6 +790,9 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             "chatNewSidebarRenderedFrame":NSStringFromRect(nativeToolbarButtonFrame(NSToolbarItem.Identifier.toggleSidebar.rawValue) ?? .zero),
             "chatTitleFrame":NSStringFromRect(mainFrame(chatTitle) ?? .zero),
             "chatHeaderWidth":chatHeader.bounds.width,
+            "chatHeaderWidthConstraint":chatHeaderWidth?.constant ?? 0,
+            "chatHeaderFrame":NSStringFromRect(mainFrame(chatHeader) ?? .zero),
+            "chatHeaderContainerFrame":NSStringFromRect(mainFrame(chatHeader.superview) ?? .zero),
             "chatHeaderTrailing":chatHeader.convert(NSPoint(x: chatHeader.bounds.maxX, y: 0), to: nil).x,
             "detailLeading":split.splitViewItems[1].viewController.view.convert(.zero, to: nil).x,
             "chatWidth":previewState["chatWidth"] ?? 0

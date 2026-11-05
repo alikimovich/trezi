@@ -6,6 +6,7 @@ import type { NativeBridge } from './bridge'
 import { dispatchIPC } from './platform'
 import { preparePreviewInput } from './smoke-input'
 import { waitFor } from './smoke-wait'
+import { inspectThreeDRoute } from './three-d-route-trace'
 
 type Rect = { x: number; y: number; width: number; height: number }
 const intersects = (a: Rect, b: Rect) =>
@@ -283,6 +284,9 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   assert.equal((await inspect()).code, true, 'the selected leaf has an exact source stamp')
   const leafState = await inspect()
   const scenePage = await page('location.href')
+  const routeBefore = inspectThreeDRoute()
+  const preloadBefore = await page('globalThis.__treziThreeDTrace?.()', true)
+  const sourceBefore = await host.request('sourceInspect')
   assert.equal(await host.request('shellPerform', { action: 'nested-code' }), true)
   try {
     await waitFor(async () => {
@@ -309,7 +313,9 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
         revision: state.revision,
         selected: state.selected,
         code: state.code,
-        capturedRevision: state.capturedRevision
+        capturedRevision: state.capturedRevision,
+        codeActionCount: state.codeActionCount,
+        lastCodeAction: state.lastCodeAction
       }
     }
     const inspector = await host.request('inspectorInspect')
@@ -322,10 +328,24 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
         page: scenePage,
         turn: null
       },
+      baseline: {
+        route: routeBefore,
+        preload: preloadBefore,
+        codeActionCount: leafState.codeActionCount,
+        source: {
+          visible: sourceBefore.visible,
+          source: sourceBefore.source,
+          busy: sourceBefore.busy,
+          error: sourceBefore.error
+        }
+      },
       before: {
         scene: await scene(),
         source: await source(),
         fixtureSource: await source(fixture),
+        nativeCode: (await inspect()).lastCodeAction,
+        route: inspectThreeDRoute(),
+        preload: await page('globalThis.__treziThreeDTrace?.()', true),
         inspector: {
           root: inspector.root,
           visible: inspector.visible,
@@ -348,29 +368,33 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
     trace.afterDirectPreview = {
       source: await source(),
       fixtureSource: await source(fixture),
-      scene: await scene()
+      scene: await scene(),
+      route: inspectThreeDRoute(),
+      preload: await page('globalThis.__treziThreeDTrace?.()', true)
     }
-    if (!(await source(fixture)).visible) {
-      await dispatchIPC('preview', {
-        type: 'send',
-        channel: PREVIEW_TOOLBAR_ACTION,
-        args: [
-          {
-            action: 'three-d-code',
-            source: 'index.html:3:1',
-            page: scenePage,
-            session: live.session,
-            revision: live.revision,
-            selected: live.selected
-          }
-        ]
-      })
-      await page('true', true)
-      trace.afterDirectToolbar = {
-        source: await source(),
-        fixtureSource: await source(fixture),
-        scene: await scene()
-      }
+    // An unrelated file may already be visible. Always probe whether this exact
+    // selected source is accepted before teardown; visibility alone proves nothing.
+    await dispatchIPC('preview', {
+      type: 'send',
+      channel: PREVIEW_TOOLBAR_ACTION,
+      args: [
+        {
+          action: 'three-d-code',
+          source: 'index.html:3:1',
+          page: scenePage,
+          session: live.session,
+          revision: live.revision,
+          selected: live.selected
+        }
+      ]
+    })
+    await page('true', true)
+    trace.afterDirectToolbar = {
+      source: await source(),
+      fixtureSource: await source(fixture),
+      scene: await scene(),
+      route: inspectThreeDRoute(),
+      preload: await page('globalThis.__treziThreeDTrace?.()', true)
     }
     console.error(`3D Code route trace: ${JSON.stringify(trace)}`)
     throw error

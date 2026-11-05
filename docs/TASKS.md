@@ -15,8 +15,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Keep a truncated branch title's ellipsis close to the chevron when its status dot slot cannot fit, with a rendered-ink regression check.
 - [x] Match the 98-point host popup and monospaced font in the branch fixture; close the measured title-to-chevron gap and clean up a stubbed chat turn after a chat-ui failure.
 - [x] Remove New Chat's duplicated address reserve at sidebar width 340 and cover the saved geometry in the offscreen chat-lead fixture.
-- [ ] Locate the live 3D selected-source action drop before changing its routing or guards; source-pinned non-GUI route controls pass but the native timeout lacks boundary evidence.
+- [x] Locate the live 3D selected-source refusal at the inspector's runtime-status page check and use the host's current page with preview IPC scene identity for Code routing.
+- [x] Keep New Chat before the viewport at the minimum toolbar width where the chat column edge would overlap that adjacent item.
 - [x] Add failure-only 3D Code route observations and direct preview/IPC probes while preserving the original assertion and negative controls.
+- [x] Keep the failure-only direct toolbar probe active even when an unrelated source file is already visible; compose the non-GUI source path and record the 950-point toolbar bound.
+- [x] Record bounded live Code delivery counts and refusal reasons at the native producer, preview, IPC, inspector and editor boundaries; expose actual toolbar constraint and container frames.
 - [ ] Manager: confirm the native chat group and independent review on the exact tree.
 ## LKM-542 — Annotation colors, persistent tools and editable canvas text
 

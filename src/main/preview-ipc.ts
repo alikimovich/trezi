@@ -19,6 +19,7 @@ import {
   type NativeView,
   type NativeWebContents
 } from '../native/platform'
+import { recordThreeDRoute } from '../native/three-d-route-trace'
 import type { MoveNodeRequest, SelectedElement, StyleReadResult } from '../shared/api'
 import {
   ANIMATION_REPLAY,
@@ -323,23 +324,43 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
   // Selection-toolbar actions that need the renderer (code drawer / delete turn);
   // comment/annotate are handled entirely inside the preview's composer.
   ipcMain.on(PREVIEW_TOOLBAR_ACTION, (e, kind: unknown) => {
-    if (!fromPreview(e)) return
+    if (!fromPreview(e)) {
+      if (
+        typeof kind === 'object' &&
+        kind !== null &&
+        (kind as { action?: unknown }).action === 'three-d-code'
+      )
+        recordThreeDRoute('preview-ipc', { reason: 'wrong-view' })
+      return
+    }
     if (typeof kind === 'object' && kind !== null) {
       const action = kind as Record<string, unknown>
-      if (
-        action.action !== 'three-d-code' ||
-        typeof action.source !== 'string' ||
-        !action.source ||
-        action.source.length > 256 ||
-        typeof action.page !== 'string' ||
-        !host.isLocalPreviewUrl(action.page) ||
-        !activeThreeD ||
-        action.session !== activeThreeD.session ||
-        action.revision !== activeThreeD.revision ||
-        action.selected !== activeThreeD.selected ||
-        !activeThreeD.hasSource
-      )
-        return
+      if (action.action !== 'three-d-code') return
+      const reason =
+        typeof action.source !== 'string' || !action.source || action.source.length > 256
+          ? 'invalid-source'
+          : typeof action.page !== 'string' || !host.isLocalPreviewUrl(action.page)
+            ? 'wrong-page'
+            : !activeThreeD
+              ? 'no-active-scene'
+              : action.session !== activeThreeD.session
+                ? 'wrong-session'
+                : action.revision !== activeThreeD.revision
+                  ? 'wrong-revision'
+                  : action.selected !== activeThreeD.selected
+                    ? 'wrong-selection'
+                    : !activeThreeD.hasSource
+                      ? 'no-selected-source'
+                      : 'forwarded'
+      recordThreeDRoute('preview-ipc', {
+        reason,
+        source: typeof action.source === 'string' ? action.source : undefined,
+        page: typeof action.page === 'string' ? action.page : undefined,
+        session: typeof action.session === 'string' ? action.session : undefined,
+        revision: typeof action.revision === 'number' ? action.revision : undefined,
+        selected: typeof action.selected === 'number' ? action.selected : undefined
+      })
+      if (reason !== 'forwarded') return
       sendToMain('preview:toolbar-action', {
         action: 'three-d-code',
         source: action.source,

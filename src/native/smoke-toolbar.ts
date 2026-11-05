@@ -191,14 +191,21 @@ export function assertToolbar(state: Toolbar, stage: string) {
     const rect = (value: string) => (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
     const [titleX, , titleWidth] = rect(state.chatTitleFrame)
     const [buttonX, , buttonWidth] = rect(state.chatNewFrame)
+    const columnEdge = state.detailLeading + state.chatWidth - 4
+    // At the minimum toolbar width the viewport already starts before the chat
+    // column ends. The button must stop before that adjacent item; a column-edge
+    // assertion there would require the two native toolbar items to overlap.
+    const columnEdgeFits = columnEdge <= state.viewportLeading
     assert.ok(
       state.chatNewStandalone &&
         buttonWidth >= 28 &&
         buttonWidth <= 48 &&
         buttonX >= titleX + titleWidth + 7 &&
         buttonX >= state.chatHeaderTrailing &&
-        Math.abs(buttonX + buttonWidth - (state.detailLeading + state.chatWidth - 4)) <= 3,
-      `Toolbar ${stage}: New Chat stays on the chat column's trailing edge without clipping the title: ${detail}`
+        (columnEdgeFits
+          ? Math.abs(buttonX + buttonWidth - columnEdge) <= 3
+          : buttonX + buttonWidth <= state.viewportLeading),
+      `Toolbar ${stage}: New Chat stays in its available chat slot without clipping the title: ${detail}`
     )
   }
   assert.equal(

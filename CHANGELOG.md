@@ -12,6 +12,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 
+- Nested 3D Code opens the selected source after navigation within a running preview (LKM-537).
 - Truncated branch titles keep their ellipsis beside the toolbar chevron at the standard window width (LKM-537).
 - Narrow toolbar resizing keeps the chat header and preview address in their final positions without a later shift (LKM-537).
 - New Chat stays at the chat column edge when the preview address needs to compress in a narrow toolbar (LKM-537).

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { registerPreviewIpc } from '../src/main/preview-ipc.ts'
 import { dispatchIPC, NativeView, views } from '../src/native/platform.ts'
+import { inspectThreeDRoute } from '../src/native/three-d-route-trace.ts'
 import { PREVIEW_TOOLBAR_ACTION } from '../src/shared/preview-channels.ts'
 
 const hostSource = readFileSync(new URL('../src/native/Host.swift', import.meta.url), 'utf8')
@@ -77,16 +78,19 @@ try {
     await dispatchIPC(events[0].view, events[0].message)
     await code('src/A.tsx:1', 0)
     assert.equal(output.at(-1)?.[1]?.source, 'src/A.tsx:1')
+    assert.equal(inspectThreeDRoute()['preview-ipc']?.reason, 'forwarded')
     await dispatchIPC(events[1].view, events[1].message)
     const count = output.length
     await code('src/A.tsx:1', 0)
     assert.equal(output.length, count, 'delayed A Code cannot reopen A after B is selected')
+    assert.equal(inspectThreeDRoute()['preview-ipc']?.reason, 'wrong-selection')
     await code('src/B.tsx:2', 1)
     assert.equal(
       output.at(-1)?.[1]?.source,
       'src/B.tsx:2',
       'valid B Code reaches the existing route'
     )
+    assert.equal(inspectThreeDRoute()['preview-ipc']?.reason, 'forwarded')
     await dispatchIPC(events[2].view, events[2].message)
     const closedCount = output.length
     await code('src/B.tsx:2', 1)
