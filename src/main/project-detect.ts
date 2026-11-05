@@ -35,8 +35,14 @@ export const PREVIEW_HOST = '127.0.0.1'
 export function withPort(command: string, framework: Framework | undefined, port: number): string {
   switch (framework) {
     case 'vite':
-    case 'sveltekit':
-      return `${command} -- --port ${port} --host ${PREVIEW_HOST}`
+    case 'sveltekit': {
+      // npm needs the script separator; Yarn, Bun and pnpm pass it through to Vite.
+      const separator =
+        /^npm\s+(?:run|run-script)\b/.test(command.trim()) && !/\s--(?:\s|$)/.test(command)
+          ? ' --'
+          : ''
+      return `${command}${separator} --port ${port} --host ${PREVIEW_HOST} --strictPort`
+    }
     case 'next': {
       // npm consumes script flags unless separated; bun/pnpm forward them and
       // an extra '--' makes Next interpret --port as a project directory.
