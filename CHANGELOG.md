@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+
+- Project names use the full sidebar row until their actions appear on title hover (LKM-531).
+
 ## [0.13.24] - 2026-11-04
 
 ### Changed

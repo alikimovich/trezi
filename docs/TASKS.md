@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-531 — Project title hover actions
+
+- [x] Give project titles the full resting row width and constrain them only while their action overlay is visible.
+- [x] Reveal from the actual title, retain the controls across pointer travel, and restore the title and marquee on exit.
+- [x] Extend the project action fixture and sidebar geometry assertions for hover, crossing, exit, width and marquee reset.
+- [ ] Manager: independent review, exact-head CI and post-merge native sidebar pointer/rendered acceptance.
+
 ## LKM-527 — Native suite failure on main a8687a1b6a94
 
 - [x] Wait for the manual chat collapse to reach its final native layout before asserting status placement, so the smoke restores its window and sidebar state.

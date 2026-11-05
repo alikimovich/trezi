@@ -118,7 +118,7 @@ export async function checkSidebarHistory(
     // Default: no History row, and "…" matches New chat at rest, hovered and focused.
     await expectHistory('default', full, 0, [])
     await restoreSidebarFocus(host, 'History default')
-    assert.equal(assertActionsMatch(await verify(), full, 'idle').more.alpha, 1)
+    assert.equal(assertActionsMatch(await verify(), full, 'idle').more.alpha, 0)
     await capture('default')
     await capture('header-idle')
     const hovered = assertActionsMatch(await verify({ hover: `project:${other}` }), other, 'hover')

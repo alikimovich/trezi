@@ -14,11 +14,24 @@ if (process.platform !== 'darwin') {
     'src/native/ProjectCell.swift',
     'src/native/SourceList.swift',
     'src/native/SidebarIcon.swift',
+    'src/native/SidebarMarquee.swift',
     'src/native/SidebarChatsAccessibility.swift'
   ])
   const report = JSON.parse(runFixture(binary))
 
-  const states = ['rest', 'hover', 'pressed', 'selected', 'emphasized', 'disabled']
+  const states = [
+    'rest',
+    'background',
+    'hover',
+    'bridge',
+    'crossed',
+    'otherRowSpace',
+    'pressed',
+    'exit',
+    'selected',
+    'emphasized',
+    'disabled'
+  ]
   for (const name of states) {
     const { more, newChat, moreInk, newChatInk } = report[name]
     for (const key of Object.keys(newChat)) {
@@ -28,7 +41,7 @@ if (process.platform !== 'darwin') {
     // New chat's frame follows its symbol: 24 wide here, 24.5 on a 2× display.
     assert.ok(Math.abs(more.width - newChat.width) <= 1, `${name}: ${newChat.width} wide`)
     assert.match(more.class, /ProjectMoreButton$/, `${name}: "…" is a plain button`)
-    assert.equal(newChat.class, 'NSButton', `${name}: New chat is what it was`)
+    assert.match(newChat.class, /ProjectActionButton$/, `${name}: New chat remains a plain button`)
     assert.equal(more.bordered, false, `${name}: no bezel`)
     assert.equal(more.width, 24, `${name}: hit target width`)
     assert.equal(more.hitHeight, 28, `${name}: "…" takes the whole row`)
@@ -43,16 +56,41 @@ if (process.platform !== 'darwin') {
   }
   assert.ok(report.pillInk > 0, `the old pill must fail the ink check: ${report.pillInk}`)
 
-  // Interaction: both are shown together, and only on hover or selection.
+  // Only the actual title opens the overlay; moving into its controls retains it.
   assert.deepEqual(
     states.map((name) => report[name].more.alpha),
-    [0, 1, 1, 1, 1, 1]
+    [0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0]
   )
+  assert.ok(
+    report.rest.titleWidth > report.hover.titleWidth,
+    'actions claim title width only while visible'
+  )
+  assert.equal(report.rest.titleWidth, report.exit.titleWidth, 'leaving restores full title width')
+  assert.equal(report.rest.titleX, report.hover.titleX, 'overlay does not shift the row')
+  assert.equal(
+    report.widths.rest,
+    report.widths.restored,
+    `title width resets after another hover: ${JSON.stringify({ widths: report.widths, rest: report.rest.rowWidth, exit: report.exit.rowWidth })}`
+  )
+  assert.ok(report.widths.rest > report.widths.actions, 'title width shrinks on hover')
+  assert.ok(report.long.restTravel > 0, 'long title overflows at rest')
+  assert.ok(
+    report.long.hoverTravel > report.long.restTravel,
+    'visible actions increase only the long title travel'
+  )
+  assert.ok(report.long.narrowTravel > report.long.hoverTravel, 'resize retargets marquee travel')
+  assert.equal(report.long.running, true, 'hover starts the existing long-title marquee')
+  assert.equal(report.long.stopped, true, 'exit stops the marquee')
+  assert.equal(report.long.offset, 0, 'exit resets the marquee offset')
+  assert.equal(report.longDetachedStopped, true, 'row removal stops its marquee')
   assert.equal(report.pressed.more.highlighted, true, 'pressed reaches the button')
   assert.equal(report.disabled.more.enabled, false)
   assert.equal(report.focus.more, report.focus.newChat, 'one rule for keyboard focus')
   assert.equal(report.focus.moreTook, report.focus.newChatTook)
   assert.equal(report.focus.moreAccepts, report.focus.newChatAccepts)
+  assert.equal(report.focus.moreVisible, report.focus.more)
+  assert.equal(report.focus.newVisible, report.focus.newChat)
+  assert.equal(report.focusReveal, true, 'keyboard focus reveals and dismisses the overlay')
   // A symbol's alignment rect sets a plain button's frame and differs by macOS, so New chat's
   // height is not fixed: "…" takes the whole row and is never the shorter target.
   assert.equal(report.hit.more, report.hit.row, 'AppKit gives "…" every point of the row')
@@ -64,7 +102,7 @@ if (process.platform !== 'darwin') {
   // One builder for both, and no way back to the pill.
   const cell = readFileSync('src/native/ProjectCell.swift', 'utf8')
   assert.match(cell, /let more = ProjectMoreButton\(\)/)
-  assert.match(cell, /let newChat = NSButton\(\)/)
+  assert.match(cell, /let newChat = ProjectActionButton\(\)/)
   assert.doesNotMatch(cell, /NSPopUpButton/)
   assert.doesNotMatch(readFileSync('src/native/Shell.swift', 'utf8'), /more\.bezelStyle/)
   console.log(

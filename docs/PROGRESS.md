@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-531 project title hover actions
+
+- Project titles now occupy the available row width at rest. Hovering the actual title reveals the existing project buttons over its trailing space, with a continuous pointer path into them; leaving restores the width. The title uses the existing marquee with the active width and stops it on exit or removal.
+- The offscreen project action fixture covers background, title, bridge, control and exit states, width restoration and long-title marquee reset. Sidebar verification records the resting and active title inset for the post-merge native check; independent review and exact-head CI remain required.
+
 ## 2026-11-04 — LKM-527 native suite timing and glass evidence repair
 
 - The chat-gate smoke now waits for the native collapse animation to finish before checking the preview status frame. The earlier assertion ran while the chat column was already hidden but the layout fraction was still moving, aborting the check before its window and sidebar restoration and cascading into Settings, core and chat failures.

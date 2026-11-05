@@ -14,6 +14,7 @@ if (process.platform !== 'darwin') {
     'src/native/ProjectCell.swift',
     'src/native/SourceList.swift',
     'src/native/SidebarIcon.swift',
+    'src/native/SidebarMarquee.swift',
     'src/native/SidebarChatsAccessibility.swift'
   ])
   const report = JSON.parse(runFixture(binary))
