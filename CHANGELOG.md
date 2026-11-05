@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.13.22] - 2026-11-04
+
 ### Fixed
 
 - New Project planning chat and composer remain visible when an older project is still selected (LKM-520).
