@@ -77,19 +77,22 @@ struct WorkflowRemote {
     // MARK: Trezi's own update check
 
     /// The update check: after a fetch, how far HEAD trails its tracked
-    /// upstream (`origin/main` when it has none). Every soft failure (not a checkout, no
-    /// remote, offline) is `idle`, so a source install without a remote never nags.
+    /// upstream (`origin/main` when it has none). Failed checks are unavailable,
+    /// never reported as current; this runs only when the user asks.
     func updateCheck() -> JSValue {
         let git = context.tool("git", timeout: 15)
         func line(_ arguments: [String]) throws -> String { try git.text(root, arguments).trimmingCharacters(in: .whitespacesAndNewlines) }
         let idle = WorkflowOwner.object([("status", Self.text("idle")), ("behind", .number(0))])
+        let unavailable = WorkflowOwner.object([("status", Self.text("unavailable")), ("behind", .number(0)),
+                                                ("error", Self.text("Could not check this source installation. Check your connection, remote and access, then try again."))])
         var upstream = (try? line(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])) ?? ""
         if upstream.isEmpty { upstream = "origin/main" }
         let slash = upstream.firstIndex(of: "/")
         let remote = slash.map { String(upstream[..<$0]) }.flatMap { $0.isEmpty ? nil : $0 } ?? "origin"
         let branch = slash.map { String(upstream[upstream.index(after: $0)...]) }.flatMap { $0.isEmpty ? nil : $0 } ?? "main"
-        guard (try? line(["fetch", remote, branch])) != nil, let count = try? line(["rev-list", "--count", "HEAD..\(upstream)"]) else { return idle }
-        guard let behind = Int(count), behind > 0 else { return idle }
+        guard (try? line(["fetch", remote, branch])) != nil, let count = try? line(["rev-list", "--count", "HEAD..\(upstream)"]),
+              let behind = Int(count), behind >= 0 else { return unavailable }
+        if behind == 0 { return idle }
         var fields: [(String, JSValue)] = [("status", Self.text("available")), ("behind", .number(Double(behind)))]
         if let subject = try? line(["log", "-1", "--format=%s", upstream]), !subject.isEmpty { fields.append(("subject", Self.text(subject))) }
         return WorkflowOwner.object(fields)

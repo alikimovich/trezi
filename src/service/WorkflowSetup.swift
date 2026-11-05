@@ -224,6 +224,18 @@ struct WorkflowSetup {
                 context.failed(step, message)
                 return WorkflowContext.fail(WorkflowJournal.redact(message))
             }
+            if step == "build" {
+                let output = String(decoding: result.stdout, as: UTF8.self)
+                let errors = String(decoding: result.stderr, as: UTF8.self)
+                let signer = output.split(separator: "\n").last { $0.hasPrefix("Signed Trezi: ") }
+                if signer == nil || signer == "Signed Trezi: ad hoc" || errors.contains("warning: signing Trezi ad hoc") {
+                    let warning = errors.split(separator: "\n").first { $0.hasPrefix("warning: signing Trezi ad hoc") }
+                    let message = "Trezi was built without a verified signing identity. Check code-signing identity and Keychain access, then retry the update. The app was not restarted."
+                        + (warning.map { "\n\(WorkflowJournal.redact(String($0)))" } ?? "")
+                    context.failed(step, message)
+                    return WorkflowContext.fail(message)
+                }
+            }
             try context.done(step)
         }
         return .done(WorkflowOwner.object([("ok", .bool(true)), ("head", Self.text((try? context.run(["rev-parse", "HEAD"])) ?? ""))]))

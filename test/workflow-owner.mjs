@@ -680,6 +680,19 @@ try {
     assert.match(remote.outside, /top-level folder/)
     assert.deepEqual(remote.update, { status: 'idle', behind: 0 }) // the fixture branch is not behind its own upstream
 
+    const unavailableUpdate = await owned('update-check-unavailable', async (owner, w) => {
+      git(w.local, 'checkout', '-q', 'main')
+      git(w.local, 'remote', 'set-url', 'origin', join(w.base, 'missing-remote.git'))
+      const failedFetch = await owner.updateCheck(w.local)
+      git(w.local, 'remote', 'remove', 'origin')
+      const noRemote = await owner.updateCheck(w.local)
+      return { failedFetch, noRemote }
+    })
+    for (const status of [unavailableUpdate.failedFetch, unavailableUpdate.noRemote]) {
+      assert.equal(status.status, 'unavailable')
+      assert.match(status.error, /connection, remote and access/)
+    }
+
     // Recovery from a dirty tree: drift, busy, conflict, retry and Switch (LKM-250).
     await owned('remote-recovery', async (owner, w) => {
       const peer = w.peer()
@@ -998,6 +1011,74 @@ try {
     assert.deepEqual(updated.result, { ok: true })
     assert.equal(updated.head, true)
     assert.deepEqual(updated.pm, ['bun install --frozen-lockfile', 'bun run build:native'])
+
+    const dirtyUpdate = await owned('update-dirty-tree', async (owner, w) => {
+      git(w.local, 'checkout', '-q', 'main')
+      const peer = w.peer()
+      commit(peer, 'release.txt', 'new release\n')
+      git(peer, 'push', '-q', 'origin', 'main')
+      write(w.local, 'a.txt', 'local edit\n')
+      const before = {
+        head: git(w.local, 'rev-parse', 'HEAD'),
+        status: git(w.local, 'status', '--porcelain'),
+        content: readFileSync(join(w.local, 'a.txt'), 'utf8')
+      }
+      const result = await owner.update(w.local)
+      const after = {
+        head: git(w.local, 'rev-parse', 'HEAD'),
+        status: git(w.local, 'status', '--porcelain'),
+        content: readFileSync(join(w.local, 'a.txt'), 'utf8')
+      }
+      return { result, before, after, pm: w.pm().calls ?? [] }
+    })
+    assert.equal(dirtyUpdate.result.ok, false)
+    assert.match(dirtyUpdate.result.error, /local changes/)
+    assert.deepEqual(
+      dirtyUpdate.after,
+      dirtyUpdate.before,
+      'dirty update preserves HEAD and local edits'
+    )
+    assert.deepEqual(dirtyUpdate.pm, [], 'dirty update refuses before install or build')
+
+    const divergedUpdate = await owned('update-diverged-tree', async (owner, w) => {
+      git(w.local, 'checkout', '-q', 'main')
+      commit(w.local, 'local.txt', 'local commit\n')
+      const peer = w.peer()
+      commit(peer, 'release.txt', 'new release\n')
+      git(peer, 'push', '-q', 'origin', 'main')
+      const before = {
+        head: git(w.local, 'rev-parse', 'HEAD'),
+        status: git(w.local, 'status', '--porcelain'),
+        content: readFileSync(join(w.local, 'local.txt'), 'utf8')
+      }
+      const result = await owner.update(w.local)
+      const after = {
+        head: git(w.local, 'rev-parse', 'HEAD'),
+        status: git(w.local, 'status', '--porcelain'),
+        content: readFileSync(join(w.local, 'local.txt'), 'utf8')
+      }
+      return { result, before, after, pm: w.pm().calls ?? [] }
+    })
+    assert.equal(divergedUpdate.result.ok, false)
+    assert.match(divergedUpdate.result.error, /fast.forward|diverg/i)
+    assert.deepEqual(
+      divergedUpdate.after,
+      divergedUpdate.before,
+      'diverged update preserves HEAD and local commit'
+    )
+    assert.deepEqual(divergedUpdate.pm, [], 'diverged update refuses before install or build')
+
+    for (const signing of ['adhoc', 'missing']) {
+      const refused = await owned(`update-signing-${signing}`, async (owner, w) => {
+        git(w.local, 'checkout', '-q', 'main')
+        writeFileSync(w.pmState, JSON.stringify({ signing }))
+        return { result: await owner.update(w.local), pm: w.pm().calls }
+      })
+      assert.equal(refused.result.ok, false, `${signing} build cannot authorize restart`)
+      assert.match(refused.result.error, /without a verified signing identity/)
+      if (signing === 'adhoc') assert.match(refused.result.error, /warning: signing Trezi ad hoc/)
+      assert.deepEqual(refused.pm, ['bun install --frozen-lockfile', 'bun run build:native'])
+    }
 
     const diagnosed = await owned('diagnostics', async (owner, w) => {
       const error = "Cannot find module '@ai-sdk/xai' imported from /Users/x/chat.ts"
