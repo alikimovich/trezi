@@ -137,7 +137,11 @@ enum RuntimeDetect {
     /// commands read PORT/HOST from the environment instead.
     static func withPort(_ command: String, framework: String?, port: Int) -> String {
         switch framework {
-        case "vite", "sveltekit": return "\(command) -- --port \(port) --host \(RuntimeNet.previewHost)"
+        case "vite", "sveltekit":
+            // npm needs the script separator; Yarn, Bun and pnpm pass it through to Vite.
+            let npm = matches("^npm[\(RuntimeNet.jsSpace)]+(?:run|run-script)(?![A-Za-z0-9_])", jsTrim(command))
+            let separated = matches("[\(RuntimeNet.jsSpace)]--(?:[\(RuntimeNet.jsSpace)]|$)", command)
+            return "\(command)\(npm && !separated ? " --" : "") --port \(port) --host \(RuntimeNet.previewHost) --strictPort"
         case "next":
             // npm consumes script flags unless separated; bun/pnpm forward them.
             let npm = matches("^npm[\(RuntimeNet.jsSpace)]+(?:run|run-script)(?![A-Za-z0-9_])", jsTrim(command))

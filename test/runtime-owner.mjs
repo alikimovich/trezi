@@ -404,6 +404,10 @@ try {
       assert.equal(applyPreviewChoice(plain, 'native'), plain, 'one preview: nothing to choose')
     const commandCases = [
       ['npm run dev', 'vite'],
+      ['yarn run dev', 'vite'],
+      ['yarn run dev', 'sveltekit'],
+      ['pnpm run dev', 'vite'],
+      ['bun run dev', 'vite'],
       ['bun run dev', 'sveltekit'],
       ['npm run dev', 'next'],
       ['npm run dev -- --turbo', 'next'],
@@ -435,6 +439,14 @@ try {
         JSON.stringify(item)
       )
     })
+    assert.equal(commands[0], 'npm run dev -- --port 7777 --host 127.0.0.1 --strictPort')
+    for (const index of [1, 2, 3, 4, 5]) {
+      assert.equal(
+        commands[index],
+        `${commandCases[index].command} --port 7777 --host 127.0.0.1 --strictPort`,
+        `${commandCases[index].command} forwards the assigned port without a literal --`
+      )
+    }
     failureCases.forEach((item, index) => {
       const actual = failures[commandCases.length + index]
       assert.equal(actual.message, interpretFailure(item.code, item.tail), JSON.stringify(item))
@@ -1494,8 +1506,56 @@ exit 0
     await section('sockets', async () => {
       // Real servers become ready in well under a second. A short readiness timeout makes a
       // start that never becomes reachable fail in seconds, not after the 90 s default.
-      const fixture = await start(dir(), { RUNTIME_PORT: '', RUNTIME_READY_TIMEOUT: '12' })
+      const yarnBin = dir()
+      write(
+        join(yarnBin, 'yarn'),
+        '#!/bin/sh\n[ "$1" = run ] && [ "$2" = dev ] || exit 2\nshift 2\nexec "$TREZI_TEST_BUN" "$PWD/vite.mjs" "$@"\n',
+        0o755
+      )
+      const fixture = await start(dir(), {
+        RUNTIME_PORT: '',
+        RUNTIME_READY_TIMEOUT: '12',
+        PATH: `${yarnBin}:${process.env.PATH}`,
+        TREZI_TEST_BUN: process.execPath
+      })
       const runtime = fixture.runtime()
+      // Yarn 4 forwards a literal `--` to the script. This shim does the same; the
+      // Vite-style script ignores flags after it, then serves on the parsed port.
+      const yarnApp = dir()
+      write(
+        join(yarnApp, 'vite.mjs'),
+        `const args = process.argv.slice(2)
+await Bun.write('vite-args.json', JSON.stringify(args))
+let port = 5173, host = '127.0.0.1'
+for (let index = 0; index < args.length; index++) {
+  if (args[index] === '--') break
+  if (args[index] === '--port') port = Number(args[++index])
+  if (args[index] === '--host') host = args[++index]
+}
+const server = Bun.serve({ port, hostname: host, fetch: () => new Response('yarn-private') })
+console.log('Local: http://' + host + ':' + server.port + '/')`
+      )
+      const yarnPrivate = await runtime.startAgent({
+        agent: 'yarn-vite',
+        root: yarnApp,
+        command: 'yarn run dev',
+        framework: 'vite'
+      })
+      const assigned = fixture.logs.find((line) => line.startsWith('Assigned free port '))
+      const assignedPort = assigned?.match(/^Assigned free port (\d+) /)?.[1]
+      assert.ok(assignedPort, 'the private runtime logs its assigned port')
+      assert.deepEqual(JSON.parse(readFileSync(join(yarnApp, 'vite-args.json'), 'utf8')), [
+        '--port',
+        assignedPort,
+        '--host',
+        '127.0.0.1',
+        '--strictPort'
+      ])
+      assert.equal(yarnPrivate.url, `http://127.0.0.1:${assignedPort}`)
+      assert.equal((await runtime.agentInfo('yarn-vite', yarnApp)).server.url, yarnPrivate.url)
+      assert.equal(await (await fetch(yarnPrivate.url)).text(), 'yarn-private')
+      console.log(`RUNTIME-OWNER Yarn 4 private Vite URL ${yarnPrivate.url} PASS`)
+      await runtime.stopAgent('yarn-vite', yarnApp)
       const site = dir()
       write(join(site, 'index.html'), '<body><h1>Live</h1></body>')
       const served = await runtime.start({ root: site, command: '', framework: 'static' })

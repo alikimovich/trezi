@@ -10,6 +10,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Extend the lock-free Swift fixture for staged glyphs, motion fallback and sidebar font; keep toolbar interaction regression coverage.
 - [x] Review repair: preserve header glyphs across toolbar updates, carry sidebar reveal time across rebuilt cells, and assert visible glyph and New Chat interaction states in the standalone fixtures.
 - [ ] Manager: independent review, exact-head CI and post-merge native chat/sidebar/core acceptance with foreground captures.
+## LKM-519 — Feedback: review logs
+
+- [x] Forward Trezi's assigned port and host to Yarn, Bun and pnpm Vite/SvelteKit scripts without npm's literal separator; fail on port conflicts.
+- [x] Cover generated commands and Swift/TypeScript parity in the runtime fixture; retain the private URL isolation assertion and the existing broken agent-browser link diagnosis.
+- [x] Review repair: exercise a Yarn 4 style Vite launch on a real listener and assert its recorded arguments, assigned private URL and page response.
+- [ ] Manager: exact-head CI, independent review, PR merge and post-merge private preview acceptance.
 
 ## LKM-521 — Native chat and Settings suite failure
 

@@ -9,6 +9,13 @@
 
 - The read-only decipher reference snapshot at `/Users/panda/dev/hephaestus/reports/trezi-decipher-reference` was available with its source manifest. Unknown titles now use a native fixed-width per-glyph reveal in the sidebar and selected header, with a static Reduce Motion label and stable accessibility text. Authoritative ready/error titles replace the effect immediately; a running chat retains its separate shimmer.
 - Sidebar labels use the system monospace family. New Chat keeps its native glass and momentary control while its AppKit bezel responds to hover and keyboard focus. The offscreen sidebar fixture covers beginning, middle and resolved glyphs, static motion fallback, accessibility and font; the existing toolbar fixture compiles the shared control. Foreground appearance and interaction captures remain for the operator-owned post-merge native run.
+## 2026-11-04 — LKM-519 review repair: assigned private URL
+
+- The runtime-owner socket fixture now launches a Yarn 4 style script that preserves literal `--`, records its Vite arguments and serves a real page on the forwarded port. It checks the private runtime's returned and recorded URL against the assigned port and fetches the page. The unit tier runs this section where loopback binding is available; CI and post-merge acceptance remain with the manager.
+
+## 2026-11-04 — LKM-519 assigned Vite port in private previews
+
+- The Swift runtime and its TypeScript reference now add npm's script-argument separator only for npm when launching Vite or SvelteKit. Yarn, Bun and pnpm receive `--port` and `--host` directly, so the private server can bind to the assigned loopback port that Trezi probes. `--strictPort` makes a collision fail instead of silently moving to another port. The runtime command fixture checks exact commands and Swift/TypeScript parity; the existing private-runtime fixture rejects a foreign printed URL. The broken global agent-browser link is a separate host prerequisite already covered by browser-setup's missing-link fixture. CI, independent review and post-merge acceptance remain with the manager.
 
 ## 2026-11-04 — LKM-521 native chat and Settings suite repair
 
