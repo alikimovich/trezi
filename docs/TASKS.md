@@ -3,6 +3,21 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-542 — Annotation colors, persistent tools and editable canvas text
+
+- [x] Store chosen colors with drawing and canvas text in the native composite and attachment path.
+- [x] Keep the active annotation tool selected and accessible, and edit text directly on the canvas.
+- [x] Suspend a marked-up snapshot when Select takes input, and resume it with its edits intact.
+- [x] Extend focused native model and controller fixtures for color, text, and mode transitions.
+- [x] Review repair: hit-test rendered text bounds and prove popup-selected color in the encoded attachment fixture.
+- [x] Review repair: retain the snapshot across Select, guard history and stale-page resume, and assert input routing in the windowless fixture.
+- [x] Bounded review repair: changed-page recovery offers Save to chat or explicit Discard; fixture advances page identity and checks the exact retained composite.
+- [x] CI repair: update the toolbar divider fixture's obsolete Mark up wiring assertions.
+- [x] CI repair: sample rebuilt sidebar decipher cells at one elapsed instant and detect a true reset.
+- [x] CI repair: sample each marquee start as its hover begins so slow fixture callbacks cannot mislabel a scrolling phase.
+- [x] Review proof: assert Text remains tinted and accessibly selected when focus moves to the annotation color chooser, with peer tools off.
+- [ ] Manager: independent review, exact-head CI, merge and post-merge native acceptance.
+
 ## LKM-529 — Simplify Trezi update availability and guided update flow
 
 - [x] Replace the behind-build diagnostics sheet with a concise Update / Not Now decision; retain diagnostics in the badge tooltip, About and Copy Commit menu.

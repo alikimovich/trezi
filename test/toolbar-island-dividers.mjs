@@ -189,10 +189,10 @@ assert.equal(
 )
 assert.match(
   source('PreviewMarkupHost.swift'),
-  /changed: \{[^\n]*updateMarkup\(active: self\?\.markup\?\.overlay != nil\)/
+  /changed: \{[^\n]*updateMarkup\(active: self\?\.markup\?\.overlay\?\.isHidden == false\)/
 )
 const controller = readFileSync('src/native/index.ts', 'utf8')
-assert.match(controller, /action\.action === 'markup'\) markup\.toggle\(\)/)
+assert.match(controller, /action\.action === 'markup'[\s\S]{0,220}markup\.toggle\(\)/)
 // Every on state is drawn by the one helper: no filled or rayed variant swapped in, no animation
 // (Reduce Motion has nothing to reduce), and the tooltip follows the toggle.
 assert.match(shell, /ToolbarIslands\.stateImage\("select-object"/)
