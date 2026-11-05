@@ -28,6 +28,7 @@ final class PreviewMarkup {
     private let captureTimeout: TimeInterval
     private(set) var session: String?
     private(set) var overlay: PreviewMarkupOverlay?
+    private(set) var recovery: PreviewMarkupRecovery?
     private(set) var context: [String: Any] = [:]
     private var suspended = false
     private var capturedPageIdentity = ""
@@ -97,6 +98,7 @@ final class PreviewMarkup {
     }
     private func close() {
         overlay?.removeFromSuperview()
+        recovery?.removeFromSuperview(); recovery = nil
         overlay = nil; session = nil; context = [:]; suspended = false; capturedPageIdentity = ""
         changed()
     }
@@ -111,13 +113,33 @@ final class PreviewMarkup {
     func resume() {
         let currentIdentity = currentPageIdentity()
         if let token = session, !capturedPageIdentity.isEmpty, !currentIdentity.isEmpty, capturedPageIdentity != currentIdentity {
-            report(token, "suspended", message: "The preview changed. Your mark up is preserved; return to its page or Cancel it.")
+            showRecovery()
+            report(token, "suspended", message: "The preview changed. Save the marked image to chat or discard it.")
             return
         }
+        recovery?.removeFromSuperview(); recovery = nil
         suspended = false
         overlay?.isHidden = false
         if let overlay { parent.window?.makeFirstResponder(overlay) }
         changed()
+    }
+    private func showRecovery() {
+        guard recovery == nil else { return }
+        let view = PreviewMarkupRecovery(frame: .zero)
+        view.onSave = { [weak self] in self?.add() }
+        view.onDiscard = { [weak self] in self?.cancel() }
+        view.saveButton.isEnabled = overlay?.addEnabled == true
+        parent.addSubview(view, positioned: .above, relativeTo: nil)
+        recovery = view
+        placeRecovery()
+        changed()
+    }
+    private func placeRecovery() {
+        guard let recovery else { return }
+        let bounds = area ?? parent.bounds
+        let width = min(460, max(240, bounds.width - 20))
+        recovery.frame = CGRect(x: bounds.midX - width / 2, y: bounds.maxY - 86, width: width, height: 76)
+        recovery.needsLayout = true; recovery.layoutSubtreeIfNeeded()
     }
     /// Discards everything; nothing was written, so nothing is left to clean.
     func cancel() {
@@ -145,10 +167,13 @@ final class PreviewMarkup {
         overlay.show(error: nil)
         let canvas = overlay.canvas
         guard let encoded = MarkupEncoder.encode(canvas.image, marks: canvas.document.marks, budget: budget) else {
-            overlay.show(error: "Mark up could not make an image small enough to send. Nothing was added.")
+            let message = "Mark up could not make an image small enough to send. Nothing was added."
+            overlay.show(error: message)
+            recovery?.show(error: message)
             return
         }
         overlay.adding = true
+        recovery?.adding = true
         var capture = context
         capture["imageWidth"] = encoded.width; capture["imageHeight"] = encoded.height
         emit(["event":"markup-add", "session":token, "name":encoded.name, "type":encoded.type,
@@ -160,6 +185,8 @@ final class PreviewMarkup {
         if ok { close(); return }
         overlay.adding = false
         overlay.show(error: message ?? "The image could not be added to the chat.")
+        recovery?.adding = false
+        recovery?.show(error: message ?? "The image could not be added to the chat.")
     }
     /// The host's Escape; the chat next to it keeps its own.
     func escape() -> Bool {
@@ -180,6 +207,7 @@ final class PreviewMarkup {
         guard let overlay, overlay.frame != area || overlay.page != page else { return }
         overlay.frame = area; overlay.page = page
         overlay.layoutSubtreeIfNeeded()
+        placeRecovery()
         changed()
     }
 }

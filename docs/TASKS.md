@@ -11,6 +11,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Extend focused native model and controller fixtures for color, text, and mode transitions.
 - [x] Review repair: hit-test rendered text bounds and prove popup-selected color in the encoded attachment fixture.
 - [x] Review repair: retain the snapshot across Select, guard history and stale-page resume, and assert input routing in the windowless fixture.
+- [x] Bounded review repair: changed-page recovery offers Save to chat or explicit Discard; fixture advances page identity and checks the exact retained composite.
+- [x] CI repair: update the toolbar divider fixture's obsolete Mark up wiring assertions.
 - [ ] Manager: independent review, exact-head CI, merge and post-merge native acceptance.
 
 ## LKM-529 — Simplify Trezi update availability and guided update flow

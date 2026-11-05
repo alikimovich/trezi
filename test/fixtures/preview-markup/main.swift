@@ -483,6 +483,7 @@ check(frames() == closedFrames, "opening moves and resizes nothing")
 session.overlay?.canvas.pointerDown(CGPoint(x: 100, y: 100), tool: .pen)
 session.overlay?.canvas.pointerDragged(CGPoint(x: 140, y: 120)); session.overlay?.canvas.pointerUp()
 let retained = session.overlay?.canvas.document.marks
+let retainedComposite = MarkupEncoder.encode(session.overlay!.canvas.image, marks: retained!)!.data.base64EncodedString()
 let inputPoint = NSPoint(x: 500, y: 350)
 check(parent.hitTest(inputPoint) === session.overlay?.canvas, "active annotation owns preview input")
 session.suspend()
@@ -492,17 +493,42 @@ check(!session.undo(), "Select keeps Undo with the active mode")
 pageIdentity = "page-b"
 session.resume()
 check(session.overlay?.isHidden == true && session.overlay?.canvas.document.marks == retained && state() == "suspended", "a changed page cannot display the retained snapshot")
-pageIdentity = "page-a"
-session.resume()
-check(session.overlay?.isHidden == false && session.overlay?.canvas.document.marks == retained, "Mark up restores the same marked snapshot")
+let recovery = session.recovery!
+check(recovery.superview === parent && recovery.saveButton.isEnabled && recovery.discardButton.isEnabled, "changed-page recovery offers Save and Discard")
+check(parent.hitTest(inputPoint) === livePage, "recovery never puts the old snapshot over the new page")
+recovery.saveButton.performClick(nil)
+let recoveredAdd = events.last { $0["event"] as? String == "markup-add" }
+check(recoveredAdd?["session"] as? String == "t1" && recoveredAdd?["type"] as? String == "image/png" && recoveredAdd?["data"] as? String == retainedComposite, "Save sends the exact retained native composite through Add")
+check(session.overlay?.isHidden == true && recovery.saveButton.isEnabled == false, "Save keeps the stale canvas hidden while Add is pending")
+session.finished("t1", ok: false, message: "Attachment unavailable")
+check(recovery.message.stringValue == "Attachment unavailable" && recovery.saveButton.isEnabled, "failed Save remains recoverable")
+recovery.saveButton.performClick(nil)
+session.finished("t1", ok: true, message: nil)
+check(session.overlay == nil && session.recovery == nil && session.session == nil, "successful recovery releases the snapshot")
+pageIdentity = "page-c"
+session.begin("t1-discard"); pendingCapture?(.success(captured(solid(800, 400, .white)))); pendingCapture = nil
+session.overlay?.canvas.pointerDown(CGPoint(x: 100, y: 100), tool: .pen)
+session.overlay?.canvas.pointerDragged(CGPoint(x: 140, y: 120)); session.overlay?.canvas.pointerUp()
+session.suspend(); pageIdentity = "page-d"; session.resume()
+check(session.recovery != nil && session.overlay?.isHidden == true, "later navigation also offers recovery")
+session.recovery?.discardButton.performClick(nil)
+check(session.overlay == nil && session.recovery == nil && session.session == nil && state() == "cancelled", "explicit Discard releases marks")
+events.removeAll()
+pageIdentity = "page-e"
+session.begin("t1-resume"); pendingCapture?(.success(captured(solid(800, 400, .white)))); pendingCapture = nil
+session.overlay?.canvas.pointerDown(CGPoint(x: 100, y: 100), tool: .pen)
+session.overlay?.canvas.pointerDragged(CGPoint(x: 140, y: 120)); session.overlay?.canvas.pointerUp()
+let resumedMarks = session.overlay?.canvas.document.marks
+session.suspend(); session.resume()
+check(session.overlay?.isHidden == false && session.overlay?.canvas.document.marks == resumedMarks, "same-page resume keeps the marks")
 check(parent.hitTest(inputPoint) === session.overlay?.canvas, "resumed annotation owns preview input again")
 let beforeStale = events.count
 session.cancel("t0")
-check(session.overlay != nil && session.session == "t1", "a stale token closes nothing")
+check(session.overlay != nil && session.session == "t1-resume", "a stale token closes nothing")
 check(events.count == beforeStale + 1 && state() == "cancelled" && events.last?["session"] as? String == "t0", "but is answered, so Bun never waits")
 let focusBefore = focused
-session.cancel("t1")
-check(state() == "cancelled" && events.last?["session"] as? String == "t1", "the button cancels its session")
+session.cancel("t1-resume")
+check(state() == "cancelled" && events.last?["session"] as? String == "t1-resume", "the button cancels its session")
 check(session.overlay == nil && session.session == nil, "and closes it, marks and all")
 check(focused == focusBefore + 1, "focus goes back")
 check(frames() == closedFrames, "closing moves and resizes nothing")

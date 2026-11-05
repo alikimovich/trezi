@@ -153,6 +153,36 @@ final class MarkupIslandFace: NSView {
     }
 }
 
+/// A changed page never receives the old snapshot. The retained composite can still be
+/// attached to its original chat, or explicitly discarded, from this small native island.
+final class PreviewMarkupRecovery: NSVisualEffectView {
+    let message = NSTextField(labelWithString: "Preview changed. Save the marked image to chat or discard it.")
+    let saveButton = NSButton(title: "Save to chat", target: nil, action: nil)
+    let discardButton = NSButton(title: "Discard", target: nil, action: nil)
+    var onSave: (() -> Void)?
+    var onDiscard: (() -> Void)?
+    var adding = false { didSet { saveButton.isEnabled = !adding } }
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        material = .popover; blendingMode = .withinWindow; state = .active
+        wantsLayer = true; layer?.cornerRadius = 16; layer?.masksToBounds = true
+        message.font = .systemFont(ofSize: 12)
+        saveButton.target = self; saveButton.action = #selector(save)
+        discardButton.target = self; discardButton.action = #selector(discard)
+        for view in [message, saveButton, discardButton] { addSubview(view) }
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    override func layout() {
+        super.layout()
+        message.frame = CGRect(x: 12, y: bounds.height - 25, width: bounds.width - 24, height: 18)
+        saveButton.frame = CGRect(x: 12, y: 8, width: 116, height: 28)
+        discardButton.frame = CGRect(x: 136, y: 8, width: 90, height: 28)
+    }
+    @objc private func save() { onSave?() }
+    @objc private func discard() { onDiscard?() }
+    func show(error: String) { message.stringValue = error }
+}
+
 /// The opaque cover over the preview area while a session is open: the live page never shows
 /// through and takes no keys. LKM-448: the snapshot sits exactly where the page was, at its
 /// size, and the controls float over it, so opening and closing moves and resizes nothing.

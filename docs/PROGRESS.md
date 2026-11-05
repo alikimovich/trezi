@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-542 changed-page Mark up recovery
+
+- A retained Mark up snapshot from an earlier page stays hidden after navigation. A native recovery island offers Save to chat through the existing composite/Add path or explicit Discard; attachment failure keeps the island and marks for retry. The windowless fixture advances page identity without resetting it, checks exact composite bytes on Save, explicit Discard, same-page resume and preview input ownership.
+- The toolbar divider fixture now checks the current visible-overlay state and Select handoff. The reported sidebar marquee CI failure was on unchanged base code; its focused fixture passed locally. Current-head CI, independent review and post-merge native acceptance remain with the manager.
+
 ## 2026-11-05 — LKM-542 suspended snapshot navigation guard
 
 - Back and Forward now remain disabled through a Mark up session, including while Select uses the live preview. The retained snapshot carries the captured page identity; a changed page cannot display it on resume, and the user gets a preservation notice. The windowless fixture asserts preview hit testing leaves the canvas during suspension and returns on resume, with the marks intact. Exact-head CI, independent review and post-merge native acceptance remain with the manager.
