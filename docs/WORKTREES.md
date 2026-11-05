@@ -248,12 +248,15 @@ The repository owner validates that each Git tool targets a linked chat worktree
   counts every file that became dirty or changed again, every file that was uncommitted
   before and is clean after (`git checkout -- f`, `restore`, `stash` or `reset --hard`),
   and commits made in the live checkout.
-- **Trezi's own effects are subtracted (LKM-215).** Every repository lease (any chat's
-  landing, conflict markers, installs, island writes) and every effectful agent tool
+- **Trezi's own effects are subtracted (LKM-215, LKM-539).** Every repository lease (any chat's
+  landing, conflict markers, installs) and every effectful agent tool
   (`land_now`, `publish_update`/`publish_merge`, `git_sync_base`, the merge tools,
   `prepare_conflict_resolution`, `restart_dev_server`, `install_skills`) and the user's
   Publish run inside `treziLiveEffect`, which snapshots around the effect while a watch
-  is open. The paths it changed (with the state it left them in), the commits it made or
+  is open. Source-owner writes from chat islands, Styles, the internal editor, Undo and
+  file actions enter that lane while a turn watch is open; only paths named by a
+  successful source transaction are attributed to Trezi. A refused stale edit claims
+  no path. The paths each effect changed (with the state it left them in), the commits it made or
   brought in and the HEADs it left are not reported. A file the user edits again after a
   landing still is. Dev-server and build output (`node_modules`, `.next`, `dist`,
   `.svelte-kit`, `*.tsbuildinfo`, `next-env.d.ts` and the like) and `.env` files are

@@ -10,6 +10,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Changed
+
+- Chat tuning islands now use prepared source-bound controls immediately by default; Jev selection runs only when requested explicitly (LKM-539).
+- Styles, chat-island and internal editor source edits made during a chat turn are now attributed to Trezi without hiding genuine external changes (LKM-539).
+
 ## [0.13.29] - 2026-11-05
 
 ### Changed

@@ -9,10 +9,12 @@ stages follow below; the current implementation is deliberately bounded.
   children cannot create islands. Agent-prepared groups and 2D points render in
   SwiftUI inside the originating assistant turn, with standard fields and Bézier
   handles/presets. Springs use grouped parameters for the project's actual engine.
-- Jev selects and orders whole prepared blocks via the installed json-render
-  evaluator. The coding agent determines group membership. Arbitrary nested layout
-  and Jev-generated regrouping are not implemented yet. Missing credentials retain
-  the prepared layout and report the actual agent engine.
+- The default auto engine uses prepared blocks directly, without a second model
+  request. Explicit `engine:jev` selects and orders whole prepared blocks via the
+  installed json-render evaluator. The coding agent determines group membership.
+  Arbitrary nested layout and Jev-generated regrouping are not implemented yet.
+  Missing credentials on an explicit Jev request retain the prepared layout and
+  report the actual agent engine.
 - Up to 12 literal fields in one source file; points batch x/y into one queued,
   revision-checked write and undo group. Reset, Reload and instrumented Replay are
   supported. Sliders, points and curves write at most once per 120 ms during dragging,
@@ -294,7 +296,7 @@ The host supplies session/turn identity; tool arguments cannot redirect delivery
 Expose tools through supported provider seams and update the bundled controls
 workflow guidance. Scope tools to native clients that advertise the capability.
 
-Use Jev when configured to select prepared block alternatives and group structure.
+Use Jev only when explicitly requested to select prepared block alternatives and group structure.
 First verify the installed API supports the required constraints. If nested output
 is insufficient, use bounded typed decisions for block/group membership and order,
 then deterministically assemble the same validated tree. This is a composition

@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { chatIslandShape } from '../bin/chat-island-schema.mjs'
 import { islandDefinition } from '../src/main/chat-island-schema.ts'
 import { ChatIslands, ISLAND_CONFLICT_NOTICE } from '../src/main/chat-islands.ts'
+import { selectControlCandidates } from '../src/main/control-selection.ts'
 import { chooseControlsWithJev } from '../src/main/controls-jev.ts'
 import { enqueueRepoWrite } from '../src/main/repo-write-queue.ts'
 import {
@@ -67,6 +68,25 @@ try {
     blockKinds,
     'Catalog must not advertise unrenderable block types'
   )
+  // The six About-photo controls do not wait for a second model on the default path.
+  const photoBlocks = [
+    { id: 'pixel-area', params: ['radius', 'block-size'] },
+    { id: 'trail', params: ['fringe', 'retention'] },
+    { id: 'response', params: ['follow', 'expansion'] }
+  ]
+  for (const engine of [undefined, 'auto', 'agent']) {
+    const selected = await selectControlCandidates(
+      'photo',
+      photoBlocks,
+      { engine, prompt: 'Surface the photo hover controls' },
+      async () => {
+        throw new Error('The default path must not call Jev')
+      }
+    )
+    assert.equal(selected.engine, 'agent')
+    assert.deepEqual(selected.controls, photoBlocks)
+    assert.equal(selected.controls.flatMap((block) => block.params).length, 6)
+  }
   await writeFile(join(root, 'shadow.js'), code)
   // Publish a disabled draft before a slow Jev response; do not persist drafts.
   let releaseSelection

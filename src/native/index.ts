@@ -42,6 +42,7 @@ import { GEMINI_ENABLED_KEY, setGeminiEnabledSource } from '../main/gemini-setti
 import { checkoutBranch, ensureBranch, listBranches, switchBranch } from '../main/git'
 import { registerGitRemoteIpc } from '../main/git-remote'
 import { registerGithubIpc } from '../main/github'
+import { hasLiveWatch } from '../main/live-change-watch'
 import { type PlatformOwner, setPlatformOwner } from '../main/platform-owner'
 import { type PreviewState, registerPreviewIpc } from '../main/preview-ipc'
 import { initProductLog, productLog } from '../main/product-log'
@@ -50,6 +51,7 @@ import { readProjectIcon } from '../main/project-icon'
 import { registerPropsIpc } from '../main/props'
 import { setProviderDataOwner } from '../main/provider-data'
 import { setProviderOwner } from '../main/provider-owner'
+import { enqueueRepoWrite } from '../main/repo-write-queue'
 import { type RepositoryOwner, setRepositoryOwner } from '../main/repository-owner'
 import { createProject } from '../main/scaffold'
 import { PROVIDER_FALLBACK_KEY, setProviderFallbackSource } from '../main/self-heal/fallback'
@@ -244,7 +246,11 @@ async function main() {
   // transactions in the repository's lane (inside the leases this chain holds) and
   // owns Undo, file operations and saved drafts.
   // Each successful write also tells the editor's caches (LKM-216, docs/CACHES.md).
-  const source: SourceOwner = observedSourceOwner(serviceSource(host, leases))
+  const source: SourceOwner = observedSourceOwner(
+    serviceSource(host, leases),
+    (root, operation, affected) =>
+      hasLiveWatch(root) ? enqueueRepoWrite(root, operation, affected) : operation()
+  )
   setSourceOwner(source)
   // Conversation state (S11): the service owns chat records and History, live-chat
   // checkpoints, turn transitions, titles, model handoff, approvals and spawn admission.

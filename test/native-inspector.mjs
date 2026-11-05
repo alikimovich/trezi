@@ -110,6 +110,7 @@ assert.deepEqual(calls.filter((c) => c[0] === 'styles:apply').at(-1)[2].token, {
   name: '--blue',
   group: 'colors'
 })
+assert.equal(agents.length, 0, 'eligible Styles edits never start an agent turn')
 await action('tab', { value: 'props' })
 assert.equal(controller.state.tab, 'props')
 assert.ok(controller.state.fields.some((f) => f.id === 'prop:count'))

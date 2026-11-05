@@ -1,5 +1,13 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-539 Styles and internal edit attribution
+
+- The existing Styles inspector already previews eligible values in WebKit and commits source through the Swift source owner without starting a model. Its unsupported dynamic cases continue to use the agent fallback. Successful source-owner writes (Styles, chat islands, internal editor saves, Undo and file actions) now enter the repository lane as bounded Trezi effects while a Full-access turn watch is open. Only paths the successful source transaction names are excluded from outside-change reporting; a stale refused write names none. The owner still hash-checks source edits and the landing gate holds on live drift rather than overwriting an internal save. Focused attribution and conflict fixtures plus a rendered Styles assertion cover this path; independent review, CI and post-merge native acceptance remain with the manager.
+
+## 2026-11-05 — LKM-539 faster photo tuning controls
+
+- Traced the reported About-photo island: six source-bound values already write code directly during interaction and use project HMR for preview updates, without a new agent turn. Creation alone could wait on Jev for up to 25 seconds and fail without registering a panel. The default auto engine now keeps the agent's prepared blocks immediately; Jev remains an explicit option. Provider guidance favors binding existing literals without a planned edit, and the focused fixture checks all six photo controls avoid Jev. Exact-head CI, independent review and post-merge native acceptance remain with the manager.
+
 ## 2026-11-04 — LKM-529 artifact verifier census classification
 
 - Classified the updater controller's read-only Git and bundle proof as a WorkflowOwner helper in the Swift backend retirement census. The verifier still checks the exact source revision, build number and host/service artifact before restart; the approved update flow and safeguards are unchanged. The exact-head retirement-census CI failure prompted this documentation repair; fresh review, CI and post-merge native acceptance remain with the manager.

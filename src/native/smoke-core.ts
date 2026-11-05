@@ -1092,6 +1092,13 @@ export async function runNativeCoreSmoke(
           const state = await host.request('inspectorInspect')
           return state.edits > moduleEdits && moduleSource().includes('row-gap: 12px')
         }, 'CSS Module source edit persisted')
+        await wait(
+          () =>
+            page(
+              `getComputedStyle(document.querySelector('#native-module-card')).rowGap === '12px'`
+            ),
+          'CSS Module applied value is visible in the rendered preview'
+        )
         assert.ok((await invoke('edit:undo', fixture)).ok, 'CSS Module edit has Undo')
         await wait(() => moduleSource().includes('row-gap: 8px'), 'CSS Module Undo restores source')
         await settleLiveReload()

@@ -19,6 +19,7 @@ import {
 import { enqueueRepoWrite } from '../src/main/repo-write-queue.ts'
 import { setRepositoryOwner } from '../src/main/repository-owner.ts'
 import { LIVE_EFFECT_TOOLS } from '../src/main/session-tools.ts'
+import { observedSourceOwner } from '../src/main/source-changes.ts'
 import { newChat, reduce } from '../src/native/chat-state.ts'
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-live-change-')))
@@ -126,6 +127,45 @@ try {
   assert.equal(await turn(landing), null, 'lane effects are subtracted')
   git(live, 'add', '-A')
   git(live, 'commit', '-qm', 'resolved')
+
+  // Styles, chat islands and the internal editor all reach this source-owner seam.
+  // A successful first-party write is attributed without hiding a simultaneous
+  // external edit; a stale proposal that wrote nothing cannot claim the path.
+  const source = observedSourceOwner(
+    {
+      commit: async (_root, edits) => {
+        const edit = edits[0]
+        if (edit.expectedHash === 'stale') {
+          write(live, edit.path, 'external after stale proposal\n')
+          return { ok: false, conflict: true, file: edit.path }
+        }
+        write(live, edit.path, edit.content)
+        if (edit.expectedHash === 'concurrent') write(live, 'outside.md', 'external\n')
+        if (edit.expectedHash === 'same-path')
+          write(live, edit.path, 'external after owner write\n')
+        return { ok: true, files: [edit.path], hashes: [] }
+      }
+    },
+    enqueueRepoWrite
+  )
+  const sourceEdit = (expectedHash, content) =>
+    source.commit(live, [{ path: 'README.md', expectedHash, content }])
+  assert.equal(await turn(() => sourceEdit('current', 'editor save\n')), null)
+  const mixed = await turn(() => sourceEdit('concurrent', 'Styles value\n'))
+  assert.deepEqual(mixed?.files, ['outside.md'], 'an external file is still reported')
+  const overwritten = await turn(() => sourceEdit('same-path', 'island value\n'))
+  assert.deepEqual(
+    overwritten?.files,
+    ['README.md'],
+    'an external overwrite of the same source path is still reported'
+  )
+  const stale = await turn(() => sourceEdit('stale', 'must not land\n'))
+  assert.deepEqual(
+    stale?.files,
+    ['README.md'],
+    'a refused source edit does not claim an external write'
+  )
+  assert.equal(readFileSync(join(live, 'README.md'), 'utf8'), 'external after stale proposal\n')
 
   // (4) Dev-server output never counts, untracked or not ignored.
   assert.equal(

@@ -3,6 +3,16 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-539 — Faster source-bound chat controls
+
+- [x] Trace the photo-hover island creation and source-to-preview update paths against the reported session and DialKit's live-value model.
+- [x] Use prepared controls by default without a Jev network wait; retain explicit Jev selection and its fallback semantics.
+- [x] Keep direct literal source writes, project HMR and no-model control gestures; cover six-control default selection in a focused fixture.
+- [x] Trace eligible Styles preview and source commits, and attribute Styles, chat-island and internal editor writes through the source owner during active turns.
+- [x] Preserve stale-source and landing conflict guards; prove first-party and external attribution plus an internal editor save racing a landing in focused fixtures.
+- [x] Extend the native Styles fixture to assert an applied value reaches the rendered preview as well as the source and Undo history.
+- [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
+
 ## LKM-529 — Simplify Trezi update availability and guided update flow
 
 - [x] Replace the behind-build diagnostics sheet with a concise Update / Not Now decision; retain diagnostics in the badge tooltip, About and Copy Commit menu.
