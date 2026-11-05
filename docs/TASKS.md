@@ -3,6 +3,16 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-530 — System monospace in top bar
+
+- [x] Use system monospace at existing sizes and weights for chat title, preview address and branch/status text.
+- [x] Extend the toolbar inspection fixture with font, size, glass and fit assertions; add a focused Publish control fixture for idle, busy and disabled states.
+- [x] Render Publish in monospace with the authorized custom AppKit glass control while keeping its menu, spinner, action and enablement semantics.
+- [x] Review repair: separate the LKM-530 Unreleased changelog entry from the dated release heading.
+- [x] Recheck that placement after the 0.13.26 release synced into this branch.
+- [x] Repair the real Publish control's glass hover and full-frame alignment APIs and compile the focused fixture against that control.
+- [ ] Manager: exact-head CI, independent review and post-merge native inspection.
+
 ## LKM-525 — Nested Settings navigation and actions
 
 - [x] Keep Skills overview actions and nested Skills/provider Back, context and actions visible above scrolling forms, with the sidebar section retained.
