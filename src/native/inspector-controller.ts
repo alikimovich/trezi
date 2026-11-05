@@ -102,11 +102,15 @@ export class NativeInspectorController {
   }
   async settleDraftTurn(success: boolean) {
     if (!this.submitted) return
-    if (!success) {
-      this.submitted = false
-      this.state.error = 'Apply failed. The preview draft is still pending.'
-      await this.projectDrafts()
-    }
+    if (success) await this.invalidated()
+    if (!this.submitted) return
+    // A landed turn is not proof that it edited the requested source. Release
+    // the submitted lock if source plus rendered preview did not confirm it.
+    this.submitted = false
+    this.state.error = success
+      ? 'Apply did not confirm source and rendered preview. The draft is still pending.'
+      : 'Apply failed. The preview draft is still pending.'
+    await this.projectDrafts()
   }
   private sequence = 0
   private readonly saved = new Map<
@@ -707,6 +711,8 @@ export class NativeInspectorController {
         this.state.visible = false
         this.clearReconciles()
         await this.send('styles:clear-preview', {})
+        this.previewAvailable = false
+        this.publishDraft()
         this.publish()
         return
       }

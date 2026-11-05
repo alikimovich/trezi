@@ -503,6 +503,11 @@ const beforeDraft = draftCalls.filter((call) => call === 'styles:apply').length
 await draftAction('apply', { field: 'style:opacity', value: '0.6' })
 await draftAction('apply', { field: 'style:width', value: '12px' })
 assert.equal(drafts.state.draft.count, 2)
+await draftAction('close')
+assert.equal(drafts.state.draft.preview, false, 'closed inspector cannot claim a cleared preview')
+assert.equal(drafts.state.draft.count, 2, 'closing retains pending edits')
+await drafts.select(element)
+assert.equal(drafts.state.draft.preview, true, 'reselecting projects the pending preview again')
 assert.equal(draftCalls.filter((call) => call === 'styles:apply').length, beforeDraft)
 assert.equal(draftAgent.length, 0, 'no model turn per small Styles adjustment')
 await draftAction('undo-draft')
@@ -519,10 +524,22 @@ await draftAction('apply', { field: 'style:width', value: '12px' })
 await draftAction('apply-drafts')
 assert.equal(draftAgent.length, 1, 'one agent operation submits all values')
 assert.equal(drafts.state.draft.submitted, true)
+await drafts.settleDraftTurn(true)
+assert.equal(
+  drafts.state.draft.submitted,
+  false,
+  'a landed turn without source edits unlocks the draft'
+)
+assert.equal(drafts.state.draft.count, 2, 'unconfirmed edits stay pending')
+await draftAction('undo-draft')
+assert.equal(drafts.state.draft.count, 1, 'unconfirmed draft remains actionable')
+await draftAction('apply', { field: 'style:width', value: '12px' })
+await draftAction('apply-drafts')
+assert.equal(draftAgent.length, 2, 'pending draft can be submitted again')
 authoredHash = 'applied'
 authoredOpacity = '0.6'
 authoredWidth = '12px'
-await drafts.invalidated()
+await drafts.settleDraftTurn(true)
 assert.equal(drafts.state.draft, undefined, 'source and rendered values confirm Apply')
 await draftAction('apply', { field: 'style:opacity', value: '0.4' })
 await draftAction('revert-draft')

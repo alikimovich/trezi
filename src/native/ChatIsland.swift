@@ -35,6 +35,7 @@ struct NativeChatIsland: View {
         model.islandAction(island, action: "draft", values: batch.values.mapValues(\.object), gesture: batch.gesture, ended: batch.ended)
     }
     private func value(_ field: IslandField) -> IslandValue { drafts[field.id] ?? field.value ?? .text("") }
+    private func discardLocalDraft() { drafts = [:]; dragging = false; writes = IslandLiveWrites() }
     private func action(_ name: String, values: [String: IslandValue] = [:]) {
         model.islandAction(island, action: name, values: values.mapValues(\.object))
     }
@@ -154,9 +155,12 @@ struct NativeChatIsland: View {
         }
         HStack {
             Button("Apply") { action("apply-draft") }.disabled(!island.live || island.draft == nil || island.draft?.conflict == true)
-            Button("Undo draft") { action("undo-draft") }.disabled(island.draft == nil)
-            Button("Revert draft") { drafts = [:]; action("revert-draft") }.disabled(island.draft == nil)
-            Button("Reload") { drafts = [:]; action("reload") }
+            Button("Undo draft") { discardLocalDraft(); action("undo-draft") }.disabled(island.draft == nil)
+            Button("Revert draft") { discardLocalDraft(); action("revert-draft") }.disabled(island.draft == nil)
+            Button("Reset") { discardLocalDraft(); action("draft-reset") }.disabled(!island.live)
+        }.controlSize(.small)
+        HStack {
+            Button("Reload") { discardLocalDraft(); action("reload") }
             Button("Undo source") { action("undo") }.disabled(!island.live || island.draft != nil)
             if island.replay { Button("Replay") { action("replay") }.disabled(!island.live) }
         }.controlSize(.small)

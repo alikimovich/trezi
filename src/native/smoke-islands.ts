@@ -142,6 +142,21 @@ document.body.append(card);
           (i: any) => i.id === result.id && i.draft?.count === 2 && i.draft.preview === false
         )
       )
+      await host.request('islandPerform', { island: result.id, action: 'undo-draft' })
+      await wait(async () =>
+        (await host.request('chatInspect')).islands.some(
+          (i: any) =>
+            i.id === result.id &&
+            !i.draft &&
+            i.fields.find((field: any) => field.id === 'x')?.value === 0 &&
+            i.fields.find((field: any) => field.id === 'y')?.value === -0.5
+        )
+      )
+      await host.request('islandPerform', {
+        island: result.id,
+        action: 'draft',
+        values: { x: 0.75, y: -0.25 }
+      })
       await host.request('islandPerform', { island: result.id, action: 'apply-draft' })
       await wait(
         () =>

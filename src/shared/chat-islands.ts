@@ -87,6 +87,7 @@ export interface IslandCommand {
     | 'apply-draft'
     | 'undo-draft'
     | 'revert-draft'
+    | 'draft-reset'
     | 'reset'
     | 'undo'
     | 'reload'

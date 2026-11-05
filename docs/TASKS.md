@@ -14,6 +14,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: authenticate Undo, Redo, Revert and file-operation effects against the source owner's resulting state; cover same-path external interleavings and a source-backed CSS reload assertion.
 - [x] Stage eligible Styles and island adjustments as preview drafts with explicit Apply, Undo and Revert; retain unsatisfied drafts and source revision guards.
 - [x] Cover source-free draft gestures and batch Apply in focused fixtures, with native fixture assertions for the rendered preview and source-backed reload.
+- [x] Review repair: reconcile island Undo display, stage Reset through Apply, unlock unconfirmed Styles batches, and report cleared inspector previews truthfully.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
 
 ## LKM-529 — Simplify Trezi update availability and guided update flow

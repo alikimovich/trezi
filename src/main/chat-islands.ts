@@ -411,6 +411,7 @@ export class ChatIslands {
       case 'recreate':
         throw new Error('Unknown island action.')
       case 'draft':
+      case 'draft-reset':
       case 'undo-draft':
       case 'revert-draft':
       case 'apply-draft':
@@ -439,19 +440,30 @@ export class ChatIslands {
       throw new Error('This island changed or is unavailable. Reload its controls.')
     let draft = session.drafts.get(record.id)
     const key = `${command.chat}\n${record.id}`
-    if (command.action === 'draft') {
+    if (command.action === 'draft' || command.action === 'draft-reset') {
       if (
         view.sourceRevision !== command.sourceRevision ||
         (draft && draft.sourceRevision !== view.sourceRevision)
       )
         throw new Error('Source changed while this preview draft was pending.')
-      const values = command.values ?? {}
+      // Reset is a preview gesture too. Keep the original values in the draft
+      // until Apply, and leave bindings that no longer exist or are broken alone.
+      const values =
+        command.action === 'draft-reset'
+          ? Object.fromEntries(
+              Object.entries(record.initial).filter(([id]) =>
+                view.fields.some((field) => field.id === id && !field.disabled)
+              )
+            )
+          : (command.values ?? {})
       if (!Object.keys(values).length) return
       for (const [id, value] of Object.entries(values)) {
         const field = view.fields.find((f) => f.id === id)
         if (!field || field.disabled) throw new Error('This control is no longer editable.')
-        const rendered = renderLiteral(field.kind, value, field)
-        if (typeof rendered !== 'string') throw new Error(rendered.error)
+        if (command.action === 'draft') {
+          const rendered = renderLiteral(field.kind, value, field)
+          if (typeof rendered !== 'string') throw new Error(rendered.error)
+        }
       }
       if (!draft) {
         draft = {

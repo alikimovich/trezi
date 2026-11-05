@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-539 draft lifecycle review repair
+
+- Island Undo and Revert now discard local control values so displayed fields follow the refreshed draft, and Reset stages the island's initial values for the same explicit Apply path. Styles drafts now unlock after a landed turn that did not confirm source and rendered output; closing the inspector reports its cleared preview as unavailable, while reselecting projects pending values again. Focused fixtures cover the terminal turn, inspector close/reselect, source-free Reset, and island Undo values. Native assertions are recorded for the post-merge run.
+
 ## 2026-11-05 — LKM-539 preview drafts and one Apply
 
 - Styles and chat islands now collect eligible adjustments as temporary preview drafts without per-value source writes or agent turns. Styles project through the existing WebKit preview, and Shadow islands use their existing override port. One Apply validates the source baseline before a source transaction or one batch agent request; pending values have Undo and Revert, and a failed or stale Apply retains them. Literal-only islands whose runtime effect cannot be projected show an explicit preview-unavailable state. The source owner effect repair and focused same-path interleaving proof remain in this tree. Native fixture assertions cover pending source, rendered preview and source-backed reload; the native run is deferred to the manager's post-merge gate.
