@@ -107,6 +107,14 @@ enum ChatLatestSettle: Equatable {
     /// settle only pins and no longer realizes through SwiftUI, which jumped
     /// the clip with every chunk for the whole turn.
     static let unresolvedRestarts = 2
+    /// Whether a realize step may scroll through SwiftUI. Past `unresolvedRestarts`
+    /// it only pins while a turn streams, but an idle conversation has no chunk
+    /// whose pin would undo the jump, and a tall stack pinned at its end with
+    /// no row in view (the send, delta and done settles of one turn had used
+    /// the count up) would otherwise stay blank until the user scrolled.
+    static func mayRealize(unresolved: Int, running: Bool) -> Bool {
+        !running || unresolved <= unresolvedRestarts
+    }
     /// The count after a settle ended with `last`. `realized`: one of its steps
     /// needed a realize. That settle is unresolved too, whatever it read last:
     /// the realize moved the stack and the next layout can measure rows that are
@@ -121,9 +129,17 @@ enum ChatLatestSettle: Equatable {
     /// whose estimates are far off can stay empty at the latest row; every
     /// fourth step goes to the first row, whose position it knows exactly, and
     /// the next one comes back to the latest from there.
-    static func realizeTarget(latest: String, first: String?, stuck: Int) -> (id: String, anchor: UnitPoint) {
+    static func realizeTarget(latest: String, first: String?, stuck: Int, running: Bool, readingHeight: CGFloat, viewportHeight: CGFloat) -> (id: String, anchor: UnitPoint) {
         if stuck % 4 == 3, let first { return (first, .top) }
-        return (latest, .bottom)
+        // A streaming turn keeps the bottom anchor: the bounded settles of
+        // native-chat-send-follow (LKM-354/365) are tuned on it, and the next chunk's
+        // pin undoes the move either way. An idle conversation (the settle after
+        // the turn) realizes at the reading edge: the viewport extends beneath the
+        // overlaid composer, and at its bottom a short latest row can stay hidden
+        // there while AppKit is pinned to the document end and the lazy stack
+        // reports no visible row.
+        if running { return (latest, .bottom) }
+        return (latest, UnitPoint(x: 0.5, y: readingHeight / max(1, viewportHeight)))
     }
     /// Steps once per frame while `current`; returns the attempts used. Settled
     /// counts only when the next frame measures it again, so a reading taken
