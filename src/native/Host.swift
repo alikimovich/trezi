@@ -204,7 +204,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             }
             DispatchQueue.main.async { self?.terminateHost() }
         }
-          emit(["event":"ready", "pid": Int(getpid())])
+          emit(["event":"ready", "pid": Int(getpid()), "appPath": Bundle.main.bundlePath])
         }
     }
     // Menus: `HostMenus.swift`. Test-broker commands: `HostInspect.swift` (LKM-160).

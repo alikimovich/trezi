@@ -1,6 +1,51 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { appInfoPlist, serviceInfoPlist } from '../scripts/service-info.mjs'
 import { NativeSheetController } from '../src/native/sheets-runtime.ts'
-import { NativeUpdateController } from '../src/native/update-controller.ts'
+import { NativeUpdateController, verifyUpdatedArtifact } from '../src/native/update-controller.ts'
+import { updatePhaseStatus } from '../src/native/workflow-service.ts'
+
+const verbose =
+  'bun run build:native\nCompiler diagnostic: /private/source/file.swift:99\nSigning output'
+for (const [steps, expected] of [
+  [[{ name: 'pull', state: 'intent' }], 'Downloading changes…'],
+  [
+    [
+      { name: 'pull', state: 'done' },
+      { name: 'install', state: 'intent' }
+    ],
+    'Installing dependencies…'
+  ],
+  [
+    [
+      { name: 'pull', state: 'done' },
+      { name: 'install', state: 'done' },
+      { name: 'build', state: 'intent' }
+    ],
+    'Building Trezi…'
+  ],
+  [[{ name: 'pull', state: 'done' }], 'Preparing update…']
+]) {
+  const displayed = updatePhaseStatus({
+    kind: 'update',
+    state: 'running',
+    steps,
+    progress: verbose
+  })
+  assert.equal(displayed, expected)
+  assert.doesNotMatch(displayed, /Compiler|Signing|bun run/)
+}
 
 const sheets = new NativeSheetController({ send() {} }, {}, {}, async () => {})
 let answer = { ok: true },
@@ -26,7 +71,8 @@ const update = new NativeUpdateController(
     restarts++
   },
   owner,
-  () => blocked
+  () => blocked,
+  () => null
 )
 const action = async (name) =>
   sheets.action({ id: sheets.current.state.id, action: name, values: {} })
@@ -43,7 +89,7 @@ assert.match(sheets.current.state.detail, /local changes/)
 assert.equal(restarts, 0)
 blocked = 'Save source drafts'
 await action('retry')
-assert.match(sheets.current.state.message, /Save source drafts/)
+assert.match(sheets.current.state.detail, /Save source drafts/)
 assert.equal(
   calls.filter((c) => c[0] === 'update').length,
   1,
@@ -66,10 +112,279 @@ const changingDraft = new NativeUpdateController(
     restarts++
   },
   owner,
-  () => (++checks === 1 ? null : 'New unsaved content draft')
+  () => (++checks === 1 ? null : 'New unsaved content draft'),
+  () => null
 )
 await changingDraft.apply()
 assert.equal(restarts, 1)
 assert.equal(sheets.current.state.title, 'Update could not finish')
 assert.match(sheets.current.state.detail, /New unsaved content draft/)
+let proofRestarted = false
+const invalidArtifact = new NativeUpdateController(
+  sheets,
+  '/fixture',
+  () => {
+    proofRestarted = true
+  },
+  owner,
+  () => null,
+  () => 'The built application does not match the updated version and commit.'
+)
+await invalidArtifact.apply()
+assert.equal(proofRestarted, false, 'an unproved build cannot restart')
+assert.match(sheets.current.state.detail, /does not match/)
+let releaseUpdate
+let started = 0
+const pending = new NativeUpdateController(
+  sheets,
+  '/fixture',
+  () => {
+    restarts++
+  },
+  {
+    updateCheck: owner.updateCheck,
+    update: async (_root, progress) => {
+      started++
+      progress(
+        updatePhaseStatus({
+          kind: 'update',
+          state: 'running',
+          steps: [
+            { name: 'pull', state: 'done' },
+            { name: 'install', state: 'done' },
+            { name: 'build', state: 'intent' }
+          ],
+          progress: verbose
+        })
+      )
+      return new Promise((resolve) => {
+        releaseUpdate = resolve
+      })
+    }
+  },
+  () => null,
+  () => null
+)
+const first = pending.apply()
+assert.equal(sheets.current.state.title, 'Updating Trezi')
+assert.equal(sheets.current.state.message, 'Building Trezi…')
+assert.doesNotMatch(sheets.current.state.message, /Compiler|Signing|bun run/)
+await pending.apply()
+assert.equal(started, 1, 'duplicate Update cannot start another owner workflow')
+releaseUpdate({ ok: true })
+await first
+assert.equal(restarts, 2)
+let releaseCheck
+let checkCalls = 0
+const current = new NativeUpdateController(
+  sheets,
+  '/fixture',
+  () => {
+    restarts++
+  },
+  {
+    updateCheck: () => {
+      checkCalls++
+      return new Promise((resolve) => {
+        releaseCheck = resolve
+      })
+    },
+    update: owner.update
+  },
+  () => null,
+  () => null
+)
+current.open()
+const checking = action('check')
+assert.equal(sheets.current.state.title, 'Checking for updates')
+assert.match(sheets.current.state.detail, /Checking this Trezi installation/)
+assert.deepEqual(sheets.current.state.actions, [], 'pending check has no actions')
+current.open()
+assert.equal(
+  sheets.current.state.title,
+  'Checking for updates',
+  'opening again cannot replace a pending check'
+)
+assert.equal(checkCalls, 1, 'a pending check cannot start twice')
+releaseCheck({ status: 'idle', behind: 0 })
+await checking
+assert.equal(sheets.current.state.title, 'No update found')
+assert.deepEqual(
+  sheets.current.state.actions.map((entry) => entry.id),
+  ['cancel']
+)
+const failedCheck = new NativeUpdateController(
+  sheets,
+  '/fixture',
+  () => {
+    restarts++
+  },
+  {
+    updateCheck: async () => ({ status: 'error', behind: 0, error: 'Network unavailable' }),
+    update: owner.update
+  },
+  () => null,
+  () => null
+)
+failedCheck.open()
+await action('check')
+assert.match(sheets.current.state.detail, /Network unavailable/)
+assert.equal(restarts, 2)
+await action('retry')
+assert.equal(sheets.current.state.title, 'Trezi updates', 'check retry returns to the check action')
+const unavailableCheck = new NativeUpdateController(
+  sheets,
+  '/fixture',
+  () => {
+    restarts++
+  },
+  {
+    updateCheck: async () => ({
+      status: 'unavailable',
+      behind: 0,
+      error: 'Check your connection, remote and access, then try again.'
+    }),
+    update: owner.update
+  },
+  () => null,
+  () => null
+)
+unavailableCheck.open()
+await action('check')
+assert.equal(sheets.current.state.title, 'Could not check for updates')
+assert.match(sheets.current.state.detail, /connection, remote and access/)
+assert.deepEqual(
+  sheets.current.state.actions.map((entry) => entry.id),
+  ['cancel', 'retry']
+)
+await action('retry')
+assert.equal(sheets.current.state.title, 'Trezi updates')
+
+// Real artifact proof in an isolated source checkout; no installed app or signing is touched.
+const source = mkdtempSync(join(tmpdir(), 'trezi-update-proof-'))
+try {
+  const git = (...args) => {
+    const result = spawnSync(
+      'git',
+      ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args],
+      {
+        cwd: source,
+        encoding: 'utf8',
+        env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' }
+      }
+    )
+    assert.equal(result.status, 0, result.stderr)
+    return result.stdout.trim()
+  }
+  git('init', '-q')
+  git(
+    '-c',
+    'user.name=Trezi Test',
+    '-c',
+    'user.email=test@trezi.invalid',
+    'commit',
+    '-q',
+    '--allow-empty',
+    '-m',
+    'fixture'
+  )
+  const info = {
+    version: '0.13.24',
+    build: git('rev-list', '--count', 'HEAD'),
+    commit: git('rev-parse', '--short=7', 'HEAD')
+  }
+  writeFileSync(join(source, 'package.json'), JSON.stringify({ version: info.version }))
+  const contents = join(source, 'out/native/Trezi.app/Contents')
+  const service = join(contents, 'XPCServices/dev.trezi.service.xpc/Contents')
+  mkdirSync(join(contents, 'MacOS'), { recursive: true })
+  mkdirSync(join(service, 'MacOS'), { recursive: true })
+  const hostPlist = join(contents, 'Info.plist')
+  const servicePlist = join(service, 'Info.plist')
+  const hostExe = join(contents, 'MacOS/TreziHost')
+  const serviceExe = join(service, 'MacOS/TreziService')
+  writeFileSync(hostPlist, appInfoPlist(info))
+  writeFileSync(servicePlist, serviceInfoPlist(info))
+  writeFileSync(hostExe, 'fixture')
+  writeFileSync(serviceExe, 'fixture')
+  assert.equal(verifyUpdatedArtifact(source), null, 'matching source and both app bundles pass')
+  let artifactRestarts = 0
+  const proofSheets = new NativeSheetController({ send() {} }, {}, {}, async () => {})
+  const proofUpdate = new NativeUpdateController(
+    proofSheets,
+    source,
+    () => {
+      artifactRestarts++
+    },
+    { updateCheck: owner.updateCheck, update: async () => ({ ok: true }) },
+    () => null
+  )
+  await proofUpdate.apply()
+  assert.equal(artifactRestarts, 1, 'matching artifact reaches restart callback')
+  writeFileSync(servicePlist, readFileSync(servicePlist, 'utf8').replace(info.version, '0.0.0'))
+  assert.match(verifyUpdatedArtifact(source), /does not match/)
+  await proofUpdate.apply()
+  assert.equal(artifactRestarts, 1, 'mismatched service stamp blocks restart')
+  assert.match(proofSheets.current.state.detail, /does not match/)
+  writeFileSync(servicePlist, serviceInfoPlist(info))
+  rmSync(serviceExe)
+  assert.match(verifyUpdatedArtifact(source), /incomplete/)
+  await proofUpdate.apply()
+  assert.equal(artifactRestarts, 1, 'missing service executable blocks restart')
+  assert.match(proofSheets.current.state.detail, /incomplete/)
+  writeFileSync(serviceExe, 'fixture')
+
+  // Git may lengthen --short=7 to disambiguate. A disposable git shim makes
+  // that rare case deterministic while the verifier still runs its real code.
+  const fullSha = git('rev-parse', 'HEAD')
+  const expanded = { ...info, commit: fullSha.slice(0, 9) }
+  writeFileSync(hostPlist, appInfoPlist(expanded))
+  writeFileSync(servicePlist, serviceInfoPlist(expanded))
+  const originalPath = process.env.PATH
+  const realGit = originalPath
+    .split(':')
+    .map((dir) => join(dir, 'git'))
+    .find(existsSync)
+  assert.ok(realGit, 'git executable for the disposable abbreviation fixture')
+  const bin = join(source, 'bin')
+  mkdirSync(bin)
+  const shim = join(bin, 'git')
+  writeFileSync(
+    shim,
+    `#!${process.execPath}
+import { spawnSync } from 'node:child_process'
+const args = process.argv.slice(2)
+if (args.includes('--short=7')) { console.log(${JSON.stringify(expanded.commit)}); process.exit(0) }
+const result = spawnSync(${JSON.stringify(realGit)}, args, { encoding: 'utf8' })
+process.stdout.write(result.stdout ?? '')
+process.stderr.write(result.stderr ?? '')
+process.exit(result.status ?? 1)
+`
+  )
+  chmodSync(shim, 0o755)
+  process.env.PATH = `${bin}:${originalPath}`
+  try {
+    const prove = () => {
+      const module = new URL('../src/native/update-controller.ts', import.meta.url).href
+      const code = `import { verifyUpdatedArtifact } from ${JSON.stringify(module)}; console.log(JSON.stringify(verifyUpdatedArtifact(${JSON.stringify(source)})))`
+      const result = spawnSync(process.execPath, ['-e', code], {
+        encoding: 'utf8',
+        env: process.env
+      })
+      assert.equal(result.status, 0, result.stderr)
+      return JSON.parse(result.stdout.trim())
+    }
+    assert.equal(
+      git('rev-parse', '--short=7', 'HEAD'),
+      expanded.commit,
+      'fixture provides an expanded abbreviation'
+    )
+    assert.equal(prove(), null, 'a unique abbreviation longer than seven characters passes')
+    writeFileSync(servicePlist, serviceInfoPlist(info))
+    assert.match(prove(), /does not match/, 'truncated service stamp blocks restart')
+  } finally {
+    process.env.PATH = originalPath
+  }
+} finally {
+  rmSync(source, { recursive: true, force: true })
+}
 console.log('Native updates: owner-run update, draft guards, failure recovery and restart passed')

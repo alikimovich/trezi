@@ -3,6 +3,20 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-529 — Simplify Trezi update availability and guided update flow
+
+- [x] Replace the behind-build diagnostics sheet with a concise Update / Not Now decision; retain diagnostics in the badge tooltip, About and Copy Commit menu.
+- [x] Route Update directly to the owner-backed pull, install and build workflow; show checking, current, progress and failure states with duplicate-action and restart guards.
+- [x] Reject a restart unless the running app is the source-built app and its rebuilt host/service match the updated version and commit.
+- [x] Extend focused build-status, update-controller and native sheet fixture assertions without running a production updater smoke.
+- [x] Review repair: display journaled update phases instead of raw command output, and drive the disposable native progress fixture through the badge's Update action.
+- [x] Review repair: derive each routine progress label from the update owner's running journal step, and test owner-shaped summaries across pull, install and build.
+- [x] Targeted safety repair: reject ad hoc signing downgrade or missing signer proof before restart, and exercise the real artifact verifier against disposable valid and invalid bundles.
+- [x] Review repair: match Git's possibly extended commit abbreviation and distinguish failed or unavailable update checks from a confirmed current build.
+- [x] Review proof: exercise the real owner update with clean, dirty and diverged disposable checkouts; unsafe trees refuse before install/build and preserve local work.
+- [x] Review proof: hold an owner check pending and assert the visible action-free checking sheet before its truthful current result.
+- [x] Classify the read-only artifact verifier process effect in the Swift backend retirement census.
+- [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
 ## LKM-538 — Remove Custom from selected-element inspector
 
 - [x] Show only Props and Styles in the native inspector and retire its Custom request/composer and Create controls route.

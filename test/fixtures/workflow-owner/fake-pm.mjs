@@ -29,3 +29,7 @@ if (state.fail[step] > 0) {
   process.exit(1)
 }
 process.stdout.write(`${step}: done\n`)
+if (step === 'build' && state.signing !== 'missing') {
+  process.stdout.write(`Signed Trezi: ${state.signing === 'adhoc' ? 'ad hoc' : 'Trezi Local (fixture)'}\n`)
+  if (state.signing === 'adhoc') process.stderr.write('warning: signing Trezi ad hoc (fixture identity unavailable)\n')
+}
