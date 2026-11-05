@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-519 review repair: assigned private URL
+
+- The runtime-owner socket fixture now launches a Yarn 4 style script that preserves literal `--`, records its Vite arguments and serves a real page on the forwarded port. It checks the private runtime's returned and recorded URL against the assigned port and fetches the page. The unit tier runs this section where loopback binding is available; CI and post-merge acceptance remain with the manager.
+
 ## 2026-11-04 — LKM-519 assigned Vite port in private previews
 
 - The Swift runtime and its TypeScript reference now add npm's script-argument separator only for npm when launching Vite or SvelteKit. Yarn, Bun and pnpm receive `--port` and `--host` directly, so the private server can bind to the assigned loopback port that Trezi probes. `--strictPort` makes a collision fail instead of silently moving to another port. The runtime command fixture checks exact commands and Swift/TypeScript parity; the existing private-runtime fixture rejects a foreign printed URL. The broken global agent-browser link is a separate host prerequisite already covered by browser-setup's missing-link fixture. CI, independent review and post-merge acceptance remain with the manager.
