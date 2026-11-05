@@ -27,6 +27,25 @@
 
 - The 3D inspector now puts its Back chevron and object name in the native preview title location. The floating Code island routes through the inspected layer's guarded source action; unavailable source disables it. The in-content header and visible Front/Reset controls are removed while camera gestures, separation and layer picker remain. The existing native 3D fixture covers the rendered toolbar context, island Code route, and Back restoration; post-merge native acceptance remains required.
 
+## 2026-11-04 — LKM-538 CI marquee fixture timing repair
+
+- The unrelated sidebar marquee unit fixture now uses its sample's measured clock if a loaded macOS runner takes the scheduled-before sample after the 0.7-second delay. It still requires an exact zero offset when sampled during the delay and checks 30 points per second afterward. No sidebar product behavior changed; current-head CI must rerun the shard.
+
+## 2026-11-04 — LKM-538 retirement census CI repair
+
+- The revised native inspector smoke checks the two-tab UI without writing a fixture file. Its old test-effect row is removed from the executable retirement census; the Bun-owned retirement gate remains open. Current-head CI must rerun the census and unit shards.
+
+## 2026-11-04 — LKM-538 provider rule review repair
+
+- Provider rules no longer tell an agent to answer a retired Inspector Custom request with a `trezi-controls` block. The control-capable providers continue to use the existing `chat_island` guidance; rules version 49 and the rules fixture cover the changed prompt. Current-head CI and post-merge native acceptance remain manager gates.
+
+## 2026-11-04 — LKM-538 documentation review repair
+
+- After the 0.13.27 sync, the Custom removal entry is separated from the dated release heading under Unreleased. The provider guide now describes the retired inspector request route while retaining historical control parsing and saved panels. Current-head CI and post-merge native acceptance remain manager gates.
+
+## 2026-11-04 — LKM-538 inspector Custom removal
+
+- The selected-element inspector now offers Props and Styles only. Old Custom tab selections resolve to Styles, and its request, comment, cancel, remove and Create controls routes no longer run. The Swift request view is removed from the native build, while saved panel data and shared control parsing remain intact. The existing controller and core native inspector fixtures now check the two-tab surface and legacy fallback; focused verification and manager gates are reported separately.
 
 ## 2026-11-04 — LKM-530 real Publish control compile repair
 
