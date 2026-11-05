@@ -278,10 +278,8 @@ export async function checkBuildBadge(host: NativeBridge, artifacts: string) {
       Buffer.from(await host.request('captureSheet'), 'base64')
     )
     evidence.details = { title: sheet.title, detail: sheet.detail, actions: sheet.actions }
-    await host.request('sheetPerform', { action: 'cancel' })
-    await waitFor(async () => !(await host.request('sheetInspect')).visible, 'details sheet closed')
-    // The visible progress path uses a disposable owner. It never pulls, builds or
-    // restarts the operator's installation.
+    // Route this visible Update action to a disposable owner before pressing it.
+    // The production updater cannot be called by this fixture.
     let finishUpdate: ((result: { ok: boolean }) => void) | undefined
     let restartRequested = false
     const disposable = new NativeUpdateController(
@@ -302,27 +300,48 @@ export async function checkBuildBadge(host: NativeBridge, artifacts: string) {
       () => null,
       () => null
     )
-    const pending = disposable.apply()
-    const progress = await waitFor(async () => {
-      const value = await host.request('sheetInspect')
-      return (
-        value.visible &&
-        value.title === 'Updating Trezi' &&
-        value.message === 'Building Trezi…' &&
-        value
-      )
-    }, 'disposable update progress')
-    assert.equal(progress.message, 'Building Trezi…')
-    assert.deepEqual(progress.actions, [])
-    finishUpdate?.({ ok: true })
-    await pending
-    assert.ok(restartRequested, 'proved disposable update reaches restart callback')
-    evidence.progress = {
-      title: progress.title,
-      message: progress.message,
-      actions: progress.actions
+    const liveOpenUpdates = controller.openUpdates
+    let pending: Promise<void> | undefined
+    const disposableAction = () => {
+      pending = disposable.apply()
     }
-    controller.sheets.close()
+    Object.defineProperty(controller, 'openUpdates', {
+      value: disposableAction,
+      configurable: true
+    })
+    try {
+      assert.equal(
+        controller.openUpdates,
+        disposableAction,
+        'badge Update targets the disposable owner'
+      )
+      await host.request('sheetPerform', { action: 'update' })
+      const progress = await waitFor(async () => {
+        const value = await host.request('sheetInspect')
+        return (
+          value.visible &&
+          value.title === 'Updating Trezi' &&
+          value.message === 'Building Trezi…' &&
+          value
+        )
+      }, 'badge Update opens disposable progress')
+      assert.ok(pending, 'the badge Update action entered the disposable controller')
+      assert.deepEqual(progress.actions, [])
+      finishUpdate?.({ ok: true })
+      await pending
+      assert.ok(restartRequested, 'proved disposable update reaches restart callback')
+      evidence.progress = {
+        title: progress.title,
+        message: progress.message,
+        actions: progress.actions
+      }
+    } finally {
+      Object.defineProperty(controller, 'openUpdates', {
+        value: liveOpenUpdates,
+        configurable: true
+      })
+      controller.sheets.close()
+    }
     writeFileSync(join(artifacts, 'build-badge.json'), JSON.stringify(evidence, null, 2))
   } finally {
     await host

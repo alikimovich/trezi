@@ -38,6 +38,20 @@ const wallClock = (expire: () => void, ms: number) => {
   return () => clearTimeout(timer)
 }
 
+/** The journal's step is trusted workflow state; its progress is raw command output. */
+export function updatePhaseStatus(workflow: { step?: unknown; progress?: unknown }): string {
+  switch (workflow.step) {
+    case 'pull':
+      return 'Downloading changes…'
+    case 'install':
+      return 'Installing dependencies…'
+    case 'build':
+      return 'Building Trezi…'
+    default:
+      return 'Preparing update…'
+  }
+}
+
 /**
  * Bun's client for the Swift workflow owner (S13). Every workflow request carries an
  * operation ID; when a reply does not arrive in time the SAME operation is asked again,
@@ -225,6 +239,7 @@ export function serviceWorkflows(
     updateCheck: (root) => call('updateCheck', { root, ...leases() }),
     async update(root, progress) {
       let polling = true
+      let lastStatus = ''
       const poll = async () => {
         while (polling) {
           await new Promise((resolve) => setTimeout(resolve, options.progressInterval ?? 500))
@@ -232,7 +247,13 @@ export function serviceWorkflows(
           const running = (await call('workflows', {}, 'read').catch(() => [])).find(
             (w: any) => w.kind === 'update' && w.root === root && w.state === 'running'
           )
-          if (running?.progress && polling) progress?.(running.progress)
+          if (running && polling) {
+            const status = updatePhaseStatus(running)
+            if (status !== lastStatus) {
+              lastStatus = status
+              progress?.(status)
+            }
+          }
         }
       }
       const watcher = progress ? poll() : Promise.resolve()

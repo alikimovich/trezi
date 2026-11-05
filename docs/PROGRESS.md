@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-529 review repair: concise progress and connected native fixture
+
+- The update poll now uses the workflow owner's pull, install and build phase to show short progress text. Raw compiler and package-manager lines remain available to the existing failure result and journal, and repeated polls do not resend the same phase. The focused update fixture checks that verbose owner output cannot appear in the sheet's routine progress.
+- The native badge fixture now presses the visible Update action after replacing only its callback with a disposable owner. It asserts the resulting progress sheet and stub restart callback, then restores the production callback; no production pull, build or restart runs in the fixture. Native acceptance still awaits the post-merge run.
+
 ## 2026-11-04 — LKM-529 guided Trezi update
 
 - The build badge now opens a short availability sheet with Update and Not Now; technical details remain in its existing tooltip, About credits and Copy Commit menu. A known behind state enters the owner update directly, while the general Updates menu shows a checking state first. The owner still refuses dirty trees and non-fast-forward pulls and runs its journaled install/build workflow.

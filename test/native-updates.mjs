@@ -1,6 +1,20 @@
 import assert from 'node:assert/strict'
 import { NativeSheetController } from '../src/native/sheets-runtime.ts'
 import { NativeUpdateController } from '../src/native/update-controller.ts'
+import { updatePhaseStatus } from '../src/native/workflow-service.ts'
+
+const verbose =
+  'bun run build:native\nCompiler diagnostic: /private/source/file.swift:99\nSigning output'
+for (const [step, expected] of [
+  ['pull', 'Downloading changes…'],
+  ['install', 'Installing dependencies…'],
+  ['build', 'Building Trezi…'],
+  [undefined, 'Preparing update…']
+]) {
+  const displayed = updatePhaseStatus({ step, progress: verbose })
+  assert.equal(displayed, expected)
+  assert.doesNotMatch(displayed, /Compiler|Signing|bun run/)
+}
 
 const sheets = new NativeSheetController({ send() {} }, {}, {}, async () => {})
 let answer = { ok: true },
@@ -98,8 +112,9 @@ const pending = new NativeUpdateController(
   },
   {
     updateCheck: owner.updateCheck,
-    update: async () => {
+    update: async (_root, progress) => {
       started++
+      progress(updatePhaseStatus({ step: 'build', progress: verbose }))
       return new Promise((resolve) => {
         releaseUpdate = resolve
       })
@@ -110,6 +125,8 @@ const pending = new NativeUpdateController(
 )
 const first = pending.apply()
 assert.equal(sheets.current.state.title, 'Updating Trezi')
+assert.equal(sheets.current.state.message, 'Building Trezi…')
+assert.doesNotMatch(sheets.current.state.message, /Compiler|Signing|bun run/)
 await pending.apply()
 assert.equal(started, 1, 'duplicate Update cannot start another owner workflow')
 releaseUpdate({ ok: true })
