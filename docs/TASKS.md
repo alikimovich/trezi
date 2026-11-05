@@ -13,6 +13,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: derive each routine progress label from the update owner's running journal step, and test owner-shaped summaries across pull, install and build.
 - [x] Targeted safety repair: reject ad hoc signing downgrade or missing signer proof before restart, and exercise the real artifact verifier against disposable valid and invalid bundles.
 - [x] Review repair: match Git's possibly extended commit abbreviation and distinguish failed or unavailable update checks from a confirmed current build.
+- [x] Review proof: exercise the real owner update with clean, dirty and diverged disposable checkouts; unsafe trees refuse before install/build and preserve local work.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
 ## LKM-533 — Stack accepted question and answer pairs
 

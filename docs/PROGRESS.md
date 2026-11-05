@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-529 owner update safety proof
+
+- The real Swift workflow-owner fixture now runs the update path on disposable dirty and diverged source checkouts, alongside its existing clean success case. It asserts each unsafe update is refused before the fake package manager sees install or build, while HEAD and local file content and status remain intact. No product source changed; independent review, exact-head CI and post-merge native acceptance remain with the manager.
+
 ## 2026-11-04 — LKM-529 update-check and commit-stamp repair
 
 - Artifact proof now reads the same `git rev-parse --short=7` abbreviation as build stamping, including Git's longer unique abbreviation, and still compares both built bundles before restart. A disposable source and app fixture proves a nine-character stamp passes and a truncated service stamp fails.

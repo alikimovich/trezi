@@ -1012,6 +1012,62 @@ try {
     assert.equal(updated.head, true)
     assert.deepEqual(updated.pm, ['bun install --frozen-lockfile', 'bun run build:native'])
 
+    const dirtyUpdate = await owned('update-dirty-tree', async (owner, w) => {
+      git(w.local, 'checkout', '-q', 'main')
+      const peer = w.peer()
+      commit(peer, 'release.txt', 'new release\n')
+      git(peer, 'push', '-q', 'origin', 'main')
+      write(w.local, 'a.txt', 'local edit\n')
+      const before = {
+        head: git(w.local, 'rev-parse', 'HEAD'),
+        status: git(w.local, 'status', '--porcelain'),
+        content: readFileSync(join(w.local, 'a.txt'), 'utf8')
+      }
+      const result = await owner.update(w.local)
+      const after = {
+        head: git(w.local, 'rev-parse', 'HEAD'),
+        status: git(w.local, 'status', '--porcelain'),
+        content: readFileSync(join(w.local, 'a.txt'), 'utf8')
+      }
+      return { result, before, after, pm: w.pm().calls ?? [] }
+    })
+    assert.equal(dirtyUpdate.result.ok, false)
+    assert.match(dirtyUpdate.result.error, /local changes/)
+    assert.deepEqual(
+      dirtyUpdate.after,
+      dirtyUpdate.before,
+      'dirty update preserves HEAD and local edits'
+    )
+    assert.deepEqual(dirtyUpdate.pm, [], 'dirty update refuses before install or build')
+
+    const divergedUpdate = await owned('update-diverged-tree', async (owner, w) => {
+      git(w.local, 'checkout', '-q', 'main')
+      commit(w.local, 'local.txt', 'local commit\n')
+      const peer = w.peer()
+      commit(peer, 'release.txt', 'new release\n')
+      git(peer, 'push', '-q', 'origin', 'main')
+      const before = {
+        head: git(w.local, 'rev-parse', 'HEAD'),
+        status: git(w.local, 'status', '--porcelain'),
+        content: readFileSync(join(w.local, 'local.txt'), 'utf8')
+      }
+      const result = await owner.update(w.local)
+      const after = {
+        head: git(w.local, 'rev-parse', 'HEAD'),
+        status: git(w.local, 'status', '--porcelain'),
+        content: readFileSync(join(w.local, 'local.txt'), 'utf8')
+      }
+      return { result, before, after, pm: w.pm().calls ?? [] }
+    })
+    assert.equal(divergedUpdate.result.ok, false)
+    assert.match(divergedUpdate.result.error, /fast.forward|diverg/i)
+    assert.deepEqual(
+      divergedUpdate.after,
+      divergedUpdate.before,
+      'diverged update preserves HEAD and local commit'
+    )
+    assert.deepEqual(divergedUpdate.pm, [], 'diverged update refuses before install or build')
+
     for (const signing of ['adhoc', 'missing']) {
       const refused = await owned(`update-signing-${signing}`, async (owner, w) => {
         git(w.local, 'checkout', '-q', 'main')
