@@ -9,6 +9,9 @@
 
 - Project titles now occupy the available row width at rest. Hovering the actual title reveals the existing project buttons over its trailing space, with a continuous pointer path into them; leaving restores the width. The title uses the existing marquee with the active width and stops it on exit or removal.
 - The offscreen project action fixture covers background, title, bridge, control and exit states, width restoration and long-title marquee reset. Sidebar verification records the resting and active title inset for the post-merge native check; independent review and exact-head CI remain required.
+## 2026-11-04 — LKM-532 Mark up foreground activation in native smoke
+
+- The `preview-markup` posted-event seam now waits up to five seconds for the host window to become key in the active app, re-requesting activation every half second. The prior single 90 ms wait could fail before AppKit completed activation after another native smoke. Events still require a foreground window without a sheet; failure now reports active, key, sheet and frontmost state. This changes only the disposable-profile smoke seam, so there is no user-visible changelog entry.
 
 ## 2026-11-04 — LKM-527 native suite timing and glass evidence repair
 

@@ -10,6 +10,10 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Extend the project action fixture and sidebar geometry assertions for hover, crossing, exit, width and marquee reset.
 - [x] Review repair: restore project-title hover across a stationary-pointer row reload and assert that opening another project's menu preserves the selected project and visible chats.
 - [ ] Manager: independent review, exact-head CI and post-merge native sidebar pointer/rendered acceptance.
+## LKM-532 — Native preview-markup foreground failure on main
+
+- [x] Bound the posted-event seam's foreground activation wait and retry activation while AppKit settles; retain the no-sheet guard and report focus state on failure.
+- [ ] Confirm the `core` native group on the repaired tree through the manager's desktop lock.
 
 ## LKM-527 — Native suite failure on main a8687a1b6a94
 
