@@ -104,12 +104,13 @@ snapshot("providers-780")
 sheets.model.setValue("connection", "gw")
 require(emitted.last?["action"] as? String == "section", "Draft fields never autosave")
 // The provider editor swaps the pane's fields in place: new fields are seeded, removed ones forgotten.
-sheets.model.update(try settingsState([
+let editorState = try settingsState([
     ["id":"label", "section":"providers", "draft":true, "label":"Provider name", "kind":"text", "value":"AI Gateway"],
     ["id":"url", "section":"providers", "draft":true, "label":"API base URL", "kind":"text", "value":"https://ai-gateway.vercel.sh/v1"],
     ["id":"key", "section":"providers", "draft":true, "label":"API key", "kind":"secure", "value":""],
     ["id":"models", "section":"providers", "draft":true, "label":"Model IDs (one per line)", "kind":"multiline", "value":""]
-], [["id":"back", "label":"Back", "section":"providers"], ["id":"connect", "label":"Load models", "section":"providers"], ["id":"save-provider", "label":"Add provider", "primary":true, "section":"providers"]], nested: true))
+], [["id":"back", "label":"Back", "section":"providers"], ["id":"connect", "label":"Load models", "section":"providers"], ["id":"save-provider", "label":"Add provider", "primary":true, "section":"providers"]], nested: true)
+sheets.model.update(editorState)
 settle()
 require(sheets.model.values["label"] == "AI Gateway" && sheets.model.values["connection"] == nil && sheets.model.values["projectUi"] == "false", "In-place pane swap seeds and forgets only its own fields")
 require(sheets.model.section == "providers", "An in-place update keeps the selected section")
@@ -121,7 +122,14 @@ try select("general"); try select("providers")
 require(sheets.model.values["label"] == "Draft provider", "Sidebar reentry preserves the unsaved provider draft")
 _ = try report(["pressHeader":"back"])
 require(emitted.last?["action"] as? String == "back" && emitted.last?["section"] as? String == "providers", "Rendered Back returns through the existing provider route")
+sheets.model.update(state)
+sheets.model.update(editorState)
+require(sheets.model.values["label"] == "Draft provider", "Back and reentry preserve the unsaved editor draft")
 snapshot("providers-editor-780")
+sheets.model.perform("save-provider")
+sheets.model.update(state)
+sheets.model.update(editorState)
+require(sheets.model.values["label"] == "AI Gateway", "A submitted provider edit clears the retained draft")
 sheets.model.update(state); settle()
 try select("experimental")
 let before = emitted.count
@@ -153,4 +161,9 @@ require(changes.count == 18, "Every native choice must emit exactly one autosave
 require(changes.allSatisfy { $0["action"] as? String == "change" && $0["section"] as? String == "experimental" }, "Picker must use the autosave path")
 window.setContentSize(window.contentMinSize); settle()
 for section in ["general", "providers"] { try select(section); snapshot("\(section)-min") }
+// Persisted read-only status must refresh in place when a skill is toggled, while
+// draft editors above still preserve their unsaved values across section switches.
+sheets.model.update(try settingsState([["id":"status", "section":"providers", "label":"Status", "kind":"readonly", "value":"Off"]], []))
+sheets.model.update(try settingsState([["id":"status", "section":"providers", "label":"Status", "kind":"readonly", "value":"On"]], []))
+require(sheets.model.values["status"] == "On", "An existing read-only row reflects a persisted state change")
 print("NATIVE SETTINGS LAYOUT PASS — windowless sectioned Settings: real source-list selection, inline AI Providers pane with in-place editor and unsaved draft fields, picker bindings at minimum/780/960 points; hidden controls cannot be invoked; engine preservation and autosave emission")

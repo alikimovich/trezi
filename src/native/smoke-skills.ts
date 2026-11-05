@@ -163,7 +163,7 @@ export async function checkSkillsSettings(host: NativeBridge, artifacts: string)
   await shoot('1-overview-empty', { view: 'overview', installed: [] })
 
   // Manual add: the template, then the sample typed over it in the rendered editor.
-  await host.request('sheetPerform', { action: 'skill-add' })
+  await host.request('settingsVerification', { pressHeader: 'skill-add' })
   await until(
     'add view',
     (s) => s.fields.includes(NEW_SKILL_FIELD) && s.editors[0]?.text === NEW_SKILL_TEMPLATE

@@ -11,17 +11,25 @@ final class SheetModel: ObservableObject {
     @Published var state: SheetState?
     @Published var filters: [String: String] = [:]
     @Published var values: [String: String] = [:]
+    private var retainedDrafts: [String: String] = [:]
     /// The sidebar pane of a sectioned window. Bun only seeds it; the window owns it after that.
     @Published var section: String?
+    private func draftKey(_ field: SheetField, in state: SheetState) -> String {
+        let context = state.sections?.first { $0.id == field.section }?.navigationTitle ?? ""
+        return "\(field.section ?? ""):\(context):\(field.id)"
+    }
     func update(_ next: SheetState) {
         if state?.id != next.id {
             filters = [:]
+            retainedDrafts = [:]
             values = Dictionary(uniqueKeysWithValues: next.fields.map { ($0.id, $0.value) })
             section = next.sections.flatMap { sections in sections.first { $0.id == next.section }?.id ?? sections.first?.id }
         } else if let previous = state {
             // A pane swapped its fields in place (the provider editor): seed new ones, forget removed ones.
             let known = Set(previous.fields.map(\.id)), current = Set(next.fields.map(\.id))
-            for field in next.fields where !known.contains(field.id) { values[field.id] = field.value }
+            for field in next.fields where !known.contains(field.id) || field.kind == "readonly" {
+                values[field.id] = field.kind == "readonly" ? field.value : retainedDrafts[draftKey(field, in: next)] ?? field.value
+            }
             values = values.filter { current.contains($0.key) }
         }
         state = next
@@ -33,6 +41,14 @@ final class SheetModel: ObservableObject {
     func perform(_ action: String) {
         guard let state, !state.busy || action == "cancel" else { return }
         if action == "cancel" && !(state.dismissible ?? !state.actions.isEmpty) { return }
+        if action == "back" || action == "skill-back" {
+            for field in state.fields where field.section == section && field.draft == true {
+                let value = values[field.id] ?? field.value
+                if value != field.value { retainedDrafts[draftKey(field, in: state)] = value }
+            }
+        } else if ["save-provider", "skill-save", "skill-create", "skill-remove"].contains(action) {
+            for field in state.fields where field.section == section && field.draft == true { retainedDrafts.removeValue(forKey: draftKey(field, in: state)) }
+        }
         if let text = state.actions.first(where: { $0.id == action })?.copy, !state.busy {
             NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string)
         }

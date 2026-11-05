@@ -1,8 +1,12 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-525 Skills list follow-up
+
+- The normal recommendations list now includes only importable, path-verified catalog entries with recorded import evidence. Empty categories disappear, while catalog provenance and any installed library record remain intact. Installed rows use persisted enabled state for ordering and On/Off labels; matching recommendation rows show both Installed and On/Off. Focused list/evidence fixtures cover unavailable entries, an installed unavailable source, state changes and the existing native viewport assertions. Native GUI acceptance remains with the manager after merge.
+
 ## 2026-11-04 — LKM-525 nested Settings header
 
-- Nested Skills and provider panes now use the existing section and action state to show Back, context and registered actions in a fixed header. The grouped form holds metadata and help below it; the large section title stays on overview panes. Skills fixture assertions cover parent/detail/back and section reentry; native visual acceptance remains for the manager after merge.
+- Skills overview and nested Skills/provider panes now use the existing section and action state to keep registered actions in a fixed header. Nested panes show Back and context; the grouped form holds metadata and help below it, and the large section title stays only on overviews. Unsaved draft values survive Back and reopen in the same window, scoped to their pane context. Skills and windowless native fixtures cover parent/detail/back, draft preservation and section reentry; native visual acceptance remains for the manager after merge.
 
 ## 2026-11-04 — LKM-523 review repair: unresolved title unmount
 

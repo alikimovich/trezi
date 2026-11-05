@@ -34,12 +34,13 @@ struct SectionedSheetContent: View {
         for case let group? in fields.map(\.group) where !named.contains(group) { named.append(group) }
         let groups: [String?] = (named.isEmpty || fields.contains { $0.group == nil } ? [nil] : []) + named
         let nested = section.navigationTitle != nil
+        let pinned = nested || section.id == "skills"
         return VStack(spacing: 0) {
-        if nested {
+        if pinned {
             VStack(spacing: 6) {
                 HStack(spacing: 10) {
                     ForEach(actions.filter { $0.id == "back" || $0.id == "skill-back" }) { headerButton($0) }
-                    Text(section.navigationTitle ?? "").font(.headline).lineLimit(1).accessibilityAddTraits(.isHeader)
+                    Text(section.navigationTitle ?? section.label).font(.headline).lineLimit(1).accessibilityAddTraits(.isHeader)
                     Spacer(minLength: 8)
                     ForEach(actions.filter { $0.primary == true }) { headerButton($0) }
                     if state.busy { ProgressView().controlSize(.small).accessibilityLabel("Working") }
@@ -72,7 +73,7 @@ struct SectionedSheetContent: View {
                         }
                     }.textCase(nil).padding(.bottom, index == 0 ? 8 : 2)
                 } footer: {
-                    if index == groups.count - 1 { footer(nested ? [] : actions) }
+                    if index == groups.count - 1 { footer(pinned ? [] : actions) }
                 }
             }
         }

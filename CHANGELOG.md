@@ -12,7 +12,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Changed
 
-- Nested Settings panes keep Back, their context and their existing actions above scrolling content (LKM-525).
+- Skills and nested Settings panes keep existing actions above scrolling content; nested panes also show Back and their context (LKM-525).
+- The Skills list shows enabled installed skills first and hides recommendations Trezi cannot import, while retaining installed records and clear On/Off status (LKM-525).
 ## [0.13.24] - 2026-11-04
 
 ### Changed

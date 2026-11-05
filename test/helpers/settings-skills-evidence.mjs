@@ -3,8 +3,13 @@
 // Run by test/settings-skills.mjs.
 import assert from 'node:assert/strict'
 import { bodyField, NEW_SKILL_FIELD } from '../../src/native/settings-skills.ts'
+import { overview as skillsOverview } from '../../src/native/settings-skills-views.ts'
 import { assertSkillsEvidence } from '../../src/native/skills-verification.ts'
 import { SKILL_RECOMMENDATIONS } from '../../src/shared/skills-catalog.ts'
+import {
+  recommendationImport,
+  SKILL_RECOMMENDATION_IMPORTS
+} from '../../src/shared/skills-recommendations.ts'
 
 const sections = [
   ['general', 'General', 'gearshape'],
@@ -47,7 +52,7 @@ const base = {
   message: '',
   busy: false,
   disabledActions: [],
-  headerActions: []
+  headerActions: header(['skill-add', 'skill-folder', 'skill-github'])
 }
 const reject = (evidence, expect, mutate, width = 680) => {
   const bad = structuredClone(evidence)
@@ -55,15 +60,86 @@ const reject = (evidence, expect, mutate, width = 680) => {
   assert.throws(() => assertSkillsEvidence(bad, width, expect))
 }
 
+// The list uses persisted enabled state, while catalog availability only filters
+// suggestions. An already installed unavailable entry remains in the library.
+{
+  const skill = (id, enabled, source = { kind: 'manual' }) => ({
+    id,
+    name: id,
+    description: id,
+    enabled,
+    source,
+    removed: false,
+    modified: false
+  })
+  const pane = {
+    view: { kind: 'overview' },
+    error: null,
+    importing: null,
+    list: {
+      skills: [
+        skill('off', false),
+        skill('on', true),
+        skill('variant', true, {
+          kind: 'github',
+          repository: 'jakubkrehel/skills',
+          subpath: 'skills/variant'
+        })
+      ]
+    }
+  }
+  const shown = skillsOverview(pane)
+  const installed = shown.fields.filter(
+    (field) => field.group === 'Installed' && field.id.startsWith('skill:')
+  )
+  assert.deepEqual(
+    installed.map((field) => field.id),
+    ['skill:on', 'skill:variant', 'skill:off']
+  )
+  assert.deepEqual(
+    installed.map((field) => field.value),
+    ['On · Manual', 'On · GitHub', 'Off · Manual']
+  )
+  assert.ok(!shown.fields.some((field) => field.id === 'recommendation:variant'))
+  assert.ok(
+    !shown.fields.some(
+      (field) =>
+        field.group === 'Recommended · Writing' ||
+        field.group === 'Recommended · Explore and review'
+    )
+  )
+  assert.ok(shown.fields.some((field) => field.id === 'recommendation:frontend-design'))
+  pane.list.skills[0].enabled = true
+  pane.list.skills[1].enabled = false
+  const changed = skillsOverview(pane).fields.filter(
+    (field) => field.group === 'Installed' && field.id.startsWith('skill:')
+  )
+  assert.deepEqual(
+    changed.map((field) => [field.id, field.value]),
+    [
+      ['skill:off', 'On · Manual'],
+      ['skill:variant', 'On · GitHub'],
+      ['skill:on', 'Off · Manual']
+    ]
+  )
+}
+
 // Overview: rows usable as rendered; a recommendation never reads as installed unless it is.
-const recommended = SKILL_RECOMMENDATIONS.map((r) =>
+const visibleRecommendations = SKILL_RECOMMENDATIONS.filter(
+  (entry) => recommendationImport(entry) && SKILL_RECOMMENDATION_IMPORTS[entry.id]
+)
+const recommended = visibleRecommendations.map((r) =>
   button(`skill-recommendation:${r.id}`, 'Details…', `Details ${r.title}`, { contained: false })
 )
 const overview = {
   ...base,
-  values: Object.fromEntries(
-    SKILL_RECOMMENDATIONS.map((r) => [`recommendation:${r.id}`, `${r.publisher} · ${r.license}`])
-  ),
+  values: Object.fromEntries([
+    ['skill:a1', 'On · Manual'],
+    ...visibleRecommendations.map((r) => [
+      `recommendation:${r.id}`,
+      `${r.publisher} · ${r.license}`
+    ])
+  ]),
   rows: [button('skill-open:a1', 'Edit…', 'Edit ui-notes'), ...recommended],
   editors: [],
   fields: ['skill:a1', 'recommendations-note'],
@@ -79,11 +155,16 @@ reject(overview, expectOverview, (e) => e.rows.pop())
 reject(overview, expectOverview, (e) => e.fields.push('skills-status'))
 reject(overview, expectOverview, (e) => (e.fields = ['skill:a1']))
 reject(overview, expectOverview, (e) => (e.actions = ['skill-add']))
+reject(overview, expectOverview, (e) => (e.headerActions[0].contained = false))
 reject(overview, expectOverview, (e) => (e.disabledActions = ['skill-github']))
-reject(overview, expectOverview, (e) => (e.values['recommendation:frontend-design'] = 'Installed'))
+reject(
+  overview,
+  expectOverview,
+  (e) => (e.values['recommendation:frontend-design'] = 'Installed · On')
+)
 const installedRecommendations = structuredClone(overview)
-installedRecommendations.values['recommendation:frontend-design'] = 'Installed'
-installedRecommendations.values['recommendation:impeccable'] = 'Installed'
+installedRecommendations.values['recommendation:frontend-design'] = 'Installed · On'
+installedRecommendations.values['recommendation:impeccable'] = 'Installed · Off'
 assertSkillsEvidence(installedRecommendations, 680, {
   ...expectOverview,
   recommended: ['frontend-design', 'impeccable']
@@ -113,7 +194,7 @@ reject(normalOverview, expectEmpty, (e) => (e.rows[0].contained = false), 780)
 reject(normalOverview, expectEmpty, (e) => (e.rows[0].hitTarget = false), 780)
 const withInstalled = {
   ...structuredClone(overview),
-  values: { ...overview.values, 'recommendation:frontend-design': 'Installed' }
+  values: { ...overview.values, 'recommendation:frontend-design': 'Installed · On' }
 }
 const expectInstalled = { ...expectOverview, recommended: ['frontend-design'] }
 assertSkillsEvidence(withInstalled, 680, expectInstalled)

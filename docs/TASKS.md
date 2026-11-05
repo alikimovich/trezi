@@ -5,8 +5,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 ## LKM-525 — Nested Settings navigation and actions
 
-- [x] Keep nested Skills and provider Back, context and existing actions visible above scrolling forms, with the sidebar section retained.
+- [x] Keep Skills overview actions and nested Skills/provider Back, context and actions visible above scrolling forms, with the sidebar section retained.
 - [x] Cover Skills parent/detail/back paths and section reentry in the existing fixture.
+- [x] Preserve unsaved draft values on Back and reopen within the same Settings window; clear them on successful save/create/remove paths.
+- [x] Show enabled installed skills first from the saved skill state, retain unavailable installed records, label On/Off, and hide unavailable recommendations and empty groups.
+- [x] Extend Skills list and rendered-state fixtures for filtering, ordering, enabled state, and installed records.
 - [ ] Manager: current-head CI, independent review and post-merge native Settings acceptance.
 
 ## LKM-523 — Loading titles, sidebar typography and New Chat
