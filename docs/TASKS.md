@@ -23,6 +23,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: require the parsed literal to feed the exact rendered opacity target and reject a same-file unrelated element even when its value matches.
 - [x] Review repair: reject later or aliased opacity writers and same-line element impersonation; bind the supported readback to the unique creation column.
 - [x] Review repair: close the admitted opacity syntax against every `cssText` write and shared-statement creation, with matching default-value and identity fixtures.
+- [x] Architecture discriminator: restrict rendered-opacity proof to inert `div` syntax; reject executable-element resets while retaining linked positive and stale/identity controls.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
 ## LKM-543 — Native annotation composite and Send acceptance fixture
 

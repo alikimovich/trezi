@@ -2,9 +2,10 @@ import ts from 'typescript'
 import { lexLiteral, locateAnchor } from '../main/control-manifest'
 import type { ControlParam } from '../shared/api'
 
-/** A deliberately small single-writer subset. Every reference to the created
- * element must be a known top-level write or its final append. This rejects
- * aliases, callbacks and later style mutations we cannot attribute to the literal. */
+/** A closed inert single-writer subset. The only created node is a div, and
+ * every top-level expression must be an allowed literal write or append. An
+ * executable element, URL, event handler, alias, callback or later mutation
+ * makes the relationship between source and rendered opacity unknowable. */
 export function linkedOpacityStamp(code: string, file: string, param: ControlParam): string | null {
   if (
     !/\.[cm]?jsx?$/.test(file) ||
@@ -82,7 +83,8 @@ export function linkedOpacityStamp(code: string, file: string, param: ControlPar
       ts.isCallExpression(decl.initializer) &&
       chain(decl.initializer.expression, ['document', 'createElement']) &&
       decl.initializer.arguments.length === 1 &&
-      ts.isStringLiteral(decl.initializer.arguments[0])
+      ts.isStringLiteral(decl.initializer.arguments[0]) &&
+      decl.initializer.arguments[0].text === 'div'
   )
   const created = new Set(targets.map(({ decl }) => (decl.name as ts.Identifier).text))
   const primitiveNames = new Set(

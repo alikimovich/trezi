@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-539 inert rendered-opacity proof
+
+The prior opacity proof admitted executable elements: a source-stamped `div` could set opacity, then a same-file `script` could reset it before a coincidentally matching default was read. The supported grammar now admits only inert `div` creation, static id/text and source-stamp writes, direct opacity assignment, side-effect-free shadow arithmetic, and a final append. A script or any other element type is unsupported and leaves Apply pending with Retry/Revert. The production transport fixture covers a linked positive, script-reset negative, stale revision and identity controls. Runtime source-node instrumentation would require a broader preview capability and was not chosen for this bounded repair. Independent review, exact-head CI and post-merge native acceptance remain manager gates.
+
 ## 2026-11-05 — LKM-539 closed opacity readback subset
 
 The rendered-opacity proof now rejects every `cssText` writer, including a later reset whose computed default equals the requested value. A source stamp is admitted only for a single `createElement` declaration in its own statement; multiple creations in one declaration cannot share identity. The supported fixture uses direct opacity assignment and side-effect-free shadow arithmetic, while the production transport fixture covers the default-opacity reset and shared-statement creation negatives. Ambiguous sources retain pending Apply with Retry/Revert. Independent review, exact-head CI and post-merge native acceptance remain manager gates.
