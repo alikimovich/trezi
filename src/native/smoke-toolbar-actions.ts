@@ -15,10 +15,17 @@ type Focus = 'composer' | 'preview' | 'source'
 const INTERACTION = ['select-object', 'overlay', 'speed', 'markup']
 const TOOLS = ['code', 'layers']
 const MINIMUM_WINDOW = 850
+export const NEW_CHAT_INTERACTION_STAGES = [
+  'hover',
+  'pressed',
+  'focus-new',
+  'focus-more',
+  'focus-sidebar'
+] as const
 
-/** Read painted glass from the foreground PNG, using the capture's crop and the native frames.
- * The left interior of each 32 pt control avoids its glyph; the point just left is bare toolbar.
- * Compare with the device segment in the same image so appearance and wallpaper cancel out. */
+/** Read painted glass from the foreground PNG, using the capture's crop and native frames.
+ * The left interior avoids each glyph; the point just left is bare toolbar.
+ * Compare with adjacent controls in the same image so appearance and wallpaper cancel out. */
 function glassInk(image: State, frame: string) {
   const pixels = decodePng(Buffer.from(image.png, 'base64'))
   const numbers = (value: string) => (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
@@ -45,6 +52,60 @@ function glassInk(image: State, frame: string) {
     outside = sample(-5)
   const brightness = (rgb: number[]) => rgb.reduce((sum, value) => sum + value, 0) / 3
   return { inside, outside, lift: brightness(inside) - brightness(outside) }
+}
+
+/** Compare the same native button's painted pixels in two foreground captures. The
+ * margin includes a keyboard focus ring; the interior includes hover and press fill. */
+function buttonPaintChange(before: State, after: State, frame: string) {
+  const first = decodePng(Buffer.from(before.png, 'base64'))
+  const second = decodePng(Buffer.from(after.png, 'base64'))
+  assert.equal(before.geometry.window, after.geometry.window, 'interaction captures share geometry')
+  return paintedButtonDifference(first, second, before.geometry, frame)
+}
+
+function toolbarButtonMeasure(frame: string) {
+  const [x, y, width, height] = (frame.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
+  assert.ok(
+    [x, y, width, height].every(Number.isFinite) && width >= 24 && height >= 24,
+    `toolbar button has measured native frame: ${frame}`
+  )
+  return { height, centerY: y + height / 2 }
+}
+
+/** The foreground fixture and its unit check use the same pixel test. */
+export function paintedButtonDifference(
+  first: { width: number; height: number; rgb: (x: number, y: number) => number[] },
+  second: { width: number; height: number; rgb: (x: number, y: number) => number[] },
+  geometry: { window: string; crop: string },
+  frame: string
+) {
+  const numbers = (value: string) => (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
+  const [x, y, width, height] = numbers(frame)
+  const [, , windowWidth, windowHeight] = numbers(geometry.window)
+  const [cropX, cropY] = numbers(geometry.crop)
+  const scale = first.width / windowWidth
+  assert.equal(first.width, second.width, 'interaction captures share one window width')
+  assert.equal(first.height, second.height, 'interaction captures share one window height')
+  assert.ok(
+    width >= 24 && height >= 24 && Number.isFinite(scale),
+    'native button has measured frame'
+  )
+  let changed = 0,
+    peak = 0,
+    samples = 0
+  for (let yy = -4; yy <= height + 4; yy += 2)
+    for (let xx = -4; xx <= width + 4; xx += 2) {
+      const px = Math.round((x + xx) * scale - cropX)
+      const py = Math.round((windowHeight - y - yy) * scale - cropY)
+      if (px < 0 || px >= first.width || py < 0 || py >= first.height) continue
+      const a = first.rgb(px, py),
+        b = second.rgb(px, py)
+      const difference = Math.max(...a.map((value, index) => Math.abs(value - b[index])))
+      if (difference >= 3) changed++
+      peak = Math.max(peak, difference)
+      samples++
+    }
+  return { changed, peak, samples }
 }
 
 /**
@@ -211,29 +272,78 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
 
     await islands('at rest')
 
-    // LKM-481: a bordered/style flag cannot prove the glass was painted in a custom toolbar
-    // view. Keep the actual foreground pixels and geometry for both enabled and disabled states.
-    for (const appearance of ['light', 'dark'] as const) {
-      await host.request('shellPerform', { action: 'window-appearance', row: appearance })
-      await pause(250)
+    // Capture each interaction beside More and the sidebar toggle at normal and narrower
+    // widths. The narrower case collapses the sidebar so all three items stay visible.
+    const originalWidth = (await host.request('toolbarInspect')).windowWidth
+    const originalSidebarCollapsed = (await shell()).sidebarCollapsed
+    for (const { layout, appearance } of [
+      { layout: 'normal', appearance: 'light' },
+      { layout: 'normal', appearance: 'dark' },
+      { layout: 'narrow', appearance: 'light' },
+      { layout: 'narrow', appearance: 'dark' }
+    ]) {
       try {
+        if (layout === 'narrow' && !(await shell()).sidebarCollapsed)
+          await host.request('shellPerform', { action: 'toggle-sidebar' })
+        await host.request('shellPerform', {
+          action: 'window-width',
+          row: layout === 'normal' ? '1320' : '1120'
+        })
+        await waitFor(async () => {
+          const state = await shell()
+          return (
+            state.chatNewVisible && state.moreVisible && state.chatNewFrame !== '{{0, 0}, {0, 0}}'
+          )
+        }, `${layout}: New Chat and More are visible in the toolbar`)
+        await host.request('shellPerform', { action: 'window-appearance', row: appearance })
+        await pause(250)
+        let idle: State | undefined
+        let disabled: State | undefined
+        let idleFrame = ''
         for (const enabled of [true, false]) {
           await host.request('chatNewAppearanceTest', { enabled })
           const state = await shell()
           const image: State = await host.request('captureVisibleWindow')
-          const name = `toolbar-actions-chat-new-${appearance}-${enabled ? 'idle' : 'disabled'}`
-          assert.equal(state.chatNewSystemGlass, true, `${name}: AppKit owns the glass surface`)
+          const name = `toolbar-actions-chat-new-${layout}-${appearance}-${enabled ? 'idle' : 'disabled'}`
           assert.equal(
-            state.chatNewGlassFrame,
-            state.chatNewFrame,
-            `${name}: glass follows New Chat's 32 pt frame`
+            state.chatNewStandalone,
+            true,
+            `${name}: AppKit owns the standalone toolbar item`
           )
+          assert.equal(state.chatNewBordered, true, `${name}: AppKit draws the button border`)
           writeFileSync(join(artifacts, `${name}.png`), Buffer.from(image.png, 'base64'))
+          if (enabled) {
+            idle = image
+            idleFrame = state.chatNewFrame
+          } else disabled = image
           const chat = glassInk(image, state.chatNewFrame)
           const neighbor = glassInk(image, state.chatNewNeighborFrame)
-          results[name] = { state, geometry: image.geometry, chat, neighbor }
+          const more = glassInk(image, state.chatNewMoreFrame)
+          const sidebar = glassInk(image, state.chatNewSidebarFrame)
+          const alignment = {
+            new: toolbarButtonMeasure(state.chatNewRenderedFrame),
+            more: toolbarButtonMeasure(state.chatNewMoreRenderedFrame),
+            sidebar: toolbarButtonMeasure(state.chatNewSidebarRenderedFrame)
+          }
+          results[name] = {
+            capture: join(artifacts, `${name}.png`),
+            state,
+            geometry: image.geometry,
+            chat,
+            neighbor,
+            more,
+            sidebar,
+            alignment
+          }
           save()
           assert.equal(state.chatNewEnabled, enabled, `${name}: enabled state`)
+          for (const peer of ['more', 'sidebar'] as const) {
+            assert.ok(
+              Math.abs(alignment.new.height - alignment[peer].height) <= 2 &&
+                Math.abs(alignment.new.centerY - alignment[peer].centerY) <= 2,
+              `${name}: New Chat height and vertical center align with ${peer}: ${JSON.stringify(alignment)}`
+            )
+          }
           assert.ok(
             Math.abs(neighbor.lift) >= 5,
             `${name}: neighboring glass is visibly painted: ${JSON.stringify(neighbor)}`
@@ -252,9 +362,75 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
               `${name}: disabled New Chat rejects input`
             )
         }
+        assert.ok(idle, `${layout} ${appearance}: idle foreground capture exists`)
+        assert.ok(disabled, `${layout} ${appearance}: disabled foreground capture exists`)
+        const enabledDisabledPaint = buttonPaintChange(idle, disabled, idleFrame)
+        const disabledName = `toolbar-actions-chat-new-${layout}-${appearance}-disabled`
+        results[disabledName].enabledDisabledPaint = enabledDisabledPaint
+        save()
+        assert.ok(
+          enabledDisabledPaint.changed >= 8 && enabledDisabledPaint.peak >= 5,
+          `${disabledName}: enabled and disabled New Chat visibly differ: ${JSON.stringify(enabledDisabledPaint)}`
+        )
+        await host.request('chatNewAppearanceTest', { enabled: true })
+        for (const stage of NEW_CHAT_INTERACTION_STAGES) {
+          const probe: State = await host.request('toolbarInteractionProbe', { stage })
+          assert.equal(
+            probe.error,
+            undefined,
+            `${layout} ${appearance} ${stage}: ${JSON.stringify(probe)}`
+          )
+          await pause(120)
+          const state = await shell()
+          const image: State = await host.request('captureVisibleWindow')
+          const name = `toolbar-actions-chat-new-${layout}-${appearance}-${stage}`
+          const capturePath = join(artifacts, `${name}.png`)
+          writeFileSync(capturePath, Buffer.from(image.png, 'base64'))
+          const frames = {
+            new: state.chatNewFrame,
+            more: state.chatNewMoreFrame,
+            sidebar: state.chatNewSidebarFrame
+          }
+          const controls = stage.startsWith('focus-')
+            ? [stage.slice(6)]
+            : ['new', 'more', 'sidebar']
+          const paint: State = {}
+          for (const control of controls) {
+            const frame = frames[control as keyof typeof frames]
+            const change = buttonPaintChange(idle, image, frame)
+            paint[control] = change
+          }
+          results[name] = { capture: capturePath, state, geometry: image.geometry, probe, paint }
+          save()
+          for (const control of controls) {
+            const change = paint[control]
+            assert.ok(
+              change.changed >= 8 && change.peak >= 5,
+              `${name}: ${control} paints ${stage} beside the other native toolbar buttons: ${JSON.stringify(change)}`
+            )
+          }
+          if (stage.startsWith('focus-')) {
+            const id =
+              stage === 'focus-new'
+                ? 'chat-new'
+                : stage === 'focus-more'
+                  ? 'more'
+                  : state.toolbar.find((value: string) => value.includes('ToggleSidebar'))
+            assert.ok(
+              probe.buttons.some((button: State) => button.id === id && button.focused),
+              `${name}: the native toolbar button owns keyboard focus`
+            )
+          }
+          const reset: State = await host.request('toolbarInteractionProbe', { stage: 'reset' })
+          assert.equal(reset.error, undefined, `${name}: interaction reset`)
+        }
       } finally {
+        await host.request('toolbarInteractionProbe', { stage: 'reset' })
         await host.request('chatNewAppearanceTest', { enabled: true })
         await host.request('shellPerform', { action: 'window-appearance', row: '' })
+        await host.request('shellPerform', { action: 'window-width', row: String(originalWidth) })
+        if ((await shell()).sidebarCollapsed !== originalSidebarCollapsed)
+          await host.request('shellPerform', { action: 'toggle-sidebar' })
       }
     }
 

@@ -25,6 +25,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 - Removed Claude and Gemini credentials no longer reappear as unsaved Settings drafts; validation and service messages stay visible beside pinned Settings actions (LKM-525).
 
+### Changed
+
+- New Chat is a standalone native toolbar button with system-managed Liquid Glass and interaction states (LKM-535).
 ## [0.13.25] - 2026-11-04
 
 ### Fixed
