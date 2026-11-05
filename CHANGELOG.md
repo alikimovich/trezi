@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-11-05
+
 ### Fixed
 
 - Nested 3D Code opens the selected source after navigation within a running preview (LKM-537).
@@ -18,6 +20,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - New Chat stays at the chat column edge when the preview address needs to compress in a narrow toolbar (LKM-537).
 - New Chat follows the chat column when the sidebar is resized to a wider width (LKM-537).
 - Publish keeps its full trigger width when the toolbar is narrow (LKM-537).
+
 ## [0.14.0] - 2026-11-05
 
 ### Added
