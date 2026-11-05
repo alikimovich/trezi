@@ -13,6 +13,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Removed
 
 - The selected-element inspector no longer offers a Custom tab or controls request field; Props and Styles remain available (LKM-538).
+## [0.13.27] - 2026-11-04
+
+### Changed
+
+- Chat title, preview address, branch, status and Publish trigger text in the top bar use system monospace (LKM-530).
 
 ## [0.13.26] - 2026-11-04
 

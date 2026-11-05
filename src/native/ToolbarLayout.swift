@@ -123,6 +123,43 @@ final class ToolbarLayout {
 /// order and the bezel are the system's. macOS 26 and earlier keep their look.
 final class IslandSegmentedControl: NSSegmentedControl {
     static var hidesDividers: Bool { if #available(macOS 27.0, *) { return true } else { return false } }
+    /// Publish fills its glass capsule; the toolbar islands retain AppKit's alignment inset.
+    var alignsFullFrame = false
+    /// Publish draws its glass at rest and restores the native textured bezel for interaction.
+    var usesGlassHover = false
+    private var glassHovered = false
+    private var glassPressed = false
+    private var glassTracking: NSTrackingArea?
+    override var isEnabled: Bool { didSet { updateGlassBezel() } }
+    func setGlassInteraction(hovered: Bool? = nil, pressed: Bool? = nil) {
+        if let hovered { glassHovered = hovered }
+        if let pressed { glassPressed = pressed }
+        updateGlassBezel()
+    }
+    private func updateGlassBezel() {
+        guard usesGlassHover else { return }
+        cell?.isBordered = isEnabled && (glassHovered || glassPressed || window?.firstResponder === self)
+        needsDisplay = true
+    }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let glassTracking { removeTrackingArea(glassTracking) }
+        guard usesGlassHover else { return }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area); glassTracking = area
+    }
+    override func mouseEntered(with event: NSEvent) { super.mouseEntered(with: event); setGlassInteraction(hovered: true) }
+    override func mouseExited(with event: NSEvent) { super.mouseExited(with: event); setGlassInteraction(hovered: false) }
+    override func mouseDown(with event: NSEvent) {
+        setGlassInteraction(pressed: true)
+        defer { setGlassInteraction(pressed: false) }
+        super.mouseDown(with: event)
+    }
+    override func becomeFirstResponder() -> Bool { let accepted = super.becomeFirstResponder(); updateGlassBezel(); return accepted }
+    override func resignFirstResponder() -> Bool { let accepted = super.resignFirstResponder(); updateGlassBezel(); return accepted }
+    override var alignmentRectInsets: NSEdgeInsets {
+        alignsFullFrame ? NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0) : super.alignmentRectInsets
+    }
     override func layout() { super.layout(); hideDividers() }
     override func updateLayer() { super.updateLayer(); hideDividers() }
     override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); hideDividers() }
