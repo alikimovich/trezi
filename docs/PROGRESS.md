@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-538 inspector Custom removal
+
+- The selected-element inspector now offers Props and Styles only. Old Custom tab selections resolve to Styles, and its request, comment, cancel, remove and Create controls routes no longer run. The Swift request view is removed from the native build, while saved panel data and shared control parsing remain intact. The existing controller and core native inspector fixtures now check the two-tab surface and legacy fallback; focused verification and manager gates are reported separately.
+
 ## 2026-11-04 — LKM-525 credential removal and pinned feedback repair
 
 - A successful Claude token or Gemini key removal now sends a one-update clear signal to the native Settings form, which discards both its typed secure value and matching retained draft. Failed removal leaves the draft intact; unrelated provider drafts still restore. The synthetic Settings fixture covers removal, Back, reopen and blocked resubmission for each credential. Validation and service messages now render beside the pinned action above long scrolling Settings forms, with windowless geometry and accessibility assertions. Current-head CI, independent review and native acceptance remain manager gates.

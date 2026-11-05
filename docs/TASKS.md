@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-538 — Remove Custom from selected-element inspector
+
+- [x] Show only Props and Styles in the native inspector and retire its Custom request/composer and Create controls route.
+- [x] Fall back from legacy Custom selection to Styles without losing project or element selection; ignore stale Custom actions.
+- [x] Retain persisted control panels and unrelated editing capabilities; cover the new inspector surface in controller and native fixtures.
+- [ ] Manager: current-head CI, independent review, merge and post-merge native acceptance.
+
 ## LKM-525 — Nested Settings navigation and actions
 
 - [x] Keep Skills overview actions and nested Skills/provider Back, context and actions visible above scrolling forms, with the sidebar section retained.

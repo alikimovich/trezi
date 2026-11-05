@@ -49,13 +49,9 @@ if (process.platform !== 'darwin') {
 } else {
   const binary = swiftBuild('slider-ticks', [
     'test/fixtures/slider-ticks/main.swift',
-    ...[
-      'EditingInspector',
-      'InspectorCustom',
-      'FloatingIsland',
-      'IslandLayout',
-      'SnappedSlider'
-    ].map((name) => `src/native/${name}.swift`)
+    ...['EditingInspector', 'FloatingIsland', 'IslandLayout', 'SnappedSlider'].map(
+      (name) => `src/native/${name}.swift`
+    )
   ])
   console.log(runFixture(binary).trim())
 }

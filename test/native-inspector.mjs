@@ -111,6 +111,31 @@ assert.deepEqual(calls.filter((c) => c[0] === 'styles:apply').at(-1)[2].token, {
   group: 'colors'
 })
 await action('tab', { value: 'props' })
+assert.equal(controller.state.tab, 'props')
+assert.ok(controller.state.fields.some((f) => f.id === 'prop:count'))
+assert.ok(!controller.state.actions.some((a) => a.id === 'controls'))
+await action('tab', { value: 'custom' })
+assert.equal(controller.state.tab, 'styles', 'Legacy Custom action falls back to Styles')
+assert.ok(controller.state.fields.some((f) => f.id === 'style:opacity'))
+assert.equal(controller.state.root, '/a')
+assert.equal(controller.element?.id, 'next')
+assert.equal(controller.state.visible, true)
+controller.state.tab = 'custom'
+controller.publish()
+assert.equal(controller.state.tab, 'styles', 'Legacy saved state falls back at publication')
+assert.ok(controller.state.fields.some((f) => f.id === 'style:opacity'))
+for (const retired of [
+  'controls',
+  'custom-request',
+  'comment-control',
+  'custom-cancel',
+  'remove:card'
+]) {
+  await action(retired, { value: 'stale request' })
+  assert.equal(controller.state.tab, 'styles', `${retired} cannot reopen Custom`)
+}
+assert.equal(controller.state.custom, undefined, 'No request composer is published')
+await action('tab', { value: 'props' })
 await action('apply', { field: 'prop:count', value: '4' })
 assert.deepEqual(agents.at(-1), ['/a', 'set count'])
 const old = controller.state.generation
