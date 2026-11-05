@@ -132,9 +132,15 @@ extension Host {
     /// AppKit can dispatch it through local monitors, the window and the hit-tested view.
     @MainActor func previewMarkupEvent(_ c: [String: Any]) async -> [String: Any] {
         func settle() async { try? await Task.sleep(nanoseconds: 90_000_000) }
-        NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil)
-        await settle()
-        guard window.isKeyWindow, NSApp.isActive, window.attachedSheet == nil else { return ["error":"Markup window is not foreground"] }
+        // App activation can finish after a run-loop turn, especially after another native
+        // smoke has owned the desktop. Keep the event route foreground-only and bounded.
+        for attempt in 0..<100 where !(window.isKeyWindow && NSApp.isActive) {
+            if attempt % 10 == 0 { NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil) }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        guard window.isKeyWindow, NSApp.isActive, window.attachedSheet == nil else {
+            return ["error":"Markup window is not foreground (active: \(NSApp.isActive), key: \(window.isKeyWindow), sheet: \(window.attachedSheet != nil), frontmost: \(NSWorkspace.shared.frontmostApplication?.localizedName ?? "unknown"))"]
+        }
         let action = c["action"] as? String ?? ""
         if !["typeInstruction", "sendButton", "toolbarSegment"].contains(action), markup?.overlay?.ownsFocus != true { return ["error":"Overlay does not own focus"] }
         func post(_ event: NSEvent?) -> Bool {
