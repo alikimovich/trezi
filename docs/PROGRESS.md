@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-530 real Publish control compile repair
+
+- The LKM-535 New Chat change removed the segmented control's glass hover and full-frame alignment behavior, but Publish still used both. Restored those behaviors on the real `IslandSegmentedControl` while leaving standalone New Chat and other island controls at their defaults. The Publish fixture now compiles the real toolbar control instead of a local stub and checks its hover, disabled, and alignment behavior. Exact-head CI, independent review, and post-merge rendered inspection remain manager gates.
+
 ## 2026-11-04 — LKM-530 Unreleased placement after 0.13.26 sync
 
 - The new 0.13.26 release landed while this ticket was open. Its merge left the LKM-530 entry adjacent to the dated heading again; a section separator now keeps the entry visibly under Unreleased. Exact-head CI and post-merge native inspection remain manager gates.
