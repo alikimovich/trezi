@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { hoverProbeScript, hoverRecorderScript } from './smoke-hover-probe'
+import { checkLayersLifecycle } from './smoke-layers-lifecycle'
 import { waitFor } from './smoke-wait'
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -279,6 +280,10 @@ export async function checkLayersIsland(host: NativeBridge, artifacts: string, s
     assert.equal((await island()).notice, refused.reason, 'the reason shows under the tree')
     assert.equal(readFileSync(index, 'utf8'), original)
     await smoke.evaluate(`document.querySelector('#layers-unstamped')?.remove()`)
+
+    // LKM-541: Selection mode decides what closing Layers keeps; grips stage drafts.
+    await checkLayersLifecycle(host, smoke, evidence, foreground)
+    await setLayers(true)
 
     // LKM-173: in select mode, a pointer over the island never hovers the page under it.
     if (foreground) await checkPointer(island, smoke, evidence)

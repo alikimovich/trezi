@@ -44,6 +44,8 @@ export const previewSendChannels = new Set([
   channels.PREVIEW_TOOLBAR_ACTION,
   channels.PREVIEW_READINESS,
   channels.PREVIEW_TEXT_EDIT,
+  channels.PREVIEW_SPACING_DRAFT,
+  channels.PREVIEW_LAYERS_RELEASED,
   channels.PREVIEW_PIN_CLICK,
   channels.PREVIEW_COMMENT_MODE,
   channels.PREVIEW_COMMENT,

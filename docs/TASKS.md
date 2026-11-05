@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-541 — Selection mode direct manipulation and Layers selection lifecycle
+
+- [x] Feasibility probe: padding and flex/grid gap map to the existing source-owned Styles fields; text editing already maps through stamped plain-text leaves.
+- [x] Selection-mode padding and gap grips in the preview overlay with instant preview, Escape cancel and shared-instance readout; released values stage LKM-539 Styles drafts (no write, HMR or agent turn per drag).
+- [x] Layers lifecycle: with Select off closing Layers clears a row's selection, outline and inspector context; with Select on it only hides Layers; late row picks are dropped; Layers never changes Selection mode.
+- [x] Focused fixtures (`test/spacing-handles.mjs`, `test/native-layers.mjs`) and native fixture assertions (`src/native/smoke-layers-lifecycle.ts`, a queued window pointer drag).
+- [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
+
 ## LKM-539 — Faster source-bound chat controls
 
 - [x] Trace the photo-hover island creation and source-to-preview update paths against the reported session and DialKit's live-value model.

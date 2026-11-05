@@ -59,6 +59,7 @@ extension Host {
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             if let dark = c["capture"] as? String { Task { @MainActor in do { reply(id, try await captureLayersIsland(dark: dark == "dark")) } catch { reply(id, error: error.localizedDescription) } } }
             else if c["pointer"] as? Bool == true { Task { @MainActor in do { reply(id, try await layersPointer(c)) } catch { reply(id, error: error.localizedDescription) } } }
+            else if c["previewDrag"] as? Bool == true { Task { @MainActor in do { reply(id, try await previewDrag(c)) } catch { reply(id, error: error.localizedDescription) } } }
             else if c["action"] is String { reply(id, performLayers(c)) }
             else { reply(id, verifyLayersIsland(c)) }
         case "movableIslands":

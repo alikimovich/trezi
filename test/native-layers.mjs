@@ -31,7 +31,7 @@ assert.equal(calls.at(-1)[0], 'layers:read')
 await controller.action({ root: '/a', action: 'select', path: [0] })
 assert.deepEqual(calls.at(-1), [
   'layers:select',
-  { path: [0], fingerprint: { tag: 'div', source: 'a.tsx:1' } }
+  { path: [0], fingerprint: { tag: 'div', source: 'a.tsx:1' }, from: 'layers' }
 ])
 await controller.action({ root: '/a', action: 'move', path: [0], target: [1], position: 'after' })
 assert.deepEqual(fallback.at(-1), ['/a', 'Move the div'])
@@ -131,7 +131,7 @@ assert.equal(states.at(-1).selected, null, 'clearing the preview selection clear
 const before = sent.length
 await sync.action({ root: '/i', action: 'select', path: [1] })
 assert.deepEqual(sent.slice(before), [
-  ['layers:select', { path: [1], fingerprint: { tag: 'p', source: 'i.html:4:1' } }]
+  ['layers:select', { path: [1], fingerprint: { tag: 'p', source: 'i.html:4:1' }, from: 'layers' }]
 ])
 // Dragging the paragraph before the heading follows it to its new row once the page re-renders.
 await sync.action({ root: '/i', action: 'move', path: [1], target: [0], position: 'before' })
@@ -148,7 +148,7 @@ page = {
 await sync.refresh()
 assert.deepEqual(sent.at(-1), [
   'layers:select',
-  { path: [0], fingerprint: { tag: 'p', source: 'i.html:3:1' } }
+  { path: [0], fingerprint: { tag: 'p', source: 'i.html:3:1' }, from: 'layers' }
 ])
 assert.deepEqual(states.at(-1).selected, [0], 'the moved element stays selected')
 
@@ -173,6 +173,69 @@ await staleDrop.toggle()
 await staleDrop.action({ root: '/i', action: 'move', path: [0], target: [1], position: 'before' })
 assert.equal(reads, 3, 'a missing target gets one read before the move and one after it')
 assert.equal(recovered.length, 1, 'the recovered drop reaches the source owner')
+
+// LKM-541: closing Layers clears a row's selection with Select off and keeps it with Select on.
+{
+  const sends = [],
+    views = []
+  let releases = 0,
+    selecting = false
+  const lifecycle = new NativeLayersController(
+    async (channel) => (channel === 'layers:read' ? snapshot : null),
+    async (...args) => sends.push(args),
+    (state) => views.push(state),
+    async () => {}
+  )
+  lifecycle.selectionMode = () => selecting
+  lifecycle.release = () => {
+    releases++
+    // What the runtime does: the inspector drops the element and tells Layers.
+    lifecycle.selected(null)
+  }
+  const modeSends = () => sends.filter(([channel]) => /select-mode/.test(channel))
+  await lifecycle.activate('/l')
+  await lifecycle.toggle()
+  assert.equal(releases, 0, 'opening Layers alone neither selects nor releases')
+  await lifecycle.toggle()
+  assert.equal(releases, 0, 'closing without a row pick keeps any other selection')
+
+  // Select OFF: open, pick, close → the transient selection, outline and inspector go.
+  await lifecycle.toggle()
+  await lifecycle.action({ root: '/l', action: 'select', path: [1] })
+  assert.deepEqual(sends.at(-1), [
+    'layers:select',
+    { path: [1], fingerprint: { tag: 'div', source: 'a.tsx:2' }, from: 'layers' }
+  ])
+  await lifecycle.toggle()
+  assert.equal(releases, 1, 'Select off: closing Layers releases the row pick')
+  assert.equal(lifecycle.selection, null)
+  const watchOff = sends.findIndex(
+    ([channel, on]) => channel === 'layers:set-watch' && on === false
+  )
+  assert.ok(watchOff >= 0, 'the preview stops treating later row picks as live')
+  // A row click delivered after close is late: no new selection reaches the preview.
+  const before = sends.length
+  await lifecycle.action({ root: '/l', action: 'select', path: [0] })
+  assert.equal(sends.length, before, 'late row select after close is dropped')
+  assert.equal(lifecycle.selection, null)
+  // Reopen: no stale selected row.
+  await lifecycle.toggle()
+  assert.equal(views.at(-1).visible, true)
+  assert.equal(views.at(-1).selected, null, 'reopened Layers shows no stale selection')
+
+  // Select ON: the same flow hides only Layers; the selection stays.
+  selecting = true
+  await lifecycle.action({ root: '/l', action: 'select', path: [0] })
+  await lifecycle.toggle()
+  assert.equal(releases, 1, 'Select on: closing Layers keeps the selected object')
+  assert.deepEqual(lifecycle.selection?.path, [0])
+  assert.equal(views.at(-1).visible, false)
+  await lifecycle.toggle()
+  assert.deepEqual(views.at(-1).selected, [0], 'reopened Layers shows the kept selection')
+  await lifecycle.action({ root: '/l', action: 'close' })
+  assert.equal(releases, 1, 'the close action follows the same rule')
+  assert.equal(modeSends().length, 0, 'Layers never changes Selection mode')
+}
 console.log(
   'Native layers: scoped selection/fingerprints, source moves, agent fallback, canceled reads, selection sync and moved-row follow passed'
 )

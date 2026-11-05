@@ -33,6 +33,7 @@ import {
   PREVIEW_CLEAR_SELECTED,
   PREVIEW_COMMENT,
   PREVIEW_COMMENT_MODE,
+  PREVIEW_LAYERS_RELEASED,
   PREVIEW_MOVE_NODE,
   PREVIEW_PICKED,
   PREVIEW_PIN_CLICK,
@@ -43,6 +44,7 @@ import {
   PREVIEW_SET_MODE,
   PREVIEW_SET_PINS,
   PREVIEW_SET_STATUS,
+  PREVIEW_SPACING_DRAFT,
   PREVIEW_STYLES_UPDATED,
   PREVIEW_TEXT_EDIT,
   PREVIEW_THREE_D_STATE,
@@ -54,6 +56,7 @@ import {
   STYLES_READ_REPLY,
   STYLES_REPLAY
 } from '../shared/preview-channels'
+import { parseSpacingDraft } from '../shared/spacing-draft'
 import { applyMoveNode } from './move-node'
 import { observePreview } from './preview-evidence'
 import { registerPreviewSource } from './preview-state'
@@ -515,6 +518,17 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
   ipcMain.on(PREVIEW_TEXT_EDIT, (e, edit: { source: string; text: string }) => {
     if (!fromPreview(e)) return
     sendToMain('preview:text-edit', edit)
+  })
+  // LKM-541: a released spacing handle → the inspector stages it as a Styles draft.
+  ipcMain.on(PREVIEW_SPACING_DRAFT, (e, input: unknown) => {
+    if (!fromPreview(e)) return
+    const draft = parseSpacingDraft(input)
+    if (draft) sendToMain('preview:spacing-draft', draft)
+  })
+  // LKM-541: Layers closed with Select off; the preview dropped the row's selection.
+  ipcMain.on(PREVIEW_LAYERS_RELEASED, (e) => {
+    if (!fromPreview(e)) return
+    sendToMain('preview:layers-released')
   })
 
   // Inline commenting (C/Y): renderer arms the mode → preview.

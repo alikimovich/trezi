@@ -799,6 +799,9 @@ async function main() {
     }
   )
   shellController.selectOff = selectToolOff
+  // LKM-541: closing Layers keeps a row's selection only while Selection mode is on.
+  layersController.selectionMode = () => shellController.selecting
+  layersController.release = selectToolOff
   installPreviewLoads(host, workspaceController, shellController)
   installPreviewRefresh(
     host,
