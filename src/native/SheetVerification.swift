@@ -76,6 +76,13 @@ extension NativeSheets {
                   let frame = editor.enclosingScrollView else { throw failure("Rendered Settings editor unavailable") }
             frame.scrollToVisible(frame.bounds)
         }
+        if let action = command["revealRow"] as? String {
+            content.layoutSubtreeIfNeeded()
+            guard let button = rowButtons(in: content).first(where: { $0.identifier?.rawValue == "sheet-row:\(action)" }) else {
+                throw failure("Rendered Settings row unavailable: \(action)")
+            }
+            button.scrollToVisible(button.bounds)
+        }
         if let action = command["press"] as? String {
             // Click the rendered row button, as the mouse or Space with keyboard navigation would.
             content.layoutSubtreeIfNeeded()

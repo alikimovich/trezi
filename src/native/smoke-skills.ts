@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { SKILL_RECOMMENDATIONS } from '../shared/skills-catalog'
 import type { SkillSummary } from '../shared/skills-registry'
 import type { NativeBridge } from './bridge'
 import { bodyField, NEW_SKILL_FIELD, NEW_SKILL_TEMPLATE, nativeSkills } from './settings-skills'
@@ -62,15 +63,24 @@ export async function checkSkillsSettings(host: NativeBridge, artifacts: string)
   const others = (await registry.list()).skills.filter((s) => !s.removed)
   assert.equal(others.length, 0, 'The disposable profile starts without skills')
   const inspect = (): Promise<SkillsEvidence> => host.request('settingsVerification')
-  const until = (label: string, check: (state: SkillsEvidence) => boolean, timeout?: number) =>
-    waitFor(
+  const until = (label: string, check: (state: SkillsEvidence) => boolean, timeout?: number) => {
+    let last: SkillsEvidence | undefined
+    return waitFor(
       async () => {
         const state = await inspect()
+        last = state
         return check(state) && state
       },
       `Skills: ${label}`,
-      timeout
+      timeout,
+      () => ({
+        message: last?.message,
+        busy: last?.busy,
+        fields: last?.fields,
+        actions: last?.actions
+      })
     )
+  }
   const sample = async () => {
     const found = (await registry.list()).skills.find((s) => s.name === SKILLS_SAMPLE_NAME)
     assert.ok(found, 'The sample skill is in the registry')
@@ -103,6 +113,16 @@ export async function checkSkillsSettings(host: NativeBridge, artifacts: string)
         await until(`editor in view at ${width}`, (s) =>
           s.editors.every((e) => e.contained && e.hitTarget)
         )
+      }
+      if (expect.view === 'overview') {
+        const action = expect.installed.length
+          ? `skill-open:${expect.installed[0].id}`
+          : `skill-recommendation:${SKILL_RECOMMENDATIONS[0].id}`
+        await host.request('settingsVerification', { revealRow: action })
+        await until(`first overview row in view at ${width}`, (s) => {
+          const row = s.rows.find((r) => r.action === action)
+          return !!row && row.contained && row.hitTarget
+        })
       }
       const image = await host.request('captureVisibleSheet')
       const evidence = { ...(await inspect()), text: [] as string[] }
