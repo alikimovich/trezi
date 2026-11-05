@@ -1924,8 +1924,16 @@ const threeD = createThreeDInspector({
   hasSource: (el) => !!findSource(el),
   code: (el) => {
     selectedEl = el
-    ipcRenderer.send(PICKED, describe(el))
-    ipcRenderer.send(TOOLBAR_ACTION, 'code')
+    const picked = describe(el)
+    ipcRenderer.send(PICKED, picked)
+    // Selection processing can await preview cleanup. Carry this inspected layer's
+    // source instead of asking the controller for whichever selection settled last.
+    if (picked.source)
+      ipcRenderer.send(TOOLBAR_ACTION, {
+        action: 'three-d-code',
+        source: picked.source,
+        page: location.href
+      })
   },
   select: (el, open) => {
     clearStylePreview()

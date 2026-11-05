@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-536 review repair: selected 3D source
+
+- The 3D Code event now carries the resolved layer's own source and page. The inspector runtime checks the active page before opening that exact source, so an asynchronous selection update cannot reuse the previous layer's file. The existing native 3D fixture gives the root and heading distinct valid fixture files, checks both Code targets in sequence, measures the rendered monospace title and adjacent Back control, and checks URL, project and selection after Back. Native execution remains for the post-merge run.
+
+
 ## 2026-11-04 — LKM-536 nested 3D navigation
 
 - The 3D inspector now puts its Back chevron and object name in the native preview title location. The floating Code island routes through the inspected layer's guarded source action; unavailable source disables it. The in-content header and visible Front/Reset controls are removed while camera gestures, separation and layer picker remain. The existing native 3D fixture covers the rendered toolbar context, island Code route, and Back restoration; post-merge native acceptance remains required.

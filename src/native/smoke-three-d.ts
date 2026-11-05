@@ -24,8 +24,9 @@ const CARD = `(() => {
   sibling.id = 'three-d-sibling';
   const card = document.createElement('section');
   card.id = 'three-d-card';
+  card.setAttribute('data-trezi-source', 'index.html:3:1');
   card.style.cssText = 'margin:12px;padding:16px;width:320px;background:#f4e3c1;border-radius:12px';
-  card.innerHTML = '<div id="three-d-head" style="padding:8px;background:#2f6fde;color:#fff"><h2 id="three-d-heading" style="margin:0;font:600 18px system-ui">Layered card</h2></div><p id="three-d-copy" style="margin:12px 0 0">Nested copy <b id="three-d-bold">bold</b></p>';
+  card.innerHTML = '<div id="three-d-head" style="padding:8px;background:#2f6fde;color:#fff"><h2 id="three-d-heading" data-trezi-source="about.html:3:1" style="margin:0;font:600 18px system-ui">Layered card</h2></div><p id="three-d-copy" style="margin:12px 0 0">Nested copy <b id="three-d-bold">bold</b></p>';
   document.body.prepend(sibling, card);
   card.scrollIntoView({ block: 'nearest' });
   return true;
@@ -131,6 +132,16 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   assert.equal(nestedToolbar.nestedTitle, opened.title)
   assert.equal(nestedToolbar.nestedBack, true)
   assert.equal(nestedToolbar.nestedCodeEnabled, opened.code)
+  assert.equal(nestedToolbar.nestedTitleMonospace, true)
+  const backFrame: Rect = nestedToolbar.nestedBackFrame
+  const titleFrame: Rect = nestedToolbar.nestedTitleFrame
+  assert.ok(backFrame.width > 0 && titleFrame.width > 0, 'native Back and title are rendered')
+  assert.ok(
+    backFrame.x + backFrame.width <= titleFrame.x &&
+      titleFrame.x - backFrame.x - backFrame.width <= 16 &&
+      backFrame.x >= nestedToolbar.viewportTrailing - 1,
+    'Back and its adjacent title follow the viewport controls'
+  )
   // N layers render natively, each a Core Animation plane holding its capture.
   assert.deepEqual(opened.layers, [
     'section#three-d-card',
@@ -269,15 +280,23 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
     async () => (await host.request('inspectorInspect')).visible,
     'clicking a layer opens the inspector'
   )
+  assert.equal((await inspect()).code, true, 'the fixture has a source-backed root')
+  assert.equal(await host.request('shellPerform', { action: 'nested-code' }), true)
+  await waitFor(async () => {
+    const editor = await host.request('sourceInspect')
+    return editor.visible && editor.source === 'index.html' && editor
+  }, 'the inherited root source opens index.html')
+  await host.request('sourcePerform', { action: { root: fixture, action: 'hide' } })
+  await waitFor(async () => !(await host.request('sourceInspect')).visible, 'first source hidden')
   const heading = opened.layers.indexOf('h2#three-d-heading')
   await perform('layer', heading)
   await waitFor(async () => (await inspect()).sceneSelected === heading, 'picker selects a layer')
-  if ((await inspect()).code) {
-    assert.equal(await host.request('shellPerform', { action: 'nested-code' }), true)
-    await waitFor(
-      async () => (await host.request('sourceInspect')).visible,
-      'Code opens source editor'
-    )
+  assert.equal(await host.request('shellPerform', { action: 'nested-code' }), true)
+  await waitFor(async () => {
+    const editor = await host.request('sourceInspect')
+    return editor.visible && editor.source === 'about.html' && editor
+  }, 'Code after switching layers opens about.html, never the prior index.html')
+  {
     // The drawer is the docked editor: dock it when Code popped it out.
     if ((await host.request('sourceInspect')).popped)
       await host.request('sourcePerform', { action: { root: fixture, action: 'dock' } })
@@ -389,6 +408,11 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
 
   // A single element: one layer, singular label.
   const second = await open('#native-title')
+  const parentUrl = await page('location.href')
+  const parentSelection = await waitFor(async () => {
+    const state = await host.request('inspectorInspect')
+    return state.title === 'h1#native-title' && state.root === fixture && state
+  }, 'parent page selection is the fixture heading')
   assert.notEqual(second.session, opened.session, 'reopening creates a new session')
   assert.equal(second.countLabel, '1 layer')
   assert.match(second.status, /^Depth shows nesting/)
@@ -411,6 +435,10 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   assert.equal(await page(`document.querySelectorAll('[data-trezi-three-d]').length`, true), 0)
   assert.equal((await host.request('shellInspect')).nestedBack, false)
   assert.deepEqual(await page('({width:innerWidth,height:innerHeight})'), viewport)
+  assert.equal(await page('location.href'), parentUrl, 'Back retains the page URL')
+  const restoredSelection = await host.request('inspectorInspect')
+  assert.equal(restoredSelection.root, parentSelection.root, 'Back retains the project')
+  assert.equal(restoredSelection.title, parentSelection.title, 'Back retains the selected object')
 
   const samePage = await open('#native-title')
   assert.notEqual(samePage.session, second.session, 'reopening creates a new session')

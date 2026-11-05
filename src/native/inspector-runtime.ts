@@ -388,8 +388,19 @@ export function installNativeInspector(
       if (value === 'props') {
         controller.state.visible = !controller.state.visible
         controller.publish()
-      } else if (value === 'code' && controller.element?.source)
-        openSource(controller.element.source)
+      } else if (
+        value?.action === 'three-d-code' &&
+        typeof value.source === 'string' &&
+        value.source.length > 0 &&
+        value.source.length <= 256 &&
+        typeof value.page === 'string' &&
+        readyRoot === entry.root &&
+        pageOf(value.page) === page &&
+        workspace.state.status.kind === 'running' &&
+        pageOf(workspace.state.status.url) === page
+      )
+        openSource(value.source)
+      else if (value === 'code' && controller.element?.source) openSource(controller.element.source)
       else if (value === 'delete' && controller.element)
         void chat
           .command({

@@ -784,6 +784,13 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         result["nestedTitle"] = nestedActive ? nestedTitle.stringValue : ""
         result["nestedBack"] = nestedActive && !nestedBack.isHidden
         result["nestedCodeEnabled"] = nestedActive && nestedCodeEnabled
+        func frame(_ view: NSView) -> [String: CGFloat] {
+            let r = mainFrame(view) ?? .zero
+            return ["x":r.minX, "y":r.minY, "width":r.width, "height":r.height]
+        }
+        result["nestedBackFrame"] = frame(nestedBack)
+        result["nestedTitleFrame"] = frame(nestedTitle)
+        result["nestedTitleMonospace"] = nestedTitle.font?.fontDescriptor.symbolicTraits.contains(.monoSpace) == true
         result.merge(publishInspect(toolbarItems["publish"] as? NSMenuToolbarItem, state: previewState)) { _, new in new }
         result.merge(moreInspect(toolbarItems["more"] as? NSMenuToolbarItem)) { _, new in new }
         result.merge(islandInspect()) { _, new in new }
