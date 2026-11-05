@@ -171,7 +171,35 @@ export async function checkVisibleSettings(
   for (const width of [minimumWidth, SETTINGS_DEFAULT_SIZE.width]) {
     for (const section of ['general', 'providers'] as const) {
       await select(section)
-      assertSectionEvidence(await shoot(width, section), width, section)
+      const evidence = await shoot(width, section)
+      assertSectionEvidence(evidence, width, section)
+      if (section === 'providers' && width === SETTINGS_DEFAULT_SIZE.width) {
+        assert.deepEqual(
+          evidence.headerActions.map((action: { action: string }) => action.action),
+          ['add'],
+          'Add provider is the only section-wide header action'
+        )
+        const rows = evidence.rows as {
+          action: string
+          contained: boolean
+          enabled: boolean
+          hitTarget: boolean
+        }[]
+        for (const action of ['claude', 'gemini']) {
+          const row = rows.find((entry) => entry.action === action)
+          assert.ok(
+            row?.contained && row.enabled && row.hitTarget,
+            `${action} configuration is reachable from its provider row`
+          )
+        }
+        assert.ok(
+          evidence.controls.some(
+            (control: { id: string; contained: boolean }) =>
+              control.id === 'geminiEnabled' && control.contained
+          ),
+          'Gemini On/Off remains a separate visible choice'
+        )
+      }
     }
   }
   // LKM-138: the Claude plugins toggle autosaves and survives close/reopen, then goes back off.

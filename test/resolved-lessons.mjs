@@ -506,7 +506,10 @@ try {
     await wait(() => updates.find((u) => u.root === p.repo), 'the memory update')
     off()
     const update = updates.find((u) => u.root === p.repo)
-    assert.equal((await undoProjectMemoryUpdate(update))?.content.includes('lesson'), false)
+    assert.notEqual(update.after.content, update.before.content, 'the lesson changed memory')
+    const restored = await undoProjectMemoryUpdate(update)
+    assert.ok(restored, 'Undo succeeds while the committed memory is current')
+    assert.equal(restored.content, update.before.content, 'Undo restores the exact prior memory')
     assert.equal(projectHasRunningAgents(p.repo), false)
   })
 

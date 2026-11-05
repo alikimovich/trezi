@@ -31,6 +31,10 @@ export interface NativeSheetSection {
   label: string
   symbol: string
   detail?: string
+  /** Context for a nested pane; keeps its actions above the scrolling form. */
+  navigationTitle?: string
+  /** Stable identity for draft fields in this pane; never derived from a display label. */
+  draftContext?: string
 }
 export interface NativeSheetState {
   id: string
@@ -64,6 +68,8 @@ export interface NativeSheetState {
   dismissible?: boolean
   busy: boolean
   message?: string
+  /** One update only: successful credential removal clears these draft fields in the native form. */
+  clearDraftFields?: string[]
 }
 /** A short confirmation inside the main window that dismisses itself after `seconds`. */
 export interface NativeToastState {

@@ -13,6 +13,17 @@ extension NativeSheets {
     private func rowButtons(in view: NSView) -> [NSButton] {
         rendered(NSButton.self, in: view).filter { $0.identifier?.rawValue.hasPrefix("sheet-row:") == true && !$0.isHiddenOrHasHiddenAncestor }
     }
+    private func headerButtons(in view: NSView) -> [NSButton] {
+        rendered(NSButton.self, in: view).filter { $0.identifier?.rawValue.hasPrefix("sheet-action:") == true && !$0.isHiddenOrHasHiddenAncestor }
+    }
+    private func formScroll(in content: NSView) -> NSScrollView? {
+        rendered(NSScrollView.self, in: content)
+            .filter { scroll in
+                guard let document = scroll.documentView else { return false }
+                return document.bounds.height > scroll.contentView.bounds.height + 4
+            }
+            .max { $0.bounds.width * $0.bounds.height < $1.bounds.width * $1.bounds.height }
+    }
     /// Geometry of a rendered control in `content`: inside the pane, unclipped, and the top hit there.
     private func placement(_ control: NSView, in content: NSView) -> [String: Any] {
         let rect = control.convert(control.bounds, to: content)
@@ -76,6 +87,13 @@ extension NativeSheets {
                   let frame = editor.enclosingScrollView else { throw failure("Rendered Settings editor unavailable") }
             frame.scrollToVisible(frame.bounds)
         }
+        if command["scrollFormToEnd"] as? Bool == true {
+            content.layoutSubtreeIfNeeded()
+            guard let scroll = formScroll(in: content), let document = scroll.documentView else { throw failure("Scrollable Settings form unavailable") }
+            let bottom = max(0, document.bounds.height - scroll.contentView.bounds.height)
+            scroll.contentView.scroll(to: NSPoint(x: 0, y: bottom))
+            scroll.reflectScrolledClipView(scroll.contentView)
+        }
         if let action = command["revealRow"] as? String {
             content.layoutSubtreeIfNeeded()
             guard let button = rowButtons(in: content).first(where: { $0.identifier?.rawValue == "sheet-row:\(action)" }) else {
@@ -90,12 +108,34 @@ extension NativeSheets {
                   button.isEnabled else { throw failure("Rendered Settings row unavailable: \(action)") }
             button.performClick(nil)
         }
+        if let action = command["pressHeader"] as? String {
+            content.layoutSubtreeIfNeeded()
+            guard let button = headerButtons(in: content).first(where: { $0.identifier?.rawValue == "sheet-action:\(action)" }),
+                  button.isEnabled else { throw failure("Rendered Settings header action unavailable: \(action)") }
+            button.performClick(nil)
+        }
         content.layoutSubtreeIfNeeded()
         content.displayIfNeeded()
         let rows: [[String: Any]] = rowButtons(in: content).map { button in
             ["action": String((button.identifier?.rawValue ?? "").dropFirst("sheet-row:".count)), "title": button.title,
              "label": button.accessibilityLabel() ?? "", "enabled": button.isEnabled].merging(placement(button, in: content)) { _, new in new }
         }
+        let headerActions: [[String: Any]] = headerButtons(in: content).map { button in
+            ["action": String((button.identifier?.rawValue ?? "").dropFirst("sheet-action:".count)), "title": button.title,
+             "label": button.accessibilityLabel() ?? "", "enabled": button.isEnabled, "keyEquivalent": button.keyEquivalent].merging(placement(button, in: content)) { _, new in new }
+        }
+        let headerMessage: [String: Any] = rendered(NSTextField.self, in: content)
+            .first { $0.identifier?.rawValue == "sheet-header-message" && !$0.isHiddenOrHasHiddenAncestor }
+            .map { label in
+                ["text": label.stringValue, "label": label.accessibilityLabel() ?? ""]
+                    .merging(placement(label, in: content)) { _, new in new }
+            } ?? [:]
+        let statuses: [[String: Any]] = rendered(NSTextField.self, in: content)
+            .filter { $0.identifier?.rawValue.hasPrefix("sheet-status:") == true && !$0.isHiddenOrHasHiddenAncestor }
+            .map { label in
+                ["id": String((label.identifier?.rawValue ?? "").dropFirst("sheet-status:".count)), "text": label.stringValue]
+                    .merging(placement(label, in: content)) { _, new in new }
+            }
         let editors: [[String: Any]] = rendered(NSTextView.self, in: content).filter { !$0.isHiddenOrHasHiddenAncestor && $0.isEditable }.map { editor in
             ["text": editor.string, "focused": panel.firstResponder === editor].merging(placement(editor, in: content)) { _, new in new }
         }
@@ -133,7 +173,8 @@ extension NativeSheets {
         }
         return ["foreground": panel.isVisible && panel.isKeyWindow && NSApp.isActive,
                 "width": content.bounds.width, "height": content.bounds.height,
-                "minimumWidth": panel.contentMinSize.width, "minimumHeight": panel.contentMinSize.height, "controls": controls, "rows": rows, "editors": editors,
+                "minimumWidth": panel.contentMinSize.width, "minimumHeight": panel.contentMinSize.height, "controls": controls, "rows": rows, "editors": editors, "headerActions": headerActions, "headerMessage": headerMessage, "statuses": statuses,
+                "formScrollY": formScroll(in: content)?.contentView.bounds.minY ?? 0,
                 "fields": model.state!.fields.filter { $0.section == shown }.map(\.id),
                 "actions": model.state!.actions.filter { $0.section == shown }.map(\.id), "message": model.state!.message ?? "",
                 "disabledActions": model.state!.actions.filter { $0.section == shown && $0.disabled == true }.map(\.id),

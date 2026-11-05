@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import { SKILL_RECOMMENDATIONS } from '../shared/skills-catalog'
 import {
+  recommendationImport,
+  SKILL_RECOMMENDATION_IMPORTS
+} from '../shared/skills-recommendations'
+import {
   assertSidebar,
   assertUsable,
   SETTINGS_DEFAULT_SIZE,
@@ -15,6 +19,8 @@ import {
 
 export interface SkillsEvidence extends SettingsEvidence {
   minimumHeight: number
+  /** The outer Settings form's vertical scroll offset, separate from SKILL.md's editor. */
+  formScrollY: number
   sidebarFocused: boolean
   /** Rendered navigation-row buttons of the shown pane. */
   rows: {
@@ -25,6 +31,16 @@ export interface SkillsEvidence extends SettingsEvidence {
     contained: boolean
     hitTarget: boolean
   }[]
+  /** AppKit buttons in the pinned nested header, measured after form scrolling. */
+  headerActions: {
+    action: string
+    label: string
+    enabled: boolean
+    contained: boolean
+    hitTarget: boolean
+  }[]
+  /** Rendered native status labels for navigation rows. */
+  statuses: { id: string; text: string; contained: boolean }[]
   /** Rendered editable text views of the shown pane. */
   editors: { text: string; contained: boolean; hitTarget: boolean }[]
   /** The shown pane's field and footer action IDs, and the footer actions shown disabled. */
@@ -35,7 +51,7 @@ export interface SkillsEvidence extends SettingsEvidence {
   busy: boolean
 }
 
-type Named = readonly { id: string; name: string }[]
+type Named = readonly { id: string; name: string; enabled?: boolean }[]
 export type SkillsExpectation =
   | {
       view: 'overview'
@@ -105,16 +121,62 @@ export function assertSkillsEvidence(
     assert.deepEqual(evidence.actions, ACTIONS[expect.view], `Skills ${expect.view} actions`)
     assert.deepEqual(evidence.disabledActions ?? [], [], `No disabled ${expect.view} actions`)
   }
+  assert.deepEqual(
+    evidence.headerActions.map((button) => button.action).sort(),
+    [...evidence.actions].sort(),
+    'Skills actions render in the pinned header'
+  )
+  for (const button of evidence.headerActions) {
+    assert.ok(
+      button.contained && button.hitTarget,
+      `Visible, hittable header action: ${button.action}`
+    )
+    assert.ok(button.label, `Accessible header action: ${button.action}`)
+    assert.equal(
+      button.enabled,
+      !evidence.disabledActions.includes(button.action),
+      `Header action enablement: ${button.action}`
+    )
+  }
   if (expect.view === 'overview') {
     const removed = expect.removed ?? []
     // The first installed row (or the empty row) is at the top and must be usable as rendered.
     expect.installed.forEach((skill, i) => {
       row(evidence, `skill-open:${skill.id}`, 'Edit…', `Edit ${skill.name}`, i === 0)
+      const status = evidence.values[`skill:${skill.id}`] ?? ''
+      assert.match(
+        status,
+        /^(On|Off) · (Manual|GitHub)( · Edited)?$/,
+        `Installed ${skill.name} shows enabled status`
+      )
+      if (skill.enabled !== undefined) assert.ok(status.startsWith(skill.enabled ? 'On' : 'Off'))
     })
+    const firstEnabled = expect.installed.find((skill) => skill.enabled !== false)
+    if (firstEnabled) {
+      const shown = evidence.statuses.find((status) => status.id === `skill:${firstEnabled.id}`)
+      assert.ok(shown, 'First enabled installed skill has a rendered status label')
+      assert.equal(
+        shown.text,
+        evidence.values[`skill:${firstEnabled.id}`],
+        'Rendered status matches saved enabled state'
+      )
+      assert.ok(
+        shown.text.startsWith('On ·') && shown.contained,
+        'First enabled skill shows On in the ordinary viewport'
+      )
+    }
+    assert.deepEqual(
+      evidence.fields.filter((id) => id.startsWith('skill:')),
+      expect.installed.map((skill) => `skill:${skill.id}`),
+      'Enabled library order follows the shown rows'
+    )
     for (const skill of removed)
       row(evidence, `skill-open:${skill.id}`, 'Restore…', `Restore ${skill.name}`)
     const recommended = new Set(expect.recommended ?? [])
-    for (const [index, entry] of SKILL_RECOMMENDATIONS.entries()) {
+    const visibleRecommendations = SKILL_RECOMMENDATIONS.filter(
+      (entry) => recommendationImport(entry) && SKILL_RECOMMENDATION_IMPORTS[entry.id]
+    )
+    for (const [index, entry] of visibleRecommendations.entries()) {
       // The first recommendation is in the viewport when the library is empty.
       // Check the rendered button at both the normal and minimum Settings widths.
       const firstVisible =
@@ -131,12 +193,26 @@ export function assertSkillsEvidence(
       )
       // A recommendation never reads as installed unless its folder is in the library.
       const value = evidence.values[`recommendation:${entry.id}`]
-      if (recommended.has(entry.id)) assert.equal(value, 'Installed', `${entry.id} is installed`)
-      else assert.notEqual(value, 'Installed', `${entry.id} is not shown as installed`)
+      if (recommended.has(entry.id))
+        assert.match(
+          value ?? '',
+          /^Installed · (On|Off)$/,
+          `${entry.id} has its library and enabled status`
+        )
+      else assert.ok(!value?.startsWith('Installed'), `${entry.id} is not shown as installed`)
+    }
+    for (const entry of SKILL_RECOMMENDATIONS.filter(
+      (candidate) => !visibleRecommendations.includes(candidate)
+    )) {
+      assert.ok(
+        !evidence.fields.includes(`recommendation:${entry.id}`),
+        `Unavailable ${entry.id} stays out of the list`
+      )
+      assert.ok(!evidence.rows.some((row) => row.action === `skill-recommendation:${entry.id}`))
     }
     assert.equal(
       evidence.rows.length,
-      expect.installed.length + removed.length + SKILL_RECOMMENDATIONS.length,
+      expect.installed.length + removed.length + visibleRecommendations.length,
       'Only the expected rows'
     )
     assert.equal(

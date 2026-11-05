@@ -94,8 +94,13 @@ export class NativeSheetController {
     await toast.runs[action.index ?? 0]?.()
   }
   /** Re-send the open sheet after its state changed in place (same window and ID). */
-  refresh() {
-    if (this.current) this.host.send('sheetState', { state: this.current.state })
+  refresh(clearDraftFields?: string[]) {
+    if (this.current)
+      this.host.send('sheetState', {
+        state: clearDraftFields?.length
+          ? { ...this.current.state, clearDraftFields }
+          : this.current.state
+      })
   }
   async action(action: NativeSheetAction) {
     const sheet = this.current
