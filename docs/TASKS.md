@@ -20,6 +20,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: require rendered confirmation before settling literal island drafts, and retain the Styles submitted turn across selection and workspace changes.
 - [x] Production composition repair: track Styles Apply terminals by exact chat and turn, including overlapping submissions in different workspaces.
 - [x] Production composition repair: provide a trustworthy source-backed rendered-value probe for supported literal islands before clearing their Apply drafts; leave unmappable literals pending with Retry and Revert.
+- [x] Review repair: require the parsed literal to feed the exact rendered opacity target and reject a same-file unrelated element even when its value matches.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
 ## LKM-542 — Annotation colors, persistent tools and editable canvas text
 

@@ -83,7 +83,7 @@ export async function checkChatIslands(host: NativeBridge, fixture: string, arti
     `
 const card = document.createElement('div');
 card.id = 'island-shadow-demo'; card.textContent = 'Light-driven shadow';
-card.setAttribute('data-trezi-source', 'island-light.js:6:1');
+card.setAttribute('data-trezi-source', 'island-light.js:7:1');
 card.style.cssText = 'margin:80px;padding:40px;background:white;border-radius:20px;width:180px';
 card.style.opacity = OPACITY;
 card.style.boxShadow = [-1,-2,-3].map((n,i) => (LIGHT_X*n*12)+'px '+(LIGHT_Y*n*12)+'px '+(SOFTNESS*(i+1))+'px rgba(0,0,0,0.12)').join(',');

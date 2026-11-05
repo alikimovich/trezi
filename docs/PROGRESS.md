@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-539 rendered opacity linkage review repair
+
+The prior source-stamped probe could mistake an unrelated element in the same file for the declared opacity target. The supported readback now requires the parsed literal to be a top-level constant directly assigned to the unique created element with the declared id, and its source stamp must identify that element's creation line. Ambiguous or dynamic source relationships leave Apply pending with Retry/Revert. The production transport fixture covers a linked positive and a same-file unrelated negative. Native acceptance remains pending after merge.
+
 ## 2026-11-05 — LKM-539 declarative literal readback
 
 - Island definitions may now declare a non-executable readback for a unitless numeric literal directly controlling the computed opacity of one source-stamped element. The production chat runtime checks the live preview's project, session, document frame, exact element and source file, then rechecks the source hash after reading WebKit. An unsupported legacy literal or an unavailable/mismatched preview keeps its draft pending with an actionable notice, Retry and Revert; it never settles from source text alone. The focused island fixture covers a supported value, stale revision, wrong source stamp and wrong project; the native fixture adds real WebKit transport assertions for the post-merge run. Universal arbitrary-literal readback is unavailable because a source constant can feed canvas, animation or arbitrary program logic without a declarative DOM value to inspect. Independent review, exact-head CI and native acceptance remain manager gates.

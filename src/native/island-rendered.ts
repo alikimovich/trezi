@@ -4,6 +4,7 @@ import { previewPage } from '../main/preview-page'
 import { previewAgentHost } from '../main/preview-state'
 import type { IslandRecord, IslandValue } from '../shared/chat-islands'
 import { projectKey } from '../shared/projectKey'
+import { linkedOpacityLine } from './island-rendered-link'
 
 /** Read only a declared, source-stamped computed value from the actual preview frame. */
 export async function confirmIslandRendered(
@@ -29,6 +30,12 @@ export async function confirmIslandRendered(
     )
   )
     return false
+  const initialSource = await islandSource(root, record).catch(() => null)
+  if (!initialSource || initialSource.revision !== revision) return false
+  const lines = bindings.map(({ param }) =>
+    linkedOpacityLine(initialSource.code, record.manifest.file, param!)
+  )
+  if (lines.some((line) => line === null)) return false
   const before = await previewPage(root)
   const host = previewAgentHost()
   const server = previewServers.get(projectKey(root))
@@ -84,8 +91,8 @@ export async function confirmIslandRendered(
     return (
       item &&
       typeof item.stamp === 'string' &&
-      item.stamp.startsWith(`${record.manifest.file}:`) &&
-      /^\d+(?::\d+)?$/.test(item.stamp.slice(record.manifest.file.length + 1)) &&
+      item.stamp.startsWith(`${record.manifest.file}:${lines[index]}:`) &&
+      /^\d+$/.test(item.stamp.slice(`${record.manifest.file}:${lines[index]}:`.length)) &&
       typeof item.value === 'string' &&
       Number(item.value) === spec[index].value
     )

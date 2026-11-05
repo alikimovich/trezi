@@ -559,7 +559,8 @@ try {
   assert.equal(evaluations, 2)
   // The actual chat runtime uses this fixed preview transport. Only a declared
   // computed opacity on the matching source-stamped element can confirm Apply.
-  const opacityCode = 'const OPACITY = 0.5;\n'
+  const opacityCode =
+    "const OPACITY = 0.5;\nconst card = document.createElement('div');\ncard.id = 'card';\ncard.style.opacity = OPACITY;\ndocument.body.append(card);\n"
   await writeFile(join(root, 'opacity.js'), opacityCode)
   const opacityDefinition = islandDefinition({
     manifest: {
@@ -592,7 +593,7 @@ try {
   }
   const opacityRevision = (await islandSource(root, opacityRecord)).revision
   let pageHref = 'http://127.0.0.1:7777/'
-  let renderedStamp = 'opacity.js:1:1'
+  let renderedStamp = 'opacity.js:2:1'
   let renderedValue = '0.5'
   let startedAt = 1770000000000
   let navigateDuringRead = false
@@ -618,8 +619,20 @@ try {
   assert.equal(
     await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, opacityRevision),
     true,
-    'production callback checks a source-stamped rendered value in the current preview session'
+    'production callback links the exact source constant to the target opacity in the current preview session'
   )
+  const unrelatedCode =
+    "const OPACITY = 0.5;\nconst other = document.createElement('div');\nother.id = 'other';\nother.style.opacity = OPACITY;\nconst card = document.createElement('div');\ncard.id = 'card';\ncard.style.opacity = 0.5;\ndocument.body.append(other, card);\n"
+  await writeFile(join(root, 'opacity.js'), unrelatedCode)
+  const unrelatedRevision = (await islandSource(root, opacityRecord)).revision
+  renderedStamp = 'opacity.js:5:1'
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, unrelatedRevision),
+    false,
+    'a matching same-file element is not proof that the controlled literal feeds its opacity'
+  )
+  await writeFile(join(root, 'opacity.js'), opacityCode)
+  renderedStamp = 'opacity.js:2:1'
   assert.equal(
     await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, 'stale-revision'),
     false,
@@ -631,7 +644,7 @@ try {
     false,
     'a matching rendered value from another source cannot settle Apply'
   )
-  renderedStamp = 'opacity.js:1:1'
+  renderedStamp = 'opacity.js:2:1'
   renderedValue = '1'
   assert.equal(
     await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, opacityRevision),
