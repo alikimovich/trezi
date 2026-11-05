@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+
+- Private Vite and SvelteKit previews launched through Yarn, Bun or pnpm receive Trezi's assigned port instead of timing out on a different port (LKM-519).
+
 ## [0.13.22] - 2026-11-04
 
 ### Fixed
