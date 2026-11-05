@@ -52,7 +52,8 @@ const base = {
   message: '',
   busy: false,
   disabledActions: [],
-  headerActions: header(['skill-add', 'skill-folder', 'skill-github'])
+  headerActions: header(['skill-add', 'skill-folder', 'skill-github']),
+  statuses: []
 }
 const reject = (evidence, expect, mutate, width = 680) => {
   const bad = structuredClone(evidence)
@@ -141,6 +142,7 @@ const overview = {
     ])
   ]),
   rows: [button('skill-open:a1', 'Edit…', 'Edit ui-notes'), ...recommended],
+  statuses: [{ id: 'skill:a1', text: 'On · Manual', contained: true }],
   editors: [],
   fields: ['skill:a1', 'recommendations-note'],
   actions: ['skill-add', 'skill-folder', 'skill-github']
@@ -156,6 +158,8 @@ reject(overview, expectOverview, (e) => e.fields.push('skills-status'))
 reject(overview, expectOverview, (e) => (e.fields = ['skill:a1']))
 reject(overview, expectOverview, (e) => (e.actions = ['skill-add']))
 reject(overview, expectOverview, (e) => (e.headerActions[0].contained = false))
+reject(overview, expectOverview, (e) => (e.statuses[0].contained = false))
+reject(overview, expectOverview, (e) => (e.statuses[0].text = 'Off · Manual'))
 reject(overview, expectOverview, (e) => (e.disabledActions = ['skill-github']))
 reject(
   overview,
@@ -182,6 +186,7 @@ reject(overview, expectOverview, (e) => (e.width = 780))
 const emptyOverview = {
   ...structuredClone(overview),
   rows: recommended.map((r, index) => ({ ...r, contained: index === 0 })),
+  statuses: [],
   fields: ['skills-status', 'recommendations-note']
 }
 const expectEmpty = { view: 'overview', installed: [] }

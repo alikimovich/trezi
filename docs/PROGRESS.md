@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-525 review repair: nested headings and scroll evidence
+
+- Nested Skills forms now omit a group heading when it repeats the pinned navigation title, retaining distinct field groups and help. The windowless Settings fixture scrolls a long provider form before checking Back and the primary action remain visible and hittable. The Skills rendered-state fixture inspects the first enabled installed row's native On label within the ordinary viewport. Post-merge native visual acceptance remains with the manager.
+
 ## 2026-11-04 — LKM-525 Skills list follow-up
 
 - The normal recommendations list now includes only importable, path-verified catalog entries with recorded import evidence. Empty categories disappear, while catalog provenance and any installed library record remain intact. Installed rows use persisted enabled state for ordering and On/Off labels; matching recommendation rows show both Installed and On/Off. Focused list/evidence fixtures cover unavailable entries, an installed unavailable source, state changes and the existing native viewport assertions. Native GUI acceptance remains with the manager after merge.

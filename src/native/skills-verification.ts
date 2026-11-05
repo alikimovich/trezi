@@ -37,6 +37,8 @@ export interface SkillsEvidence extends SettingsEvidence {
     contained: boolean
     hitTarget: boolean
   }[]
+  /** Rendered native status labels for navigation rows. */
+  statuses: { id: string; text: string; contained: boolean }[]
   /** Rendered editable text views of the shown pane. */
   editors: { text: string; contained: boolean; hitTarget: boolean }[]
   /** The shown pane's field and footer action IDs, and the footer actions shown disabled. */
@@ -147,6 +149,20 @@ export function assertSkillsEvidence(
       )
       if (skill.enabled !== undefined) assert.ok(status.startsWith(skill.enabled ? 'On' : 'Off'))
     })
+    const firstEnabled = expect.installed.find((skill) => skill.enabled !== false)
+    if (firstEnabled) {
+      const shown = evidence.statuses.find((status) => status.id === `skill:${firstEnabled.id}`)
+      assert.ok(shown, 'First enabled installed skill has a rendered status label')
+      assert.equal(
+        shown.text,
+        evidence.values[`skill:${firstEnabled.id}`],
+        'Rendered status matches saved enabled state'
+      )
+      assert.ok(
+        shown.text.startsWith('On ·') && shown.contained,
+        'First enabled skill shows On in the ordinary viewport'
+      )
+    }
     assert.deepEqual(
       evidence.fields.filter((id) => id.startsWith('skill:')),
       expect.installed.map((skill) => `skill:${skill.id}`),

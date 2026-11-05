@@ -34,6 +34,9 @@ func settingsState(_ providers: [[String: Any]], _ actions: [[String: Any]], nes
 let list: [[String: Any]] = [["id":"connection", "section":"providers", "draft":true, "label":"Provider", "kind":"choice", "value":"gw", "choices":[["value":"gw", "label":"AI Gateway · 2 models · API key saved"]]]]
 let listActions: [[String: Any]] = [["id":"add", "label":"Add provider…", "section":"providers"], ["id":"edit", "label":"Edit…", "section":"providers"], ["id":"delete", "label":"Remove…", "section":"providers"]]
 let state = try settingsState(list, listActions)
+let skillDetail = try JSONDecoder().decode(SheetSection.self, from: JSONSerialization.data(withJSONObject: ["id":"skills", "label":"Skills", "symbol":"book.closed", "navigationTitle":"emil-design-eng"]))
+require(!SectionedSheetContent.showsGroupHeading("emil-design-eng", in: skillDetail), "Nested skill context appears only in the pinned header")
+require(SectionedSheetContent.showsGroupHeading("SKILL.md", in: skillDetail), "A distinct nested group heading remains visible")
 sheets.model.update(state)
 // Match production: the split view with the source-list sidebar, installed the way NativeSheets does.
 sheets.install(in: window)
@@ -104,12 +107,15 @@ snapshot("providers-780")
 sheets.model.setValue("connection", "gw")
 require(emitted.last?["action"] as? String == "section", "Draft fields never autosave")
 // The provider editor swaps the pane's fields in place: new fields are seeded, removed ones forgotten.
-let editorState = try settingsState([
+let editorFields: [[String: Any]] = [
     ["id":"label", "section":"providers", "draft":true, "label":"Provider name", "kind":"text", "value":"AI Gateway"],
     ["id":"url", "section":"providers", "draft":true, "label":"API base URL", "kind":"text", "value":"https://ai-gateway.vercel.sh/v1"],
     ["id":"key", "section":"providers", "draft":true, "label":"API key", "kind":"secure", "value":""],
     ["id":"models", "section":"providers", "draft":true, "label":"Model IDs (one per line)", "kind":"multiline", "value":""]
-], [["id":"back", "label":"Back", "section":"providers"], ["id":"connect", "label":"Load models", "section":"providers"], ["id":"save-provider", "label":"Add provider", "primary":true, "section":"providers"]], nested: true)
+] + (0..<12).map { index in
+    ["id":"provider-help-\(index)", "section":"providers", "label":"More information \(index)", "kind":"readonly", "value":"This long provider help stays in the scrolling form."]
+}
+let editorState = try settingsState(editorFields, [["id":"back", "label":"Back", "section":"providers"], ["id":"connect", "label":"Load models", "section":"providers"], ["id":"save-provider", "label":"Add provider", "primary":true, "section":"providers"]], nested: true)
 sheets.model.update(editorState)
 settle()
 require(sheets.model.values["label"] == "AI Gateway" && sheets.model.values["connection"] == nil && sheets.model.values["projectUi"] == "false", "In-place pane swap seeds and forgets only its own fields")
@@ -117,6 +123,14 @@ require(sheets.model.section == "providers", "An in-place update keeps the selec
 let header = try report()["headerActions"] as! [[String: Any]]
 require(Set(header.compactMap { $0["action"] as? String }) == Set(["back", "connect", "save-provider"]), "Nested provider actions move to the pinned header")
 require(header.allSatisfy { $0["contained"] as? Bool == true && $0["hitTarget"] as? Bool == true && $0["enabled"] as? Bool == true }, "Nested provider actions are visible and hittable")
+_ = try report(["scrollFormToEnd":true]); settle()
+let scrolled = try report()
+require((scrolled["formScrollY"] as? CGFloat ?? 0) > 0, "The nested provider form actually scrolled")
+let pinned = scrolled["headerActions"] as! [[String: Any]]
+for action in ["back", "save-provider"] {
+    guard let button = pinned.first(where: { $0["action"] as? String == action }) else { fatalError("Missing pinned \(action)") }
+    require(button["contained"] as? Bool == true && button["hitTarget"] as? Bool == true && button["enabled"] as? Bool == true, "Pinned \(action) remains visible and hittable after scrolling")
+}
 sheets.model.setValue("label", "Draft provider")
 try select("general"); try select("providers")
 require(sheets.model.values["label"] == "Draft provider", "Sidebar reentry preserves the unsaved provider draft")

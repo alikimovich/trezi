@@ -10,6 +10,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Preserve unsaved draft values on Back and reopen within the same Settings window; clear them on successful save/create/remove paths.
 - [x] Show enabled installed skills first from the saved skill state, retain unavailable installed records, label On/Off, and hide unavailable recommendations and empty groups.
 - [x] Extend Skills list and rendered-state fixtures for filtering, ordering, enabled state, and installed records.
+- [x] Review repair: remove repeated nested Skills headings and assert pinned controls after form scroll plus the rendered first enabled On status.
 - [ ] Manager: current-head CI, independent review and post-merge native Settings acceptance.
 
 ## LKM-523 — Loading titles, sidebar typography and New Chat

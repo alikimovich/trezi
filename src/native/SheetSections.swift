@@ -14,6 +14,9 @@ struct SectionedSheetContent: View {
     let sections: [SheetSection]
     var form: SheetContent { SheetContent(model: model) }
     var current: SheetSection? { sections.first { $0.id == model.section } ?? sections.first }
+    static func showsGroupHeading(_ group: String, in section: SheetSection) -> Bool {
+        group != section.navigationTitle
+    }
     func visible(_ field: SheetField) -> Bool {
         guard let condition = field.visibleWhen else { return true }
         return model.values[condition.field] == condition.value
@@ -68,7 +71,7 @@ struct SectionedSheetContent: View {
                                 Text(detail).font(.body).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                             }
                         }
-                        if let group {
+                        if let group, Self.showsGroupHeading(group, in: section) {
                             Text(group).font(.headline).foregroundStyle(.primary).padding(.top, index == 0 ? 10 : 0)
                         }
                     }.textCase(nil).padding(.bottom, index == 0 ? 8 : 2)
@@ -113,7 +116,7 @@ struct SectionedSheetContent: View {
             // A navigation row (Skills): label and help, its status, and a button that opens it.
             LabeledContent {
                 HStack(spacing: 10) {
-                    if !field.value.isEmpty { Text(field.value).foregroundStyle(.secondary).lineLimit(1) }
+                    if !field.value.isEmpty { RowStatus(text: field.value, field: field.id) }
                     RowButton(title: field.actionLabel ?? "Open…", label: "\((field.actionLabel ?? "Open").replacingOccurrences(of: "…", with: "")) \(field.label)",
                               action: action, perform: { model.perform($0) }).fixedSize()
                 }
@@ -155,6 +158,26 @@ struct SectionedSheetContent: View {
         default:
             TextField(text: form.binding(field), prompt: Text(field.placeholder ?? "")) { label(field) }
         }
+    }
+}
+
+/// A real native label lets the Settings evidence inspect the visible On/Off text
+/// alongside the rendered navigation button, including after the form scrolls.
+struct RowStatus: NSViewRepresentable {
+    let text: String
+    let field: String
+    func makeNSView(context: Context) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.textColor = .secondaryLabelColor
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 1
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return label
+    }
+    func updateNSView(_ label: NSTextField, context: Context) {
+        label.stringValue = text
+        label.identifier = NSUserInterfaceItemIdentifier("sheet-status:\(field)")
+        label.setAccessibilityLabel(text)
     }
 }
 
