@@ -210,17 +210,17 @@ extension Host {
                        "selected":threeD.model.selected, "separation":threeD.model.separation,
                        "compact":threeD.model.compact,
                        "code":threeD.model.hasSource, "status":threeD.model.status,
-                       "header":NSStringFromRect(threeD.header.frame), "footer":NSStringFromRect(threeD.footer.frame),
-                       "headerRect":rect(threeD.header.frame), "footerRect":rect(threeD.footer.frame),
+                       "header":NSStringFromRect(.zero), "footer":NSStringFromRect(threeD.footer.frame),
+                       "headerRect":rect(.zero), "footerRect":rect(threeD.footer.frame),
                        "contentTop":window.contentLayoutRect.maxY.isFinite ? canvas.convert(NSPoint(x: 0, y: window.contentLayoutRect.maxY), from: nil).y : 0,
-                       "headerHidden":threeD.header.isHidden, "footerHidden":threeD.footer.isHidden,
+                       "headerHidden":true, "footerHidden":threeD.footer.isHidden,
                        "inspector":NSStringFromRect(editingInspector.frame), "inspectorHidden":editingInspector.isHidden,
                        "layersFrame":NSStringFromRect(layers.frame), "layersHidden":layers.isHidden,
                        "inspectorRect":rect(editingInspector.frame), "layersRect":rect(layers.frame),
                        "insets":["top":insets.top, "bottom":insets.bottom, "left":insets.left, "right":insets.right],
                        "focus":window.firstResponder === views["preview"] ? "preview" : window.firstResponder === threeD.scene ? "scene" : threeD.ownsFocus(window.firstResponder) ? "chrome" : "other",
                        "dockedSourceRect":dockedSource.map { rect($0.frame) } ?? [:],
-                       "headerType":String(describing: type(of: threeD.header)),
+                       "headerType":"none",
                        "footerType":String(describing: type(of: threeD.footer)),
                        "sceneType":String(describing: type(of: threeD.scene))].merging(threeD.inspectScene()) { old, _ in old })
         case "threeDPerform":
@@ -236,7 +236,7 @@ extension Host {
             }
         case "threeDFocus":
             guard ephemeral, threeD.active else { reply(id, false); return true }
-            let target: NSResponder = c["target"] as? String == "chat" ? composer.text : threeD.header
+            let target: NSResponder = c["target"] as? String == "chat" ? composer.text : threeD.scene
             reply(id, window.makeFirstResponder(target))
         case "threeDEscape":
             guard ephemeral else { reply(id, false); return true }

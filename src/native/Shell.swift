@@ -143,6 +143,13 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     /// (macOS 26; the layout check allows ±1).
     var moreShift: CGFloat = 46
     let addressHeader = ToolbarAddressView()
+    private let nestedBack = NSButton(title: "", target: nil, action: nil)
+    private let nestedTitle = NSTextField(labelWithString: "")
+    private let nestedHeader = NSStackView()
+    var nestedBackAction: (() -> Void)?
+    var nestedCodeAction: (() -> Void)?
+    private var nestedActive = false
+    private var nestedCodeEnabled = false
     private var chatHeaderWidth: NSLayoutConstraint!
     private var previewTextColor = NSColor.labelColor { didSet { branchMenu.dot.textColor = previewTextColor } }
     let address = PreviewAddressField()
@@ -351,13 +358,24 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             // The URL's resting text keeps its authority; a branch name keeps its start.
             branchMenu.cell?.lineBreakMode = .byTruncatingTail
             let header = addressHeader
-            for view in [address, branchMenu] { header.addArrangedSubview(view) }
+            nestedBack.image = toolbarSymbol("chevron.left", "Back to page")
+            nestedBack.imagePosition = .imageOnly; nestedBack.bezelStyle = .texturedRounded
+            nestedBack.setAccessibilityLabel("Back to page"); nestedBack.toolTip = "Back to page"
+            nestedBack.target = self; nestedBack.action = #selector(backFromNested(_:))
+            nestedTitle.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+            nestedTitle.lineBreakMode = .byTruncatingTail
+            nestedTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            nestedHeader.orientation = .horizontal; nestedHeader.alignment = .centerY; nestedHeader.spacing = 6
+            nestedHeader.addArrangedSubview(nestedBack); nestedHeader.addArrangedSubview(nestedTitle)
+            nestedHeader.isHidden = true
+            for view in [address, branchMenu, nestedHeader] { header.addArrangedSubview(view) }
             header.orientation = .vertical; header.alignment = .leading; header.spacing = 0
             header.translatesAutoresizingMaskIntoConstraints = false
             address.translatesAutoresizingMaskIntoConstraints = false; branchMenu.translatesAutoresizingMaskIntoConstraints = false
             let width = header.widthAnchor.constraint(equalToConstant: ToolbarAddressLayout.minimum); addressWidth = width
             NSLayoutConstraint.activate([header.widthAnchor.constraint(greaterThanOrEqualToConstant: ToolbarAddressLayout.floor), width,
-                address.widthAnchor.constraint(equalTo: header.widthAnchor), branchMenu.widthAnchor.constraint(lessThanOrEqualTo: header.widthAnchor)])
+                address.widthAnchor.constraint(equalTo: header.widthAnchor), branchMenu.widthAnchor.constraint(lessThanOrEqualTo: header.widthAnchor),
+                nestedHeader.widthAnchor.constraint(equalTo: header.widthAnchor), nestedBack.widthAnchor.constraint(equalToConstant: 28)])
             item.view = header; item.isBordered = false
         } else if key == "publish" {
             item.image = nil
@@ -449,7 +467,17 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
     @objc func toolbarAction(_ item: NSToolbarItem) {
         if item.itemIdentifier.rawValue == "overlay", let overlayAction { overlayAction(); return }
+        if item.itemIdentifier.rawValue == "code", nestedActive { if nestedCodeEnabled { nestedCodeAction?() }; return }
         emit(["event":"shell-action", "action":item.itemIdentifier.rawValue])
+    }
+    @objc private func backFromNested(_ sender: NSButton) { nestedBackAction?() }
+    func setNestedObject(_ title: String?, hasSource: Bool = false) {
+        let active = title != nil
+        guard nestedActive != active || nestedTitle.stringValue != (title ?? "") || nestedCodeEnabled != hasSource else { return }
+        nestedActive = active; nestedCodeEnabled = hasSource
+        nestedTitle.stringValue = title ?? ""; nestedTitle.toolTip = title
+        address.isHidden = active; branchMenu.isHidden = active; nestedHeader.isHidden = !active
+        updateToolbar()
     }
     @objc func previewMenuAction(_ item: NSMenuItem) {
         guard let payload = item.representedObject as? [String: String] else { return }
@@ -468,7 +496,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     func updateToolbar() {
         defer { for group in toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }) { group.refresh() } }
         for (key, item) in toolbarItems {
-            item.isEnabled = key == "chat" ? true : key == "code" || key == "expand" ? currentProject != nil : key == "branch" ? previewState["branch"] is String : ready
+            item.isEnabled = key == "chat" ? true : key == "code" && nestedActive ? nestedCodeEnabled : key == "code" || key == "expand" ? currentProject != nil : key == "branch" ? previewState["branch"] is String : ready
         }
         let selected = allRows.first(where: { $0.id == selectedID })
         if selected?.loadingTitle != true || selected?.id != chatTitleDecipherID {
@@ -570,7 +598,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             branchMenu.setProgress(busy, after: dotted + " ", description: spoken)
         }
         if let item = toolbarItems["publish"] as? NSMenuToolbarItem { updatePublish(item, state: previewState, ready: ready) }
-        toolbarItems["code"]?.toolTip = previewState["codeOpen"] as? Bool == true ? "Hide Code" : "Show Code"
+        toolbarItems["code"]?.toolTip = nestedActive ? (nestedCodeEnabled ? "Show selected object code" : "Source unavailable for selected object") : previewState["codeOpen"] as? Bool == true ? "Hide Code" : "Show Code"
         toolbarItems["code"]?.label = toolbarItems["code"]?.toolTip ?? "Show Code"
         toolbarItems["expand"]?.toolTip = chatHidden ? "Restore Layout" : "Expand Preview"
         toolbarItems["expand"]?.label = toolbarItems["expand"]?.toolTip ?? "Expand Preview"
@@ -770,6 +798,16 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         result.merge(branchMenu.progressInspect) { _, new in new }
         result.merge(toolbarInspect()) { _, new in new }
         result["resizeSnapshot"] = resizeSnapshot
+        result["nestedTitle"] = nestedActive ? nestedTitle.stringValue : ""
+        result["nestedBack"] = nestedActive && !nestedBack.isHidden
+        result["nestedCodeEnabled"] = nestedActive && nestedCodeEnabled
+        func frame(_ view: NSView) -> [String: CGFloat] {
+            let r = mainFrame(view) ?? .zero
+            return ["x":r.minX, "y":r.minY, "width":r.width, "height":r.height]
+        }
+        result["nestedBackFrame"] = frame(nestedBack)
+        result["nestedTitleFrame"] = frame(nestedTitle)
+        result["nestedTitleMonospace"] = nestedTitle.font?.fontDescriptor.symbolicTraits.contains(.monoSpace) == true
         result.merge(publishInspect(toolbarItems["publish"] as? NSMenuToolbarItem, state: previewState)) { _, new in new }
         result.merge(moreInspect(toolbarItems["more"] as? NSMenuToolbarItem)) { _, new in new }
         result.merge(islandInspect()) { _, new in new }
@@ -798,6 +836,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             sidebarItem.isCollapsed.toggle(); split.view.layoutSubtreeIfNeeded(); return true
         }
         if action == "new-chat" { return startNewChat() }
+        if action == "nested-back", nestedActive { nestedBack.performClick(nil); return true }
+        if action == "nested-code", nestedActive, nestedCodeEnabled, let item = toolbarItems["code"] { toolbarAction(item); return true }
         if action == "header-new-chat", let item = toolbarItems["chat-new"], item.isEnabled, chatNewVisible {
             headerNewChat(item); return true
         }
