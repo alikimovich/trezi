@@ -84,7 +84,7 @@ export function observedSourceOwner(owner: SourceOwner, effect?: SourceEffect): 
       const result = await run(
         root,
         () => owner.undo(root),
-        (result) => (result.ok && result.file ? [result.file] : [])
+        (result) => (result.ok ? (result.effects ?? []) : [])
       )
       if (result.ok) edited(root, [result.file])
       return result
@@ -93,7 +93,7 @@ export function observedSourceOwner(owner: SourceOwner, effect?: SourceEffect): 
       const result = await run(
         root,
         () => owner.redo(root),
-        (result) => (result.ok && result.file ? [result.file] : [])
+        (result) => (result.ok ? (result.effects ?? []) : [])
       )
       if (result.ok) edited(root, [result.file])
       return result
@@ -102,7 +102,7 @@ export function observedSourceOwner(owner: SourceOwner, effect?: SourceEffect): 
       const result = await run(
         root,
         () => owner.revert(root, group),
-        (result) => (result.ok && result.file ? [result.file] : [])
+        (result) => (result.ok ? (result.effects ?? []) : [])
       )
       if (result.ok) edited(root, [result.file])
       return result
@@ -111,7 +111,7 @@ export function observedSourceOwner(owner: SourceOwner, effect?: SourceEffect): 
       const result = await run(
         root,
         () => owner.createFile(root, path),
-        (result) => (result.ok ? [result.path ?? path] : [])
+        (result) => (result.ok ? (result.effects ?? []) : [])
       )
       if (result.ok) edited(root, [result.path ?? path])
       return result
@@ -120,7 +120,7 @@ export function observedSourceOwner(owner: SourceOwner, effect?: SourceEffect): 
       const result = await run(
         root,
         () => owner.renameFile(root, from, to),
-        (result) => (result.ok ? [from, result.path ?? to] : [])
+        (result) => (result.ok ? (result.effects ?? []) : [])
       )
       if (result.ok) edited(root, [from, result.path ?? to])
       return result
@@ -129,7 +129,7 @@ export function observedSourceOwner(owner: SourceOwner, effect?: SourceEffect): 
       const result = await run(
         root,
         () => owner.deleteFile(root, path),
-        (result) => (result.ok ? [path] : [])
+        (result) => (result.ok ? (result.effects ?? []) : [])
       )
       if (result.ok) edited(root, [path])
       return result

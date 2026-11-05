@@ -195,7 +195,10 @@ document.body.append(card);
   ]
   for (const [index, values] of edits.entries()) {
     const expected = { ...initial, ...values }
-    await host.request('islandPerform', { island: result.id, action: 'commit', values })
+    await host.request('islandPerform', { island: result.id, action: 'draft', values })
+    assert.equal(readFileSync(file, 'utf8'), code, 'shadow draft leaves source unchanged')
+    await wait(() => previewMatches(expected))
+    await host.request('islandPerform', { island: result.id, action: 'apply-draft' })
     await wait(() =>
       Object.entries(values).every(([key, value]) =>
         readFileSync(file, 'utf8').includes(`const SHADOW_${key} = ${JSON.stringify(value)};`)

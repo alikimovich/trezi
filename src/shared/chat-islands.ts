@@ -69,6 +69,8 @@ export interface IslandView {
   replay: boolean
   /** Inline note, e.g. a bound value changed outside the island and the controls were refreshed. */
   notice?: string
+  /** Unapplied frontend values; never imply that they are already in source. */
+  draft?: { count: number; preview: boolean; conflict: boolean }
 }
 export interface IslandCommand {
   chat: string
@@ -81,6 +83,10 @@ export interface IslandCommand {
   operation: string
   action:
     | 'commit'
+    | 'draft'
+    | 'apply-draft'
+    | 'undo-draft'
+    | 'revert-draft'
     | 'reset'
     | 'undo'
     | 'reload'

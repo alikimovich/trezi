@@ -12,14 +12,23 @@ import { sourceOwner } from './source-owner'
  * (except a case-only rename), and a deleted file goes to the Trash.
  */
 
+/** Owner effect evidence is internal; the editor keeps its existing result shape. */
+const visibleResult = async (operation: Promise<FileOpResult>): Promise<FileOpResult> => {
+  const result = await operation
+  const visible: FileOpResult = { ok: result.ok }
+  if (result.path) visible.path = result.path
+  if (result.error) visible.error = result.error
+  return visible
+}
+
 /** Create an empty file at `path` (repo-relative); missing parents are created. */
 export const createProjectFile = (root: string, path: string): Promise<FileOpResult> =>
-  sourceOwner().createFile(root, path)
+  visibleResult(sourceOwner().createFile(root, path))
 
 /** Rename (or move) a file; refuses to overwrite unless only the letter case differs. */
 export const renameProjectFile = (root: string, from: string, to: string): Promise<FileOpResult> =>
-  sourceOwner().renameFile(root, from, to)
+  visibleResult(sourceOwner().renameFile(root, from, to))
 
 /** Move a file to the Trash. */
 export const deleteProjectFile = (root: string, path: string): Promise<FileOpResult> =>
-  sourceOwner().deleteFile(root, path)
+  visibleResult(sourceOwner().deleteFile(root, path))

@@ -20,6 +20,7 @@ import { enqueueRepoWrite } from '../src/main/repo-write-queue.ts'
 import { setRepositoryOwner } from '../src/main/repository-owner.ts'
 import { LIVE_EFFECT_TOOLS } from '../src/main/session-tools.ts'
 import { observedSourceOwner } from '../src/main/source-changes.ts'
+import { contentHash } from '../src/main/source-owner.ts'
 import { newChat, reduce } from '../src/native/chat-state.ts'
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-live-change-')))
@@ -166,6 +167,97 @@ try {
     'a refused source edit does not claim an external write'
   )
   assert.equal(readFileSync(join(live, 'README.md'), 'utf8'), 'external after stale proposal\n')
+
+  // Owner results authenticate the exact bytes left by Undo/Redo/Revert and file
+  // operations. An external editor writing the same path after the owner returns
+  // must remain visible, even though it lands inside the effect snapshot window.
+  let overwrite = false
+  const restored = (path, value) => {
+    write(live, path, value)
+    if (overwrite) write(live, path, 'external after owner operation\n')
+    return { ok: true, file: path, effects: [{ path, hash: contentHash(value) }] }
+  }
+  const sourceOperations = observedSourceOwner(
+    {
+      undo: async () => restored('README.md', 'undone\n'),
+      redo: async () => restored('README.md', 'redone\n'),
+      revert: async () => restored('README.md', 'reverted\n'),
+      createFile: async (_root, path) => {
+        write(live, path, '')
+        if (overwrite) write(live, path, 'external after create\n')
+        return { ok: true, path, effects: [{ path, hash: contentHash('') }] }
+      },
+      renameFile: async (_root, from, to) => {
+        const value = readFileSync(join(live, from), 'utf8')
+        rmSync(join(live, from))
+        write(live, to, value)
+        if (overwrite) write(live, to, 'external after rename\n')
+        return {
+          ok: true,
+          path: to,
+          effects: [
+            { path: from, absent: true },
+            { path: to, hash: contentHash(value) }
+          ]
+        }
+      },
+      deleteFile: async (_root, path) => {
+        rmSync(join(live, path))
+        if (overwrite) write(live, path, 'external after delete\n')
+        return { ok: true, path, effects: [{ path, absent: true }] }
+      }
+    },
+    enqueueRepoWrite
+  )
+  for (const method of ['undo', 'redo', 'revert']) {
+    overwrite = false
+    assert.equal(
+      await turn(() => sourceOperations[method](live, 'group')),
+      null,
+      `${method} is owned`
+    )
+    overwrite = true
+    assert.deepEqual(
+      (await turn(() => sourceOperations[method](live, 'group')))?.files,
+      ['README.md'],
+      `${method} does not claim an external same-path overwrite`
+    )
+  }
+  overwrite = false
+  assert.equal(await turn(() => sourceOperations.createFile(live, 'created.txt')), null)
+  overwrite = true
+  assert.deepEqual(
+    (await turn(() => sourceOperations.createFile(live, 'created-again.txt')))?.files,
+    ['created-again.txt'],
+    'create does not claim an external same-path write'
+  )
+  write(live, 'rename-from.txt', 'rename me\n')
+  overwrite = false
+  assert.equal(
+    await turn(() => sourceOperations.renameFile(live, 'rename-from.txt', 'renamed.txt')),
+    null
+  )
+  write(live, 'rename-from-again.txt', 'rename me again\n')
+  overwrite = true
+  assert.deepEqual(
+    (
+      await turn(() =>
+        sourceOperations.renameFile(live, 'rename-from-again.txt', 'renamed-again.txt')
+      )
+    )?.files,
+    ['renamed-again.txt'],
+    'rename does not claim an external destination overwrite'
+  )
+  write(live, 'delete-me.txt', 'delete me\n')
+  overwrite = false
+  assert.equal(await turn(() => sourceOperations.deleteFile(live, 'delete-me.txt')), null)
+  write(live, 'delete-me-again.txt', 'delete me again\n')
+  overwrite = true
+  assert.deepEqual(
+    (await turn(() => sourceOperations.deleteFile(live, 'delete-me-again.txt')))?.files,
+    ['delete-me-again.txt'],
+    'delete does not claim an external same-path recreation'
+  )
 
   // (4) Dev-server output never counts, untracked or not ignored.
   assert.equal(

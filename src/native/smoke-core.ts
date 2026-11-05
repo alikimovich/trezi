@@ -1088,6 +1088,16 @@ export async function runNativeCoreSmoke(
             value: '12px'
           }
         })
+        assert.ok(!moduleSource().includes('row-gap: 12px'), 'Styles draft does not write source')
+        const pending = await host.request('inspectorInspect')
+        assert.equal(pending.draft?.count, 1, 'Styles preview is visibly pending')
+        await host.request('inspectorPerform', {
+          action: {
+            root: fixture,
+            generation: moduleState.generation,
+            action: 'apply-drafts'
+          }
+        })
         await wait(async () => {
           const state = await host.request('inspectorInspect')
           return state.edits > moduleEdits && moduleSource().includes('row-gap: 12px')
@@ -1098,6 +1108,20 @@ export async function runNativeCoreSmoke(
               `getComputedStyle(document.querySelector('#native-module-card')).rowGap === '12px'`
             ),
           'CSS Module applied value is visible in the rendered preview'
+        )
+        await invoke('styles:clear-preview', {})
+        await settleLiveReload()
+        const authoredRule = moduleSource().replace('.layoutCard', '._layoutCard_abcde_1')
+        await page(`(() => {
+          const sheet = document.querySelector('#native-module-css');
+          if (sheet) sheet.textContent = ${JSON.stringify(authoredRule)};
+          return true;
+        })()`)
+        assert.ok(
+          await page(
+            `getComputedStyle(document.querySelector('#native-module-card')).rowGap === '12px'`
+          ),
+          'CSS Module authored source reaches rendered preview after clearing draft'
         )
         assert.ok((await invoke('edit:undo', fixture)).ok, 'CSS Module edit has Undo')
         await wait(() => moduleSource().includes('row-gap: 8px'), 'CSS Module Undo restores source')

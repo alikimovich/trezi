@@ -25,6 +25,7 @@ export function installNativeInspector(
 ) {
   const send = (channel: string, ...args: any[]) =>
     dispatchIPC('main', { type: 'send', channel, args })
+  let draftChat: string | null = null
   const controller = new NativeInspectorController(
     workspace.services.invoke,
     send,
@@ -32,8 +33,10 @@ export function installNativeInspector(
     async (root, prompt, submit) => {
       const entry = workspace.state.projects.find((p) => p.root === root)
       if (!entry) return
-      if (submit) await chat.command({ type: 'submit', chat: entry.activeSessionKey, text: prompt })
-      else await visualEdit(root, prompt)
+      if (submit) {
+        draftChat = entry.activeSessionKey
+        await chat.command({ type: 'submit', chat: entry.activeSessionKey, text: prompt })
+      } else await visualEdit(root, prompt)
     },
     () => chat.action({ chat: chat.active, action: 'setup' }),
     () => chat.chats.get(chat.active)?.settings.provider ?? 'claude',
@@ -71,6 +74,10 @@ export function installNativeInspector(
   )
   turnBoundaries.add((key, kind, turn) => {
     void navigation.boundary(key, kind, turn).catch(report)
+    if (draftChat === key && (kind === 'landed' || kind === 'failed')) {
+      draftChat = null
+      void controller.settleDraftTurn(kind === 'landed').catch(report)
+    }
   })
   const render = workspace.services.render
   workspace.services.render = (state) => {

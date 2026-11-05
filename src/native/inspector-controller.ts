@@ -1,3 +1,4 @@
+import { sourceOwner } from '../main/source-owner'
 import { isClassSelector, matchingUtilityClass } from '../main/tw-styles'
 import type {
   PropInspection,
@@ -21,6 +22,15 @@ type Binding = {
   preview?(value: string): Promise<any>
   reset?(): Promise<any>
   token?(value: string): Promise<any>
+  tokenValue?(value: string): string
+}
+type StyleDraft = {
+  field: string
+  value: string
+  file: string
+  hash: string
+  preview: (value: string) => Promise<any>
+  tokenChoice?: string
 }
 export class NativeInspectorController {
   readonly state: NativeInspectorState = {
@@ -47,6 +57,57 @@ export class NativeInspectorController {
   styles: StyleReadResult | null = null
   classRule: { file: string; className: string } | null = null
   readonly bindings = new Map<string, Binding>()
+  private draftTarget = ''
+  private drafts = new Map<string, StyleDraft>()
+  private draftHistory: Map<string, StyleDraft>[] = []
+  private submitted = false
+  private submitting = false
+  private draftConflict = false
+  private previewAvailable = false
+  private target() {
+    const e = this.element
+    return e ? JSON.stringify([this.state.root, e.source, e.tag, e.id, e.selector]) : ''
+  }
+  private styleSourceFile(field: string) {
+    const prop = field
+      .slice(6)
+      .replace(/-horizontal$/, '-left')
+      .replace(/-vertical$/, '-top')
+    const origin = this.styles?.origins?.[prop]
+    const source = this.element?.source?.replace(/:\d+(?::\d+)?$/, '')
+    return origin?.kind === 'inline' ? source : (this.classRule?.file ?? source)
+  }
+  private publishDraft() {
+    this.state.draft = this.drafts.size
+      ? {
+          count: this.drafts.size,
+          submitted: this.submitted,
+          conflict: this.draftConflict,
+          preview: this.previewAvailable
+        }
+      : undefined
+    this.publish()
+  }
+  private async projectDrafts() {
+    await this.send('styles:clear-preview', {})
+    try {
+      for (const draft of this.drafts.values()) await draft.preview(draft.value)
+      this.previewAvailable = this.drafts.size > 0
+    } catch (error) {
+      await this.send('styles:clear-preview', {}).catch(() => {})
+      this.previewAvailable = false
+      this.state.error = `Live preview is unavailable: ${String(error)}`
+    }
+    this.publishDraft()
+  }
+  async settleDraftTurn(success: boolean) {
+    if (!this.submitted) return
+    if (!success) {
+      this.submitted = false
+      this.state.error = 'Apply failed. The preview draft is still pending.'
+      await this.projectDrafts()
+    }
+  }
   private sequence = 0
   private readonly saved = new Map<
     string,
@@ -155,6 +216,11 @@ export class NativeInspectorController {
     this.state.visible = false
     this.state.busy = false
     this.state.error = ''
+    this.drafts.clear()
+    this.draftHistory = []
+    this.draftTarget = ''
+    this.submitted = false
+    this.draftConflict = false
     this.build()
     this.publish()
     void this.send('styles:clear-preview', {}).catch(() => {})
@@ -172,9 +238,19 @@ export class NativeInspectorController {
     this.classRule = null
     this.controls = []
     this.state.error = ''
+    if (this.target() !== this.draftTarget) {
+      this.drafts.clear()
+      this.draftHistory = []
+      this.submitted = false
+      this.draftConflict = false
+      this.state.draft = undefined
+    }
     this.build()
     this.publish()
-    if (element) await this.refresh()
+    if (element) {
+      await this.refresh()
+      if (this.drafts.size) await this.projectDrafts()
+    }
   }
   /**
    * LKM-216: the live tree, the page or its CSS changed. Re-reads everything the island
@@ -184,7 +260,43 @@ export class NativeInspectorController {
    */
   async invalidated() {
     if (!this.state.root || this.state.busy || this.reconciles.size) return
+    if (this.submitted && this.drafts.size) {
+      await this.send('styles:clear-preview', {})
+      await this.refresh(true)
+      const sourced = await Promise.all(
+        [...this.drafts.values()].map(async (draft) => {
+          const current = await sourceOwner().read(this.state.root, draft.file)
+          const rendered = this.styles?.values[draft.field.slice(6)]
+          return (
+            current.hash !== draft.hash &&
+            rendered !== undefined &&
+            sameCssValue(draft.field.slice(6), rendered, draft.value)
+          )
+        })
+      ).catch(() => [false])
+      if (sourced.every(Boolean)) {
+        this.drafts.clear()
+        this.draftHistory = []
+        this.submitted = false
+        this.draftConflict = false
+        this.publishDraft()
+        return
+      }
+      this.state.error = 'Apply is waiting for source and rendered preview confirmation.'
+      await this.projectDrafts()
+      return
+    }
     await this.refresh(true)
+    if (this.drafts.size) {
+      const current = await Promise.all(
+        [...this.drafts.values()].map(
+          async (draft) =>
+            (await sourceOwner().read(this.state.root, draft.file)).hash === draft.hash
+        )
+      ).catch(() => [false])
+      this.draftConflict = !current.every(Boolean)
+      await this.projectDrafts()
+    }
   }
   /** The same element, picked again in a new document (a reload); false when it is another one. */
   async reattach(element: SelectedElement): Promise<boolean> {
@@ -229,6 +341,13 @@ export class NativeInspectorController {
     // Mid-reload the page has no selection to read; keep the last values until it has.
     if (!changed || styles?.values) this.styles = styles
     this.classRule = results[4].status === 'fulfilled' ? results[4].value : null
+    if (this.drafts.size && this.target() !== this.draftTarget) {
+      this.drafts.clear()
+      this.draftHistory = []
+      this.submitted = false
+      this.draftConflict = false
+      this.state.draft = undefined
+    }
     this.tokens = results[2].status === 'fulfilled' ? results[2].value : null
     const manifests = results[3].status === 'fulfilled' ? results[3].value : []
     const animationFiles = manifests
@@ -241,6 +360,10 @@ export class NativeInspectorController {
     this.controls = controls
     const before = changed ? JSON.stringify(this.state.fields) : ''
     this.build()
+    for (const draft of this.drafts.values()) {
+      const field = this.state.fields.find((f) => f.id === draft.field)
+      if (field) field.value = draft.value
+    }
     if (changed && JSON.stringify(this.state.fields) !== before)
       this.state.updated = (this.state.updated ?? 0) + 1
     this.publish()
@@ -521,6 +644,11 @@ export class NativeInspectorController {
               const token = tokens[Number(choice)]
               if (!token) throw new Error('This token is no longer available.')
               return apply(token.token.value, { name: token.token.name, group: token.group })
+            },
+            tokenValue: (choice) => {
+              const token = tokens[Number(choice)]
+              if (!token) throw new Error('This token is no longer available.')
+              return token.token.value
             }
           }
         )
@@ -582,6 +710,78 @@ export class NativeInspectorController {
         this.publish()
         return
       }
+      if (action.action === 'undo-draft' || action.action === 'revert-draft') {
+        if (this.submitted) return
+        this.drafts =
+          action.action === 'undo-draft' ? (this.draftHistory.pop() ?? new Map()) : new Map()
+        if (!this.drafts.size) {
+          this.draftTarget = ''
+          this.draftConflict = false
+        }
+        await this.projectDrafts()
+        return
+      }
+      if (action.action === 'apply-drafts') {
+        if (
+          !this.drafts.size ||
+          this.submitted ||
+          this.submitting ||
+          this.draftConflict ||
+          this.target() !== this.draftTarget
+        )
+          throw new Error('The selected element changed. Review or revert the preview draft.')
+        this.submitting = true
+        this.state.busy = true
+        this.publish()
+        try {
+          for (const draft of this.drafts.values()) {
+            const selectedFile = this.styleSourceFile(draft.field)
+            if (draft.file !== selectedFile)
+              throw new Error(
+                'The selected source file changed. Review or revert the preview draft.'
+              )
+            const current = await sourceOwner().read(root, draft.file)
+            if (current.hash !== draft.hash) {
+              this.draftConflict = true
+              this.publishDraft()
+              throw new Error(
+                'Source changed while the preview draft was pending. Review or revert it.'
+              )
+            }
+          }
+          const edits = [...this.drafts.values()].map(
+            (draft) =>
+              `${draft.file} (SHA-256 ${draft.hash}): set ${draft.field.slice(6)} to ${draft.value}`
+          )
+          if (this.drafts.size === 1) {
+            const draft = [...this.drafts.values()][0]
+            const binding = this.bindings.get(draft.field)
+            if (!binding) throw new Error('The selected style changed. Review the draft.')
+            const result =
+              draft.tokenChoice && binding.token
+                ? await binding.token(draft.tokenChoice)
+                : await binding.apply(draft.value)
+            if (result?.needsAgent && result.agentPrompt)
+              await this.agent(root, result.agentPrompt, true)
+            else if (!result?.applied)
+              throw new Error(result?.error ?? 'The draft was not applied.')
+          } else {
+            await this.agent(
+              root,
+              `Apply this single batch of Styles preview drafts to the actual application source. Target ${this.element?.selector ?? ''} from ${this.element?.source ?? ''} in workspace ${root}. Preserve all other edits. Refuse any changed source hash, stale selection or unsupported target. Edits:\n${edits.join('\n')}`,
+              true
+            )
+          }
+          this.submitted = true
+          this.state.edits = (this.state.edits ?? 0) + 1
+          this.publishDraft()
+        } finally {
+          this.submitting = false
+          this.state.busy = false
+          this.publish()
+        }
+        return
+      }
       if (action.action === 'refresh') {
         await this.refresh()
         return
@@ -639,6 +839,58 @@ export class NativeInspectorController {
         // A style-watch read may have cached the temporary inline value. Re-read
         // the authored declaration after cancel so a var() stays visible.
         await this.refresh(true)
+        if (this.drafts.size) await this.projectDrafts()
+        return
+      }
+      let draftOwner: ReturnType<typeof sourceOwner> | null = null
+      try {
+        draftOwner = sourceOwner()
+      } catch {
+        /* unavailable outside the native owner */
+      }
+      if (draftOwner && action.action === 'token' && action.field?.startsWith('style:')) {
+        if (!binding.tokenValue) throw new Error('This token cannot be previewed safely.')
+        const value = binding.tokenValue(action.value ?? '')
+        await this.action({ ...action, action: 'apply', value })
+        const draft = this.drafts.get(action.field)
+        if (draft?.value === value) draft.tokenChoice = action.value
+        return
+      }
+      if (draftOwner && action.action === 'apply' && action.field?.startsWith('style:')) {
+        if (this.submitted || this.submitting || this.draftConflict)
+          throw new Error('Wait for Apply to finish or revert the stale draft.')
+        const field = this.state.fields.find((f) => f.id === action.field)
+        if (!field || field.disabled || !binding.preview || !this.element)
+          throw new Error('This style has no safe live preview. Ask the agent to edit it.')
+        const file = this.styleSourceFile(action.field)
+        if (!file) throw new Error('This style has no source file. Ask the agent to edit it.')
+        const current = await draftOwner.read(root, file)
+        if (!current.hash || current.binary)
+          throw new Error('This source cannot be previewed safely. Ask the agent to edit it.')
+        const target = this.target()
+        if (this.drafts.size && this.draftTarget !== target)
+          throw new Error('The selected element changed. Review or revert the preview draft.')
+        const prior = this.drafts.get(action.field)
+        if ([...this.drafts.values()].some((draft) => draft.file !== file))
+          throw new Error('The selected source file changed. Review or revert the preview draft.')
+        if (prior && prior.hash !== current.hash)
+          throw new Error('Source changed while the preview draft was pending.')
+        this.draftTarget = target
+        this.draftHistory.push(new Map(this.drafts))
+        const prop = action.field.slice(6)
+        const input = action.value ?? ''
+        const value =
+          field.kind === 'number' && /^-?\d+(\.\d+)?$/.test(input.trim())
+            ? toCssText(prop, finite(input))
+            : input
+        this.drafts.set(action.field, {
+          field: action.field,
+          value,
+          file,
+          hash: current.hash,
+          preview: binding.preview
+        })
+        await this.projectDrafts()
         return
       }
       const write = async () => {

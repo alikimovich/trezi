@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
+import { lstat, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative } from 'node:path'
 import { agentFileAccess, currentAgentFileAccess, realPath } from './agent-file-access'
@@ -11,7 +11,7 @@ import {
 import { repositoryOwner } from './repository-owner'
 import { contentHash } from './source-owner'
 
-export type EffectPath = string | { path: string; hash: string }
+export type EffectPath = { path: string; hash: string } | { path: string; absent: true }
 
 /**
  * LKM-163, LKM-215: in Full access, Codex runs without a sandbox, so it can write the
@@ -205,10 +205,17 @@ export async function treziLiveEffect<T>(
       const allowed = new Set<string>()
       if (affected && succeeded)
         for (const item of affected(result as T)) {
-          const sourcePath = typeof item === 'string' ? item : item.path
-          const path = isAbsolute(sourcePath) ? relative(live, sourcePath) : sourcePath
+          const path = isAbsolute(item.path) ? relative(live, item.path) : item.path
           if (!path || path === '..' || path.startsWith('../')) continue
-          if (typeof item !== 'string') {
+          if ('absent' in item) {
+            if (
+              await lstat(join(live, path)).then(
+                () => true,
+                () => false
+              )
+            )
+              continue
+          } else {
             const content = await readFile(join(live, path)).catch(() => null)
             if (!content || contentHash(content) !== item.hash) continue
           }

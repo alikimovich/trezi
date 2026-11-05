@@ -133,9 +133,16 @@ document.body.append(card);
       )
       await host.request('islandPerform', {
         island: result.id,
-        action: 'commit',
+        action: 'draft',
         values: { x: 0.75, y: -0.25 }
       })
+      assert.equal(readFileSync(file, 'utf8'), code, 'island draft does not write source')
+      await wait(async () =>
+        (await host.request('chatInspect')).islands.some(
+          (i: any) => i.id === result.id && i.draft?.count === 2 && i.draft.preview === false
+        )
+      )
+      await host.request('islandPerform', { island: result.id, action: 'apply-draft' })
       await wait(
         () =>
           readFileSync(file, 'utf8').includes('LIGHT_X = 0.75') &&

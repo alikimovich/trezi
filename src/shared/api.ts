@@ -1047,9 +1047,13 @@ export interface SourceWriteResult {
 export interface FileOpResult {
   ok: boolean
   path?: string
+  /** Exact state the source service left at each changed path, for live attribution. */
+  effects?: SourceEffectState[]
   /** Human-readable failure (bad path, name taken, fs error). */
   error?: string
 }
+
+export type SourceEffectState = { path: string; hash: string } | { path: string; absent: true }
 
 export type PropKind = 'string' | 'number' | 'boolean' | 'enum' | 'other'
 
@@ -1354,6 +1358,8 @@ export interface UndoResult {
   ok: boolean
   /** The file reverted/re-applied. */
   file?: string
+  /** Exact state of every file in the restored batch. */
+  effects?: SourceEffectState[]
   /** The history stack was empty. */
   empty?: boolean
   /** The file changed on disk since the edit — refused to clobber. */

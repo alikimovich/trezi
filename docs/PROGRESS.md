@@ -1,5 +1,13 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-539 preview drafts and one Apply
+
+- Styles and chat islands now collect eligible adjustments as temporary preview drafts without per-value source writes or agent turns. Styles project through the existing WebKit preview, and Shadow islands use their existing override port. One Apply validates the source baseline before a source transaction or one batch agent request; pending values have Undo and Revert, and a failed or stale Apply retains them. Literal-only islands whose runtime effect cannot be projected show an explicit preview-unavailable state. The source owner effect repair and focused same-path interleaving proof remain in this tree. Native fixture assertions cover pending source, rendered preview and source-backed reload; the native run is deferred to the manager's post-merge gate.
+
+## 2026-11-05 — LKM-539 review repair: authenticate source effects
+
+- The Swift source owner now returns the exact resulting hashes for Undo, Redo, Revert, create and rename, and an absent state for delete and the old path of rename. The live-turn watch checks each state before attributing it to Trezi, so an external same-path write or recreation in the effect window remains visible. Focused source-owner and live-watch fixtures cover the returned states and interleavings. The native Styles fixture clears the transient preview, reloads, then asserts the rendered row gap from the saved CSS file. Quick verification, exact-head CI, independent review and post-merge native acceptance are reported through their separate gates.
+
 ## 2026-11-05 — LKM-539 Styles and internal edit attribution
 
 - The existing Styles inspector already previews eligible values in WebKit and commits source through the Swift source owner without starting a model. Its unsupported dynamic cases continue to use the agent fallback. Successful source-owner writes (Styles, chat islands, internal editor saves, Undo and file actions) now enter the repository lane as bounded Trezi effects while a Full-access turn watch is open. Only paths the successful source transaction names are excluded from outside-change reporting; a stale refused write names none. The owner still hash-checks source edits and the landing gate holds on live drift rather than overwriting an internal save. Focused attribution and conflict fixtures plus a rendered Styles assertion cover this path; independent review, CI and post-merge native acceptance remain with the manager.

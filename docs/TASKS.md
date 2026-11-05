@@ -11,6 +11,9 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Trace eligible Styles preview and source commits, and attribute Styles, chat-island and internal editor writes through the source owner during active turns.
 - [x] Preserve stale-source and landing conflict guards; prove first-party and external attribution plus an internal editor save racing a landing in focused fixtures.
 - [x] Extend the native Styles fixture to assert an applied value reaches the rendered preview as well as the source and Undo history.
+- [x] Review repair: authenticate Undo, Redo, Revert and file-operation effects against the source owner's resulting state; cover same-path external interleavings and a source-backed CSS reload assertion.
+- [x] Stage eligible Styles and island adjustments as preview drafts with explicit Apply, Undo and Revert; retain unsatisfied drafts and source revision guards.
+- [x] Cover source-free draft gestures and batch Apply in focused fixtures, with native fixture assertions for the rendered preview and source-backed reload.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
 
 ## LKM-529 — Simplify Trezi update availability and guided update flow

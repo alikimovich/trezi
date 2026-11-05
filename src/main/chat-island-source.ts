@@ -86,11 +86,14 @@ export function writeIsland(
   seen: Record<string, IslandValue> | undefined,
   values: Record<string, IslandValue>,
   guard: () => boolean,
-  gestureGroup?: string
+  gestureGroup?: string,
+  expectedRevision?: string
 ) {
   return enqueueRepoWrite(root, async (): Promise<IslandWrite | undefined> => {
     if (!guard()) throw new Error('This island changed or closed. Reload its controls.')
     const source = await islandSource(root, record)
+    if (expectedRevision && source.revision !== expectedRevision)
+      throw new Error('Source changed while this preview draft was pending. Review or revert it.')
     if (seen && changedBindings(record, seen, source.values).length)
       return { conflict: true, revision: source.revision, values: source.values }
     const changes: { start: number; end: number; text: string }[] = []

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { setSourceOwner } from '../src/main/source-owner.ts'
 import { NativeInspectorController } from '../src/native/inspector-controller.ts'
 
 const calls = [],
@@ -460,6 +461,82 @@ assert.deepEqual(
   ['right', 'left', 'top', 'bottom']
 )
 assert.deepEqual(spacingSnapshot('margin'), collapsedMargin)
+
+// Styles gestures stay frontend-only until one Apply submits their accumulated intent.
+let authoredHash = 'base'
+let authoredOpacity = '1'
+let authoredWidth = '10px'
+const draftCalls = []
+const draftAgent = []
+setSourceOwner({
+  read: async () => ({ path: 'a.tsx', hash: authoredHash, binary: false, size: 10 })
+})
+const drafts = new NativeInspectorController(
+  async (channel) => {
+    draftCalls.push(channel)
+    if (channel === 'styles:read')
+      return {
+        values: { opacity: authoredOpacity, width: authoredWidth, display: 'block' },
+        specified: { opacity: authoredOpacity, width: authoredWidth }
+      }
+    if (channel === 'props:inspect') return null
+    if (channel === 'controls:list' || channel === 'controls:get') return []
+    if (channel === 'styles:resolve-class') return null
+    if (channel === 'styles:apply') return { applied: true }
+    return null
+  },
+  async (...args) => draftCalls.push(args),
+  () => {},
+  async (...args) => draftAgent.push(args),
+  async () => {}
+)
+await drafts.activate('/a')
+await drafts.select(element)
+const draftAction = (action, extra = {}) =>
+  drafts.action({
+    root: '/a',
+    generation: drafts.state.generation,
+    action,
+    ...extra
+  })
+const beforeDraft = draftCalls.filter((call) => call === 'styles:apply').length
+await draftAction('apply', { field: 'style:opacity', value: '0.6' })
+await draftAction('apply', { field: 'style:width', value: '12px' })
+assert.equal(drafts.state.draft.count, 2)
+assert.equal(draftCalls.filter((call) => call === 'styles:apply').length, beforeDraft)
+assert.equal(draftAgent.length, 0, 'no model turn per small Styles adjustment')
+await draftAction('undo-draft')
+assert.equal(drafts.state.draft.count, 1)
+await draftAction('apply', { field: 'style:width', value: '12px' })
+authoredHash = 'external'
+await draftAction('apply-drafts')
+assert.equal(draftAgent.length, 0, 'stale source is refused before agent submission')
+assert.equal(drafts.state.draft.count, 2, 'failed Apply retains draft')
+authoredHash = 'base'
+await draftAction('revert-draft')
+await draftAction('apply', { field: 'style:opacity', value: '0.6' })
+await draftAction('apply', { field: 'style:width', value: '12px' })
+await draftAction('apply-drafts')
+assert.equal(draftAgent.length, 1, 'one agent operation submits all values')
+assert.equal(drafts.state.draft.submitted, true)
+authoredHash = 'applied'
+authoredOpacity = '0.6'
+authoredWidth = '12px'
+await drafts.invalidated()
+assert.equal(drafts.state.draft, undefined, 'source and rendered values confirm Apply')
+await draftAction('apply', { field: 'style:opacity', value: '0.4' })
+await draftAction('revert-draft')
+assert.equal(drafts.state.draft, undefined)
+const sourceWrites = draftCalls.filter((call) => call === 'styles:apply').length
+await draftAction('apply', { field: 'style:opacity', value: '0.3' })
+assert.equal(draftCalls.filter((call) => call === 'styles:apply').length, sourceWrites)
+await draftAction('apply-drafts')
+assert.equal(draftCalls.filter((call) => call === 'styles:apply').length, sourceWrites + 1)
+authoredHash = 'single-applied'
+authoredOpacity = '0.3'
+await drafts.invalidated()
+assert.equal(drafts.state.draft, undefined, 'single edit confirms source and rendered value')
+setSourceOwner(null)
 assert.deepEqual(spacingSnapshot('padding'), {
   'style:padding-right': '18px',
   'style:padding-left': 'var(--space)',

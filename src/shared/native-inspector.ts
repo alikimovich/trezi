@@ -49,6 +49,7 @@ export interface NativeInspectorState {
   /** Counts edits whose write (and Undo record) finished, applied or not. A selection
    *  change resets `busy` but never this, so a test can wait for one specific edit. */
   edits?: number
+  draft?: { count: number; submitted: boolean; conflict: boolean; preview: boolean }
 }
 export interface NativeInspectorAction {
   root: string

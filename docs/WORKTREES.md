@@ -255,8 +255,10 @@ The repository owner validates that each Git tool targets a linked chat worktree
   Publish run inside `treziLiveEffect`, which snapshots around the effect while a watch
   is open. Source-owner writes from chat islands, Styles, the internal editor, Undo and
   file actions enter that lane while a turn watch is open; only paths named by a
-  successful source transaction are attributed to Trezi. A refused stale edit claims
-  no path. The paths each effect changed (with the state it left them in), the commits it made or
+  successful source transaction are attributed to Trezi only when the resulting file
+  hash or absent state still matches the source owner's result. A refused stale edit
+  claims no path; an external same-path write after an owner operation remains visible.
+  The paths each effect changed (with the state it left them in), the commits it made or
   brought in and the HEADs it left are not reported. A file the user edits again after a
   landing still is. Dev-server and build output (`node_modules`, `.next`, `dist`,
   `.svelte-kit`, `*.tsbuildinfo`, `next-env.d.ts` and the like) and `.env` files are
