@@ -21,10 +21,10 @@ let generalFields: [[String: Any]] = [
     ["id":"projectUi", "section":"experimental", "label":"Gen UI", "kind":"choice", "value":"false", "help":"Generate UI using your project’s existing components and styles. Experimental; supports React and Svelte.", "choices":[["value":"false", "label":"Off"], ["value":"true", "label":"On"]]],
     ["id":"engine", "section":"experimental", "label":"UI layout method", "kind":"choice", "value":"agent", "visibleWhen":["field":"projectUi", "value":"true"], "help":"Chat model uses your selected chat model to arrange components. Jev uses a separate layout model and requires an AI Gateway API key.", "choices":[["value":"agent", "label":"Chat model"], ["value":"jev", "label":"Jev layout engine"]]]
 ]
-func settingsState(_ providers: [[String: Any]], _ actions: [[String: Any]], nested: Bool = false) throws -> SheetState {
+func settingsState(_ providers: [[String: Any]], _ actions: [[String: Any]], nested: Bool = false, navigationTitle: String = "Add a provider") throws -> SheetState {
     let shownSections = sections.map { entry -> [String: Any] in
         var section = entry
-        if nested && entry["id"] as? String == "providers" { section["navigationTitle"] = "Add a provider" }
+        if nested && entry["id"] as? String == "providers" { section["navigationTitle"] = navigationTitle }
         return section
     }
     let raw: [String: Any] = ["id":"fixture", "title":"Settings", "detail":"", "busy":false, "autosave":true, "sections":shownSections, "section":"general",
@@ -153,6 +153,27 @@ sheets.model.perform("save-provider")
 sheets.model.update(state)
 sheets.model.update(editorState)
 require(sheets.model.values["label"] == "AI Gateway", "A submitted provider edit clears the retained draft")
+let selectedEditorState = try settingsState(editorFields, [["id":"back", "label":"Back", "section":"providers"], ["id":"connect", "label":"Load models", "section":"providers"], ["id":"delete", "label":"Remove…", "section":"providers"], ["id":"save-provider", "label":"Save provider", "primary":true, "section":"providers"]], nested: true, navigationTitle: "Edit AI Gateway")
+let removeConfirmState = try settingsState([["id":"remove-confirm", "section":"providers", "label":"Remove AI Gateway?", "kind":"readonly", "value":"Confirm removal"]], [["id":"back", "label":"Back", "section":"providers"], ["id":"remove", "label":"Remove provider", "primary":true, "destructive":true, "section":"providers"]], nested: true, navigationTitle: "Remove AI Gateway")
+sheets.model.update(selectedEditorState); settle()
+let providerDraft = ["label":"Unsaved selected provider", "url":"https://draft.example/v1", "key":"synthetic-draft-key", "models":"draft-model"]
+for (field, value) in providerDraft { sheets.model.setValue(field, value) }
+sheets.model.perform("delete")
+require(emitted.last?["action"] as? String == "delete" && emitted.last?["section"] as? String == "providers", "Editor Remove uses its selected provider route")
+sheets.model.update(removeConfirmState); settle()
+try select("general"); try select("providers")
+sheets.model.perform("back")
+require(emitted.last?["action"] as? String == "back" && emitted.last?["section"] as? String == "providers", "Confirmation Back targets its immediate parent editor")
+sheets.model.update(selectedEditorState); settle()
+require(sheets.model.state?.sections?.first(where: { $0.id == "providers" })?.navigationTitle == "Edit AI Gateway", "Confirmation Back restores the exact selected provider context")
+require(providerDraft.allSatisfy { sheets.model.values[$0.key] == $0.value }, "Confirmation Back restores the identical unsaved provider draft after section reentry")
+// Exercise the successful removal transition without invoking a provider writer.
+sheets.model.perform("delete")
+sheets.model.update(removeConfirmState)
+sheets.model.perform("remove")
+sheets.model.update(state)
+sheets.model.update(selectedEditorState)
+require(sheets.model.values["label"] == "AI Gateway" && sheets.model.values["key"] == "", "Confirmed removal clears the obsolete editor draft")
 sheets.model.update(state); settle()
 try select("experimental")
 let before = emitted.count

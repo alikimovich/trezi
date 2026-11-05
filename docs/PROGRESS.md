@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-525 provider removal confirmation Back repair
+
+- Remove confirmation now returns to its immediate selected provider editor. The native sheet retains that editor's unsaved fields across confirmation and sidebar reentry, and clears the obsolete draft after a successful removal. Focused controller and windowless Settings fixtures cover the route, exact synthetic draft restoration and confirmed-remove cleanup; current-head CI and post-merge native acceptance remain with the manager.
+
 ## 2026-11-04 — LKM-525 selected provider Remove route repair
 
 - The editor's Remove action now uses the provider already selected when the editor opened. Its form has no provider picker, so reading a connection value from that form blocked the confirmation. The existing confirmation and removal handler remain unchanged; the focused provider route fixture invokes Remove without a synthetic connection value and checks the confirmation actions before its stand-in removal.

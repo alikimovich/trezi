@@ -305,7 +305,15 @@ export class NativeSettingsController {
             : 'Nothing to clean up.'
       return
     }
-    if (action.action === 'back') return this.reload(action.id)
+    if (action.action === 'back') {
+      // Remove confirmation is a child of the selected provider editor. Returning
+      // to that editor also lets the native sheet restore its unsaved field draft.
+      if (this.target && this.sheets.current?.state.actions.some((item) => item.id === 'remove')) {
+        this.show(action.id, this.editor(this.target))
+        return
+      }
+      return this.reload(action.id)
+    }
     if (action.action === 'add') {
       this.target = undefined
       this.show(action.id, this.editor())

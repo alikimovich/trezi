@@ -425,7 +425,23 @@ assert.deepEqual(
   ['back', 'remove'],
   'Remove from the editor opens the selected provider confirmation without a connection field'
 )
+await sheets.action({ id: inPlace, action: 'section', values: {}, section: 'general' })
+await sheets.action({ id: inPlace, action: 'section', values: {}, section: 'providers' })
+assert.match(field('remove-confirm').label, /Remove Test\?/)
+await action('back')
+assert.equal(
+  sheets.current.state.sections.find((section) => section.id === 'providers').navigationTitle,
+  'Edit Test',
+  'Back from Remove returns to the selected provider editor'
+)
+assert.equal(field('key').help, 'Leave blank to keep the current key.')
+assert.ok(sheets.current.state.actions.some((item) => item.id === 'delete'))
+await action('delete')
 await action('remove')
+assert.ok(
+  calls.some((call) => call[0] === 'providers:remove' && call[1] === 'connection-1'),
+  'confirmed removal still targets the selected provider'
+)
 assert.equal(connections.length, 0)
 assert.equal(field('connections').value, 'None')
 assert.equal(sheets.current.state.id, inPlace)

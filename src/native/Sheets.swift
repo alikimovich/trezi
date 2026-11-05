@@ -12,6 +12,7 @@ final class SheetModel: ObservableObject {
     @Published var filters: [String: String] = [:]
     @Published var values: [String: String] = [:]
     private var retainedDrafts: [String: String] = [:]
+    private var providerRemovalDraftContext: String?
     /// The sidebar pane of a sectioned window. Bun only seeds it; the window owns it after that.
     @Published var section: String?
     private func draftKey(_ field: SheetField, in state: SheetState) -> String {
@@ -22,9 +23,18 @@ final class SheetModel: ObservableObject {
         if state?.id != next.id {
             filters = [:]
             retainedDrafts = [:]
+            providerRemovalDraftContext = nil
             values = Dictionary(uniqueKeysWithValues: next.fields.map { ($0.id, $0.value) })
             section = next.sections.flatMap { sections in sections.first { $0.id == next.section }?.id ?? sections.first?.id }
         } else if let previous = state {
+            if previous.actions.contains(where: { $0.id == "remove" }) && !next.actions.contains(where: { $0.id == "remove" }) {
+                // Confirmation Back returns to the editor; a successful removal
+                // returns to the list and must not resurrect the removed draft.
+                if !next.actions.contains(where: { $0.id == "delete" }), let context = providerRemovalDraftContext {
+                    retainedDrafts = retainedDrafts.filter { !$0.key.hasPrefix("providers:\(context):") }
+                }
+                providerRemovalDraftContext = nil
+            }
             // A pane swapped its fields in place (the provider editor): seed new ones, forget removed ones.
             let known = Set(previous.fields.map(\.id)), current = Set(next.fields.map(\.id))
             for field in next.fields where !known.contains(field.id) || field.kind == "readonly" {
@@ -41,10 +51,13 @@ final class SheetModel: ObservableObject {
     func perform(_ action: String) {
         guard let state, !state.busy || action == "cancel" else { return }
         if action == "cancel" && !(state.dismissible ?? !state.actions.isEmpty) { return }
-        if action == "back" || action == "skill-back" {
+        if action == "back" || action == "skill-back" || action == "delete" {
             for field in state.fields where field.section == section && field.draft == true {
                 let value = values[field.id] ?? field.value
                 if value != field.value { retainedDrafts[draftKey(field, in: state)] = value }
+            }
+            if action == "delete" {
+                providerRemovalDraftContext = state.sections?.first { $0.id == "providers" }?.navigationTitle
             }
         } else if ["save-provider", "skill-save", "skill-create", "skill-remove"].contains(action) {
             for field in state.fields where field.section == section && field.draft == true { retainedDrafts.removeValue(forKey: draftKey(field, in: state)) }
