@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-535 review repair: rendered toolbar button geometry
+
+- The toolbar inspection now exposes the actual AppKit NSButton bounds for New Chat, More and the sidebar toggle, converted to the main window's coordinates. The existing toolbar item frames retain their layout and pixel-sampling meanings.
+- The normal/narrow, light/dark foreground fixture now asserts height and vertical-center alignment from those rendered button frames and records the measurements beside each capture. The prior enabled/disabled paint-delta assertion remains. Native acceptance still runs in the manager's post-merge pipeline.
+
 ## 2026-11-04 — LKM-535 review repair: enabled paint and toolbar alignment evidence
 
 - The existing light/dark foreground fixture now compares New Chat's enabled and disabled PNG pixels at normal and narrow widths, asserting a visible change and recording the measured difference with both capture paths.

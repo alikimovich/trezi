@@ -321,9 +321,9 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
           const more = glassInk(image, state.chatNewMoreFrame)
           const sidebar = glassInk(image, state.chatNewSidebarFrame)
           const alignment = {
-            new: toolbarButtonMeasure(state.chatNewFrame),
-            more: toolbarButtonMeasure(state.chatNewMoreFrame),
-            sidebar: toolbarButtonMeasure(state.chatNewSidebarFrame)
+            new: toolbarButtonMeasure(state.chatNewRenderedFrame),
+            more: toolbarButtonMeasure(state.chatNewMoreRenderedFrame),
+            sidebar: toolbarButtonMeasure(state.chatNewSidebarRenderedFrame)
           }
           results[name] = {
             capture: join(artifacts, `${name}.png`),

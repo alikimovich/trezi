@@ -10,6 +10,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: assert foreground hover, pressed and keyboard-focus painting for New Chat beside More and the sidebar toggle in both appearances, with capture paths in the fixture receipt.
 - [x] Review repair: keep New Chat's title-driven visibility on macOS 13/14 and assert the rendered toolbar button's VoiceOver role and label.
 - [x] Review repair: assert enabled-to-disabled foreground paint changes and measured height and vertical-center alignment beside More and the sidebar toggle at normal and narrow widths.
+- [x] Review repair: measure the rendered New Chat, More and sidebar NSButtons for foreground height and vertical-center alignment, separately from toolbar item frames.
 - [ ] Manager: independent review, exact-head CI, PR to main and post-merge foreground native acceptance in light and dark modes.
 
 ## LKM-533 — Stack accepted question and answer pairs

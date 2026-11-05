@@ -22,6 +22,10 @@ extension NativeShell {
         }
         return walk(root)
     }
+    /// The rendered control, distinct from its enclosing toolbar item, in main-window coordinates.
+    func nativeToolbarButtonFrame(_ id: String) -> NSRect? {
+        nativeToolbarButton(id).flatMap { mainFrame($0) }
+    }
     @MainActor func toolbarInteractionProbe(_ stage: String) -> [String: Any] {
         guard let host = toolbarWindow else { return ["error":"Toolbar window unavailable"] }
         let ids = ["chat-new", "more", NSToolbarItem.Identifier.toggleSidebar.rawValue]
