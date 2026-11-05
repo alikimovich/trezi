@@ -21,6 +21,9 @@ for (const action of ['key', 'pointer', 'button', 'typeInstruction']) {
   assert.match(broker, new RegExp(`"${action}"`), `${action} event broker`)
   assert.match(smoke, new RegExp(`action: '${action}'`), `${action} smoke route`)
 }
+assert.match(host, /case "canvasText"/, 'canvas text uses posted AppKit input')
+assert.match(broker, /"canvasText"/, 'canvas text is routed through the event broker')
+assert.match(smoke, /action: 'canvasText'/, 'creation and revision use the posted route')
 assert.match(smoke, /history.*steps/, 'history is checked across posted keys')
 assert.match(smoke, /__markupSmokeKeys/, 'page keyDown delivery is checked')
 for (const [, literal] of smoke.matchAll(/\bpage\(\s*('(?:\\.|[^'\\])*')\s*\)/gs)) {

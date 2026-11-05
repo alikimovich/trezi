@@ -10,6 +10,8 @@ import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
+  ANNOTATION_COMPOSITE_CHECK,
+  ANNOTATION_COMPOSITE_FLAG,
   CHAT_RECOVERY_ACCEPTANCE_CHECK,
   DREAMER_ACCEPTANCE_CHECK,
   DREAMER_ACCEPTANCE_FLAG,
@@ -21,6 +23,7 @@ import {
   SMOKE_PRELUDE,
   SOURCE_POPOUT_ACCEPTANCE_CHECK,
   SOURCE_POPOUT_ACCEPTANCE_FLAG,
+  selectAnnotationComposite,
   selectDreamerAcceptance,
   selectMarkupAcceptance,
   selectSmokeChecks,
@@ -96,7 +99,7 @@ for (const { name } of names)
   assert.ok(SMOKE_PRELUDE.includes(name) || SMOKE_CHECK_GROUPS[name], `Check ${name} needs a group`)
 // The opt-in checks are pushed onto the list under their flag, so the pattern skips them.
 for (const name of Object.keys(SMOKE_CHECK_GROUPS).filter(
-  (key) => key !== CHAT_RECOVERY_ACCEPTANCE_CHECK
+  (key) => key !== CHAT_RECOVERY_ACCEPTANCE_CHECK && key !== ANNOTATION_COMPOSITE_CHECK
 ))
   assert.ok(
     [
@@ -269,6 +272,30 @@ assert.throws(
       ['--test', '--only=core', SOURCE_POPOUT_ACCEPTANCE_FLAG, MARKUP_ACCEPTANCE_FLAG],
       () => {}
     ),
+  /cannot run/
+)
+
+const compositeArgv = ['--test', '--only=core', ANNOTATION_COMPOSITE_FLAG]
+const compositeChecks = [...names, { name: ANNOTATION_COMPOSITE_CHECK, dependsOn: ['chat-ready'] }]
+assert.deepEqual(
+  selectAnnotationComposite(
+    selectSmokeChecks(compositeChecks, parseSmokeGroups(compositeArgv), () => {}),
+    compositeArgv
+  ).map((c) => c.name),
+  [...SMOKE_PRELUDE, ANNOTATION_COMPOSITE_CHECK],
+  'the annotation composite has a narrow selectable route'
+)
+assert.throws(
+  () => parseSmokeGroups(['--only=chat', ANNOTATION_COMPOSITE_FLAG]),
+  /needs the core group/
+)
+assert.throws(() => selectAnnotationComposite(names, compositeArgv), /was not selected/)
+assert.throws(
+  () => selectAnnotationComposite(compositeChecks, [...compositeArgv, '--live']),
+  /cannot run/
+)
+assert.throws(
+  () => selectAnnotationComposite(compositeChecks, [...compositeArgv, MARKUP_ACCEPTANCE_FLAG]),
   /cannot run/
 )
 
