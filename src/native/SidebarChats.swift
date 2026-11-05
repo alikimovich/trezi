@@ -19,11 +19,12 @@ final class SidebarChatCell: SourceListCell {
     private var chevron: NSImageView?
     /// Only while the chat's model is at work (`SidebarTitleShimmer.swift`).
     private(set) var shimmer: SidebarTitleShimmer?
+    private(set) var decipher: SidebarTitleDecipher?
     private(set) var hovered = false
     private var tracking: NSTrackingArea?
     private var resting: NSLayoutConstraint?, hovering: NSLayoutConstraint?
 
-    init(row: ShellRow, canArchive: Bool, target: AnyObject?) {
+    init(row: ShellRow, canArchive: Bool, target: AnyObject?, decipherSince: CFTimeInterval? = nil) {
         super.init(frame: .zero)
         identifier = NSUserInterfaceItemIdentifier(row.id)
         dot.wantsLayer = true; dot.layer?.cornerRadius = 3; dot.layer?.backgroundColor = NSColor.systemGreen.cgColor
@@ -52,10 +53,10 @@ final class SidebarChatCell: SourceListCell {
         } else {
             let title = SidebarMarqueeTitle(title: row.title)
             self.title = title; textField = title.label; content = title
-            toolTip = row.title
+            toolTip = row.loadingTitle ? "Loading conversation" : row.title
             if row.kind == "history" {
                 let detail = NSTextField(labelWithString: row.detail)
-                detail.font = .systemFont(ofSize: NSFont.smallSystemFontSize); detail.textColor = .tertiaryLabelColor
+                detail.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular); detail.textColor = .tertiaryLabelColor
                 detail.setContentHuggingPriority(.required, for: .horizontal)
                 detail.setContentCompressionResistancePriority(.required, for: .horizontal)
                 self.detail = detail; views.append(detail)
@@ -74,7 +75,7 @@ final class SidebarChatCell: SourceListCell {
                     archive.symbolConfiguration = .init(pointSize: 11, weight: .regular)
                     archive.toolTip = "Archive Chat"
                     // LKM-379: VoiceOver gets the button's cell, so the label goes there.
-                    archive.cell?.setAccessibilityLabel("Archive \(row.title)")
+                    archive.cell?.setAccessibilityLabel("Archive \(row.loadingTitle ? "loading conversation" : row.title)")
                     archive.alphaValue = 0
                     self.archive = archive; views.append(archive)
                     hovering = title.trailingAnchor.constraint(lessThanOrEqualTo: archive.leadingAnchor, constant: -4)
@@ -90,7 +91,8 @@ final class SidebarChatCell: SourceListCell {
             dot.centerXAnchor.constraint(equalTo: slot.centerXAnchor), dot.centerYAnchor.constraint(equalTo: slot.centerYAnchor),
             dot.widthAnchor.constraint(equalToConstant: 6), dot.heightAnchor.constraint(equalToConstant: 6)
         ])
-        if (row.thinking || row.loadingTitle), let title { shimmer = SidebarTitleShimmer(label: title.label) }
+        if row.loadingTitle, let title { decipher = SidebarTitleDecipher(label: title.label, startedAt: decipherSince) }
+        else if row.thinking, let title { shimmer = SidebarTitleShimmer(label: title.label) }
         tint()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -101,10 +103,13 @@ final class SidebarChatCell: SourceListCell {
         archive?.contentTintColor = emphasized ? .alternateSelectedControlTextColor : .secondaryLabelColor
         detail?.textColor = emphasized ? .alternateSelectedControlTextColor : .tertiaryLabelColor
         shimmer?.emphasized = emphasized
+        decipher?.label.textColor = emphasized ? .alternateSelectedControlTextColor : .labelColor
+        decipher?.refresh()
     }
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         shimmer?.refresh()
+        decipher?.refresh()
     }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -135,6 +140,11 @@ final class SidebarChatCell: SourceListCell {
 }
 
 extension NativeShell {
+    /// A loading chat keeps its reveal clock when the outline replaces its cell.
+    func pruneSidebarDecipherStarts() {
+        let active = Set(rows.flatMap { $0.recent.filter(\.loadingTitle).map(\.id) })
+        sidebarDecipherStarts = sidebarDecipherStarts.filter { active.contains($0.key) }
+    }
     /// Every row the outline shows: each project, then its nested rows.
     var outlineRows: [ShellRow] { rows.flatMap { [$0] + $0.nested } }
     /// The row that carries the selection: the selected chat when it is nested, else its project.
@@ -163,7 +173,12 @@ extension NativeShell {
         cell.setHovered(true, scrollingSince: hover.scroll)
     }
     func sidebarChatCell(_ row: ShellRow) -> NSView {
-        SidebarChatCell(row: row, canArchive: canArchive(row), target: self)
+        let since: CFTimeInterval?
+        if row.loadingTitle {
+            since = sidebarDecipherStarts[row.id] ?? CACurrentMediaTime()
+            sidebarDecipherStarts[row.id] = since
+        } else { since = nil }
+        return SidebarChatCell(row: row, canArchive: canArchive(row), target: self, decipherSince: since)
     }
     /// Closing a project's last open chat closes the project, so that chat has no Archive.
     func canArchive(_ row: ShellRow) -> Bool {

@@ -250,4 +250,31 @@ for control in islands().values {
 }
 interactive["inserted"] = immediate()
 result["interactive"] = interactive
+// LKM-523: the custom chat-header segment shares the island glyph and textured cell. Its
+// enclosing glass paints at rest; AppKit's cell bezel supplies the transient interaction states.
+let newChat = IslandSegmentedControl(images: [toolbarSymbol("square.and.pencil", "New Chat")!], trackingMode: .momentary, target: nil, action: nil)
+newChat.segmentStyle = .texturedRounded
+newChat.setWidth(32, forSegment: 0)
+newChat.cell?.isBordered = false
+newChat.usesGlassHover = true
+newChat.focusRingType = .exterior
+newChat.frame = NSRect(x: 540, y: 18, width: 32, height: 32)
+canvas.addSubview(newChat)
+func chatState() -> [String: Any] {
+    ["bordered":newChat.cell?.isBordered ?? false, "enabled":newChat.isEnabled,
+     "focused":window.firstResponder === newChat,
+     "textured":newChat.segmentStyle == .texturedRounded, "momentary":newChat.trackingMode == .momentary,
+     "template":newChat.image(forSegment: 0)?.isTemplate ?? false,
+     "glyphSize":NSStringFromSize(newChat.image(forSegment: 0)?.size ?? .zero),
+     "neighborGlyphSize":NSStringFromSize((viewport.view as! IslandSegmentedControl).image(forSegment: 0)?.size ?? .zero)]
+}
+var glass: [String: Any] = ["idle":chatState()]
+newChat.setGlassInteraction(hovered: true); glass["hover"] = chatState()
+newChat.setGlassInteraction(hovered: false, pressed: true); glass["pressed"] = chatState()
+newChat.setGlassInteraction(pressed: false)
+_ = window.makeFirstResponder(newChat); glass["focus"] = chatState()
+_ = window.makeFirstResponder(canvas)
+newChat.isEnabled = false; newChat.setGlassInteraction(hovered: true); glass["disabled"] = chatState()
+newChat.setGlassInteraction(hovered: false); newChat.isEnabled = true; glass["restored"] = chatState()
+result["newChatGlass"] = glass
 print(String(data: try! JSONSerialization.data(withJSONObject: result), encoding: .utf8)!)
