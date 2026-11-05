@@ -1,5 +1,13 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-537 review toolbar layout root cause
+
+- The deferred-frame wait showed a stable 87-point New Chat offset from the chat column edge, not a transient AppKit placement delay. The chat header was reserving the preview address's preferred 180-point width when the toolbar could only fit that address at its existing 80-point floor. Header sizing now reserves the floor; the address still chooses its own preferred width whenever it fits. The fixture keeps its exact edge and title-clearance assertion and reports measured frames on failure.
+
+## 2026-11-04 — LKM-537 review native toolbar timing repair
+
+- The review native chat run passed the accepted-card capture on the current tree but stopped earlier in sidebar-chats when its standalone New Chat geometry was sampled before AppKit's deferred toolbar alignment. The existing sidebar fixture now waits for the same exact edge, width and title-clearance conditions and reports all relevant frames if they never settle. This is a fixture timing repair for the review gate; no toolbar layout or user behavior changed.
+
 ## 2026-11-04 — LKM-537 native accepted-card capture repair
 
 - The chat UI foreground capture now reveals the accepted component's containing message after each width change. At 320 points, pressing Latest parked that older card outside the lazy stack's realized viewport, so its measured frame was zero before the pair geometry assertions could run. The capture retries the message reveal while layout settles and still requires a visible card and measured answer lines at each width. The wide fixture uses 460 points because the native test window caps chat width at 466. No user-facing layout changed; quick and native verification remain the final worker gates.

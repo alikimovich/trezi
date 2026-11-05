@@ -255,7 +255,9 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             // inter-item advance once laid out; reserve it inside the chat column.
             let advance = (toolbarFrames["chat-new"]?.maxX).map { $0 - (mainFrame(chatHeader)?.maxX ?? 0) } ?? 40
             let reserve = max(32, min(60, advance)) + 4
-            let width = min(max(100, target - leading - reserve), max(100, addressLayout.chatLimit(windowWidth: windowWidth, chatLeading: leading, addressPreferred: addressPreferredWidth) - reserve))
+            // Keep New Chat at the chat column edge before giving the address its
+            // preferred width. The address can compress to its existing floor.
+            let width = min(max(100, target - leading - reserve), max(100, addressLayout.chatLimit(windowWidth: windowWidth, chatLeading: leading, addressPreferred: ToolbarAddressLayout.floor) - reserve))
             chatTitle.isHidden = currentProject == nil || chatHidden || width < 150
             setChatNewVisible(!chatTitle.isHidden)
             if abs(chatHeaderWidth.constant - width) > 0.5 { chatHeaderWidth.constant = width }

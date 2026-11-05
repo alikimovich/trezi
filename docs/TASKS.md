@@ -6,6 +6,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 ## LKM-537 — Native chat UI accepted-card capture failure
 
 - [x] Reveal the accepted component's containing message before measuring its card and answer lines across chat widths.
+- [x] Wait for the standalone New Chat toolbar frame to meet its existing geometry assertion before the review chat smoke continues.
+- [x] Let the preview address compress to its existing floor so New Chat reaches the chat column edge at the standard window width.
 - [ ] Manager: confirm the native chat group and independent review on the exact tree.
 
 ## LKM-525 — Nested Settings navigation and actions

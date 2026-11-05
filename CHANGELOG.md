@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+
+- New Chat stays at the chat column edge when the preview address needs to compress in a narrow toolbar (LKM-537).
+
 ## [0.13.26] - 2026-11-04
 
 ### Changed
