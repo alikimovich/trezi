@@ -13,6 +13,14 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Changed
 
 - Nested 3D inspection uses the native toolbar for Back and the selected object's Code action, without the in-preview navigation row or visible camera reset controls (LKM-536).
+## [0.13.25] - 2026-11-04
+
+### Fixed
+
+- Accepted answer cards now show each question directly above its full-width answer (LKM-533).
+### Fixed
+
+- Project names use the full sidebar row until their actions appear on title hover (LKM-531).
 
 ## [0.13.24] - 2026-11-04
 

@@ -172,6 +172,23 @@ extension NativeShell {
               SidebarChatCell.keepsHover(pointer: outline.window?.mouseLocationOutsideOfEventStream, in: cell) else { return }
         cell.setHovered(true, scrollingSince: hover.scroll)
     }
+    func sidebarProjectHover() -> (id: String, scroll: CFTimeInterval?)? {
+        for index in 0..<outline.numberOfRows {
+            guard let cell = outline.view(atColumn: 0, row: index, makeIfNecessary: false) as? ProjectCell,
+                  cell.showingActions, let row = outline.item(atRow: index) as? ShellRow else { continue }
+            return (row.id, cell.scrollStart)
+        }
+        return nil
+    }
+    func restoreSidebarProjectHover(_ hover: (id: String, scroll: CFTimeInterval?)?) {
+        guard let pointer = ProjectCell.scriptedPointer ?? outline.window?.mouseLocationOutsideOfEventStream else { return }
+        for index in 0..<outline.numberOfRows {
+            guard let row = outline.item(atRow: index) as? ShellRow, row.kind == "project",
+                  let cell = outline.view(atColumn: 0, row: index, makeIfNecessary: true) as? ProjectCell else { continue }
+            cell.restorePointer(at: pointer, wasActive: row.id == hover?.id,
+                                scrollingSince: row.id == hover?.id ? hover?.scroll : nil)
+        }
+    }
     func sidebarChatCell(_ row: ShellRow) -> NSView {
         let since: CFTimeInterval?
         if row.loadingTitle {
@@ -219,9 +236,11 @@ extension NativeShell {
         let wasApplying = applying
         applying = true; defer { applying = wasApplying }
         let hover = sidebarHover()
+        let projectHover = sidebarProjectHover()
         outline.reloadItem(row, reloadChildren: true)
         outline.expandItem(row)
         restoreSidebarHover(hover)
+        restoreSidebarProjectHover(projectHover)
         if let target = sidebarTarget() {
             let index = outline.row(forItem: target)
             if index >= 0 && outline.selectedRow != index { outline.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false) }

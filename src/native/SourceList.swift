@@ -49,7 +49,8 @@ enum SourceList {
            let icon = cell.imageView, let text = cell.textField {
             cell.layoutSubtreeIfNeeded()
             // Layout rects, as the shared constraints place them (a label's frame adds its text inset).
-            let iconFrame = icon.alignmentRect(forFrame: icon.frame), textFrame = text.alignmentRect(forFrame: text.frame)
+            let iconFrame = icon.alignmentRect(forFrame: icon.frame)
+            let textFrame = text.superview!.convert(text.alignmentRect(forFrame: text.frame), to: cell)
             result["row"] = ["height": outline.rect(ofRow: 0).height, "iconWidth": iconFrame.width, "iconHeight": iconFrame.height,
                              "iconLeading": iconFrame.minX, "labelGap": textFrame.minX - iconFrame.maxX,
                              "fontSize": text.font?.pointSize ?? 0]
