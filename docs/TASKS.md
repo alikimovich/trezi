@@ -3,6 +3,16 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-538 — Remove Custom from selected-element inspector
+
+- [x] Show only Props and Styles in the native inspector and retire its Custom request/composer and Create controls route.
+- [x] Fall back from legacy Custom selection to Styles without losing project or element selection; ignore stale Custom actions.
+- [x] Retain persisted control panels and unrelated editing capabilities; cover the new inspector surface in controller and native fixtures.
+- [x] Review repair: keep the removal entry under Unreleased after the 0.13.27 sync and update active provider guidance.
+- [x] Review repair: remove the obsolete inspector request exception from provider rules and bump their version.
+- [x] CI repair: remove the retired inspector smoke fixture's stale file-effect census row.
+- [x] CI fixture repair: compare the sidebar marquee's scheduled-before sample with its actual clock when a loaded runner passes the delay.
+- [ ] Manager: current-head CI, independent review, merge and post-merge native acceptance.
 ## LKM-530 — System monospace in top bar
 
 - [x] Use system monospace at existing sizes and weights for chat title, preview address and branch/status text.
