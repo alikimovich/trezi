@@ -14,6 +14,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Targeted safety repair: reject ad hoc signing downgrade or missing signer proof before restart, and exercise the real artifact verifier against disposable valid and invalid bundles.
 - [x] Review repair: match Git's possibly extended commit abbreviation and distinguish failed or unavailable update checks from a confirmed current build.
 - [x] Review proof: exercise the real owner update with clean, dirty and diverged disposable checkouts; unsafe trees refuse before install/build and preserve local work.
+- [x] Review proof: hold an owner check pending and assert the visible action-free checking sheet before its truthful current result.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
 ## LKM-525 — Nested Settings navigation and actions
 

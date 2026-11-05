@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-529 visible checking-state proof
+
+- The existing update-controller fixture now holds the owner's check response, asserts the live sheet says “Checking for updates” with no actions, and confirms a second open cannot start another check. Settling the promise then shows the current state. Existing fixtures cover available, updating, failure, unavailable, dirty and diverged states; product source is unchanged. Independent review, exact-head CI and post-merge native acceptance remain with the manager.
+
 ## 2026-11-04 — LKM-529 owner update safety proof
 
 - The real Swift workflow-owner fixture now runs the update path on disposable dirty and diverged source checkouts, alongside its existing clean success case. It asserts each unsafe update is refused before the fake package manager sees install or build, while HEAD and local file content and status remain intact. No product source changed; independent review, exact-head CI and post-merge native acceptance remain with the manager.

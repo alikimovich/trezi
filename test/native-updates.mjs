@@ -174,18 +174,40 @@ assert.equal(started, 1, 'duplicate Update cannot start another owner workflow')
 releaseUpdate({ ok: true })
 await first
 assert.equal(restarts, 2)
+let releaseCheck
+let checkCalls = 0
 const current = new NativeUpdateController(
   sheets,
   '/fixture',
   () => {
     restarts++
   },
-  { updateCheck: async () => ({ status: 'idle', behind: 0 }), update: owner.update },
+  {
+    updateCheck: () => {
+      checkCalls++
+      return new Promise((resolve) => {
+        releaseCheck = resolve
+      })
+    },
+    update: owner.update
+  },
   () => null,
   () => null
 )
 current.open()
-await action('check')
+const checking = action('check')
+assert.equal(sheets.current.state.title, 'Checking for updates')
+assert.match(sheets.current.state.detail, /Checking this Trezi installation/)
+assert.deepEqual(sheets.current.state.actions, [], 'pending check has no actions')
+current.open()
+assert.equal(
+  sheets.current.state.title,
+  'Checking for updates',
+  'opening again cannot replace a pending check'
+)
+assert.equal(checkCalls, 1, 'a pending check cannot start twice')
+releaseCheck({ status: 'idle', behind: 0 })
+await checking
 assert.equal(sheets.current.state.title, 'No update found')
 assert.deepEqual(
   sheets.current.state.actions.map((entry) => entry.id),
