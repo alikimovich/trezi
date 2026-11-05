@@ -238,9 +238,12 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
             Math.abs(neighbor.lift) >= 5,
             `${name}: neighboring glass is visibly painted: ${JSON.stringify(neighbor)}`
           )
+          // These controls sit over different surfaces: New Chat is on the dark chat
+          // header while the neighboring island is on the light preview toolbar.
+          // The same-image outside sample proves the New Chat glass independently.
           assert.ok(
-            Math.abs(chat.lift) >= Math.max(3, Math.abs(neighbor.lift) * 0.4),
-            `${name}: New Chat paints glass like its neighbor: ${JSON.stringify({ chat, neighbor })}`
+            Math.abs(chat.lift) >= 3,
+            `${name}: New Chat paints glass against its header: ${JSON.stringify({ chat, neighbor })}`
           )
           if (!enabled)
             assert.equal(

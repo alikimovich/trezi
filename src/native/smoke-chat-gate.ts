@@ -331,10 +331,10 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
     true
   )
   assert.equal(await host.request('shellPerform', { action: 'expand' }), true)
-  await until(
-    async () => (await host.request('layoutInspect')).chatColumnHidden,
-    'manual Hide collapses chat'
-  )
+  await until(async () => {
+    const layout = await host.request('layoutInspect')
+    return layout.chatColumnHidden && layout.fraction === 0
+  }, 'manual Hide finishes collapsing chat')
   await captureChatGate(host, artifacts, 'manually-hidden', false)
   assert.equal(await host.request('shellPerform', { action: 'expand' }), true)
   await until(async () => {

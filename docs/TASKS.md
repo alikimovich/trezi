@@ -16,6 +16,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: open selected provider Remove confirmation from editor state without a provider picker value.
 - [x] Review repair: return from provider Remove confirmation to the selected editor with its unsaved draft, including sidebar reentry, and clear that draft on confirmed removal.
 - [ ] Manager: current-head CI, independent review and post-merge native Settings acceptance.
+## LKM-527 — Native suite failure on main a8687a1b6a94
+
+- [x] Wait for the manual chat collapse to reach its final native layout before asserting status placement, so the smoke restores its window and sidebar state.
+- [x] Compare New Chat's painted glass with its own chat header in dark and light appearances; keep the neighboring island's painted-glass check.
+- [ ] Confirm the failing chat, core, settings and sidebar native groups on the repaired tree.
 
 ## LKM-523 — Loading titles, sidebar typography and New Chat
 

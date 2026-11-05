@@ -23,6 +23,10 @@
 ## 2026-11-04 — LKM-525 nested Settings header
 
 - Skills overview and nested Skills/provider panes now use the existing section and action state to keep registered actions in a fixed header. Nested panes show Back and context; the grouped form holds metadata and help below it, and the large section title stays only on overviews. Unsaved draft values survive Back and reopen in the same window, scoped to their pane context. Skills and windowless native fixtures cover parent/detail/back, draft preservation and section reentry; native visual acceptance remains for the manager after merge.
+## 2026-11-04 — LKM-527 native suite timing and glass evidence repair
+
+- The chat-gate smoke now waits for the native collapse animation to finish before checking the preview status frame. The earlier assertion ran while the chat column was already hidden but the layout fraction was still moving, aborting the check before its window and sidebar restoration and cascading into Settings, core and chat failures.
+- The New Chat foreground pixel check now measures its glass against the adjacent chat header in each appearance. The neighboring island remains a separate painted-glass control check; its light preview background cannot define the contrast required on the dark chat header. Native acceptance is still required.
 
 ## 2026-11-04 — LKM-523 review repair: unresolved title unmount
 
