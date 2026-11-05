@@ -51,16 +51,17 @@ try {
       statusText: null,
       pins: []
     }
+    preview.url = state.url
     registerPreviewIpc({
       state,
       ensurePreviewView: () => preview,
       getPreviewView: () => preview,
       getMainWindow: () => null,
       sendToMain: (...args) => output.push(args),
-      isLocalPreviewUrl: (url) => url === state.url,
+      isLocalPreviewUrl: (url) => new URL(url).origin === new URL(state.url).origin,
       placeholderUrl: 'data:,'
     })
-    const code = (source, selected) =>
+    const code = (source, selected, page = state.url) =>
       dispatchIPC('preview', {
         type: 'send',
         channel: PREVIEW_TOOLBAR_ACTION,
@@ -68,7 +69,7 @@ try {
           {
             action: 'three-d-code',
             source,
-            page: state.url,
+            page,
             session: 'scene-1',
             revision: 4,
             selected
@@ -91,6 +92,13 @@ try {
       'valid B Code reaches the existing route'
     )
     assert.equal(inspectThreeDRoute()['preview-ipc']?.reason, 'forwarded')
+    const beforeRoute = output.length
+    const oldPage = state.url
+    preview.url = `${oldPage}#next`
+    await code('src/B.tsx:2', 1, oldPage)
+    assert.equal(output.length, beforeRoute, 'old-route Code cannot reopen after pushState')
+    assert.equal(inspectThreeDRoute()['preview-ipc']?.reason, 'stale-page')
+    preview.url = oldPage
     await dispatchIPC(events[2].view, events[2].message)
     const closedCount = output.length
     await code('src/B.tsx:2', 1)

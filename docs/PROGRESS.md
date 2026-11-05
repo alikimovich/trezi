@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-537 stale 3D Code after a same-document route change
+
+- Manager native chat/core on candidate `66949fe3` passed 60 of 62 checks. The 3D negative failed because preview IPC allowed any local page URL, so a Code action from the old hash route could pass while the WebKit view had already moved to a new route and its scene-clear message was still in flight. The IPC guard now compares the action page with the current preview view URL before forwarding. The existing non-GUI state-relay fixture exercises a valid Code, a stale old-route Code with the scene still active, a changed selection and a closed scene. The inspector's prior running-server versus page fix remains intact.
+- The other native failure is `core/agent-integration`: a private WebKit browser receipt passed its `Other by B` text check but reported `source-not-verified: document-replaced` after a reload. That is a separate private-browser document freshness path; no 3D routing change or shared cause was shown. Manager exact-final-tree native chat/core, independent review, current-head CI and acceptance remain pending.
+
 ## 2026-11-05 — LKM-537 live Code refusal and compact toolbar constraint
 
 - The locked core trace showed a native Code event, isolated WebKit callback with `index.html:3:1`, and preview IPC acceptance for the same session, revision, selection and page. The inspector alone refused `status-page-mismatch`: its runtime status URL identifies the running dev server while WebKit had navigated to `/?lkm219=c`. Code now relies on the host's current page, ready root, running status and preview IPC's exact scene identity; stale page, session, revision, selection and root controls remain. The original 10-second native assertion is unchanged.

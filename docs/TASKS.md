@@ -20,6 +20,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Add failure-only 3D Code route observations and direct preview/IPC probes while preserving the original assertion and negative controls.
 - [x] Keep the failure-only direct toolbar probe active even when an unrelated source file is already visible; compose the non-GUI source path and record the 950-point toolbar bound.
 - [x] Record bounded live Code delivery counts and refusal reasons at the native producer, preview, IPC, inspector and editor boundaries; expose actual toolbar constraint and container frames.
+- [x] Reject a selected 3D Code request from an old same-document route against the preview view's current URL, with valid, stale-route, stale-selection and closed-scene IPC controls.
+- [ ] Manager: resolve the separate private-browser `document-replaced` native result and verify the exact final tree.
 - [ ] Manager: confirm the native chat group and independent review on the exact tree.
 ## LKM-543 — Native annotation composite and Send acceptance fixture
 

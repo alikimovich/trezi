@@ -341,17 +341,19 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
           ? 'invalid-source'
           : typeof action.page !== 'string' || !host.isLocalPreviewUrl(action.page)
             ? 'wrong-page'
-            : !activeThreeD
-              ? 'no-active-scene'
-              : action.session !== activeThreeD.session
-                ? 'wrong-session'
-                : action.revision !== activeThreeD.revision
-                  ? 'wrong-revision'
-                  : action.selected !== activeThreeD.selected
-                    ? 'wrong-selection'
-                    : !activeThreeD.hasSource
-                      ? 'no-selected-source'
-                      : 'forwarded'
+            : action.page !== previewWc()?.getURL()
+              ? 'stale-page'
+              : !activeThreeD
+                ? 'no-active-scene'
+                : action.session !== activeThreeD.session
+                  ? 'wrong-session'
+                  : action.revision !== activeThreeD.revision
+                    ? 'wrong-revision'
+                    : action.selected !== activeThreeD.selected
+                      ? 'wrong-selection'
+                      : !activeThreeD.hasSource
+                        ? 'no-selected-source'
+                        : 'forwarded'
       recordThreeDRoute('preview-ipc', {
         reason,
         source: typeof action.source === 'string' ? action.source : undefined,
