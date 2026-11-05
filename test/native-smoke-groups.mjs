@@ -99,7 +99,7 @@ for (const { name } of names)
   assert.ok(SMOKE_PRELUDE.includes(name) || SMOKE_CHECK_GROUPS[name], `Check ${name} needs a group`)
 // The opt-in checks are pushed onto the list under their flag, so the pattern skips them.
 for (const name of Object.keys(SMOKE_CHECK_GROUPS).filter(
-  (key) => key !== CHAT_RECOVERY_ACCEPTANCE_CHECK && key !== ANNOTATION_COMPOSITE_CHECK
+  (key) => key !== CHAT_RECOVERY_ACCEPTANCE_CHECK
 ))
   assert.ok(
     [
@@ -276,20 +276,88 @@ assert.throws(
 )
 
 const compositeArgv = ['--test', '--only=core', ANNOTATION_COMPOSITE_FLAG]
-const compositeChecks = [...names, { name: ANNOTATION_COMPOSITE_CHECK, dependsOn: ['chat-ready'] }]
+const compositeChecks = names
+const compositeIndex = names.findIndex((check) => check.name === ANNOTATION_COMPOSITE_CHECK)
+assert.ok(compositeIndex > 0, 'the composite check is registered in the ordinary smoke list')
+assert.equal(names.filter((check) => check.name === ANNOTATION_COMPOSITE_CHECK).length, 1)
+assert.deepEqual(names[compositeIndex].dependsOn, ['chat-ready'])
+assert.equal(names[compositeIndex - 1].name, 'preview-markup')
+assert.equal(names[compositeIndex + 1].name, 'text-edit')
+for (const argv of [[], ['--only=core']]) {
+  const selected = selectSmokeChecks(names, parseSmokeGroups(argv), () => {})
+  assert.equal(selected.filter((check) => check.name === ANNOTATION_COMPOSITE_CHECK).length, 1)
+  assert.equal(
+    selectAnnotationComposite(selected, argv),
+    selected,
+    'ordinary selection is unchanged'
+  )
+}
+assert.ok(
+  !selectSmokeChecks(names, parseSmokeGroups(['--only=chat']), () => {}).some(
+    (check) => check.name === ANNOTATION_COMPOSITE_CHECK
+  ),
+  'the check stays in core'
+)
+assert.match(
+  source,
+  /name: 'annotation-composite-send-native',\n\s*dependsOn: \['chat-ready'\],\n\s*run: async \(\) => \{[\s\S]*?await checkAnnotationCompositeSend\(host, page, artifacts\)\n\s*await restorePreviewMarkup\(host, page\)/,
+  'a successful composite check restores the preview before text-edit'
+)
+assert.match(
+  source,
+  /name: 'annotation-composite-send-native',[\s\S]*?if \(\s*process\.env\.TREZI_NATIVE_BACKGROUND_TEST === '1' &&\s*!process\.argv\.includes\(ANNOTATION_COMPOSITE_FLAG\)\s*\) \{\s*console\.log\('SKIP annotation composite\/Send foreground capture: background test'\)\s*return\s*\}\s*await checkAnnotationCompositeSend/,
+  'ordinary background runs skip the foreground check, while the narrow opt-in keeps its foreground guard'
+)
+assert.match(
+  source,
+  /'annotation fixture page removed'\s*\)\s*assert\.equal\(\(await host\.request\('previewMarkupInspect'\)\)\.open, false\)\s*\},\s*cleanup: \(\) => restorePreviewMarkup\(host, page\)/,
+  'success waits for the synthetic page to disappear and verifies the overlay is closed; failure retains cleanup'
+)
+const markupSource = readFileSync(
+  fileURLToPath(new URL('../src/native/smoke-preview-markup.ts', import.meta.url)),
+  'utf8'
+)
+assert.match(markupSource, /const PAGE = `\(\(\) => \{/, 'the check uses a local synthetic page')
+assert.match(
+  markupSource,
+  /if \(channel === 'agent:send'\) \{\s*sent\.push\(args\)\s*return/,
+  'Send is intercepted before a provider call'
+)
+assert.match(
+  markupSource,
+  /finally \{\s*nativeChat\.services\.invoke = invoke/,
+  'Send interception is restored'
+)
+assert.match(
+  markupSource,
+  /document\.querySelector\("#markup-smoke"\)\?\.remove\(\)/,
+  'cleanup removes the synthetic page'
+)
+assert.doesNotMatch(
+  markupSource,
+  /\bfetch\s*\(|feedback.{0,30}POST/i,
+  'the scenario has no network or feedback POST'
+)
 assert.deepEqual(
   selectAnnotationComposite(
     selectSmokeChecks(compositeChecks, parseSmokeGroups(compositeArgv), () => {}),
     compositeArgv
   ).map((c) => c.name),
-  [...SMOKE_PRELUDE, ANNOTATION_COMPOSITE_CHECK],
+  ['startup', 'open-project', 'chat-ready', ANNOTATION_COMPOSITE_CHECK, 'final-shell'],
   'the annotation composite has a narrow selectable route'
 )
 assert.throws(
   () => parseSmokeGroups(['--only=chat', ANNOTATION_COMPOSITE_FLAG]),
   /needs the core group/
 )
-assert.throws(() => selectAnnotationComposite(names, compositeArgv), /was not selected/)
+assert.throws(
+  () =>
+    selectAnnotationComposite(
+      names.filter((check) => check.name !== ANNOTATION_COMPOSITE_CHECK),
+      compositeArgv
+    ),
+  /was not selected/
+)
 assert.throws(
   () => selectAnnotationComposite(compositeChecks, [...compositeArgv, '--live']),
   /cannot run/
@@ -298,6 +366,16 @@ assert.throws(
   () => selectAnnotationComposite(compositeChecks, [...compositeArgv, MARKUP_ACCEPTANCE_FLAG]),
   /cannot run/
 )
+for (const flag of [
+  DREAMER_ACCEPTANCE_FLAG,
+  SOURCE_POPOUT_ACCEPTANCE_FLAG,
+  '--chat-recovery-acceptance'
+])
+  assert.throws(
+    () => selectAnnotationComposite(compositeChecks, [...compositeArgv, flag]),
+    /cannot run/,
+    `${flag} cannot combine with the narrow composite route`
+  )
 
 if (process.platform === 'darwin') {
   const cwd = fileURLToPath(new URL('../', import.meta.url))

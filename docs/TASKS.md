@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-544 — Include annotation composite Send proof in normal native smoke
+
+- [x] Register the existing synthetic composite/Send check once in ordinary core and full selection, retaining the narrow opt-in route.
+- [x] Cover normal and narrow selection, incompatible opt-ins, ordering, and cleanup in pure tests.
+- [ ] Manager: independent review, exact-head CI, merge and the scheduled post-merge native acceptance run.
+
 ## LKM-543 — Native annotation composite and Send acceptance fixture
 
 - [x] Add a narrow opt-in native scenario on a disposable fixture page, with the existing mocked Send interception.
