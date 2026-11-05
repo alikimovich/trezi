@@ -8,15 +8,15 @@ import AppKit
 // JSON report on stdout.
 _ = NSApplication.shared
 let small = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
-func scene(width: CGFloat, branch: String, busy: Bool = true, rest: String = " · Changes 2↑", ci: String = "running") -> (BranchPopUpButton, NSWindow) {
+func scene(width: CGFloat, branch: String, busy: Bool = true, rest: String = " · Changes 2↑", ci: String = "running", font: NSFont = small) -> (BranchPopUpButton, NSWindow) {
     let button = BranchPopUpButton(frame: NSRect(x: 20, y: 20, width: width, height: 20), pullsDown: true)
-    button.isBordered = false; button.font = small
+    button.isBordered = false; button.font = font
     button.cell?.lineBreakMode = .byTruncatingTail
     let prefix = "\(branch) · ", dotted = prefix + BranchStatusDot.slot
     let display = dotted + (busy ? " " + BranchStatusDot.slot : "") + rest
     button.addItem(withTitle: display)
     let style = NSMutableParagraphStyle(); style.lineBreakMode = .byTruncatingTail
-    button.item(at: 0)?.attributedTitle = NSAttributedString(string: display, attributes: [.foregroundColor:NSColor.black, .font:small, .paragraphStyle:style])
+    button.item(at: 0)?.attributedTitle = NSAttributedString(string: display, attributes: [.foregroundColor:NSColor.black, .font:font, .paragraphStyle:style])
     button.setDot(ci, after: prefix)
     button.setProgress(busy, after: dotted + " ", description: display)
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width + 40, height: 60), styleMask: [.borderless], backing: .buffered, defer: false)
@@ -58,4 +58,12 @@ for (key, width) in [("cutAfterSlot", CGFloat(91.5)), ("fitsWhole", CGFloat(94.5
     out[key] = report(idle).merging(["cut": idle.titleCut, "kept": idle.keptSlots, "dotFrame": [dot.minX, dot.maxX],
                                      "runs": ink.map { [$0.0, $0.1] }]) { _, new in new }
 }
+// LKM-537: the real 1320 pt toolbar gives the placeholder a 98 pt popup and uses
+// a monospaced title. Proportional-font cuts can conceal unused space before the chevron.
+let hostFont = NSFont.monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+let (host, hostWindow) = scene(width: 98, branch: "Branch", busy: false, rest: " · ?", ci: "unknown", font: hostFont)
+keep.append(hostWindow)
+let hostRuns = renderedText(host, text: host.itemTitle(at: 0), font: hostFont)?.runs ?? []
+out["hostCompact"] = report(host).merging(["cut": host.titleCut, "kept": host.keptSlots,
+                                               "runs": hostRuns.map { [$0.0, $0.1] }]) { _, new in new }
 print(String(data: try! JSONSerialization.data(withJSONObject: out, options: [.sortedKeys]), encoding: .utf8)!)

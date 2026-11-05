@@ -56,5 +56,15 @@ if (process.platform !== 'darwin') {
   // Untightened, the cut and the drawing agree: a title that fits is drawn whole.
   assert.equal(whole.cut || whole.kept > 0, false, `the whole title fits at 94.5 pt: ${dump}`)
   assert.ok(gap(whole.runs) >= 1 && gap(whole.runs) <= 6.5, `untruncated chevron gap: ${dump}`)
+  const host = report.hostCompact
+  assert.equal(
+    host.cut && host.kept === 0 && !host.dotVisible,
+    true,
+    `host title cuts before its dot: ${dump}`
+  )
+  assert.ok(
+    gap(host.runs) >= 1 && gap(host.runs) <= 16,
+    `monospace 98 pt title meets its chevron: ${dump}`
+  )
   console.log('BRANCH-SPINNER PASS')
 }

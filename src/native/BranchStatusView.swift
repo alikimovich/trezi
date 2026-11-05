@@ -139,7 +139,18 @@ final class BranchPopUpCell: NSPopUpButtonCell {
             while stop > kept, let scalar = UnicodeScalar(text.character(at: stop - 1)), CharacterSet.whitespaces.contains(scalar) { stop -= 1 }
             let candidate = NSMutableAttributedString(attributedString: title.attributedSubstring(from: NSRange(location: 0, length: stop)))
             candidate.append(NSAttributedString(string: "…", attributes: title.attributes(at: max(0, stop - 1), effectiveRange: nil)))
-            if candidate.size().width <= width { return candidate }
+            if candidate.size().width <= width {
+                // At the host's 98 pt monospaced popup the last whole prefix leaves a
+                // glyph's worth of unused room. Move only the trailing ellipsis into
+                // that room; the prefix and any retained status-dot slot stay put.
+                if kept == 0 && stop > 0 {
+                    let room = max(0, width - candidate.size().width - 2)
+                    let nudge = min(5, room)
+                    let last = (candidate.string as NSString).rangeOfComposedCharacterSequence(at: stop - 1)
+                    candidate.addAttribute(.kern, value: nudge, range: last)
+                }
+                return candidate
+            }
         }
         return nil
     }

@@ -284,10 +284,97 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   const leafState = await inspect()
   const scenePage = await page('location.href')
   assert.equal(await host.request('shellPerform', { action: 'nested-code' }), true)
-  await waitFor(async () => {
-    const editor = await host.request('sourceInspect')
-    return editor.visible && editor.source === 'index.html' && editor
-  }, 'the selected leaf source opens index.html')
+  try {
+    await waitFor(async () => {
+      const editor = await host.request('sourceInspect')
+      return editor.visible && editor.source === 'index.html' && editor
+    }, 'the selected leaf source opens index.html')
+  } catch (error) {
+    // Only after the original assertion failed, locate the first route that drops
+    // Code. Do not make the direct probes part of the passing user interaction.
+    const source = async (root?: string) => {
+      const editor = await host.request('sourceInspect', root ? { root } : {})
+      return {
+        visible: editor.visible,
+        source: editor.source,
+        busy: editor.busy,
+        error: editor.error
+      }
+    }
+    const scene = async () => {
+      const state = await inspect()
+      return {
+        active: state.active,
+        session: state.session,
+        revision: state.revision,
+        selected: state.selected,
+        code: state.code,
+        capturedRevision: state.capturedRevision
+      }
+    }
+    const inspector = await host.request('inspectorInspect')
+    const trace: Record<string, unknown> = {
+      expected: {
+        source: 'index.html:3:1',
+        selected: leaf,
+        session: leafState.session,
+        revision: leafState.revision,
+        page: scenePage,
+        turn: null
+      },
+      before: {
+        scene: await scene(),
+        source: await source(),
+        fixtureSource: await source(fixture),
+        inspector: {
+          root: inspector.root,
+          visible: inspector.visible,
+          busy: inspector.busy,
+          error: inspector.error,
+          title: inspector.title
+        }
+      }
+    }
+    const live = await scene()
+    trace.directPreviewAction = await page(
+      `globalThis.__treziThreeDAction?.(${JSON.stringify({
+        action: 'code',
+        session: live.session,
+        revision: live.revision
+      })})`,
+      true
+    )
+    await page('true', true)
+    trace.afterDirectPreview = {
+      source: await source(),
+      fixtureSource: await source(fixture),
+      scene: await scene()
+    }
+    if (!(await source(fixture)).visible) {
+      await dispatchIPC('preview', {
+        type: 'send',
+        channel: PREVIEW_TOOLBAR_ACTION,
+        args: [
+          {
+            action: 'three-d-code',
+            source: 'index.html:3:1',
+            page: scenePage,
+            session: live.session,
+            revision: live.revision,
+            selected: live.selected
+          }
+        ]
+      })
+      await page('true', true)
+      trace.afterDirectToolbar = {
+        source: await source(),
+        fixtureSource: await source(fixture),
+        scene: await scene()
+      }
+    }
+    console.error(`3D Code route trace: ${JSON.stringify(trace)}`)
+    throw error
+  }
   await host.request('sourcePerform', { action: { root: fixture, action: 'hide' } })
   await waitFor(async () => !(await host.request('sourceInspect')).visible, 'first source hidden')
   const heading = opened.layers.indexOf('h2#three-d-heading')

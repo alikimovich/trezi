@@ -1,5 +1,19 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-537 selected 3D Code route trace
+
+- The retained native artifacts show the selected `index.html` leaf and a Code timeout, but no action, page/readiness, or source-editor state at the refusal boundary. The 3D smoke now captures the selected session, revision, page, source editor for both default and fixture roots, and inspector state only if the original 10-second assertion fails. It then probes the current scene's Code action directly in the isolated preview and, if no editor opens, sends the same source through the preview toolbar IPC. These failure-only observations distinguish host relay, preview selection, and downstream inspector/editor routing without changing passing interaction or guards. A single worker native call and manager acceptance remain pending.
+
+## 2026-11-05 — LKM-537 resized New Chat measurement and 3D route discriminator
+
+- The retained native sidebar-340 frame placed New Chat at x679 rather than the chat edge x692. `alignChatHeader` reserved the button in the header width and again in the address limit, even though `ToolbarAddressLayout.measure` records the address offset after the button and viewport. The header now applies the button reserve only against the chat edge and passes its actual trailing edge to the address. The offscreen chat-lead fixture uses the saved 340-point sidebar geometry to check the 13-point correction; native placement remains to be verified.
+- A task-local non-GUI discriminator through the real inspector event handler accepted the exact `index.html:3:1` source after readiness and rejected pre-readiness and stale-page actions. The existing Swift relay and preview IPC fixture accepted current selected source and rejected stale selection/closed state. These controlled results do not identify where the live 3D Code action stopped in the saved native timeout, so no 3D product guard or timeout was changed. Native chat/core and manager acceptance remain pending.
+
+## 2026-11-05 — LKM-537 host-width branch cut and chat smoke cleanup
+
+- The saved native run measured a 19.375-point gap between the cut branch title and chevron in the 1320-point toolbar. A 98-point popup fixture using the host's monospaced font reproduced the same gap. The branch cell now moves only the trailing ellipsis into the spare room when no status-dot slot fits; the prefix and dot/spinner placement remain unchanged. The focused fixture keeps the 1–16-point rendered-ink assertion.
+- The same native run timed out in chat-ui with a live backend turn, then parallel-stream rejected that busy shared chat and quit-alert waited on its activity. Chat-ui now uses the established shared-chat cleanup in `finally` so a failing check ends its stubbed turn before later checks. The initial timeout cause remains to be established by native verification; this cleanup does not count that timeout as a pass.
+
 ## 2026-11-05 — LKM-537 truncated branch title and chevron
 
 - Manager native verification passed 61 of 62 checks on the candidate and failed toolbar-address at the default 1320-point width. The measured branch title was cut, its dot slot was not retained, and AppKit left 19.375 points between the ellipsis and chevron. The branch cell now uses its existing explicit longest-prefix truncation even when no dot slot fits. The offscreen branch fixture checks the rendered ink gap for that case; final-tree quick and native chat/core verification remain the gates.
