@@ -17,6 +17,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: return from provider Remove confirmation to the selected editor with its unsaved draft, including sidebar reentry, and clear that draft on confirmed removal.
 - [x] CI fixture repair: assert Undo restores the exact captured prior memory in `resolved-lessons`.
 - [x] Security repair: scope provider drafts and Remove return context by stable provider ID, and reject same-label credential crossover in the existing Settings fixtures.
+- [x] Review repair: clear native Claude/Gemini secure values and retained drafts after successful removal, preserving failed-removal and unrelated drafts.
+- [x] Review repair: show exact validation and service messages beside pinned Settings actions above long scrolling forms.
 - [ ] Manager: current-head CI, independent review and post-merge native Settings acceptance.
 ## LKM-533 — Stack accepted question and answer pairs
 

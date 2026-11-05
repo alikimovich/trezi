@@ -6,7 +6,7 @@ struct SheetFieldCondition: Decodable { let field: String; let value: String }
 struct SheetField: Decodable, Identifiable { let id: String; let label: String; let kind: String; let value: String; let choices: [SheetChoice]?; let help: String?; let visibleWhen: SheetFieldCondition?; let section: String?; let draft: Bool?; let placeholder: String?; let action: String?; let actionLabel: String?; let group: String?; let height: Double? }
 struct SheetAction: Decodable, Identifiable { let id: String; let label: String; let primary: Bool?; let destructive: Bool?; let section: String?; let cancel: Bool?; let copy: String?; let disabled: Bool? }
 struct SheetSection: Decodable, Identifiable { let id: String; let label: String; let symbol: String; let detail: String?; let navigationTitle: String?; let draftContext: String? }
-struct SheetState: Decodable { let id: String; let title: String; let detail: String; let fields: [SheetField]; let actions: [SheetAction]; let busy: Bool; let autosave: Bool?; let dismissible: Bool?; let message: String?; let sections: [SheetSection]?; let section: String?; let alert: Bool? }
+struct SheetState: Decodable { let id: String; let title: String; let detail: String; let fields: [SheetField]; let actions: [SheetAction]; let busy: Bool; let autosave: Bool?; let dismissible: Bool?; let message: String?; let sections: [SheetSection]?; let section: String?; let alert: Bool?; let clearDraftFields: [String]? }
 private struct SheetDraftKey: Hashable { let section: String; let context: String; let field: String }
 final class SheetModel: ObservableObject {
     @Published var state: SheetState?
@@ -47,6 +47,13 @@ final class SheetModel: ObservableObject {
                 values[field.id] = field.kind == "readonly" ? field.value : draft ?? field.value
             }
             values = values.filter { current.contains($0.key) }
+        }
+        // The service confirmed removal of a saved credential. Its secure field
+        // still exists in this pane, so ordinary in-place updates retain typed
+        // input; discard that input and its retained draft only for this update.
+        for field in next.fields where field.draft == true && (next.clearDraftFields?.contains(field.id) ?? false) {
+            values[field.id] = field.value
+            if let key = draftKey(field, in: next) { retainedDrafts.removeValue(forKey: key) }
         }
         state = next
     }

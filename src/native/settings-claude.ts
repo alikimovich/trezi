@@ -56,6 +56,7 @@ async function claudeAction(
   action: NativeSheetAction
 ) {
   let report: ProviderLoginReport | undefined, message: string | undefined
+  let removed = false
   if (action.action === 'claude-check')
     report = await sheets.invoke('providers:check-login', 'claude')
   else if (action.action !== 'claude') {
@@ -65,6 +66,7 @@ async function claudeAction(
     const result = await sheets.invoke('providers:seat-token-save', token)
     if (!result.ok) throw new Error(result.error ?? 'Could not save the token.')
     message = result.hasToken ? 'Token saved. New Claude chats use it.' : 'Token removed.'
+    removed = remove && !result.hasToken
   }
   const next = await pane(sheets, report)
   if (sheets.current !== sheet) return
@@ -83,7 +85,7 @@ async function claudeAction(
     section.navigationTitle = 'Claude'
   }
   sheet.state.message = message
-  sheets.refresh()
+  sheets.refresh(removed ? ['token'] : undefined)
 }
 /** Add Claude configuration beside the provider rows, with no global action button. */
 const offer = (sheet: Sheet) => {

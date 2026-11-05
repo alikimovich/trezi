@@ -56,6 +56,10 @@ struct SectionedSheetContent: View {
                         ForEach(secondary) { headerButton($0) }
                     }
                 }
+                if let message = state.message, !message.isEmpty {
+                    SheetHeaderMessage(text: message)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .padding(.horizontal, 20).padding(.vertical, 10)
             Divider()
@@ -77,7 +81,7 @@ struct SectionedSheetContent: View {
                         }
                     }.textCase(nil).padding(.bottom, index == 0 ? 8 : 2)
                 } footer: {
-                    if index == groups.count - 1 { footer(pinned ? [] : actions) }
+                    if index == groups.count - 1 && !pinned { footer(actions) }
                 }
             }
         }
@@ -159,6 +163,24 @@ struct SectionedSheetContent: View {
         default:
             TextField(text: form.binding(field), prompt: Text(field.placeholder ?? "")) { label(field) }
         }
+    }
+}
+
+/// A selectable, accessible result beside pinned Settings actions. The form can
+/// scroll independently without hiding validation or service feedback.
+struct SheetHeaderMessage: NSViewRepresentable {
+    let text: String
+    func makeNSView(context: Context) -> NSTextField {
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.textColor = .secondaryLabelColor
+        label.isSelectable = true
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return label
+    }
+    func updateNSView(_ label: NSTextField, context: Context) {
+        label.stringValue = text
+        label.identifier = NSUserInterfaceItemIdentifier("sheet-header-message")
+        label.setAccessibilityLabel(text)
     }
 }
 

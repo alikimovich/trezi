@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-525 credential removal and pinned feedback repair
+
+- A successful Claude token or Gemini key removal now sends a one-update clear signal to the native Settings form, which discards both its typed secure value and matching retained draft. Failed removal leaves the draft intact; unrelated provider drafts still restore. The synthetic Settings fixture covers removal, Back, reopen and blocked resubmission for each credential. Validation and service messages now render beside the pinned action above long scrolling Settings forms, with windowless geometry and accessibility assertions. Current-head CI, independent review and native acceptance remain manager gates.
+
 ## 2026-11-04 — LKM-525 provider draft identity security repair
 
 - Retained provider form drafts now use the selected provider's stable ID, section and field ID instead of the displayed navigation title. Remove confirmation keeps the same identity through Back and clears only that provider's draft after confirmed removal. The existing windowless Settings fixture first reproduced a same-label collision, then checks that provider B cannot receive or submit provider A's synthetic key, URL or models while A's own draft still restores. The controller fixture checks that list, editor and confirmation states send the matching stable context; current-head CI and native acceptance remain with the manager.

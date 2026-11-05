@@ -88,6 +88,7 @@ async function geminiAction(
   action: NativeSheetAction
 ) {
   let report: ProviderLoginReport | undefined, message: string | undefined
+  let removed = false
   if (action.action === 'gemini-check')
     report = await sheets.invoke('providers:check-login', 'gemini')
   else if (action.action !== 'gemini') {
@@ -97,6 +98,7 @@ async function geminiAction(
     const result = await sheets.invoke('providers:seat-token-save', key, 'gemini')
     if (!result.ok) throw new Error(result.error ?? 'Could not save the key.')
     message = result.hasToken ? 'Key saved. New Gemini chats use it.' : 'Key removed.'
+    removed = remove && !result.hasToken
   }
   const next = await pane(sheets, report)
   if (sheets.current !== sheet) return
@@ -115,7 +117,7 @@ async function geminiAction(
     section.navigationTitle = 'Gemini'
   }
   sheet.state.message = message
-  sheets.refresh()
+  sheets.refresh(removed ? ['geminiKey'] : undefined)
 }
 
 /** Keep the Gemini On/Off picker separate from its configuration row. */

@@ -68,6 +68,8 @@ export interface NativeSheetState {
   dismissible?: boolean
   busy: boolean
   message?: string
+  /** One update only: successful credential removal clears these draft fields in the native form. */
+  clearDraftFields?: string[]
 }
 /** A short confirmation inside the main window that dismisses itself after `seconds`. */
 export interface NativeToastState {

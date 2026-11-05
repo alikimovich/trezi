@@ -261,6 +261,13 @@ try {
   assert.match(field('report').value, /Gemini CLI/)
   assert.deepEqual(owned.at(-1), ['checkLogin', 'gemini'])
   await action('gemini-remove')
+  assert.ok(
+    sent.some(
+      ([method, data]) =>
+        method === 'sheetState' && data.state.clearDraftFields?.includes('geminiKey')
+    ),
+    'a successful removal tells the native form to clear the key draft'
+  )
   assert.deepEqual(calls.filter((c) => c[0] === 'providers:seat-token-save').at(-1), [
     'providers:seat-token-save',
     '',

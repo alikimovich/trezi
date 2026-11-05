@@ -129,6 +129,12 @@ assert.ok(
   'the token must not return in sheet snapshots'
 )
 await action('claude-remove')
+assert.ok(
+  sent.some(
+    ([method, data]) => method === 'sheetState' && data.state.clearDraftFields?.includes('token')
+  ),
+  'a successful removal tells the native form to clear the token draft'
+)
 assert.deepEqual(calls.filter((c) => c[0] === 'providers:seat-token-save').at(-1), [
   'providers:seat-token-save',
   ''

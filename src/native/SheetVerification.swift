@@ -124,6 +124,12 @@ extension NativeSheets {
             ["action": String((button.identifier?.rawValue ?? "").dropFirst("sheet-action:".count)), "title": button.title,
              "label": button.accessibilityLabel() ?? "", "enabled": button.isEnabled, "keyEquivalent": button.keyEquivalent].merging(placement(button, in: content)) { _, new in new }
         }
+        let headerMessage: [String: Any] = rendered(NSTextField.self, in: content)
+            .first { $0.identifier?.rawValue == "sheet-header-message" && !$0.isHiddenOrHasHiddenAncestor }
+            .map { label in
+                ["text": label.stringValue, "label": label.accessibilityLabel() ?? ""]
+                    .merging(placement(label, in: content)) { _, new in new }
+            } ?? [:]
         let statuses: [[String: Any]] = rendered(NSTextField.self, in: content)
             .filter { $0.identifier?.rawValue.hasPrefix("sheet-status:") == true && !$0.isHiddenOrHasHiddenAncestor }
             .map { label in
@@ -167,7 +173,7 @@ extension NativeSheets {
         }
         return ["foreground": panel.isVisible && panel.isKeyWindow && NSApp.isActive,
                 "width": content.bounds.width, "height": content.bounds.height,
-                "minimumWidth": panel.contentMinSize.width, "minimumHeight": panel.contentMinSize.height, "controls": controls, "rows": rows, "editors": editors, "headerActions": headerActions, "statuses": statuses,
+                "minimumWidth": panel.contentMinSize.width, "minimumHeight": panel.contentMinSize.height, "controls": controls, "rows": rows, "editors": editors, "headerActions": headerActions, "headerMessage": headerMessage, "statuses": statuses,
                 "formScrollY": formScroll(in: content)?.contentView.bounds.minY ?? 0,
                 "fields": model.state!.fields.filter { $0.section == shown }.map(\.id),
                 "actions": model.state!.actions.filter { $0.section == shown }.map(\.id), "message": model.state!.message ?? "",
