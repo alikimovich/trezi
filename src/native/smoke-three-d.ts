@@ -281,6 +281,8 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
     'clicking a layer opens the inspector'
   )
   assert.equal((await inspect()).code, true, 'the selected leaf has an exact source stamp')
+  const leafState = await inspect()
+  const scenePage = await page('location.href')
   assert.equal(await host.request('shellPerform', { action: 'nested-code' }), true)
   await waitFor(async () => {
     const editor = await host.request('sourceInspect')
@@ -290,7 +292,35 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   await waitFor(async () => !(await host.request('sourceInspect')).visible, 'first source hidden')
   const heading = opened.layers.indexOf('h2#three-d-heading')
   await perform('layer', heading)
-  await waitFor(async () => (await inspect()).sceneSelected === heading, 'picker selects a layer')
+  const headingState = await waitFor(async () => {
+    const state = await inspect()
+    return state.selected === heading && state.sceneSelected === heading && state
+  }, 'picker selects a new source-backed layer')
+  assert.equal(
+    headingState.revision,
+    leafState.revision,
+    'layer changes do not advance capture revision'
+  )
+  await dispatchIPC('preview', {
+    type: 'send',
+    channel: PREVIEW_TOOLBAR_ACTION,
+    args: [
+      {
+        action: 'three-d-code',
+        source: 'index.html:3:1',
+        page: scenePage,
+        session: leafState.session,
+        revision: leafState.revision,
+        selected: leaf
+      }
+    ]
+  })
+  await page('true', true)
+  assert.equal(
+    (await host.request('sourceInspect')).visible,
+    false,
+    'delayed Code for the prior layer cannot reopen index.html'
+  )
   assert.equal(await host.request('shellPerform', { action: 'nested-code' }), true)
   await waitFor(async () => {
     const editor = await host.request('sourceInspect')
@@ -474,7 +504,8 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
         source: 'index.html:3:1',
         page: parentUrl,
         session: samePage.session,
-        revision: samePage.revision
+        revision: samePage.revision,
+        selected: samePage.selected
       }
     ]
   })
@@ -534,7 +565,8 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
         source: 'about.html:3:1',
         page: parentUrl,
         session: third.session,
-        revision: third.revision
+        revision: third.revision,
+        selected: third.selected
       }
     ]
   })

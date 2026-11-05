@@ -1922,7 +1922,7 @@ function setFrame(on: boolean): void {
 const threeD = createThreeDInspector({
   publish: (state: ThreeDState | null) => ipcRenderer.send(PREVIEW_THREE_D_STATE, state),
   hasSource: (el) => !!findSource(el),
-  code: (el, session, revision) => {
+  code: (el, session, revision, selected) => {
     selectedEl = el
     const picked = describe(el)
     ipcRenderer.send(PICKED, picked)
@@ -1934,7 +1934,8 @@ const threeD = createThreeDInspector({
         source: picked.source,
         page: location.href,
         session,
-        revision
+        revision,
+        selected
       })
   },
   select: (el, open) => {

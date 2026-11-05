@@ -28,7 +28,7 @@ function identity(el: Element, scope: ParentNode): () => Element | null {
 export function createThreeDInspector(options: {
   select: (element: Element, open: boolean) => void
   hasSource: (element: Element) => boolean
-  code: (element: Element, session: string, revision: number) => void
+  code: (element: Element, session: string, revision: number, selected: number) => void
   lost: () => void
   close: () => void
   publish: (state: ThreeDState | null) => void
@@ -255,7 +255,9 @@ export function createThreeDInspector(options: {
           break
         case 'code': {
           const element = resolveSelected?.()
-          if (element && options.hasSource(element)) options.code(element, session, revision)
+          const index = surfaces.findIndex((surface) => surface.element === element)
+          if (element && index >= 0 && options.hasSource(element))
+            options.code(element, session, revision, index)
           break
         }
         case 'layer':

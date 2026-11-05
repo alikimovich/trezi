@@ -153,7 +153,12 @@ function requestReply<T>(opts: {
 
 export function registerPreviewIpc(host: PreviewIpcHost): void {
   const { state, sendToMain } = host
-  let activeThreeD: { session: string; revision: number; hasSource: boolean } | null = null
+  let activeThreeD: {
+    session: string
+    revision: number
+    selected: number | null
+    hasSource: boolean
+  } | null = null
   const previewWc = (): NativeWebContents | undefined => host.getPreviewView()?.webContents
   /** Push to the preview's preload (no-op when there's no preview yet). */
   const toPreview = (channel: string, ...args: unknown[]): void => {
@@ -163,13 +168,29 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
   const fromPreview = (e: NativeIpcEvent): boolean => e.sender === previewWc()
   ipcMain.on(PREVIEW_THREE_D_STATE, (e, value: unknown) => {
     if (!fromPreview(e)) return
-    const scene = value as { session?: unknown; revision?: unknown; hasSource?: unknown } | null
+    const scene = value as {
+      session?: unknown
+      revision?: unknown
+      selected?: unknown
+      hasSource?: unknown
+      layers?: unknown
+    } | null
     activeThreeD =
       scene &&
       typeof scene.session === 'string' &&
       Number.isInteger(scene.revision) &&
+      (scene.selected === null ||
+        (Number.isInteger(scene.selected) &&
+          Array.isArray(scene.layers) &&
+          (scene.selected as number) >= 0 &&
+          (scene.selected as number) < scene.layers.length)) &&
       typeof scene.hasSource === 'boolean'
-        ? { session: scene.session, revision: scene.revision as number, hasSource: scene.hasSource }
+        ? {
+            session: scene.session,
+            revision: scene.revision as number,
+            selected: scene.selected as number | null,
+            hasSource: scene.hasSource
+          }
         : null
   })
 
@@ -315,6 +336,7 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
         !activeThreeD ||
         action.session !== activeThreeD.session ||
         action.revision !== activeThreeD.revision ||
+        action.selected !== activeThreeD.selected ||
         !activeThreeD.hasSource
       )
         return

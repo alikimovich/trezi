@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-536 delayed Code after layer selection
+
+- A 3D Code action now carries the scene's selected layer index. The preview IPC accepts it only when that index matches the latest published selection in the same session and revision, so a delayed A action cannot open A after B is selected without a recapture. The existing native fixture sends that delayed A action after selecting B and checks that B's real Code action still opens B. Native execution and exact-head CI remain manager gates.
+
+
 ## 2026-11-04 — LKM-536 review repair: preview IPC and stale Code
 
 - The preview IPC now accepts the bounded structured 3D Code action only from the preview, for its current published 3D session and source-backed selection. It clears that context on close, load and readiness, then forwards the exact source and page to the existing inspector route. The 3D fixture now uses an unstamped connected layer between two distinct stamped layers, checks that Code cannot reopen a prior file there, and injects an old-session Code action after route navigation and reload. Native execution remains a post-merge gate.
