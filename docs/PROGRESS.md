@@ -4,6 +4,19 @@
 
 - Nested Skills and provider panes now use the existing section and action state to show Back, context and registered actions in a fixed header. The grouped form holds metadata and help below it; the large section title stays on overview panes. Skills fixture assertions cover parent/detail/back and section reentry; native visual acceptance remains for the manager after merge.
 
+## 2026-11-04 — LKM-523 review repair: unresolved title unmount
+
+- The existing offscreen sidebar title fixture now detaches a row while glyphs remain unresolved. It asserts the decipher timer was active before removal, stops on detachment, leaves a readable label, and does not retain the decipher object after the cell is discarded. `sidebar-shimmer` is registered in the unit tier for the manager's CI command. The reported prior-head `contentTintColor` Swift error is absent from this checkout; exact-head CI remains required.
+
+## 2026-11-04 — LKM-523 review repair: preserve loading glyphs through updates
+
+- The selected header now leaves its attributed decipher frame intact while the same chat loads. Sidebar rebuilds carry a chat-keyed reveal clock, and readiness or cancellation prunes it. The offscreen title fixture asserts visible beginning/middle glyphs, independently resolved columns, fixed-width advances and a rebuilt row that keeps its time; the toolbar control fixture asserts idle, hover, press, focus and disabled bezel states beside a neighboring island glyph.
+- System monospace widens the marquee's real travel and whitespace. Its existing rendered fixture now schedules holds from measured travel and allows one full monospace space without relaxing the painted-clip or end-position checks. Foreground native acceptance remains with the post-merge operator run.
+
+## 2026-11-04 — LKM-523 loading titles, sidebar type and New Chat
+
+- The read-only decipher reference snapshot at `/Users/panda/dev/hephaestus/reports/trezi-decipher-reference` was available with its source manifest. Unknown titles now use a native fixed-width per-glyph reveal in the sidebar and selected header, with a static Reduce Motion label and stable accessibility text. Authoritative ready/error titles replace the effect immediately; a running chat retains its separate shimmer.
+- Sidebar labels use the system monospace family. New Chat keeps its native glass and momentary control while its AppKit bezel responds to hover and keyboard focus. The offscreen sidebar fixture covers beginning, middle and resolved glyphs, static motion fallback, accessibility and font; the existing toolbar fixture compiles the shared control. Foreground appearance and interaction captures remain for the operator-owned post-merge native run.
 ## 2026-11-04 — LKM-519 review repair: assigned private URL
 
 - The runtime-owner socket fixture now launches a Yarn 4 style script that preserves literal `--`, records its Vite arguments and serves a real page on the forwarded port. It checks the private runtime's returned and recorded URL against the assigned port and fetches the page. The unit tier runs this section where loopback binding is available; CI and post-merge acceptance remain with the manager.

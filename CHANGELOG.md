@@ -13,6 +13,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Changed
 
 - Nested Settings panes keep Back, their context and their existing actions above scrolling content (LKM-525).
+## [0.13.24] - 2026-11-04
+
+### Changed
+
+- Unknown chat titles now decipher into a readable loading label; sidebar text uses system monospace, and New Chat gains native toolbar hover and focus feedback (LKM-523).
 
 ## [0.13.23] - 2026-11-04
 

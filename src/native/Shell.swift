@@ -33,7 +33,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     /// What the chat gate shows in the header, merged into `shellInspect`.
     func gateInspect() -> [String: Any] {
         ["chatReady":chatReady, "chatHeaderContentVisible":!chatTitle.isHidden,
-         "chatTitleMode":chatTitleShimmer?.mode ?? "none",
+         "chatTitleMode":chatTitleDecipher?.mode ?? "none",
          "chatTitleLabel":chatTitle.accessibilityLabel() ?? ""]
     }
     /// A toolbar button's control and its rect in it, to anchor a popover or menu (LKM-229).
@@ -95,7 +95,9 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
     let chatHeader = ChatToolbarView()
     private let chatTitle = NSTextField(labelWithString: "Chat")
-    private var chatTitleShimmer: SidebarTitleShimmer?
+    private var chatTitleDecipher: SidebarTitleDecipher?
+    private var chatTitleDecipherID: String?
+    var sidebarDecipherStarts: [String: CFTimeInterval] = [:]
     // The toolbar islands receive AppKit's glass from their item groups. The title's custom
     // item needs an explicit native glass view around its single action.
     private let chatNewGlass: NSView = {
@@ -198,7 +200,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         toolbar.delegate = self; toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false; toolbar.autosavesConfiguration = false
         chatHeader.align = { [weak self] in self?.measureToolbar() }
-        chatHeader.attached = { [weak self] in self?.chatTitleShimmer?.refresh() }
+        chatHeader.attached = { [weak self] in self?.chatTitleDecipher?.refresh() }
         addressHeader.measure = { [weak self] in self?.measureToolbar() }
         NotificationCenter.default.addObserver(self, selector: #selector(splitResized(_:)), name: NSSplitView.didResizeSubviewsNotification, object: split.splitView)
         // Window resizes set the toolbar widths synchronously, in the same layout pass.
@@ -315,6 +317,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             chatNewButton.segmentStyle = .texturedRounded
             // The glass view owns the bezel; a second segmented-cell bezel darkens its interior.
             chatNewButton.cell?.isBordered = false
+            chatNewButton.usesGlassHover = true
+            chatNewButton.focusRingType = .exterior
             chatNewButton.alignsFullFrame = true
             chatNewButton.setWidth(32, forSegment: 0)
             chatNewButton.toolTip = "New Chat"; chatNewButton.setAccessibilityLabel("New Chat")
@@ -462,13 +466,26 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             item.isEnabled = key == "chat" ? true : key == "code" || key == "expand" ? currentProject != nil : key == "branch" ? previewState["branch"] is String : ready
         }
         let selected = allRows.first(where: { $0.id == selectedID })
-        chatTitle.stringValue = selected?.title ?? "Chat"
-        chatTitle.setAccessibilityLabel(chatTitle.stringValue == "••••••••" ? "Loading conversation" : chatTitle.stringValue)
+        if selected?.loadingTitle != true || selected?.id != chatTitleDecipherID {
+            chatTitleDecipher?.stop(); chatTitleDecipher = nil; chatTitleDecipherID = nil
+        }
+        let titleFont: NSFont = selected?.loadingTitle == true
+            ? .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+            : .boldSystemFont(ofSize: NSFont.systemFontSize)
+        if chatTitle.font != titleFont { chatTitle.font = titleFont }
         if selected?.loadingTitle == true {
-            if chatTitleShimmer == nil { chatTitleShimmer = SidebarTitleShimmer(label: chatTitle) }
-            chatTitleShimmer?.refresh()
-        } else { chatTitleShimmer?.stop(); chatTitleShimmer = nil }
-        chatTitle.toolTip = chatTitle.stringValue
+            if chatTitleDecipher == nil {
+                chatTitle.stringValue = selected?.title ?? "••••••••"
+                chatTitleDecipher = SidebarTitleDecipher(label: chatTitle)
+                chatTitleDecipherID = selected?.id
+            }
+            chatTitle.setAccessibilityLabel("Loading conversation")
+            chatTitleDecipher?.refresh()
+        } else {
+            chatTitle.stringValue = selected?.title ?? "Chat"
+            chatTitle.setAccessibilityLabel(chatTitle.stringValue)
+        }
+        chatTitle.toolTip = selected?.loadingTitle == true ? "Loading conversation" : chatTitle.stringValue
         if chatHeaderWidth != nil {
             alignChatHeader()
         }
@@ -563,6 +580,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         let signature = (try? JSONSerialization.data(withJSONObject: rowData, options: [.sortedKeys])) ?? Data()
         let rowsChanged = signature != rowsSignature
         if rowsChanged { rowsSignature = signature; rows = rowData.map(ShellRow.init); layoutNested() }
+        pruneSidebarDecipherStarts()
         let nextProject = state["project"] as? String
         if nextProject != currentProject && address.currentEditor() != nil { window?.makeFirstResponder(nil) }
         let projectChanged = nextProject != currentProject
@@ -683,7 +701,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             "sidebarTop":sidebarFrame.maxY, "contentTop":window?.contentLayoutRect.maxY ?? 0,
             "detailTop":contentCanvas.convert(contentCanvas.bounds, to: nil).maxY,
             "sidebarListTop":outline.enclosingScrollView.map { $0.convert($0.bounds, to: nil).maxY } ?? 0,
-            "rows":allRows.map { ["id":$0.id, "title":$0.title, "kind":$0.kind] },
+            "rows":allRows.map { ["id":$0.id, "title":$0.title, "kind":$0.kind, "loadingTitle":$0.loadingTitle] },
             "selected":selectedID ?? "", "sidebarCollapsed":sidebarItem.isCollapsed,
             "sourceList":SourceList.inspect(outline, item: sidebarItem),
             "sidebarWidth":sidebar.view.bounds.width,

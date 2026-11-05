@@ -2,7 +2,7 @@ import AppKit
 
 enum SidebarRowStyle {
     static let height: CGFloat = 28
-    static let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+    static let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
 }
 
 /// SF Symbol image views report the symbol's alignment insets (the 19×14 folder
