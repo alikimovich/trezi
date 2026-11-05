@@ -466,6 +466,7 @@ assert.deepEqual(spacingSnapshot('margin'), collapsedMargin)
 let authoredHash = 'base'
 let authoredOpacity = '1'
 let authoredWidth = '10px'
+let directSourceWrite = false
 const draftCalls = []
 const draftAgent = []
 setSourceOwner({
@@ -482,7 +483,10 @@ const drafts = new NativeInspectorController(
     if (channel === 'props:inspect') return null
     if (channel === 'controls:list' || channel === 'controls:get') return []
     if (channel === 'styles:resolve-class') return null
-    if (channel === 'styles:apply') return { applied: true }
+    if (channel === 'styles:apply') {
+      if (directSourceWrite) authoredHash = 'direct-applied'
+      return { applied: true }
+    }
     return null
   },
   async (...args) => draftCalls.push(args),
@@ -503,6 +507,24 @@ const beforeDraft = draftCalls.filter((call) => call === 'styles:apply').length
 await draftAction('apply', { field: 'style:opacity', value: '0.6' })
 await draftAction('apply', { field: 'style:width', value: '12px' })
 assert.equal(drafts.state.draft.count, 2)
+await drafts.select({ ...element, source: 'b.tsx' })
+assert.equal(drafts.state.draft, undefined, 'another selected element cannot inherit the draft')
+await drafts.select(element)
+assert.equal(drafts.state.draft.count, 2, 'returning to the target restores its draft')
+await drafts.activate('/b')
+await drafts.select(element)
+assert.equal(drafts.state.draft, undefined, 'another workspace cannot inherit the draft')
+await drafts.activate('/a')
+await drafts.select(element)
+assert.equal(drafts.state.draft.count, 2, 'returning to the workspace restores its draft')
+await drafts.select({ ...element, source: 'b.tsx' })
+authoredHash = 'changed-away'
+await drafts.select(element)
+assert.equal(drafts.state.draft.conflict, true, 'source drift while away blocks stale Apply')
+await draftAction('revert-draft')
+authoredHash = 'base'
+await draftAction('apply', { field: 'style:opacity', value: '0.6' })
+await draftAction('apply', { field: 'style:width', value: '12px' })
 await draftAction('close')
 assert.equal(drafts.state.draft.preview, false, 'closed inspector cannot claim a cleared preview')
 assert.equal(drafts.state.draft.count, 2, 'closing retains pending edits')
@@ -547,12 +569,19 @@ assert.equal(drafts.state.draft, undefined)
 const sourceWrites = draftCalls.filter((call) => call === 'styles:apply').length
 await draftAction('apply', { field: 'style:opacity', value: '0.3' })
 assert.equal(draftCalls.filter((call) => call === 'styles:apply').length, sourceWrites)
+directSourceWrite = true
 await draftAction('apply-drafts')
 assert.equal(draftCalls.filter((call) => call === 'styles:apply').length, sourceWrites + 1)
-authoredHash = 'single-applied'
+assert.equal(drafts.state.draft.submitted, true, 'direct Apply waits for rendered confirmation')
+await new Promise((resolve) => setTimeout(resolve, 150))
+assert.equal(drafts.state.draft.submitted, true, 'source write alone cannot confirm the draft')
 authoredOpacity = '0.3'
-await drafts.invalidated()
-assert.equal(drafts.state.draft, undefined, 'single edit confirms source and rendered value')
+await new Promise((resolve) => setTimeout(resolve, 550))
+assert.equal(
+  drafts.state.draft,
+  undefined,
+  'direct Apply confirms without an agent event or invalidation'
+)
 setSourceOwner(null)
 assert.deepEqual(spacingSnapshot('padding'), {
   'style:padding-right': '18px',

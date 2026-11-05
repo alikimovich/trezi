@@ -131,6 +131,7 @@ document.body.append(card);
           (i: any) => i.id === result.id && i.status === 'ready'
         )
       )
+      await host.request('revealChatIsland', { island: result.id })
       await host.request('islandPerform', {
         island: result.id,
         action: 'draft',
@@ -139,18 +140,24 @@ document.body.append(card);
       assert.equal(readFileSync(file, 'utf8'), code, 'island draft does not write source')
       await wait(async () =>
         (await host.request('chatInspect')).islands.some(
-          (i: any) => i.id === result.id && i.draft?.count === 2 && i.draft.preview === false
+          (i: any) => i.id === result.id && i.draftCount === 2 && i.draftPreview === false
         )
       )
+      await wait(
+        async () =>
+          (await host.request('islandControlInspect', { label: 'Light X' })).value === '0.75'
+      )
       await host.request('islandPerform', { island: result.id, action: 'undo-draft' })
-      await wait(async () =>
-        (await host.request('chatInspect')).islands.some(
-          (i: any) =>
-            i.id === result.id &&
-            !i.draft &&
-            i.fields.find((field: any) => field.id === 'x')?.value === 0 &&
-            i.fields.find((field: any) => field.id === 'y')?.value === -0.5
-        )
+      await wait(
+        async () =>
+          !(await host.request('chatInspect')).islands.some(
+            (i: any) => i.id === result.id && i.draftCount !== 0
+          )
+      )
+      await wait(
+        async () =>
+          (await host.request('islandControlInspect', { label: 'Light X' })).value === '0' &&
+          (await host.request('islandControlInspect', { label: 'Light Y' })).value === '-0.5'
       )
       await host.request('islandPerform', {
         island: result.id,

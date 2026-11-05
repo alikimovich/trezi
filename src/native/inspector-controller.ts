@@ -29,8 +29,12 @@ type StyleDraft = {
   value: string
   file: string
   hash: string
-  preview: (value: string) => Promise<any>
   tokenChoice?: string
+}
+type HeldDraft = {
+  drafts: Map<string, StyleDraft>
+  history: Map<string, StyleDraft>[]
+  conflict: boolean
 }
 export class NativeInspectorController {
   readonly state: NativeInspectorState = {
@@ -64,6 +68,45 @@ export class NativeInspectorController {
   private submitting = false
   private draftConflict = false
   private previewAvailable = false
+  private readonly heldDrafts = new Map<string, HeldDraft>()
+  private directSettle: ReturnType<typeof setTimeout> | null = null
+  private holdDraft() {
+    if (!this.draftTarget) return
+    if (this.drafts.size)
+      this.heldDrafts.set(this.draftTarget, {
+        drafts: new Map(this.drafts),
+        history: this.draftHistory.map((step) => new Map(step)),
+        conflict: this.draftConflict
+      })
+    else this.heldDrafts.delete(this.draftTarget)
+  }
+  private async resumeDraft() {
+    const target = this.target()
+    const held = this.heldDrafts.get(target)
+    if (!held) return
+    const root = this.state.root
+    const generation = this.state.generation
+    // A turn can finish while another project is active. Its source and
+    // rendered result must be checked again before a restored draft can Apply.
+    const hashes = await Promise.all(
+      [...held.drafts.values()].map(
+        async (draft) => (await sourceOwner().read(root, draft.file)).hash === draft.hash
+      )
+    ).catch(() => [false])
+    if (
+      this.state.root !== root ||
+      this.state.generation !== generation ||
+      this.target() !== target
+    )
+      return
+    this.heldDrafts.delete(target)
+    this.draftTarget = target
+    this.drafts = held.drafts
+    this.draftHistory = held.history
+    this.submitted = false
+    this.draftConflict = held.conflict || !hashes.every(Boolean)
+    await this.projectDrafts()
+  }
   private target() {
     const e = this.element
     return e ? JSON.stringify([this.state.root, e.source, e.tag, e.id, e.selector]) : ''
@@ -91,7 +134,12 @@ export class NativeInspectorController {
   private async projectDrafts() {
     await this.send('styles:clear-preview', {})
     try {
-      for (const draft of this.drafts.values()) await draft.preview(draft.value)
+      for (const draft of this.drafts.values()) {
+        const binding = this.bindings.get(draft.field)
+        if (!binding?.preview || this.styleSourceFile(draft.field) !== draft.file)
+          throw new Error('The selected style binding changed.')
+        await binding.preview(draft.value)
+      }
       this.previewAvailable = this.drafts.size > 0
     } catch (error) {
       await this.send('styles:clear-preview', {}).catch(() => {})
@@ -208,6 +256,9 @@ export class NativeInspectorController {
   /** LKM-172: the selection and the island belong to one project and one page. Drops both
    *  and publishes the hidden island now; a refresh still in flight is discarded. */
   clear() {
+    this.holdDraft()
+    if (this.directSettle) clearTimeout(this.directSettle)
+    this.directSettle = null
     this.clearReconciles()
     ++this.sequence
     ++this.state.generation
@@ -225,11 +276,19 @@ export class NativeInspectorController {
     this.draftTarget = ''
     this.submitted = false
     this.draftConflict = false
+    this.previewAvailable = false
+    this.state.draft = undefined
     this.build()
     this.publish()
     void this.send('styles:clear-preview', {}).catch(() => {})
   }
   async select(element: SelectedElement | null) {
+    const nextTarget = element
+      ? JSON.stringify([this.state.root, element.source, element.tag, element.id, element.selector])
+      : ''
+    if (nextTarget !== this.target()) this.holdDraft()
+    if (this.directSettle) clearTimeout(this.directSettle)
+    this.directSettle = null
     this.clearReconciles()
     await this.send('styles:clear-preview', {})
     this.state.busy = false
@@ -245,15 +304,18 @@ export class NativeInspectorController {
     if (this.target() !== this.draftTarget) {
       this.drafts.clear()
       this.draftHistory = []
+      this.draftTarget = ''
       this.submitted = false
       this.draftConflict = false
       this.state.draft = undefined
+      this.previewAvailable = false
     }
     this.build()
     this.publish()
     if (element) {
       await this.refresh()
       if (this.drafts.size) await this.projectDrafts()
+      else await this.resumeDraft()
     }
   }
   /**
@@ -739,6 +801,7 @@ export class NativeInspectorController {
         this.submitting = true
         this.state.busy = true
         this.publish()
+        let direct = false
         try {
           for (const draft of this.drafts.values()) {
             const selectedFile = this.styleSourceFile(draft.field)
@@ -771,6 +834,7 @@ export class NativeInspectorController {
               await this.agent(root, result.agentPrompt, true)
             else if (!result?.applied)
               throw new Error(result?.error ?? 'The draft was not applied.')
+            else direct = true
           } else {
             await this.agent(
               root,
@@ -778,6 +842,7 @@ export class NativeInspectorController {
               true
             )
           }
+          if (root !== this.state.root || generation !== this.state.generation) return
           this.submitted = true
           this.state.edits = (this.state.edits ?? 0) + 1
           this.publishDraft()
@@ -785,6 +850,23 @@ export class NativeInspectorController {
           this.submitting = false
           this.state.busy = false
           this.publish()
+        }
+        if (direct) {
+          // Direct owner writes have no agent terminal event. Give the page's
+          // normal source reload a bounded chance, then confirm or unlock.
+          const target = this.target()
+          const timer = setTimeout(() => {
+            if (this.directSettle !== timer || this.target() !== target) return
+            this.directSettle = null
+            void this.settleDraftTurn(true).catch((error) => {
+              this.submitted = false
+              this.previewAvailable = false
+              this.state.error = `Apply confirmation failed: ${String(error)}`
+              this.publishDraft()
+            })
+          }, 600)
+          timer.unref?.()
+          this.directSettle = timer
         }
         return
       }
@@ -893,8 +975,7 @@ export class NativeInspectorController {
           field: action.field,
           value,
           file,
-          hash: current.hash,
-          preview: binding.preview
+          hash: current.hash
         })
         await this.projectDrafts()
         return

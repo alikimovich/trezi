@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-539 bounded draft completion repair
+
+- A direct Styles source write now has a bounded confirmation path even without an agent terminal event or page invalidation: it clears the temporary preview, checks changed source and rendered value, then either confirms Apply or returns an actionable pending draft. Pending Styles intent is held by workspace and selected element across selection and project changes; reactivation checks its source hash and rebuilds the preview binding. The island native fixture now reads the Swift text controls' accessibility values after Undo instead of treating backend fields as rendered evidence. Focused inspector tests cover direct completion and both draft transitions; the native fixture remains for the post-merge gate.
+
 ## 2026-11-05 — LKM-539 draft lifecycle review repair
 
 - Island Undo and Revert now discard local control values so displayed fields follow the refreshed draft, and Reset stages the island's initial values for the same explicit Apply path. Styles drafts now unlock after a landed turn that did not confirm source and rendered output; closing the inspector reports its cleared preview as unavailable, while reselecting projects pending values again. Focused fixtures cover the terminal turn, inspector close/reselect, source-free Reset, and island Undo values. Native assertions are recorded for the post-merge run.

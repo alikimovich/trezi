@@ -210,6 +210,7 @@ struct IslandInput: View {
                 .foregroundStyle(entry.parse(draft) == nil ? Color.red : Color.primary)
                 .focused($focused).onSubmit(apply)
                 .accessibilityLabel(label)
+                .accessibilityIdentifier("island-field-" + label)
         }.onAppear { draft = value }.onChange(of: value) { next in entry.sourceChanged(); if !focused { draft = next } }
             .onChange(of: focused) { next in if !next { apply() } }
     }

@@ -15,6 +15,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Stage eligible Styles and island adjustments as preview drafts with explicit Apply, Undo and Revert; retain unsatisfied drafts and source revision guards.
 - [x] Cover source-free draft gestures and batch Apply in focused fixtures, with native fixture assertions for the rendered preview and source-backed reload.
 - [x] Review repair: reconcile island Undo display, stage Reset through Apply, unlock unconfirmed Styles batches, and report cleared inspector previews truthfully.
+- [x] Bounded review repair: confirm direct Styles Apply after source/render settle, preserve drafts across selection and workspace changes, and assert the displayed Swift island value after Undo.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
 
 ## LKM-529 — Simplify Trezi update availability and guided update flow
