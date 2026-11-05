@@ -97,6 +97,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     private let chatTitle = NSTextField(labelWithString: "Chat")
     private var chatTitleDecipher: SidebarTitleDecipher?
     private var chatTitleDecipherID: String?
+    var sidebarDecipherStarts: [String: CFTimeInterval] = [:]
     // The toolbar islands receive AppKit's glass from their item groups. The title's custom
     // item needs an explicit native glass view around its single action.
     private let chatNewGlass: NSView = {
@@ -317,7 +318,6 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             // The glass view owns the bezel; a second segmented-cell bezel darkens its interior.
             chatNewButton.cell?.isBordered = false
             chatNewButton.usesGlassHover = true
-            chatNewButton.contentTintColor = .labelColor
             chatNewButton.focusRingType = .exterior
             chatNewButton.alignsFullFrame = true
             chatNewButton.setWidth(32, forSegment: 0)
@@ -469,17 +469,21 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         if selected?.loadingTitle != true || selected?.id != chatTitleDecipherID {
             chatTitleDecipher?.stop(); chatTitleDecipher = nil; chatTitleDecipherID = nil
         }
-        chatTitle.font = selected?.loadingTitle == true
+        let titleFont: NSFont = selected?.loadingTitle == true
             ? .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
             : .boldSystemFont(ofSize: NSFont.systemFontSize)
-        chatTitle.stringValue = selected?.title ?? "Chat"
-        chatTitle.setAccessibilityLabel(chatTitle.stringValue == "••••••••" ? "Loading conversation" : chatTitle.stringValue)
+        if chatTitle.font != titleFont { chatTitle.font = titleFont }
         if selected?.loadingTitle == true {
             if chatTitleDecipher == nil {
+                chatTitle.stringValue = selected?.title ?? "••••••••"
                 chatTitleDecipher = SidebarTitleDecipher(label: chatTitle)
                 chatTitleDecipherID = selected?.id
             }
+            chatTitle.setAccessibilityLabel("Loading conversation")
             chatTitleDecipher?.refresh()
+        } else {
+            chatTitle.stringValue = selected?.title ?? "Chat"
+            chatTitle.setAccessibilityLabel(chatTitle.stringValue)
         }
         chatTitle.toolTip = selected?.loadingTitle == true ? "Loading conversation" : chatTitle.stringValue
         if chatHeaderWidth != nil {
@@ -576,6 +580,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         let signature = (try? JSONSerialization.data(withJSONObject: rowData, options: [.sortedKeys])) ?? Data()
         let rowsChanged = signature != rowsSignature
         if rowsChanged { rowsSignature = signature; rows = rowData.map(ShellRow.init); layoutNested() }
+        pruneSidebarDecipherStarts()
         let nextProject = state["project"] as? String
         if nextProject != currentProject && address.currentEditor() != nil { window?.makeFirstResponder(nil) }
         let projectChanged = nextProject != currentProject

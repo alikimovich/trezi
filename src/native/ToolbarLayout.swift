@@ -131,11 +131,18 @@ final class IslandSegmentedControl: NSSegmentedControl {
     /// same native hover, pressed and focus feedback as the neighboring toolbar segments.
     var usesGlassHover = false
     private var glassHovered = false
+    private var glassPressed = false
     private var glassTracking: NSTrackingArea?
     override var isEnabled: Bool { didSet { updateGlassBezel() } }
+    /// Shared state path for AppKit events and the offscreen control fixture.
+    func setGlassInteraction(hovered: Bool? = nil, pressed: Bool? = nil) {
+        if let hovered { glassHovered = hovered }
+        if let pressed { glassPressed = pressed }
+        updateGlassBezel()
+    }
     private func updateGlassBezel() {
         guard usesGlassHover else { return }
-        cell?.isBordered = isEnabled && (glassHovered || window?.firstResponder === self)
+        cell?.isBordered = isEnabled && (glassHovered || glassPressed || window?.firstResponder === self)
         needsDisplay = true
     }
     override func updateTrackingAreas() {
@@ -145,12 +152,12 @@ final class IslandSegmentedControl: NSSegmentedControl {
         let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
         addTrackingArea(area); glassTracking = area
     }
-    override func mouseEntered(with event: NSEvent) { super.mouseEntered(with: event); glassHovered = true; updateGlassBezel() }
-    override func mouseExited(with event: NSEvent) { super.mouseExited(with: event); glassHovered = false; updateGlassBezel() }
+    override func mouseEntered(with event: NSEvent) { super.mouseEntered(with: event); setGlassInteraction(hovered: true) }
+    override func mouseExited(with event: NSEvent) { super.mouseExited(with: event); setGlassInteraction(hovered: false) }
     override func mouseDown(with event: NSEvent) {
-        if usesGlassHover && isEnabled { cell?.isBordered = true; needsDisplay = true }
+        setGlassInteraction(pressed: true)
+        defer { setGlassInteraction(pressed: false) }
         super.mouseDown(with: event)
-        updateGlassBezel()
     }
     override func becomeFirstResponder() -> Bool { let accepted = super.becomeFirstResponder(); updateGlassBezel(); return accepted }
     override func resignFirstResponder() -> Bool { let accepted = super.resignFirstResponder(); updateGlassBezel(); return accepted }

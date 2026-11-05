@@ -8,6 +8,7 @@ _ = NSApplication.shared
 
 final class NativeShell: NSObject {
     var rows: [ShellRow] = []
+    var sidebarDecipherStarts: [String: CFTimeInterval] = [:]
     var currentProject: String?
     var selectedID: String?
     var sidebarHistory = SidebarHistoryState()
@@ -38,9 +39,14 @@ func make(_ data: [String: Any], title: String = long, width: CGFloat = 200, arc
 func spinners(_ view: NSView) -> Int { (view is NSProgressIndicator ? 1 : 0) + view.subviews.map(spinners).reduce(0, +) }
 func describe(_ cell: SidebarChatCell) -> [String: Any] {
     let title = cell.title!, label = title.label
+    let styled = label.attributedStringValue
+    let firstFont = styled.length > 0 ? (styled.attribute(.font, at: 0, effectiveRange: nil) as? NSFont ?? label.font!) : label.font!
+    let secondFont = styled.length > 1 ? (styled.attribute(.font, at: 1, effectiveRange: nil) as? NSFont ?? label.font!) : label.font!
     return ["titleX": title.frame.minX, "titleWidth": title.frame.width, "labelX": label.frame.minX, "labelWidth": label.frame.width,
             "mode": cell.decipher?.mode ?? cell.shimmer?.mode ?? "none", "shimmer": cell.shimmer?.inspect() ?? [:],
-            "decipher": cell.decipher?.inspect() ?? [:], "font": label.font?.familyName ?? "", "spinners": spinners(cell),
+            "decipher": cell.decipher?.inspect() ?? [:], "font": firstFont.familyName ?? "",
+            "fontWidths": [("M" as NSString).size(withAttributes: [.font: firstFont]).width,
+                           ("i" as NSString).size(withAttributes: [.font: secondFont]).width], "spinners": spinners(cell),
             "label": cell.accessibilityLabel() ?? "", "alpha": label.alphaValue, "dot": !cell.dot.isHidden,
             "truncates": label.lineBreakMode == .byTruncatingTail, "text": label.stringValue, "archive": cell.archive != nil]
 }
@@ -98,7 +104,7 @@ let loading = make(["loadingTitle": true], title: "••••••••")
 report["loadingTitle"] = describe(loading)
 loading.decipher?.render(elapsed: 0.025)
 report["loadingEarly"] = describe(loading)
-loading.decipher?.render(elapsed: 0.08)
+loading.decipher?.render(elapsed: 0.05)
 report["loadingMiddle"] = describe(loading)
 loading.decipher?.render(elapsed: 1)
 report["loadingResolved"] = describe(loading)
@@ -109,6 +115,19 @@ SidebarMarqueeTitle.reduceMotionOverride = false
 loading.decipher?.refresh()
 loading.decipher?.stop()
 report["loadingStopped"] = describe(loading)
+let loadingRow = ShellRow(["id":"chat:rebuild", "kind":"chat", "project":"p", "title":"••••••••", "loadingTitle":true])
+shell.rows = [ShellRow(["id":"project:p", "kind":"project", "project":"p", "title":"P",
+                       "recent":[["id":"chat:rebuild", "kind":"chat", "project":"p", "title":"••••••••", "loadingTitle":true]]])]
+shell.sidebarDecipherStarts[loadingRow.id] = CACurrentMediaTime() - 0.05
+let original = shell.sidebarChatCell(loadingRow) as! SidebarChatCell
+root.addSubview(original)
+let replacement = shell.sidebarChatCell(loadingRow) as! SidebarChatCell
+root.addSubview(replacement)
+report["rebuiltLoading"] = ["first":original.decipher?.inspect() ?? [:], "second":replacement.decipher?.inspect() ?? [:],
+                            "stored":shell.sidebarDecipherStarts[loadingRow.id] ?? 0]
+shell.rows = [ShellRow(["id":"project:p", "kind":"project", "project":"p", "title":"P", "recent":[]])]
+shell.pruneSidebarDecipherStarts()
+report["retiredLoading"] = shell.sidebarDecipherStarts[loadingRow.id] == nil
 
 // The sweep, its mask at several phases, and on a selected row.
 let shimmer = thinking.shimmer!

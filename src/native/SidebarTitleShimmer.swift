@@ -101,11 +101,14 @@ final class SidebarTitleDecipher: NSObject {
     let label: NSTextField
     private var timer: Timer?
     private var started: CFTimeInterval = 0
+    private let carriedStart: CFTimeInterval?
     private(set) var mode = "off"
     private(set) var resolved = 0
+    private(set) var resolvedColumns: [Int] = []
 
-    init(label: NSTextField) {
+    init(label: NSTextField, startedAt: CFTimeInterval? = nil) {
         self.label = label
+        carriedStart = startedAt
         super.init()
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(refresh),
             name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
@@ -125,7 +128,7 @@ final class SidebarTitleDecipher: NSObject {
         }
         if mode == "decipher" { return }
         if mode == "resolved" { label.stringValue = Self.text; return }
-        mode = "decipher"; started = CACurrentMediaTime(); resolved = 0
+        mode = "decipher"; started = carriedStart ?? CACurrentMediaTime(); resolved = 0; resolvedColumns = []
         tick()
         let timer = Timer(timeInterval: 1.0 / 30, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
         RunLoop.main.add(timer, forMode: .common); self.timer = timer
@@ -141,10 +144,11 @@ final class SidebarTitleDecipher: NSObject {
         let letters = Array(Self.text)
         let output = NSMutableAttributedString(string: "")
         var count = 0
+        var columns: [Int] = []
         for (column, letter) in letters.enumerated() {
             let threshold = 0.12 + Double(column) / Double(max(32, letters.count)) * 0.62 + Self.hash(Double(column + 11)) * 0.12
             let done = progress > threshold
-            if done { count += 1 }
+            if done { count += 1; columns.append(column) }
             let decoding = !done && progress > threshold - 0.14
             let frequency = decoding ? 14.0 : 0.15 + Self.hash(Double(column + 3)) * 0.5
             let step = floor(elapsed * frequency)
@@ -156,6 +160,7 @@ final class SidebarTitleDecipher: NSObject {
             ]))
         }
         resolved = count
+        resolvedColumns = columns
         label.attributedStringValue = output
         if count == letters.count { stopClock(); mode = "resolved"; label.stringValue = Self.text }
     }
@@ -163,5 +168,6 @@ final class SidebarTitleDecipher: NSObject {
     private func stopClock() { timer?.invalidate(); timer = nil }
     func stop() { stopClock(); mode = "off"; label.stringValue = Self.text }
     deinit { NSWorkspace.shared.notificationCenter.removeObserver(self); stopClock() }
-    func inspect() -> [String: Any] { ["mode": mode, "resolved": resolved, "text": label.stringValue, "animated": timer != nil] }
+    func inspect() -> [String: Any] { ["mode": mode, "resolved": resolved, "columns": resolvedColumns,
+                                     "text": label.stringValue, "animated": timer != nil, "started": started] }
 }

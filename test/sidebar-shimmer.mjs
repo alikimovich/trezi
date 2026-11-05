@@ -151,6 +151,45 @@ if (process.platform !== 'darwin') {
   assert.equal(report.loadingTitle.mode, 'decipher')
   assert.ok(report.loadingEarly.decipher.resolved < report.loadingMiddle.decipher.resolved)
   assert.ok(report.loadingMiddle.decipher.resolved < report.loadingResolved.decipher.resolved)
+  assert.equal(
+    report.loadingEarly.text.length,
+    'Loading chat'.length,
+    'one glyph per column at the beginning'
+  )
+  assert.equal(
+    report.loadingMiddle.text.length,
+    'Loading chat'.length,
+    'one glyph per column in the middle'
+  )
+  assert.notEqual(report.loadingEarly.text, '••••••••', 'beginning paints decipher glyphs')
+  assert.notEqual(report.loadingMiddle.text, 'Loading chat', 'middle is still deciphering')
+  assert.deepEqual(
+    report.loadingMiddle.decipher.columns,
+    [0, 1, 3, 5, 6],
+    'letters resolve independently'
+  )
+  for (const column of report.loadingMiddle.decipher.columns)
+    assert.equal(
+      report.loadingMiddle.text[column],
+      'Loading chat'[column],
+      `resolved column ${column}`
+    )
+  assert.notEqual(
+    report.loadingMiddle.text[2],
+    'Loading chat'[2],
+    'an earlier column can remain unresolved'
+  )
+  for (const [name, stage] of Object.entries({
+    early: report.loadingEarly,
+    middle: report.loadingMiddle
+  })) {
+    assert.equal(
+      stage.fontWidths[0],
+      stage.fontWidths[1],
+      `${name}: rendered monospace glyph advance`
+    )
+    assert.match(stage.font, /Mono/i, `${name}: rendered glyphs use system monospace`)
+  }
   assert.equal(report.loadingResolved.text, 'Loading chat')
   assert.equal(report.loadingResolved.decipher.animated, false)
   assert.equal(report.loadingMiddle.label, 'Loading conversation')
@@ -158,6 +197,22 @@ if (process.platform !== 'darwin') {
   assert.equal(report.loadingReduced.text, 'Loading chat')
   assert.equal(report.loadingStopped.decipher.animated, false)
   assert.equal(report.loadingStopped.alpha, 1)
+  assert.equal(
+    report.rebuiltLoading.first.started,
+    report.rebuiltLoading.stored,
+    'first row uses chat clock'
+  )
+  assert.equal(
+    report.rebuiltLoading.second.started,
+    report.rebuiltLoading.stored,
+    'rebuilt row keeps chat clock'
+  )
+  assert.equal(
+    report.rebuiltLoading.second.resolved,
+    report.rebuiltLoading.first.resolved,
+    'rebuild does not reset glyph progress'
+  )
+  assert.equal(report.retiredLoading, true, 'ready or canceled row retires the clock')
   assert.match(report.idle.font, /Mono/i, 'sidebar rows use system monospace')
 
   // State: only `thinking` shimmers; a waiting row stays Running without it.

@@ -24,7 +24,7 @@ final class SidebarChatCell: SourceListCell {
     private var tracking: NSTrackingArea?
     private var resting: NSLayoutConstraint?, hovering: NSLayoutConstraint?
 
-    init(row: ShellRow, canArchive: Bool, target: AnyObject?) {
+    init(row: ShellRow, canArchive: Bool, target: AnyObject?, decipherSince: CFTimeInterval? = nil) {
         super.init(frame: .zero)
         identifier = NSUserInterfaceItemIdentifier(row.id)
         dot.wantsLayer = true; dot.layer?.cornerRadius = 3; dot.layer?.backgroundColor = NSColor.systemGreen.cgColor
@@ -91,7 +91,7 @@ final class SidebarChatCell: SourceListCell {
             dot.centerXAnchor.constraint(equalTo: slot.centerXAnchor), dot.centerYAnchor.constraint(equalTo: slot.centerYAnchor),
             dot.widthAnchor.constraint(equalToConstant: 6), dot.heightAnchor.constraint(equalToConstant: 6)
         ])
-        if row.loadingTitle, let title { decipher = SidebarTitleDecipher(label: title.label) }
+        if row.loadingTitle, let title { decipher = SidebarTitleDecipher(label: title.label, startedAt: decipherSince) }
         else if row.thinking, let title { shimmer = SidebarTitleShimmer(label: title.label) }
         tint()
     }
@@ -140,6 +140,11 @@ final class SidebarChatCell: SourceListCell {
 }
 
 extension NativeShell {
+    /// A loading chat keeps its reveal clock when the outline replaces its cell.
+    func pruneSidebarDecipherStarts() {
+        let active = Set(rows.flatMap { $0.recent.filter(\.loadingTitle).map(\.id) })
+        sidebarDecipherStarts = sidebarDecipherStarts.filter { active.contains($0.key) }
+    }
     /// Every row the outline shows: each project, then its nested rows.
     var outlineRows: [ShellRow] { rows.flatMap { [$0] + $0.nested } }
     /// The row that carries the selection: the selected chat when it is nested, else its project.
@@ -168,7 +173,12 @@ extension NativeShell {
         cell.setHovered(true, scrollingSince: hover.scroll)
     }
     func sidebarChatCell(_ row: ShellRow) -> NSView {
-        SidebarChatCell(row: row, canArchive: canArchive(row), target: self)
+        let since: CFTimeInterval?
+        if row.loadingTitle {
+            since = sidebarDecipherStarts[row.id] ?? CACurrentMediaTime()
+            sidebarDecipherStarts[row.id] = since
+        } else { since = nil }
+        return SidebarChatCell(row: row, canArchive: canArchive(row), target: self, decipherSince: since)
     }
     /// Closing a project's last open chat closes the project, so that chat has no Archive.
     func canArchive(_ row: ShellRow) -> Bool {

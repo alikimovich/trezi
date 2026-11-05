@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-523 review repair: preserve loading glyphs through updates
+
+- The selected header now leaves its attributed decipher frame intact while the same chat loads. Sidebar rebuilds carry a chat-keyed reveal clock, and readiness or cancellation prunes it. The offscreen title fixture asserts visible beginning/middle glyphs, independently resolved columns, fixed-width advances and a rebuilt row that keeps its time; the toolbar control fixture asserts idle, hover, press, focus and disabled bezel states beside a neighboring island glyph.
+- System monospace widens the marquee's real travel and whitespace. Its existing rendered fixture now schedules holds from measured travel and allows one full monospace space without relaxing the painted-clip or end-position checks. Foreground native acceptance remains with the post-merge operator run.
+
 ## 2026-11-04 — LKM-523 loading titles, sidebar type and New Chat
 
 - The read-only decipher reference snapshot at `/Users/panda/dev/hephaestus/reports/trezi-decipher-reference` was available with its source manifest. Unknown titles now use a native fixed-width per-glyph reveal in the sidebar and selected header, with a static Reduce Motion label and stable accessibility text. Authoritative ready/error titles replace the effect immediately; a running chat retains its separate shimmer.

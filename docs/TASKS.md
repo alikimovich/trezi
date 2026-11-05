@@ -8,6 +8,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Drive a per-glyph monospace loading reveal in unknown sidebar and header titles, with stable accessibility text, Reduce Motion fallback and title lifecycle cleanup.
 - [x] Use system monospace in sidebar rows and keep the New Chat action in native glass with pointer and keyboard feedback.
 - [x] Extend the lock-free Swift fixture for staged glyphs, motion fallback and sidebar font; keep toolbar interaction regression coverage.
+- [x] Review repair: preserve header glyphs across toolbar updates, carry sidebar reveal time across rebuilt cells, and assert visible glyph and New Chat interaction states in the standalone fixtures.
 - [ ] Manager: independent review, exact-head CI and post-merge native chat/sidebar/core acceptance with foreground captures.
 
 ## LKM-521 — Native chat and Settings suite failure

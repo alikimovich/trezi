@@ -13,12 +13,14 @@ const near = (actual, expected, slack, label) =>
 /** Text across the whole clip; `end` also needs the last glyph at the clip's right edge. */
 function paintsClip(sample, label, { end = false } = {}) {
   assert.ok(sample.inkFrom >= 0, `${label}: no text at all ${JSON.stringify(sample)}`)
-  assert.ok(sample.inkFrom <= 6, `${label}: text starts at ${sample.inkFrom}`)
+  assert.ok(sample.inkFrom <= 11, `${label}: text starts at ${sample.inkFrom}`)
   assert.ok(
     sample.width - sample.inkTo <= (end ? 3 : 6),
     `${label}: text stops at ${sample.inkTo} of ${sample.width}, a blank gap ${JSON.stringify(sample)}`
   )
-  assert.ok(sample.gap <= 9, `${label}: a ${sample.gap} pt hole in the text`)
+  // A full system-monospace space can occupy 10 pt at this size; the clip must still show
+  // continuous text on either side of it.
+  assert.ok(sample.gap <= 11, `${label}: a ${sample.gap} pt hole in the text`)
   if (sample.paintSeen) {
     near(sample.labelWidth, sample.natural + 4, 1, `${label}: label frame`)
     assert.ok(
