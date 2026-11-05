@@ -48,7 +48,7 @@ extension Host {
         case "previewMarkupInspect": reply(id, previewMarkupInspect())
         case "previewMarkupTest":
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
-            if ["key", "pointer", "button", "typeInstruction", "sendButton", "toolbarSegment"].contains(c["action"] as? String ?? "") {
+            if ["key", "pointer", "button", "canvasText", "typeInstruction", "sendButton", "toolbarSegment"].contains(c["action"] as? String ?? "") {
                 Task { @MainActor in reply(id, await previewMarkupEvent(c)) }
             } else { reply(id, previewMarkupTest(c)) }
         case "markupAcceptanceProbe":

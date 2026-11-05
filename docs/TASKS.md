@@ -24,6 +24,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: reject later or aliased opacity writers and same-line element impersonation; bind the supported readback to the unique creation column.
 - [x] Review repair: close the admitted opacity syntax against every `cssText` write and shared-statement creation, with matching default-value and identity fixtures.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
+## LKM-543 — Native annotation composite and Send acceptance fixture
+
+- [x] Add a narrow opt-in native scenario on a disposable fixture page, with the existing mocked Send interception.
+- [x] Assert a nondefault color, selected Text after color focus, canvas text creation and editing, and exclusive Select/Mark up handover with retained edits.
+- [x] Record the foreground capture and compare native composite, attachment and Send payload hashes.
+- [x] CI repair: post canvas text input instead of calling the canvas handler from the host seam; preserve routing and pinned-note source audits.
+- [ ] Manager: independent review, exact-current-head CI, merge and serialized post-merge native acceptance.
+
 ## LKM-542 — Annotation colors, persistent tools and editable canvas text
 
 - [x] Store chosen colors with drawing and canvas text in the native composite and attachment path.

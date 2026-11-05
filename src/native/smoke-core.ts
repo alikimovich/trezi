@@ -38,6 +38,8 @@ import {
 import { smokeFocusHooks } from './smoke-focus'
 import { checkGitUpdates } from './smoke-git-updates'
 import {
+  ANNOTATION_COMPOSITE_CHECK,
+  ANNOTATION_COMPOSITE_FLAG,
   CHAT_RECOVERY_ACCEPTANCE_CHECK,
   CHAT_RECOVERY_ACCEPTANCE_FLAG,
   DREAMER_ACCEPTANCE_CHECK,
@@ -47,6 +49,7 @@ import {
   parseSmokeGroups,
   SOURCE_POPOUT_ACCEPTANCE_CHECK,
   SOURCE_POPOUT_ACCEPTANCE_FLAG,
+  selectAnnotationComposite,
   selectChatRecoveryAcceptance,
   selectDreamerAcceptance,
   selectMarkupAcceptance,
@@ -73,7 +76,11 @@ import { checkMovableIslands, restoreMovableIslands } from './smoke-movable-isla
 import { checkParallelStream, restoreParallelStream } from './smoke-parallel-stream'
 import { checkPreviewHistory, restorePreviewHistory } from './smoke-preview-history'
 import { checkPreviewInspector } from './smoke-preview-inspector'
-import { checkPreviewMarkup, restorePreviewMarkup } from './smoke-preview-markup'
+import {
+  checkAnnotationCompositeSend,
+  checkPreviewMarkup,
+  restorePreviewMarkup
+} from './smoke-preview-markup'
 import { checkPreviewOverlay, restorePreviewOverlay } from './smoke-preview-overlay'
 import { checkPreviewSpeed, restorePreviewSpeed } from './smoke-preview-speed'
 import { checkPreviewTiming, restorePreviewTiming } from './smoke-preview-timing'
@@ -1914,6 +1921,13 @@ export async function runNativeCoreSmoke(
         await checkChatRecoveryAcceptance(host, artifacts)
       }
     })
+  if (process.argv.includes(ANNOTATION_COMPOSITE_FLAG))
+    checks.push({
+      name: ANNOTATION_COMPOSITE_CHECK,
+      dependsOn: ['chat-ready'],
+      run: () => checkAnnotationCompositeSend(host, page, artifacts),
+      cleanup: () => restorePreviewMarkup(host, page)
+    })
   let hostClosed = false
   void host.closed.then(() => {
     hostClosed = true
@@ -1924,8 +1938,11 @@ export async function runNativeCoreSmoke(
     selectSmokeChecks(checks, parseSmokeGroups(process.argv)),
     process.argv
   )
-  const optIn = selectSourcePopoutAcceptance(
-    selectMarkupAcceptance(selectDreamerAcceptance(selected, process.argv), process.argv),
+  const optIn = selectAnnotationComposite(
+    selectSourcePopoutAcceptance(
+      selectMarkupAcceptance(selectDreamerAcceptance(selected, process.argv), process.argv),
+      process.argv
+    ),
     process.argv
   )
   const results = await runSmokeChecks(optIn, {
