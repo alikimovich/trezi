@@ -13,6 +13,12 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Changed
 
 - Nested 3D inspection uses the native toolbar for Back and the selected object's Code action, without the in-preview navigation row or visible camera reset controls (LKM-536).
+## [0.13.27] - 2026-11-04
+
+### Changed
+
+- Chat title, preview address, branch, status and Publish trigger text in the top bar use system monospace (LKM-530).
+
 ## [0.13.26] - 2026-11-04
 
 ### Changed

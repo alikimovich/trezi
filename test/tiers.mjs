@@ -165,6 +165,7 @@ export const UNIT = [
   'sidebar-evidence',
   'sidebar-sizing',
   'toolbar-chat-lead',
+  'publish-toolbar',
   'preview-overlay',
   'preview-markup',
   'preview-markup-routing',

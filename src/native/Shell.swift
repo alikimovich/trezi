@@ -36,6 +36,20 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
          "chatTitleMode":chatTitleDecipher?.mode ?? "none",
          "chatTitleLabel":chatTitle.accessibilityLabel() ?? ""]
     }
+    func topBarFontInspect() -> [String: Any] {
+        let branchTitle = branchMenu.menu?.items.first?.attributedTitle
+        let branchFont = branchTitle.flatMap { $0.length > 0 ? $0.attribute(.font, at: 0, effectiveRange: nil) as? NSFont : nil }
+        func name(_ font: NSFont?) -> String { font?.fontName ?? "" }
+        return ["chatTitleFont":name(chatTitle.font), "chatTitleFontSize":chatTitle.font?.pointSize ?? 0,
+                "addressFont":name(address.font), "addressFontSize":address.font?.pointSize ?? 0,
+                "branchFont":name(branchMenu.font), "branchFontSize":branchMenu.font?.pointSize ?? 0,
+                "branchTitleFont":name(branchFont), "branchTitleFontSize":branchFont?.pointSize ?? 0,
+                "publishFont":publishControl.textFont.fontName, "publishFontSize":publishControl.textFont.pointSize,
+                "publishTitleFits":publishControl.titleFits, "publishControlGlass":publishControl.isNativeGlass,
+                "publishGlassHover":publishControl.segments.usesGlassHover,
+                "publishControlWidth":publishControl.bounds.width, "publishIntrinsicWidth":publishControl.intrinsicContentSize.width,
+                "topBarSystemFontSize":NSFont.systemFontSize, "topBarSmallFontSize":NSFont.smallSystemFontSize]
+    }
     /// A toolbar button's control and its rect in it, to anchor a popover or menu (LKM-229).
     func toolbarButtonAnchor(_ key: String) -> (view: NSView, rect: NSRect)? {
         toolbar?.items.compactMap { $0 as? MomentaryToolbarGroup }.lazy.compactMap { $0.segmentAnchor(key) }.first
@@ -141,6 +155,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     let address = PreviewAddressField()
     let branchMenu = BranchPopUpButton(frame: .zero, pullsDown: true)
     var publishTitle = "Publish"
+    let publishControl = PublishToolbarControl()
     let publishSpinner = ToolbarPublishSpinner()
     /// Toolbar frames read synchronously inside the last `window-width` test resize.
     var resizeSnapshot: [String: Any] = [:]
@@ -243,7 +258,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     private func branchTitle(_ title: String) -> NSAttributedString {
         let style = NSMutableParagraphStyle(); style.lineBreakMode = .byTruncatingTail
         // The CI dot is drawn by `BranchStatusDot`, not a glyph in this title.
-        return NSAttributedString(string: title, attributes: [.foregroundColor:previewTextColor, .font:NSFont.systemFont(ofSize: NSFont.smallSystemFontSize), .paragraphStyle:style])
+        return NSAttributedString(string: title, attributes: [.foregroundColor:previewTextColor, .font:NSFont.monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular), .paragraphStyle:style])
     }
     func setChatGeometry(_ width: CGFloat) { previewState["chatWidth"] = Double(width); alignChatHeader() }
     var previewLeading: CGFloat { CGFloat(previewState["chatWidth"] as? Double ?? 440) }
@@ -323,7 +338,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         if key == "chat" {
             chatHeader.translatesAutoresizingMaskIntoConstraints = false
             chatHeaderWidth = chatHeader.widthAnchor.constraint(equalToConstant: 400)
-            chatTitle.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+            chatTitle.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .bold)
             chatTitle.lineBreakMode = .byTruncatingTail
             chatTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             chatTitle.translatesAutoresizingMaskIntoConstraints = false; chatHeader.addSubview(chatTitle)
@@ -335,10 +350,10 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             item.view = chatHeader; item.isBordered = false; item.visibilityPriority = .high
         } else if key == "address" {
             address.placeholderString = "Preview"; address.setAccessibilityLabel("Preview address")
-            address.font = .boldSystemFont(ofSize: NSFont.systemFontSize); address.lineBreakMode = .byTruncatingTail
+            address.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .bold); address.lineBreakMode = .byTruncatingTail
             address.isBordered = false; address.drawsBackground = false
             address.delegate = self; address.target = self; address.action = #selector(navigateAddress(_:))
-            branchMenu.isBordered = false; branchMenu.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            branchMenu.isBordered = false; branchMenu.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
             branchMenu.setAccessibilityLabel("Branch"); branchMenu.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             // The URL's resting text keeps its authority; a branch name keeps its start.
             branchMenu.cell?.lineBreakMode = .byTruncatingTail
@@ -364,7 +379,9 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             item.view = header; item.isBordered = false
         } else if key == "publish" {
             item.image = nil
-            item.isBordered = true; item.visibilityPriority = .high
+            item.isBordered = false; item.visibilityPriority = .high
+            publishControl.item = item as? NSMenuToolbarItem
+            item.view = publishControl
         }
         item.autovalidates = false; toolbarItems[key] = item
         updateToolbar()
@@ -487,7 +504,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
         let titleFont: NSFont = selected?.loadingTitle == true
             ? .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-            : .boldSystemFont(ofSize: NSFont.systemFontSize)
+            : .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .bold)
         if chatTitle.font != titleFont { chatTitle.font = titleFont }
         if selected?.loadingTitle == true {
             if chatTitleDecipher == nil {
@@ -746,7 +763,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             "previewHeaderLightText":previewTextColor == .white,
             "address":previewAddress, "domain":address.stringValue,
             "viewport":previewState["viewport"] ?? "",
-            "publishStandard":toolbarItems["publish"]?.view == nil,
+            "publishNativeGlass":publishControl.isNativeGlass,
             "toolGroup":(toolbar.items.first(where: { $0.itemIdentifier.rawValue == "tools" }) as? NSToolbarItemGroup)?.subitems.map { $0.itemIdentifier.rawValue } ?? [],
             "enabled":toolbarItems.mapValues { $0.isEnabled }
         ]
@@ -842,7 +859,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         if action == "publish-cancel" { return cancelPublish(toolbarItems["publish"] as? NSMenuToolbarItem) }
         if action == "preview-more", let id { return performMore(toolbarItems["more"] as? NSMenuToolbarItem, id) }
         if action == "preview-speed", let id { return performSpeed(id) }
-        if action == "publish", toolbarItems["publish"]?.action == nil { return false }
+        if action == "publish", toolbarItems["publish"]?.action == nil || !publishControl.segments.isEnabled { return false }
         if let button = sidebarButtons[action], button.isEnabled { sidebarAction(button); return true }
         if let group = toolbar.items.compactMap({ $0 as? MomentaryToolbarGroup }).first(where: { $0.subitems.contains { $0.itemIdentifier.rawValue == action } }) { return group.clickSegment(action) }
         guard let item = toolbarItems[action], item.isEnabled else { return false }
