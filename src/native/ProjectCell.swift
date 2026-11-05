@@ -2,36 +2,133 @@ import AppKit
 
 /// LKM-388: a plain button's alignment rect follows its symbol, which left "…" a 20-point frame
 /// beside New chat's row-tall one. No insets: the constraints set the frame, the glyph stays put.
-final class ProjectMoreButton: NSButton {
+class ProjectActionButton: NSButton {
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted { (superview as? ProjectCell)?.focusChanged(true) }
+        return accepted
+    }
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { (superview as? ProjectCell)?.focusChanged(false) }
+        return resigned
+    }
+}
+final class ProjectMoreButton: ProjectActionButton {
     override var alignmentRectInsets: NSEdgeInsets { NSEdgeInsets() }
 }
 
 /// Keep project selection on the row and its actions on separate hover controls: the "…" menu
 /// and, as in the retired Electron rail, New chat at the trailing edge.
 final class ProjectCell: SourceListCell {
+    /// Pipe fixture only: a stationary pointer while a project row is replaced.
+    static var scriptedPointer: NSPoint?
     let more = ProjectMoreButton()
-    let newChat = NSButton()
+    let newChat = ProjectActionButton()
+    private(set) var title: SidebarMarqueeTitle?
+    private var resting: NSLayoutConstraint?
+    private var showing: NSLayoutConstraint?
     private var tracking: NSTrackingArea?
     var selected = false { didSet { updateVisibility() } }
-    private var hovered = false
+    private var pointerActive = false
+    private var focusActive = false
+    private var actionsVisible = false
+    private var resumedScrollStart: CFTimeInterval?
+    var showingActions: Bool { actionsVisible }
+    var scrollStart: CFTimeInterval? { pointerActive ? title?.scrollStart : nil }
     override var backgroundStyle: NSView.BackgroundStyle { didSet { updateVisibility() } }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let tracking { removeTrackingArea(tracking) }
-        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self)
         addTrackingArea(area); tracking = area
-        if let window { hovered = bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil)) }
+    }
+    override func mouseEntered(with event: NSEvent) { pointer(at: convert(event.locationInWindow, from: nil)) }
+    override func mouseMoved(with event: NSEvent) { pointer(at: convert(event.locationInWindow, from: nil)) }
+    override func mouseExited(with event: NSEvent) { pointerActive = false; updateActionState() }
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil { pointerActive = false; focusActive = false; setActionsVisible(false); title?.stop() }
+        super.viewWillMove(toWindow: newWindow)
+    }
+    /// Enter only from painted title space. Once revealed, the controls extend the hover region
+    /// so moving across the newly covered tail does not dismiss them before a click.
+    func pointer(at point: NSPoint) {
+        layoutSubtreeIfNeeded()
+        guard let title else { return }
+        let label = title.convert(title.bounds, to: self)
+        let actual = NSRect(x: label.minX, y: label.minY,
+                            width: min(label.width, ceil(title.label.intrinsicContentSize.width)), height: label.height)
+        let overTitle = actual.contains(point)
+        // The title's tail may be short. Keep a continuous path across the newly exposed
+        // space, including the small gap before the first button.
+        let bridge = NSRect(x: actual.maxX, y: 0, width: max(0, newChat.frame.maxX - actual.maxX), height: bounds.height)
+        let overActions = actionsVisible && bridge.contains(point)
+        pointerActive = overTitle || overActions
+        updateActionState()
+    }
+    /// An outline reload replaces the cell without sending a new mouse-enter event. Recheck the
+    /// stationary pointer against the new title; an already open overlay also keeps its controls.
+    func restorePointer(at windowPoint: NSPoint, wasActive: Bool, scrollingSince: CFTimeInterval?) {
+        let point = convert(windowPoint, from: nil)
+        guard bounds.contains(point) else { return }
+        layoutSubtreeIfNeeded()
+        if wasActive, let title {
+            let region = NSRect(x: title.frame.minX, y: 0,
+                                width: max(0, newChat.frame.maxX - title.frame.minX), height: bounds.height)
+            if region.contains(point) {
+                resumedScrollStart = scrollingSince
+                pointerActive = true
+                updateActionState()
+                return
+            }
+        }
+        pointer(at: point)
+    }
+    func focusChanged(_ focused: Bool) { focusActive = focused; updateActionState() }
+    private func updateActionState() {
+        setActionsVisible(pointerActive || focusActive)
+    }
+    private func setActionsVisible(_ visible: Bool) {
+        guard actionsVisible != visible else { return }
+        actionsVisible = visible
+        resting?.isActive = !visible
+        showing?.isActive = visible
+        title?.stop()
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        if visible { title?.start(since: resumedScrollStart) }
+        resumedScrollStart = nil
         updateVisibility()
     }
-    override func mouseEntered(with event: NSEvent) { hovered = true; updateVisibility() }
-    override func mouseExited(with event: NSEvent) { hovered = false; updateVisibility() }
     private func updateVisibility() {
         let emphasized = backgroundStyle == .emphasized
         for control in [more, newChat] as [NSControl] {
-            control.alphaValue = hovered || selected || emphasized ? 1 : 0
+            control.alphaValue = actionsVisible ? 1 : 0
         }
         more.contentTintColor = emphasized ? .alternateSelectedControlTextColor : .labelColor
         newChat.contentTintColor = more.contentTintColor
+    }
+    func installTitle(_ value: String, image: NSImage) {
+        let icon = SidebarIconView(image: image)
+        icon.imageScaling = .scaleProportionallyDown
+        let title = SidebarMarqueeTitle(title: value)
+        self.title = title; imageView = icon; textField = title.label
+        for view in [icon, title] { view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view) }
+        let resting = title.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8)
+        let showing = title.trailingAnchor.constraint(equalTo: more.leadingAnchor, constant: -4)
+        self.resting = resting; self.showing = showing
+        NSLayoutConstraint.activate(SidebarIconLayout.constraints(icon: icon, label: title, in: self, leading: SourceList.iconLeading) + [resting])
+        addSubview(more, positioned: .above, relativeTo: nil)
+        addSubview(newChat, positioned: .above, relativeTo: nil)
+        needsLayout = true
+        tintSymbol()
+    }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if !actionsVisible {
+            let local = convert(point, from: superview)
+            if more.frame.contains(local) || newChat.frame.contains(local) { return self }
+        }
+        return super.hitTest(point)
     }
     /// LKM-388: "…" and New chat are one control with two icons, so every state they have matches.
     /// The label goes on the cell (LKM-379).

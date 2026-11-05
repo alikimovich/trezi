@@ -34,9 +34,10 @@ const row = (id, selected, icon = 'folder') => ({
   textMidY: MID[id],
   textGap: 7,
   textWidth: 80,
+  titleRightInset: 8,
   matchesOpenProject: true,
   selected,
-  moreAlpha: selected ? 1 : 0,
+  moreAlpha: 0,
   actionsLabel: `Actions for ${id}`,
   menu: ['Project Memory…', 'Show History', 'Close Project']
 })
@@ -245,6 +246,7 @@ change((s) => {
 })
 const hovered = structuredClone(state)
 hovered.rows[1].moreAlpha = 1
+hovered.rows[1].titleRightInset = 56
 check(hovered, image, 'Beta')
 assert.throws(() => check(state, image, 'Beta'))
 assert.throws(() => check(hovered, image, 'Gamma'))

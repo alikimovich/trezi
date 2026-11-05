@@ -407,7 +407,11 @@ export function assertSidebarCapture(
     )
     assert.ok(row.textWidth > 30)
     assert.equal(row.selected, row.id === selected)
-    assert.equal(row.moreAlpha, row.selected || row.id === hovered ? 1 : 0)
+    assert.equal(row.moreAlpha, row.id === hovered ? 1 : 0)
+    assert.ok(
+      Math.abs(row.titleRightInset - (row.id === hovered ? 56 : 8)) < 1,
+      `Project title uses the available width: ${row.id} ${row.titleRightInset}`
+    )
     assert.equal(row.actionsLabel, `Actions for ${row.title}`)
     assert.deepEqual(row.menu, PROJECT_MENU)
   }
