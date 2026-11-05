@@ -25,6 +25,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: close the admitted opacity syntax against every `cssText` write and shared-statement creation, with matching default-value and identity fixtures.
 - [x] Architecture discriminator: restrict rendered-opacity proof to inert `div` syntax; reject executable-element resets while retaining linked positive and stale/identity controls.
 - [x] Parser admission repair: reject malformed JavaScript/TypeScript and duplicate top-level bindings before island source admission or opacity proof; cover old-preview settlement and record the remaining same-stamp freshness limit.
+- [x] Review repair: bind the supported opacity target's rendered stamp to a validated full-source revision and keep a same-position old frame pending until the matching revision loads.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
 ## LKM-544 — Include annotation composite Send proof in normal native smoke
 

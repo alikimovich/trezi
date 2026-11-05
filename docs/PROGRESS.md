@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-539 loaded source revision in rendered opacity proof
+
+The supported inert opacity target now carries a separate `data-trezi-revision` SHA-256 hash of the full source file, computed with only that hash literal normalized to zeros; the existing `data-trezi-source` format remains intact for inspector selection. The parser validates that the revision is authored by the exact linked target, and the production WebKit readback requires the rendered element to carry it. An old frame with the same creation position and requested opacity no longer clears Apply after a valid source edit. The source agent is instructed to update the attribute during explicit Apply; unsupported or stale attributes leave the draft actionable instead of fabricating success. Focused transport tests cover old and newly loaded revisions; the native fixture is prepared for the later operator run. Independent review, exact-head CI and post-merge native acceptance remain manager gates.
+
 ## 2026-11-05 — LKM-539 parser admission guard
 
 Opacity settlement and island source reads now reject a JavaScript/TypeScript program with any parser diagnostic before using a recovered AST or binding its literals. The source admission check also rejects duplicate top-level variable bindings; the narrow opacity proof rejects a local `document` binding that would make creation fail while an old preview remains. The production transport fixture keeps the valid linked positive and covers unterminated/invalid source, duplicate bindings, old-preview readback, the prior script reset and stale identity guards. A valid source edit that preserves the same stamp and value still lacks a runtime source-revision marker on its DOM node; source hash and frame identity alone cannot prove that WebKit loaded that edit. Independent review, exact-head CI and post-merge native acceptance remain manager gates.

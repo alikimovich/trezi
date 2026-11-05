@@ -613,7 +613,7 @@ export class ChatIslands {
       if (!this.applyDraft) throw new Error('Apply requires an active chat agent.')
       session.notices.delete(record.id)
       const values = draft.values
-      const prompt = `Apply these chat-island preview drafts as one source edit in this chat workspace. Verify the exact source revision before writing, preserve other edits, and confirm the rendered preview after the source reload. Island ${record.id}; source ${record.manifest.file}; revision ${draft.sourceRevision}. Values: ${JSON.stringify(values)}. Bindings: ${JSON.stringify(record.manifest.params.filter((param) => Object.hasOwn(values, param.id)).map((param) => ({ id: param.id, apply: param.apply })))}.`
+      const prompt = `Apply these chat-island preview drafts as one source edit in this chat workspace. Verify the exact source revision before writing, preserve other edits, and confirm the rendered preview after the source reload. For a supported source-stamped opacity div, add or update a literal data-trezi-revision attribute on that div containing the lowercase SHA-256 hash of the full UTF-8 source after replacing only that 64-character hash with 64 zeros. Keep data-trezi-source in file:line:column form. If this binding cannot be made safely, report that rendered confirmation is unavailable. Island ${record.id}; source ${record.manifest.file}; revision ${draft.sourceRevision}. Values: ${JSON.stringify(values)}. Bindings: ${JSON.stringify(record.manifest.params.filter((param) => Object.hasOwn(values, param.id)).map((param) => ({ id: param.id, apply: param.apply })))}.`
       draft.submittedTurn = await this.applyDraft(command.chat, prompt)
       await this.refresh(command.chat)
       return

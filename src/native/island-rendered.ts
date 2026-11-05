@@ -63,7 +63,7 @@ export async function confirmIslandRendered(
       const matches = document.querySelectorAll(item.selector);
       if (matches.length !== 1) return null;
       const node = matches[0];
-      return {stamp: node.getAttribute('data-trezi-source'), value: getComputedStyle(node).getPropertyValue(item.property).trim()};
+      return {stamp: node.getAttribute('data-trezi-source'), revision: node.getAttribute('data-trezi-revision'), value: getComputedStyle(node).getPropertyValue(item.property).trim()};
     })};
   })()`,
     'preview',
@@ -87,11 +87,12 @@ export async function confirmIslandRendered(
   if (!sameFrame || !Array.isArray(observed?.values) || observed.values.length !== spec.length)
     return false
   const matches = observed.values.every((entry: unknown, index: number) => {
-    const item = entry as { stamp?: unknown; value?: unknown } | null
+    const item = entry as { stamp?: unknown; revision?: unknown; value?: unknown } | null
     return (
       item &&
       typeof item.stamp === 'string' &&
-      item.stamp === `${record.manifest.file}:${stamps[index]}` &&
+      item.stamp === stamps[index]?.stamp &&
+      item.revision === stamps[index]?.revision &&
       typeof item.value === 'string' &&
       Number(item.value) === spec[index].value
     )

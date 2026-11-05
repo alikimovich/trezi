@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import ts from 'typescript'
 import { lexLiteral, locateAnchor } from '../main/control-manifest'
 import { parseIslandProgram } from '../main/island-source-syntax'
@@ -7,7 +8,11 @@ import type { ControlParam } from '../shared/api'
  * every top-level expression must be an allowed literal write or append. An
  * executable element, URL, event handler, alias, callback or later mutation
  * makes the relationship between source and rendered opacity unknowable. */
-export function linkedOpacityStamp(code: string, file: string, param: ControlParam): string | null {
+export function linkedOpacityStamp(
+  code: string,
+  file: string,
+  param: ControlParam
+): { stamp: string; revision: string } | null {
   if (
     !/\.[cm]?jsx?$/.test(file) ||
     param.apply.strategy !== 'literal' ||
@@ -100,6 +105,7 @@ export function linkedOpacityStamp(code: string, file: string, param: ControlPar
       ts.isStringLiteral(decl.initializer.arguments[0]) &&
       decl.initializer.arguments[0].text === 'div'
   )
+  const linkedRevision = { value: '' }
   const created = new Set(targets.map(({ decl }) => (decl.name as ts.Identifier).text))
   const primitiveNames = new Set(
     declarations
@@ -192,7 +198,7 @@ export function linkedOpacityStamp(code: string, file: string, param: ControlPar
         (chain(expression.expression, [name, 'setAttribute']) &&
           expression.arguments.length === 2 &&
           ts.isStringLiteral(expression.arguments[0]) &&
-          expression.arguments[0].text === 'data-trezi-source' &&
+          ['data-trezi-source', 'data-trezi-revision'].includes(expression.arguments[0].text) &&
           ts.isStringLiteral(expression.arguments[1])) ||
         ((chain(expression.expression, ['document', 'body', 'append']) ||
           chain(expression.expression, ['document', 'body', 'appendChild'])) &&
@@ -226,6 +232,8 @@ export function linkedOpacityStamp(code: string, file: string, param: ControlPar
     const stamp = `${file}:${creation.line + 1}:${creation.character + 1}`
     let appendCount = 0
     let stampCount = 0
+    let revisionCount = 0
+    let renderedRevision: string | null = null
     let safe = true
     const inspect = (node: ts.Node) => {
       if (!safe) return
@@ -256,9 +264,34 @@ export function linkedOpacityStamp(code: string, file: string, param: ControlPar
             expression.arguments[0].text === 'data-trezi-source' &&
             ts.isStringLiteral(expression.arguments[1]) &&
             expression.arguments[1].text === stamp
-          )
+          ) {
             stampCount++
-          else if (
+          } else if (
+            chain(expression.expression, [variable, 'setAttribute']) &&
+            expression.arguments.length === 2 &&
+            ts.isStringLiteral(expression.arguments[0]) &&
+            expression.arguments[0].text === 'data-trezi-revision' &&
+            ts.isStringLiteral(expression.arguments[1])
+          ) {
+            const literal = expression.arguments[1]
+            const raw = code.slice(literal.getStart(source), literal.getEnd())
+            const match = raw.match(/^(['"])([a-f0-9]{64})\1$/)
+            if (!match) {
+              safe = false
+              return
+            }
+            const normalized =
+              code.slice(0, literal.getStart(source) + 1) +
+              '0'.repeat(64) +
+              code.slice(literal.getEnd() - 1)
+            const actual = createHash('sha256').update(normalized).digest('hex')
+            if (actual !== match[2]) {
+              safe = false
+              return
+            }
+            renderedRevision = actual
+            revisionCount++
+          } else if (
             (chain(expression.expression, ['document', 'body', 'append']) ||
               chain(expression.expression, ['document', 'body', 'appendChild'])) &&
             expression.arguments.length === 1 &&
@@ -271,11 +304,22 @@ export function linkedOpacityStamp(code: string, file: string, param: ControlPar
       ts.forEachChild(node, inspect)
     }
     inspect(source)
-    return safe && appendCount === 1 && stampCount === 1
+    const linked =
+      safe &&
+      appendCount === 1 &&
+      stampCount === 1 &&
+      revisionCount === 1 &&
+      renderedRevision !== null
+    if (linked && renderedRevision) linkedRevision.value = renderedRevision
+    return linked
   })
   if (linked.length !== 1) return null
-  const position = source.getLineAndCharacterOfPosition(
+  if (!linkedRevision.value) return null
+  const creation = source.getLineAndCharacterOfPosition(
     linked[0].decl.parent.parent.getStart(source)
   )
-  return `${position.line + 1}:${position.character + 1}`
+  return {
+    stamp: `${file}:${creation.line + 1}:${creation.character + 1}`,
+    revision: linkedRevision.value
+  }
 }

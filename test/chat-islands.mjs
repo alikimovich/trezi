@@ -559,8 +559,21 @@ try {
   assert.equal(evaluations, 2)
   // The actual chat runtime uses this fixed preview transport. Only a declared
   // computed opacity on the matching source-stamped element can confirm Apply.
-  const opacityCode =
+  const revisionStamp = (code) => {
+    const normalized = code.includes('data-trezi-revision')
+      ? code.replace(
+          /data-trezi-revision', '[a-f0-9]{64}/,
+          `data-trezi-revision', '${'0'.repeat(64)}`
+        )
+      : code.replace(
+          /(card\.setAttribute\('data-trezi-source', '[^\n]+\n)/,
+          `$1card.setAttribute('data-trezi-revision', '${'0'.repeat(64)}');\n`
+        )
+    return normalized.replace('0'.repeat(64), sourceHash(normalized))
+  }
+  const opacityCode = revisionStamp(
     "const OPACITY = 0.5;\nconst card = document.createElement('div');\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:2:1');\ncard.style.opacity = OPACITY;\ndocument.body.append(card);\n"
+  )
   await writeFile(join(root, 'opacity.js'), opacityCode)
   const opacityDefinition = islandDefinition({
     manifest: {
@@ -594,6 +607,7 @@ try {
   const opacityRevision = (await islandSource(root, opacityRecord)).revision
   let pageHref = 'http://127.0.0.1:7777/'
   let renderedStamp = 'opacity.js:2:1'
+  let renderedRevision = opacityCode.match(/data-trezi-revision', '([a-f0-9]{64})/)[1]
   let renderedValue = '0.5'
   let startedAt = 1770000000000
   let navigateDuringRead = false
@@ -611,7 +625,7 @@ try {
         return {
           href: pageHref,
           startedAt: observedStart,
-          values: [{ stamp: renderedStamp, value: renderedValue }]
+          values: [{ stamp: renderedStamp, revision: renderedRevision, value: renderedValue }]
         }
       }
     }
@@ -621,6 +635,29 @@ try {
     true,
     'production callback links the exact source constant to the target opacity in the current preview session'
   )
+  const unstampedEdit = `${opacityCode}const NOTE = 'new source';\n`
+  await writeFile(join(root, 'opacity.js'), unstampedEdit)
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, sourceHash(unstampedEdit)),
+    false,
+    'an edited source whose revision stamp was not updated remains unconfirmed'
+  )
+  const samePositionEdit = revisionStamp(unstampedEdit)
+  await writeFile(join(root, 'opacity.js'), samePositionEdit)
+  const samePositionRevision = (await islandSource(root, opacityRecord)).revision
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, samePositionRevision),
+    false,
+    'an old frame with the requested opacity and creation position cannot prove the edited source loaded'
+  )
+  renderedRevision = samePositionEdit.match(/data-trezi-revision', '([a-f0-9]{64})/)[1]
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, samePositionRevision),
+    true,
+    'Apply settles only after the rendered frame carries the matching source revision'
+  )
+  renderedRevision = opacityCode.match(/data-trezi-revision', '([a-f0-9]{64})/)[1]
+  await writeFile(join(root, 'opacity.js'), opacityCode)
   for (const invalid of [
     `${opacityCode}const junk = 'unterminated`,
     `${opacityCode}const other = ;`,
@@ -654,7 +691,7 @@ try {
   await writeFile(join(root, 'opacity.js'), opacityCode)
   const unrelatedCode =
     "const OPACITY = 0.5;\nconst other = document.createElement('div');\nother.id = 'other';\nother.style.opacity = OPACITY;\nconst card = document.createElement('div');\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:5:1');\ncard.style.opacity = 0.5;\ndocument.body.append(card);\n"
-  await writeFile(join(root, 'opacity.js'), unrelatedCode)
+  await writeFile(join(root, 'opacity.js'), revisionStamp(unrelatedCode))
   const unrelatedRevision = (await islandSource(root, opacityRecord)).revision
   renderedStamp = 'opacity.js:5:1'
   assert.equal(
@@ -669,7 +706,7 @@ try {
     "card.style.cssText = 'opacity: 0.5';",
     'const alias = card; alias.style.opacity = OPACITY;'
   ]) {
-    await writeFile(join(root, 'opacity.js'), `${opacityCode}${override}\n`)
+    await writeFile(join(root, 'opacity.js'), revisionStamp(`${opacityCode}${override}\n`))
     const overrideRevision = (await islandSource(root, opacityRecord)).revision
     assert.equal(
       await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, overrideRevision),
@@ -679,7 +716,7 @@ try {
   }
   const defaultResetCode =
     "const OPACITY = 1;\nconst card = document.createElement('div');\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:2:1');\ncard.style.opacity = OPACITY;\ncard.style.cssText = 'color: red';\ndocument.body.append(card);\n"
-  await writeFile(join(root, 'opacity.js'), defaultResetCode)
+  await writeFile(join(root, 'opacity.js'), revisionStamp(defaultResetCode))
   const defaultResetRevision = (await islandSource(root, opacityRecord)).revision
   renderedValue = '1'
   assert.equal(
@@ -689,7 +726,7 @@ try {
   )
   const scriptResetCode =
     "const OPACITY = 1;\nconst card = document.createElement('div');\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:2:1');\ncard.style.opacity = OPACITY;\ndocument.body.append(card);\nconst script = document.createElement('script');\nscript.textContent = \"document.querySelector('#card').style.opacity = '0'\";\ndocument.body.append(script);\n"
-  await writeFile(join(root, 'opacity.js'), scriptResetCode)
+  await writeFile(join(root, 'opacity.js'), revisionStamp(scriptResetCode))
   const scriptResetRevision = (await islandSource(root, opacityRecord)).revision
   assert.equal(
     await confirmIslandRendered(root, opacityRecord, { opacity: 1 }, scriptResetRevision),
@@ -699,7 +736,7 @@ try {
   renderedValue = '0.5'
   const multiDeclarationCode =
     "const OPACITY = 0.5;\nconst other = document.createElement('div'), card = document.createElement('div');\nother.id = 'other';\nother.style.opacity = OPACITY;\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:2:1');\ncard.style.opacity = OPACITY;\ndocument.body.append(card);\n"
-  await writeFile(join(root, 'opacity.js'), multiDeclarationCode)
+  await writeFile(join(root, 'opacity.js'), revisionStamp(multiDeclarationCode))
   const multiDeclarationRevision = (await islandSource(root, opacityRecord)).revision
   assert.equal(
     await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, multiDeclarationRevision),
@@ -710,7 +747,7 @@ try {
     "const OPACITY = 0.5;\nconst other = document.createElement('div'); const card = document.createElement('div');\n"
   const cardColumn = sameLine.split('\n')[1].indexOf('const card') + 1
   const sameLineCode = `${sameLine}other.id = 'other';\nother.style.opacity = OPACITY;\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:2:${cardColumn}');\ncard.style.opacity = OPACITY;\ndocument.body.append(card);\n`
-  await writeFile(join(root, 'opacity.js'), sameLineCode)
+  await writeFile(join(root, 'opacity.js'), revisionStamp(sameLineCode))
   const sameLineRevision = (await islandSource(root, opacityRecord)).revision
   renderedStamp = 'opacity.js:2:1'
   assert.equal(

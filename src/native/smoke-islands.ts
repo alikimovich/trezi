@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { islandSource } from '../main/chat-island-source'
+import { islandSource, sourceHash } from '../main/chat-island-source'
 import { runChatIslandTool } from '../main/chat-islands'
 import type { NativeBridge } from './bridge'
 import { nativeChat, nativeIslands } from './chat-runtime'
@@ -78,9 +78,21 @@ export async function checkChatIslands(host: NativeBridge, fixture: string, arti
   const originalIndex = readFileSync(indexFile, 'utf8')
   const page = (code: string) => host.request('evaluate', { view: 'preview', code })
   let initialShadow = ''
-  const code =
+  const revisionStamp = (text: string) => {
+    const normalized = text.includes('data-trezi-revision')
+      ? text.replace(
+          /data-trezi-revision', '[a-f0-9]{64}/,
+          `data-trezi-revision', '${'0'.repeat(64)}`
+        )
+      : text.replace(
+          /(card\.setAttribute\('data-trezi-source', '[^\n]+\n)/,
+          `$1card.setAttribute('data-trezi-revision', '${'0'.repeat(64)}');\n`
+        )
+    return normalized.replace('0'.repeat(64), sourceHash(normalized))
+  }
+  const code = revisionStamp(
     'const LIGHT_X = 0;\nconst LIGHT_Y = -0.5;\nconst SOFTNESS = 20;\nconst EASING = [0.25, 0.1, 0.25, 1];\nconst OPACITY = 1;\n' +
-    `
+      `
 const card = document.createElement('div');
 card.id = 'island-shadow-demo'; card.textContent = 'Light-driven shadow';
 card.setAttribute('data-trezi-source', 'island-light.js:7:1');
@@ -88,6 +100,7 @@ card.style.opacity = OPACITY;
 card.style.boxShadow = (LIGHT_X * -12) + 'px ' + (LIGHT_Y * -12) + 'px ' + SOFTNESS + 'px rgba(0,0,0,0.12)';
 document.body.append(card);
 `
+  )
   writeFileSync(file, code)
   writeFileSync(indexFile, originalIndex + '<script src="/island-light.js"></script>')
   const wait = async (check: () => Promise<boolean> | boolean) => {
@@ -287,13 +300,17 @@ document.body.append(card);
         blocks: [{ id: 'opacity', title: 'Opacity', kind: 'group' as const, params: ['opacity'] }]
       }
       const oldRevision = (await islandSource(fixture, opacityRecord)).revision
-      writeFileSync(file, code.replace('const OPACITY = 1;', 'const OPACITY = 0.5;'))
-      await wait(
-        async () =>
-          (await page(
-            "getComputedStyle(document.querySelector('#island-shadow-demo')).opacity"
-          )) === '0.5'
-      )
+      const updatedCode = revisionStamp(code.replace('const OPACITY = 1;', 'const OPACITY = 0.5;'))
+      writeFileSync(file, updatedCode)
+      await wait(async () => {
+        const loaded = (await page(
+          "({opacity:getComputedStyle(document.querySelector('#island-shadow-demo')).opacity, revision:document.querySelector('#island-shadow-demo').getAttribute('data-trezi-revision')})"
+        )) as { opacity?: string; revision?: string } | null
+        return (
+          loaded?.opacity === '0.5' &&
+          loaded.revision === updatedCode.match(/data-trezi-revision', '([a-f0-9]{64})/)?.[1]
+        )
+      })
       const newRevision = (await islandSource(fixture, opacityRecord)).revision
       assert.equal(
         await productionConfirm(chat.chat, opacityRecord, { opacity: 0.5 }, oldRevision),
