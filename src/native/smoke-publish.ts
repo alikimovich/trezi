@@ -450,6 +450,9 @@ export async function checkPublishProgress(
     git.statuses.set(root, sample)
     git.render()
     const dot = await checkBranchDot(host, git, root, sample, artifacts)
+    // The dot fixture covers 1320 and 850 pt. Give the full CI failure label
+    // enough toolbar room before asserting that its entire text is uncut.
+    assert.ok(await host.request('shellPerform', { action: 'window-width', row: '1800' }))
     // The Publish label's width can move the whole address block; the dot keeps its
     // frame inside the branch control and its centre line.
     const { local: dotFrame, baseline: dotBaseline } = dot[1320] as {
@@ -466,7 +469,12 @@ export async function checkPublishProgress(
     git.statuses.set(root, { ...sample, ci: 'failed', failing: ['build', 'lint'] })
     git.render()
     const failed = await until(
-      (s) => String(s.branchAccessibilityValue).includes('●2') && s.branchDotState === 'failed',
+      (s) =>
+        Math.abs(s.windowWidth - 1800) < 1 &&
+        String(s.branchAccessibilityValue).includes('●2') &&
+        s.branchDotState === 'failed' &&
+        !s.branchTruncated &&
+        s.branchTitleWidth <= s.branchTitleRoom + 0.5,
       'Failed CI'
     )
     assert.equal(failed.branchBusy, false, 'Failed CI stops the spinner')

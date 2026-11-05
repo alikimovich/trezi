@@ -371,17 +371,31 @@ extension Host {
         if let dark = c["dark"] as? Bool { window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua) }
         // Not `id`: the bridge stamps its request id there.
         let id = c["component"] as? String ?? ""
-        chat.model.pressLatest()
+        let acceptedLayout = c["acceptedLayout"] as? Bool == true
+        if acceptedLayout {
+            guard let message = chat.model.snapshot?.messages.first(where: { $0.segments.contains { $0.ui?.record?.id == id } }) else {
+                throw NSError(domain: "ChatUiCapture", code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Accepted component message is missing"])
+            }
+            chat.model.chatUiCaptureMessage = message.id
+            chat.model.chatUiCaptureRevision += 1
+        } else {
+            chat.model.pressLatest()
+        }
         var last = CGRect.zero
-        for _ in 0..<60 {
+        let readingHeight = max(1, chat.bounds.height - chat.model.bottomInset)
+        for attempt in 0..<60 {
             try await Task.sleep(nanoseconds: 50_000_000)
             let frame = chat.model.chatUiFrames[id] ?? .zero
             let linesReady = chat.model.chatUiAcceptedLineFrames.contains { entry in
                 entry.key.hasPrefix("\(id):") && abs(entry.value.width - (frame.width - 24)) <= 3
             }
             let widthReady = (c["expectedChatWidth"] as? Double).map { abs(Double(frame.width) - ($0 - 36)) <= 20 } ?? true
-            if frame == last && frame != .zero && widthReady &&
-                (c["acceptedLayout"] as? Bool != true || linesReady) { break }
+            let visible = frame.height > 0 && frame.minY >= -1 && frame.maxY <= readingHeight + 1
+            if frame == last && visible && widthReady && (!acceptedLayout || linesReady) { break }
+            if acceptedLayout && attempt % 10 == 9 {
+                chat.model.chatUiCaptureRevision += 1
+            }
             last = frame
         }
         let reading = NSRect(x: 0, y: 0, width: chat.bounds.width, height: max(1, chat.bounds.height - chat.model.bottomInset))

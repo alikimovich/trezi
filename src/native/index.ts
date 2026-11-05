@@ -143,6 +143,7 @@ import { installNativeStart } from './start-runtime'
 import { strandedLandingsNotice } from './stranded-landings'
 import { NativeSupportSheets } from './support-sheets'
 import { SyntaxController } from './syntax-controller'
+import { recordThreeDRoute } from './three-d-route-trace'
 import { NativeUpdateController } from './update-controller'
 import { serviceWorkflows } from './workflow-service'
 import { installNativeWorkspace } from './workspace-runtime'
@@ -489,6 +490,15 @@ async function main() {
     previewView.webContents.send(channels.PREVIEW_ISLAND_ENTERED)
   })
   host.on('three-d-action', (action) => {
+    if (action?.action === 'code')
+      recordThreeDRoute('host-event', {
+        reason:
+          typeof action?.session !== 'string' || !Number.isInteger(action?.revision)
+            ? 'invalid-identity'
+            : 'forwarded',
+        session: action.session,
+        revision: action.revision
+      })
     if (typeof action?.session !== 'string' || !Number.isInteger(action?.revision)) return
     // Camera and separation are native; atlas paints go straight from the host to the preview.
     if (!['close', 'code', 'layer'].includes(action?.action)) return
@@ -614,7 +624,24 @@ async function main() {
   )
   const openSource = (source?: string, popped?: boolean) => {
     const root = workspaceController.active?.root
-    if (root) void editorController.open(root, source, popped)
+    recordThreeDRoute('editor-request', {
+      reason: root ? 'opening' : 'no-active-root',
+      root,
+      source
+    })
+    if (root)
+      void editorController.open(root, source, popped).then(() => {
+        const state = editorController.session(root).state
+        recordThreeDRoute('editor-result', {
+          reason:
+            state.error ||
+            (state.source === source?.replace(/:\d+(?::\d+)?$/, '')
+              ? 'opened-target'
+              : 'other-source'),
+          root,
+          source: state.source
+        })
+      })
   }
   const editorAction = (action: any) => {
     if (!workspaceController.state.projects.some((p) => p.root === action.root)) return

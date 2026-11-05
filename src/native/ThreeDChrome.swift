@@ -27,10 +27,16 @@ final class ThreeDChromeModel: ObservableObject {
     @Published var compact = false
     var session = ""
     var revision = 0
+    private(set) var codeActionCount = 0
+    private(set) var lastCodeAction: [String: Any] = [:]
     /// Camera and spacing never leave the host.
     var local: ((String, Int?) -> Void)?
     func action(_ name: String, value: Int? = nil) {
         if ["front", "reset", "separation"].contains(name) { local?(name, value); return }
+        if name == "code" {
+            codeActionCount += 1
+            lastCodeAction = ["session":session, "revision":revision, "selected":selected, "hasSource":hasSource]
+        }
         var body: [String: Any] = ["event":"three-d-action", "session":session, "revision":revision, "action":name]
         if let value { body["value"] = value }
         emit(body)
@@ -284,6 +290,7 @@ final class ThreeDChrome {
         }
         return ["rendered": scene.planes.filter { $0.contents != nil && $0.superlayer != nil }.count,
                 "planes": scene.planes.count, "capturedRevision": capturedRevision, "captures": captures,
+                "codeActionCount": model.codeActionCount, "lastCodeAction": model.lastCodeAction,
                 "pitch": scene.pitch, "yaw": scene.yaw, "zoom": scene.zoom, "sceneSeparation": scene.separation,
                 "spacing": scene.spacing, "sceneSelected": scene.selected, "hovered": scene.hovered,
                 "guides": scene.visibleGuides, "guideParents": scene.guideParents,

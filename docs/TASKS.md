@@ -26,6 +26,32 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Architecture discriminator: restrict rendered-opacity proof to inert `div` syntax; reject executable-element resets while retaining linked positive and stale/identity controls.
 - [x] Parser admission repair: reject malformed JavaScript/TypeScript and duplicate top-level bindings before island source admission or opacity proof; cover old-preview settlement and record the remaining same-stamp freshness limit.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
+## LKM-544 — Include annotation composite Send proof in normal native smoke
+
+- [x] Register the existing synthetic composite/Send check once in ordinary core and full selection, retaining the narrow opt-in route.
+- [x] Cover normal and narrow selection, incompatible opt-ins, ordering, and cleanup in pure tests.
+- [ ] Manager: independent review, exact-head CI, merge and the scheduled post-merge native acceptance run.
+
+## LKM-537 — Native chat UI accepted-card capture failure
+
+- [x] Reveal the accepted component's containing message before measuring its card and answer lines across chat widths.
+- [x] Wait for the standalone New Chat toolbar frame to meet its existing geometry assertion before the review chat smoke continues.
+- [x] Let the preview address compress to its existing floor so New Chat reaches the chat column edge at the standard window width.
+- [x] Repair candidate core native failures in Publish sizing, toolbar inspection, branch-dot geometry and private document-start recording without relaxing their assertions.
+- [x] Reject a padded foreground toolbar capture before frame-based glass sampling at normal/narrow widths and light/dark appearances.
+- [x] Map padded foreground captures into toolbar coordinates, wait for New Chat layout after resize, and verify the full failed-CI label at a width where it fits.
+- [x] Measure the toolbar within the resize pass and assert that the chat header width cannot change after its snapshot.
+- [x] Keep a truncated branch title's ellipsis close to the chevron when its status dot slot cannot fit, with a rendered-ink regression check.
+- [x] Match the 98-point host popup and monospaced font in the branch fixture; close the measured title-to-chevron gap and clean up a stubbed chat turn after a chat-ui failure.
+- [x] Remove New Chat's duplicated address reserve at sidebar width 340 and cover the saved geometry in the offscreen chat-lead fixture.
+- [x] Locate the live 3D selected-source refusal at the inspector's runtime-status page check and use the host's current page with preview IPC scene identity for Code routing.
+- [x] Keep New Chat before the viewport at the minimum toolbar width where the chat column edge would overlap that adjacent item.
+- [x] Add failure-only 3D Code route observations and direct preview/IPC probes while preserving the original assertion and negative controls.
+- [x] Keep the failure-only direct toolbar probe active even when an unrelated source file is already visible; compose the non-GUI source path and record the 950-point toolbar bound.
+- [x] Record bounded live Code delivery counts and refusal reasons at the native producer, preview, IPC, inspector and editor boundaries; expose actual toolbar constraint and container frames.
+- [x] Reject a selected 3D Code request from an old same-document route against the preview view's current URL, with valid, stale-route, stale-selection and closed-scene IPC controls.
+- [ ] Manager: resolve the separate private-browser `document-replaced` native result and verify the exact final tree.
+- [ ] Manager: confirm the native chat group and independent review on the exact tree.
 ## LKM-543 — Native annotation composite and Send acceptance fixture
 
 - [x] Add a narrow opt-in native scenario on a disposable fixture page, with the existing mocked Send interception.

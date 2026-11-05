@@ -151,7 +151,37 @@ export async function checkSidebarChats(host: NativeBridge, artifacts: string) {
   assert.ok(button, 'the project row has a New chat button')
   assert.equal(button.role, 'AXButton', 'VoiceOver reads New chat as a button')
   assert.equal(button.label, `New chat in ${entry().name}`)
-  const header = await shell()
+  // AppKit places the standalone toolbar item after the title view's layout callback.
+  // Keep the exact edge and title-clearance check, but measure its settled frame.
+  const header = await waitFor(
+    async () => {
+      const state = await shell()
+      const rect = (value: string) => (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
+      const [titleX, , titleWidth] = rect(state.chatTitleFrame)
+      const [buttonX, , buttonWidth] = rect(state.chatNewFrame)
+      return (
+        buttonWidth >= 28 &&
+        buttonWidth <= 48 &&
+        buttonX >= titleX + titleWidth + 7 &&
+        buttonX >= state.chatHeaderTrailing &&
+        Math.abs(buttonX + buttonWidth - (state.detailLeading + state.chatWidth - 4)) <= 3 &&
+        state
+      )
+    },
+    'New Chat at the chat column trailing edge with room for the title',
+    10000,
+    async () => {
+      const state = await shell()
+      return {
+        title: state.chatTitleFrame,
+        button: state.chatNewFrame,
+        renderedButton: state.chatNewRenderedFrame,
+        titleTrailing: state.chatHeaderTrailing,
+        detailLeading: state.detailLeading,
+        chatWidth: state.chatWidth
+      }
+    }
+  )
   assert.equal(header.chatNewVisible, true, 'the chat header shows New Chat')
   assert.equal(header.chatNewEnabled, true, 'the chat header New Chat is enabled for the project')
   assert.equal(header.chatNewStandalone, true, 'New Chat is a standalone system toolbar item')
@@ -167,17 +197,6 @@ export async function checkSidebarChats(host: NativeBridge, artifacts: string) {
   )
   assert.equal(header.chatNewToolTip, 'New Chat', 'New Chat keeps its tooltip')
   assert.equal(header.chatNewGlyph, 'New Chat', 'New Chat keeps its symbol description')
-  const rect = (value: string) => (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
-  const [titleX, , titleWidth] = rect(header.chatTitleFrame)
-  const [buttonX, , buttonWidth] = rect(header.chatNewFrame)
-  assert.ok(
-    buttonWidth >= 28 &&
-      buttonWidth <= 48 &&
-      buttonX >= titleX + titleWidth + 7 &&
-      buttonX >= header.chatHeaderTrailing &&
-      Math.abs(buttonX + buttonWidth - (header.detailLeading + header.chatWidth - 4)) <= 3,
-    'New Chat is at the chat column trailing edge with room for the title'
-  )
   // Grow to more than five open chats; each gets a draft, so New chat never reuses it. Five new
   // chats: one takes the attachment, four get a prompt and fill History past "Show N more".
   for (let i = 0; i < 12 && (entry().sessionKeys.length < 6 || created.length < 5); i++) {

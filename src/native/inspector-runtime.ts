@@ -13,6 +13,7 @@ import type { NativeContextController } from './context-controller'
 import { InspectorDraftTurns, NativeInspectorController } from './inspector-controller'
 import { NavigationController } from './navigation-controller'
 import { dispatchIPC, serviceEvents } from './platform'
+import { recordThreeDRoute } from './three-d-route-trace'
 import type { NativeWorkspaceController } from './workspace-controller'
 export function installNativeInspector(
   host: NativeBridge,
@@ -383,19 +384,32 @@ export function installNativeInspector(
       if (value === 'props') {
         controller.state.visible = !controller.state.visible
         controller.publish()
-      } else if (
-        value?.action === 'three-d-code' &&
-        typeof value.source === 'string' &&
-        value.source.length > 0 &&
-        value.source.length <= 256 &&
-        typeof value.page === 'string' &&
-        readyRoot === entry.root &&
-        pageOf(value.page) === page &&
-        workspace.state.status.kind === 'running' &&
-        pageOf(workspace.state.status.url) === page
-      )
-        openSource(value.source)
-      else if (value === 'code' && controller.element?.source) openSource(controller.element.source)
+      } else if (value?.action === 'three-d-code') {
+        const status = workspace.state.status
+        const reason =
+          typeof value.source !== 'string' || !value.source || value.source.length > 256
+            ? 'invalid-source'
+            : typeof value.page !== 'string'
+              ? 'invalid-page'
+              : readyRoot !== entry.root
+                ? 'root-not-ready'
+                : pageOf(value.page) !== page
+                  ? 'wrong-page'
+                  : status.kind !== 'running'
+                    ? 'preview-not-running'
+                    : 'open-requested'
+        // The runtime status URL names the dev server. WebKit can navigate to a
+        // different route while that server keeps running; the host's current
+        // page and preview IPC's exact scene identity guard this source action.
+        recordThreeDRoute('inspector', {
+          reason,
+          source: typeof value.source === 'string' ? value.source : undefined,
+          page: typeof value.page === 'string' ? value.page : undefined,
+          root: entry.root
+        })
+        if (reason === 'open-requested') openSource(value.source)
+      } else if (value === 'code' && controller.element?.source)
+        openSource(controller.element.source)
       else if (value === 'delete' && controller.element)
         void chat
           .command({
