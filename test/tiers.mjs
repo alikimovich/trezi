@@ -278,6 +278,7 @@ export const UNIT = [
   'chat-ui-model',
   'device-frame',
   'preview-speed-placement',
+  'toolbar-button-pixels',
   'toolbar-island-dividers',
   'branch-spinner',
   'host-warnings',
