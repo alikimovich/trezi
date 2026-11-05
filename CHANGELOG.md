@@ -20,6 +20,12 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Fixed
 
 - A stale preview frame can no longer complete a supported source-stamped opacity island Apply after a same-position source edit (LKM-539).
+## [0.14.2] - 2026-11-05
+
+### Fixed
+
+- Chat latest-message recovery keeps lazy rows above the composer after sending or switching chats (LKM-545).
+
 ## [0.14.1] - 2026-11-05
 
 ### Fixed

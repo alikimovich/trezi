@@ -224,7 +224,7 @@ async function checkPointer(
     )
   await page.selectMode(true)
   try {
-    const before = await move('page')
+    const before = await move('page', 0, false, true)
     // One synthetic move can land before the page has armed select mode (the mode reaches the
     // page asynchronously), and WebKit then never sees another. A pointer keeps moving, so
     // move again over the same point about once a second until the hover shows.
@@ -233,7 +233,7 @@ async function checkPointer(
     await waitFor(
       async () => {
         if (await hoverBox()) return true
-        if (++polls % 12 === 0) repeated = await move('page', (polls / 12) % 2)
+        if (++polls % 12 === 0) repeated = await move('page', (polls / 12) % 2, false, true)
         return false
       },
       'select-mode hover over the page',

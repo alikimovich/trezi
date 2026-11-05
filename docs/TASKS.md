@@ -27,6 +27,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Parser admission repair: reject malformed JavaScript/TypeScript and duplicate top-level bindings before island source admission or opacity proof; cover old-preview settlement and record the remaining same-stamp freshness limit.
 - [x] Review repair: bind the supported opacity target's rendered stamp to a validated full-source revision and keep a same-position old frame pending until the matching revision loads.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
+## LKM-545 — Native suite failure on main 109acab68c80
+
+- [x] Realize the latest lazy chat row at the reading edge above the overlaid composer, with a targeted anchor check.
+- [x] Cross from the inspector island into the page on initial and repeated synthetic hover moves.
+- [x] Let an idle conversation realize the latest row after the unresolved-settle count is spent (`ChatLatestSettle.mayRealize`), with a fixture check.
+- [x] Keep the bottom realize anchor while a turn streams (`realizeTarget(running:)`), so `native-chat-send-follow` runs as on main; reading edge only when idle.
+- [ ] Manager: quick and locked native chat, composer, core and sidebar verification, independent review, exact-head CI and merge.
+
 ## LKM-544 — Include annotation composite Send proof in normal native smoke
 
 - [x] Register the existing synthetic composite/Send check once in ordinary core and full selection, retaining the narrow opt-in route.

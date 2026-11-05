@@ -56,6 +56,14 @@ if (process.platform !== 'darwin') {
     // is re-measured after a relayout), an unresolved pin escalates to a
     // relayout, and history footers are 28 pt.
     const cases = JSON.parse(run([binary, '--cases']))
+    assert.ok(Math.abs(cases.realizeReadingAnchor - 570 / 776) < 0.001)
+    // LKM-545: a streaming turn keeps the bottom anchor of the bounded settles (send-follow).
+    assert.equal(cases.realizeStreamingAnchor, 1)
+    assert.equal(cases.realizeFirstAnchor, 0)
+    // LKM-545: a spent count stops realizing only while a turn streams.
+    assert.equal(cases.realizeStreamingSpent, false)
+    assert.equal(cases.realizeIdleSpent, true)
+    assert.equal(cases.realizeStreamingFresh, true)
     assert.equal(cases.atEdge, 'settled')
     assert.equal(cases.markerBelow, 'bottom')
     assert.equal(
