@@ -7,6 +7,9 @@
 ## 2026-11-04 — LKM-533 accepted answer layout
 
 - Accepted form cards now stack each question and answer in field order, with leading alignment and available-width wrapping. The existing header, status and pending controls remain on their prior paths. The chat UI smoke uses a synthetic long answer in its accepted-card foreground capture and checks that the submitted note reaches the turn. Native visual acceptance remains with the post-merge run.
+## 2026-11-04 — LKM-532 Mark up foreground activation in native smoke
+
+- The `preview-markup` posted-event seam now waits up to five seconds for the host window to become key in the active app, re-requesting activation every half second. The prior single 90 ms wait could fail before AppKit completed activation after another native smoke. Events still require a foreground window without a sheet; failure now reports active, key, sheet and frontmost state. This changes only the disposable-profile smoke seam, so there is no user-visible changelog entry.
 
 ## 2026-11-04 — LKM-527 native suite timing and glass evidence repair
 
