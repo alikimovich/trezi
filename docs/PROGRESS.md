@@ -7,6 +7,20 @@
 ## 2026-11-04 — LKM-533 accepted answer layout
 
 - Accepted form cards now stack each question and answer in field order, with leading alignment and available-width wrapping. The existing header, status and pending controls remain on their prior paths. The chat UI smoke uses a synthetic long answer in its accepted-card foreground capture and checks that the submitted note reaches the turn. Native visual acceptance remains with the post-merge run.
+## 2026-11-04 — LKM-531 nested reload and CI fixture repair
+
+- The History reload path now carries project hover through `reloadNested`, using the same pointer and marquee restoration as the full outline reload. The existing sidebar History smoke fixes a pipe-only pointer on the title, opens Show History to exercise that path, and checks the replacement row retains its active title exclusion until hover exit.
+- PR CI's sidebar project-action fixture failed because its marquee assertion inherited the runner's Reduce Motion preference. The offscreen fixture now uses its existing motion override for the marquee lifecycle section and restores it afterward; no system preference changes. A separate native Changes fixture failure in that prior-head run concerns Git HEAD state outside this ticket. Exact-head CI remains required.
+
+## 2026-11-04 — LKM-531 review repair: project hover across reload
+
+- Project-row replacement now rechecks the stationary pointer against the new title and the prior overlay region, carrying the marquee start for the same hovered project. The existing offscreen action fixture replaces a row under a fixed pointer and checks that its controls and title width stay active until exit.
+- The sidebar History fixture now opens another project's action menu without choosing an item and checks that the selected project, selected row and visible chats remain unchanged. Native pointer/rendered acceptance, exact-head CI and independent review remain with the manager.
+
+## 2026-11-04 — LKM-531 project title hover actions
+
+- Project titles now occupy the available row width at rest. Hovering the actual title reveals the existing project buttons over its trailing space, with a continuous pointer path into them; leaving restores the width. The title uses the existing marquee with the active width and stops it on exit or removal.
+- The offscreen project action fixture covers background, title, bridge, control and exit states, width restoration and long-title marquee reset. Sidebar verification records the resting and active title inset for the post-merge native check; independent review and exact-head CI remain required.
 ## 2026-11-04 — LKM-532 Mark up foreground activation in native smoke
 
 - The `preview-markup` posted-event seam now waits up to five seconds for the host window to become key in the active app, re-requesting activation every half second. The prior single 90 ms wait could fail before AppKit completed activation after another native smoke. Events still require a foreground window without a sheet; failure now reports active, key, sheet and frontmost state. This changes only the disposable-profile smoke seam, so there is no user-visible changelog entry.
