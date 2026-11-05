@@ -10,9 +10,12 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-05
+
 ### Added
 
 - Mark up offers colored drawing and editable canvas text, with selected tool state and preserved edits when switching to Select (LKM-542).
+
 ## [0.13.30] - 2026-11-05
 
 ### Changed
