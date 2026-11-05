@@ -312,7 +312,10 @@ export class NativeSettingsController {
       return
     }
     if (action.action === 'edit' || action.action === 'delete') {
-      const connection = this.connections.find((c) => c.id === action.values.connection)
+      const connection =
+        action.action === 'delete'
+          ? this.target
+          : this.connections.find((c) => c.id === action.values.connection)
       if (!connection) throw new Error('Choose a provider first.')
       this.target = connection
       this.show(

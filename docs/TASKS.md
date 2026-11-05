@@ -13,6 +13,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: remove repeated nested Skills headings and assert pinned controls after form scroll plus the rendered first enabled On status.
 - [x] Put Add provider alone in the overview header; reach selected provider, Claude, and Gemini configuration through rows, keep Gemini On/Off separate, and retain Remove in provider detail with confirmation.
 - [x] Review repair: exclude destructive pinned actions from Return and assert Back and Save Revision remain usable after long Skills detail scrolling.
+- [x] Review repair: open selected provider Remove confirmation from editor state without a provider picker value.
 - [ ] Manager: current-head CI, independent review and post-merge native Settings acceptance.
 
 ## LKM-523 — Loading titles, sidebar typography and New Chat

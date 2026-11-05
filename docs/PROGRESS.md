@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-525 selected provider Remove route repair
+
+- The editor's Remove action now uses the provider already selected when the editor opened. Its form has no provider picker, so reading a connection value from that form blocked the confirmation. The existing confirmation and removal handler remain unchanged; the focused provider route fixture invokes Remove without a synthetic connection value and checks the confirmation actions before its stand-in removal.
+
 ## 2026-11-04 — LKM-525 provider hierarchy and review repair
 
 - AI Providers now has one pinned overview action, Add provider. The selected custom provider, Claude, and Gemini use labeled configuration rows, with Gemini On/Off still a separate choice. Remove moves to the selected provider editor and keeps its existing confirmation and service handler; credentials, default-model choices, and autosave paths are unchanged. The pinned native button again excludes destructive actions from Return. The long Skills detail fixture now scrolls the outer form before checking Back and Save Revision geometry, and the Settings viewport fixture checks the provider overview hierarchy. Focused unit and windowless fixtures cover the paths; manager-owned native acceptance and current-head CI remain pending.

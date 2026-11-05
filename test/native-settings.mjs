@@ -417,9 +417,14 @@ assert.ok(
   'blank key preserves same-origin credentials'
 )
 await action('edit', { connection: 'connection-1' })
-await action('delete', { connection: 'connection-1' })
+await action('delete')
 assert.equal(connections.length, 1, 'deletion requires confirmation screen')
 assert.match(field('remove-confirm').label, /Remove Test\?/)
+assert.deepEqual(
+  sheets.current.state.actions.filter((a) => a.section === 'providers').map((a) => a.id),
+  ['back', 'remove'],
+  'Remove from the editor opens the selected provider confirmation without a connection field'
+)
 await action('remove')
 assert.equal(connections.length, 0)
 assert.equal(field('connections').value, 'None')
