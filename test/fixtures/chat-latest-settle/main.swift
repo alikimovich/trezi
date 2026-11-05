@@ -62,7 +62,7 @@ struct Conversation: View {
                 if case .realize = action { relayouts = 0 }
                 if case .realize(let id) = action {
                     realizingLatest = true; latestNudge.toggle(); stuck += 1
-                    let target = ChatLatestSettle.realizeTarget(latest: id, first: model.rows.first?.id, stuck: stuck,
+                    let target = ChatLatestSettle.realizeTarget(latest: id, first: model.rows.first?.id, stuck: stuck, running: false,
                                                                readingHeight: readingHeight(), viewportHeight: viewportHeight)
                     proxy.scrollTo(target.id, anchor: target.anchor)
                 } else {
@@ -125,8 +125,9 @@ if CommandLine.arguments.contains("--cases") {
         ChatLatestSettle.escalated(.bottom, unresolved: unresolved) == .bottom ? "bottom" : "relayout"
     }
     let cases: [String: Any] = [
-        "realizeReadingAnchor": ChatLatestSettle.realizeTarget(latest: "latest", first: "old", stuck: 1, readingHeight: 570, viewportHeight: 776).anchor.y,
-        "realizeFirstAnchor": ChatLatestSettle.realizeTarget(latest: "latest", first: "old", stuck: 3, readingHeight: 570, viewportHeight: 776).anchor.y,
+        "realizeReadingAnchor": ChatLatestSettle.realizeTarget(latest: "latest", first: "old", stuck: 1, running: false, readingHeight: 570, viewportHeight: 776).anchor.y,
+        "realizeStreamingAnchor": ChatLatestSettle.realizeTarget(latest: "latest", first: "old", stuck: 1, running: true, readingHeight: 570, viewportHeight: 776).anchor.y,
+        "realizeFirstAnchor": ChatLatestSettle.realizeTarget(latest: "latest", first: "old", stuck: 3, running: false, readingHeight: 570, viewportHeight: 776).anchor.y,
         "realizeStreamingSpent": ChatLatestSettle.mayRealize(unresolved: ChatLatestSettle.unresolvedRestarts + 1, running: true),
         "realizeIdleSpent": ChatLatestSettle.mayRealize(unresolved: ChatLatestSettle.unresolvedRestarts + 1, running: false),
         "realizeStreamingFresh": ChatLatestSettle.mayRealize(unresolved: 0, running: true),
