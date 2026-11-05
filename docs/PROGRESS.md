@@ -31,6 +31,10 @@
 ## 2026-11-04 — LKM-525 nested Settings header
 
 - Skills overview and nested Skills/provider panes now use the existing section and action state to keep registered actions in a fixed header. Nested panes show Back and context; the grouped form holds metadata and help below it, and the large section title stays only on overviews. Unsaved draft values survive Back and reopen in the same window, scoped to their pane context. Skills and windowless native fixtures cover parent/detail/back, draft preservation and section reentry; native visual acceptance remains for the manager after merge.
+## 2026-11-04 — LKM-532 Mark up foreground activation in native smoke
+
+- The `preview-markup` posted-event seam now waits up to five seconds for the host window to become key in the active app, re-requesting activation every half second. The prior single 90 ms wait could fail before AppKit completed activation after another native smoke. Events still require a foreground window without a sheet; failure now reports active, key, sheet and frontmost state. This changes only the disposable-profile smoke seam, so there is no user-visible changelog entry.
+
 ## 2026-11-04 — LKM-527 native suite timing and glass evidence repair
 
 - The chat-gate smoke now waits for the native collapse animation to finish before checking the preview status frame. The earlier assertion ran while the chat column was already hidden but the layout fraction was still moving, aborting the check before its window and sidebar restoration and cascading into Settings, core and chat failures.

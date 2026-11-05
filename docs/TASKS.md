@@ -18,6 +18,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] CI fixture repair: assert Undo restores the exact captured prior memory in `resolved-lessons`.
 - [x] Security repair: scope provider drafts and Remove return context by stable provider ID, and reject same-label credential crossover in the existing Settings fixtures.
 - [ ] Manager: current-head CI, independent review and post-merge native Settings acceptance.
+## LKM-532 — Native preview-markup foreground failure on main
+
+- [x] Bound the posted-event seam's foreground activation wait and retry activation while AppKit settles; retain the no-sheet guard and report focus state on failure.
+- [ ] Confirm the `core` native group on the repaired tree through the manager's desktop lock.
+
 ## LKM-527 — Native suite failure on main a8687a1b6a94
 
 - [x] Wait for the manual chat collapse to reach its final native layout before asserting status placement, so the smoke restores its window and sidebar state.
