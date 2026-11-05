@@ -16,6 +16,12 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Styles, chat-island and internal editor source edits made during a chat turn are now attributed to Trezi without hiding genuine external changes (LKM-539).
 - Eligible Styles and chat island adjustments can remain preview drafts with Undo and Revert; Apply writes the accumulated source change and confirms the rendered result (LKM-539).
 - Applying accumulated Styles or chat island drafts now starts one chat agent operation, while individual adjustments remain source-free previews (LKM-539).
+## [0.14.0] - 2026-11-05
+
+### Added
+
+- Mark up offers colored drawing and editable canvas text, with selected tool state and preserved edits when switching to Select (LKM-542).
+
 ## [0.13.30] - 2026-11-05
 
 ### Changed

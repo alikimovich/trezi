@@ -40,6 +40,7 @@ function atEnd(sample, label) {
 function scrolls(group, label, archive = true) {
   const { start, mid, end } = group
   paintsClip(start, `${label} start`)
+  assert.ok(start.at < 0.7, `${label}: start sample stays inside the hover delay`)
   assert.equal(start.offset, 0, `${label}: waits at the title's start`)
   paintsClip(mid, `${label} mid`)
   assert.ok(mid.offset > 1 && mid.offset < mid.travel - 1, `${label}: mid ${mid.offset}`)
