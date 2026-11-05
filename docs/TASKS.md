@@ -9,6 +9,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Wait for the standalone New Chat toolbar frame to meet its existing geometry assertion before the review chat smoke continues.
 - [x] Let the preview address compress to its existing floor so New Chat reaches the chat column edge at the standard window width.
 - [x] Repair candidate core native failures in Publish sizing, toolbar inspection, branch-dot geometry and private document-start recording without relaxing their assertions.
+- [x] Reject a padded foreground toolbar capture before frame-based glass sampling at normal/narrow widths and light/dark appearances.
+- [x] Map padded foreground captures into toolbar coordinates, wait for New Chat layout after resize, and verify the full failed-CI label at a width where it fits.
 - [ ] Manager: confirm the native chat group and independent review on the exact tree.
 ## LKM-538 — Remove Custom from selected-element inspector
 

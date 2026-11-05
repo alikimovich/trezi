@@ -273,8 +273,12 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
     await new Promise((resolve) => setTimeout(resolve, 300))
     const settled: Toolbar = await waitFor(async () => {
       const state = await host.request('shellInspect')
-      return Math.abs(state.windowWidth - width) < 1 && state
-    }, `toolbar ${name} window width`)
+      return (
+        Math.abs(state.windowWidth - width) < 1 &&
+        (!state.chatNewVisible || state.chatNewFrame !== '{{0, 0}, {0, 0}}') &&
+        state
+      )
+    }, `toolbar ${name} window width and laid-out New Chat`)
     assertToolbar(live, `${name} (inside the resize)`)
     assertToolbar(settled, name)
     // LKM-319: slow motion left or came back with this width; the islands still show no divider.

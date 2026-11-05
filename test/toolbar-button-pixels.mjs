@@ -32,4 +32,15 @@ for (const image of [hover, focus]) {
   )
 }
 assert.throws(() => paintedButtonDifference(idle, raster(), geometry, '{{0, 0}, {0, 0}}'))
+const padded = raster((x, y) => x >= 70 && x <= 74 && y >= 20 && y <= 40)
+assert.equal(paintedButtonDifference(idle, padded, geometry, frame).changed, 0)
+assert.ok(
+  paintedButtonDifference(idle, padded, { ...geometry, captureOffsetX: 8 }, frame).changed >= 8,
+  'a measured capture offset keeps the button paint in the comparison'
+)
+assert.ok(
+  paintedButtonDifference(idle, padded, { ...geometry, secondCaptureOffsetX: 8 }, frame).changed >=
+    8,
+  'two captures can have different window padding without losing button paint'
+)
 console.log('TOOLBAR-BUTTON-PIXELS PASS')

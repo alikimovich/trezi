@@ -1,5 +1,14 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-537 native fixture geometry follow-up
+
+- The native call showed that the narrow capture's black left band persisted for five seconds. The fixture now measures that band and translates glass and enabled/disabled pixel coordinates by the same offset; it records the offset with every PNG. A focused pixel test proves the translation reaches a painted button outside the unshifted sample area. The glass reference keeps a visible interior-or-border assertion because the saved light capture had a distinct capsule edge but little center contrast. Toolbar-address waits for New Chat's nonzero rendered frame after resize, then keeps its exact edge and title checks. Publish-progress tests a full failed-CI label at 1800 points while the branch-dot fixture still covers 1320 and 850 points. These changes require the manager's next native run; the current worker's native call limit is exhausted.
+- The enabled and disabled captures can carry different left padding, so the paint comparison uses each capture's own measured offset. The focused pixel fixture covers that case as well.
+
+## 2026-11-04 — LKM-537 foreground toolbar capture repair
+
+- The saved narrow light toolbar-actions capture had a 271-pixel black band at the left edge even though its geometry reported a full-width window. Frame-based glass samples therefore read white background away from the controls. The existing normal/narrow, light/dark, enabled/disabled fixture now waits for a foreground capture whose left interior is painted, records the sampled edge beside each PNG, and keeps its original glass, alignment, paint-change and interaction assertions. The manager's exact-tree native run must confirm the repaired capture and the remaining chat/core paths.
+
 ## 2026-11-04 — LKM-537 native follow-up from candidate check
 
 - The first worker native run got past the original Publish-width, unsupported-command and private receipt assertions, then reported later core failures. The test resize now lays out the window's view tree before taking its synchronous toolbar snapshot. The Publish progress check waits for the restored 1320-point width and a fitting failed-CI title before asserting it. The narrow light glass capture showed white interior and exterior samples at the fixture's current points; its paint failure remains unresolved without another native run. The manager's native acceptance is still required.
