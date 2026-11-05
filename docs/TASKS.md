@@ -15,6 +15,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] CI repair: update the toolbar divider fixture's obsolete Mark up wiring assertions.
 - [x] CI repair: sample rebuilt sidebar decipher cells at one elapsed instant and detect a true reset.
 - [x] CI repair: sample each marquee start as its hover begins so slow fixture callbacks cannot mislabel a scrolling phase.
+- [x] Review proof: assert Text remains tinted and accessibly selected when focus moves to the annotation color chooser, with peer tools off.
 - [ ] Manager: independent review, exact-head CI, merge and post-merge native acceptance.
 
 ## LKM-529 — Simplify Trezi update availability and guided update flow

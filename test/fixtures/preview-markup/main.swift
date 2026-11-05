@@ -271,7 +271,15 @@ overlay.keyDown(with: key("c", 8, window: window)); check(overlay.tool == .circl
 overlay.keyDown(with: key("a", 0, window: window)); check(overlay.tool == .arrow, "A picks the arrow")
 overlay.keyDown(with: key("p", 35, window: window)); check(overlay.tool == .pen, "P picks the pen")
 overlay.keyDown(with: key("t", 17, window: window)); check(overlay.tool == .text, "T picks canvas text")
-check(overlay.controls.first { $0.cell?.accessibilityLabel() == "Text" }?.state == .on, "text tool stays selected accessibly")
+let textButton = overlay.controls.first { $0.cell?.accessibilityLabel() == "Text" }!
+let focusedColor = overlay.island.face.subviews.compactMap { $0 as? NSPopUpButton }.first!
+check(window.makeFirstResponder(focusedColor) && window.firstResponder === focusedColor, "focus moves to the color chooser")
+check(textButton.state == .on && textButton.contentTintColor == .controlAccentColor &&
+      textButton.cell?.accessibilityValue() as? String == "selected", "Text stays tinted and accessibly selected after focus moves")
+for name in ["Pen", "Rectangle", "Circle", "Arrow"] {
+    let peer = overlay.controls.first { $0.cell?.accessibilityLabel() == name }!
+    check(peer.state == .off && peer.contentTintColor == nil && peer.cell?.accessibilityValue() as? String != "selected", "\(name) stays unselected after Text loses focus")
+}
 overlay.keyDown(with: key("p", 35, window: window))
 overlay.keyDown(with: key("x", 7, window: window)); check(overlay.tool == .pen, "another key does nothing and goes nowhere")
 let mapping = overlay.canvas.mapping

@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-542 persistent Text selection fixture
+
+- The windowless Mark up fixture now moves focus from the selected Text tool to the color chooser and checks its on state, accent tint and accessible selected value while other tools remain off. This covers persistent tool selection across a real focus change without altering the approved annotation controls.
+
 ## 2026-11-05 — LKM-542 sidebar marquee fixture phase timing
 
 - Exact-head CI sampled a row's planned 0.3-second start at 0.804 seconds; its 3-point offset matched the real clock after the 0.7-second delay. The windowless fixture now records each start immediately as that row begins hovering and checks the sample remains inside the delay. Later samples use the row's own clock; pixel, speed, resize, reset and cleanup assertions remain.
