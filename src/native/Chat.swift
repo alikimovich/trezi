@@ -248,6 +248,32 @@ final class NativeChat: NSHostingView<ChatConversation> {
         func probe(_ view: NSView) -> ChatScrollStyleProbe? { (view as? ChatScrollStyleProbe) ?? view.subviews.lazy.compactMap(probe).first }
         return probe(self)?.enclosingScrollView
     }
+    /// One entry per island. Typed locals keep the type checker off the big `inspect()` literal.
+    private func inspectIslands() -> [[String: Any]] {
+        var entries: [[String: Any]] = []
+        for message in model.snapshot?.messages ?? [] {
+            for island in message.segments.compactMap({ $0.island }) {
+                let draftCount: Int = island.draft?.count ?? 0
+                let draftPreview: Bool = island.draft?.preview ?? false
+                let draftSubmitted: Bool = island.draft?.submitted ?? false
+                let disabledFields: [String] = island.fields.filter { $0.disabled != nil }.map(\.id)
+                var entry: [String: Any] = ["id":island.id, "revision":island.revision, "status":island.status, "title":island.title]
+                entry["blocks"] = island.blocks.count
+                entry["blockKinds"] = island.blocks.map(\.kind)
+                entry["fields"] = island.fields.count
+                entry["draftCount"] = draftCount
+                entry["draftPreview"] = draftPreview
+                entry["draftSubmitted"] = draftSubmitted
+                entry["sourceRevision"] = island.sourceRevision
+                entry["name"] = island.name ?? ""
+                entry["reason"] = island.reason ?? ""
+                entry["disabledBy"] = island.disabledBy ?? ""
+                entry["disabledFields"] = disabledFields
+                entries.append(entry)
+            }
+        }
+        return entries
+    }
     func inspect() -> [String: Any] {
         let tail = model.snapshot?.messages.suffix(3).map { ["id":$0.id, "frame":NSStringFromRect(model.messageFrames[$0.id] ?? .zero)] } ?? []
         let state: [String: Any] = ["scroll":conversationScroll.map(ChatScrollStyleProbe.metrics) ?? [:], "messageBodyEvaluations":model.messageBodyEvaluations, "realizedRows":model.messageFrames.count, "latestSettleAttempts":model.latestSettleAttempts, "latestSettling":model.latestSettling, "tailFrames":tail,
@@ -261,8 +287,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
          "statusLines":model.statusLines, "attachmentFrames":model.attachmentFrames.mapValues { NSStringFromRect($0) }, "attachmentPreview":model.attachmentPreview ?? "",
          "attachmentPopover":NSApp.windows.contains { $0.isVisible && String(describing: type(of: $0)).contains("Popover") }, "activityTokens":model.snapshot?.activity?.tokens?.label ?? "",
          "activity":model.snapshot?.activity?.label ?? "", "activityKind":model.snapshot?.activity?.kind ?? "", "activityAnimated":model.snapshot?.activity?.animated ?? false,
-         "islands":model.snapshot?.messages.flatMap { $0.segments.compactMap { $0.island }.map { ["id":$0.id,"revision":$0.revision,"status":$0.status,"title":$0.title,"blocks":$0.blocks.count,"blockKinds":$0.blocks.map(\.kind),"fields":$0.fields.count,"draftCount":$0.draft?.count ?? 0,"draftPreview":$0.draft?.preview ?? false,"draftSubmitted":$0.draft?.submitted ?? false,"sourceRevision":$0.sourceRevision,
-                 "name":$0.name ?? "","reason":$0.reason ?? "","disabledBy":$0.disabledBy ?? "","disabledFields":$0.fields.filter { $0.disabled != nil }.map(\.id)] as [String: Any] } } ?? [],
+         "islands":inspectIslands(),
          "cards":model.snapshot?.cards.map(\.id) ?? [],
          "cardStates":model.snapshot?.cards.map { ["id":$0.id, "title":$0.title, "detail":$0.detail ?? "", "busy":$0.busy ?? false, "actions":$0.actions.map(\.label), "disabled":$0.actions.map { $0.disabled ?? false }] as [String: Any] } ?? [],
          "questionCount":model.snapshot?.questions.count ?? 0]

@@ -9,7 +9,16 @@ struct IslandField: Decodable, Identifiable {
     let disabled: String?
 }
 struct IslandBlock: Decodable, Identifiable { let id: String; let title: String; let kind: String; let params: [String] }
-struct IslandDraftState: Decodable { let count: Int; let preview: Bool; let conflict: Bool; let submitted: Bool? }
+struct IslandDraftState: Decodable {
+    let count: Int; let preview: Bool; let conflict: Bool; let submitted: Bool?
+    /// If/else rather than a nested ternary: four chained string ternaries are slow to type-check.
+    var draftLabel: String {
+        if submitted == true { return "Applying draft with agent…" }
+        if conflict { return "Preview draft pending · source changed" }
+        if preview { return "Preview draft pending · shown in preview" }
+        return "Draft pending · live preview unavailable for these bindings"
+    }
+}
 /// `status`: waiting, ready, partially-disabled, disabled (`disabledBy` code or user) or hidden.
 struct IslandView: Decodable, Identifiable {
     let id: String; let revision: Int; let title: String; let blocks: [IslandBlock]; let fields: [IslandField]
@@ -122,7 +131,7 @@ struct NativeChatIsland: View {
                 .fixedSize(horizontal: false, vertical: true).accessibilityLabel(notice)
         }
         if let draft = island.draft {
-            Text(draft.submitted == true ? "Applying draft with agent…" : draft.conflict ? "Preview draft pending · source changed" : draft.preview ? "Preview draft pending · shown in preview" : "Draft pending · live preview unavailable for these bindings")
+            Text(draft.draftLabel)
                 .font(.caption).foregroundStyle(draft.conflict ? Color.orange : Color.secondary)
                 .accessibilityLabel("\(draft.count) pending control values")
         }

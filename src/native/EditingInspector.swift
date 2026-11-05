@@ -9,7 +9,16 @@ struct InspectorField: Decodable, Identifiable {
 }
 struct InspectorAction: Decodable, Identifiable { let id: String; let label: String }
 struct InspectorNotice: Decodable { let title: String; let reason: String; let editable: Bool }
-struct InspectorDraftState: Decodable { let count: Int; let submitted: Bool; let conflict: Bool; let preview: Bool }
+struct InspectorDraftState: Decodable {
+    let count: Int; let submitted: Bool; let conflict: Bool; let preview: Bool
+    /// If/else rather than a nested ternary: four chained string ternaries are slow to type-check.
+    var draftLabel: String {
+        if conflict { return "Draft pending · source changed" }
+        if submitted { return "Applying draft · waiting for source and preview" }
+        if preview { return "Preview draft pending · \(count) values" }
+        return "Draft pending · live preview unavailable"
+    }
+}
 struct InspectorState: Decodable { let root: String; let generation: Int; let visible: Bool; let title: String; let tab: String; let fields: [InspectorField]; let actions: [InspectorAction]; let error: String; let busy: Bool; let notice: InspectorNotice?; let updated: Int?; let edits: Int?; let draft: InspectorDraftState? }
 final class InspectorModel: ObservableObject {
     @Published var state: InspectorState?
@@ -347,7 +356,7 @@ struct EditingInspectorContent: View {
                 if !state.error.isEmpty { Text(state.error).foregroundStyle(.red).font(.caption).textSelection(.enabled) }
                 if state.tab == "styles", let draft = state.draft {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(draft.conflict ? "Draft pending · source changed" : draft.submitted ? "Applying draft · waiting for source and preview" : draft.preview ? "Preview draft pending · \(draft.count) values" : "Draft pending · live preview unavailable")
+                        Text(draft.draftLabel)
                             .font(.caption).foregroundStyle(draft.conflict ? Color.orange : Color.secondary)
                         HStack {
                             Button("Apply") { model.send("apply-drafts") }.disabled(draft.submitted || draft.conflict)
