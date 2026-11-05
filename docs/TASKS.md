@@ -8,7 +8,9 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Use system monospace at existing sizes and weights for chat title, preview address and branch/status text.
 - [x] Extend the toolbar inspection fixture with font, size, glass and fit assertions; add a focused Publish control fixture for idle, busy and disabled states.
 - [x] Render Publish in monospace with the authorized custom AppKit glass control while keeping its menu, spinner, action and enablement semantics.
+- [x] Review repair: separate the LKM-530 Unreleased changelog entry from the dated release heading.
 - [ ] Manager: exact-head CI, independent review and post-merge native inspection.
+
 ## LKM-533 — Stack accepted question and answer pairs
 
 - [x] Render each accepted form question immediately above its answer, leading-aligned across the card width.
