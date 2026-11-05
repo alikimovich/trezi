@@ -44,6 +44,14 @@ the real Mark up segment visibly accented. Retain both run directories, includin
 on failure. Record the tested merged SHA and the GREEN and RED verdicts; this is an
 operator check after merge, not acceptance on the worker branch.
 
+LKM-543's annotation composite/Send backstop is a separate narrow selection:
+`bun run dev:native --test --only=core --annotation-composite-acceptance`.
+Run it only under the manager's shared desktop lock, after merge. It uses a disposable
+fixture project and the normal outbound Send interception; it makes no provider call.
+Inspect `test/artifacts/native/annotation-composite-send/` for foreground PNGs, state,
+the retained native composite and `send-payload.json`. A fixture merge is not native
+acceptance; the operator records that verdict separately.
+
 The test runner is `node test/run.mjs unit|native|live|all`. Unit checks run with
 bounded concurrency (by default `max(min(4, cores), min(cores - 2, 8))` workers) and
 one exclusive barrier (`native-chat-send-follow`, LKM-371). Swift compiles share a

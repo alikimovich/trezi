@@ -129,6 +129,33 @@ extension Host {
             markup?.place(area: NSRect(x: frame.minX, y: frame.minY, width: width, height: height))
             markup?.overlay?.layoutSubtreeIfNeeded()
             return ["ok":true]
+        case "annotationColorFocus":
+            guard let overlay = markup?.overlay, let name = c["color"] as? String,
+                  let popup = overlay.island.face.subviews.compactMap({ $0 as? NSPopUpButton }).first,
+                  popup.item(withTitle: name) != nil else { return ["error":"Color unavailable"] }
+            popup.selectItem(withTitle: name)
+            _ = NSApp.sendAction(popup.action!, to: popup.target, from: popup)
+            guard window.makeFirstResponder(popup) else { return ["error":"Color focus unavailable"] }
+            let text = overlay.controls.first { $0.cell?.accessibilityLabel() == "Text" }
+            return ["color":popup.accessibilityValue() as? String ?? "", "focused":window.firstResponder === popup,
+                    "tool":overlay.tool.rawValue, "textSelected":text?.state == .on,
+                    "textAccessible":text?.cell?.accessibilityValue() as? String ?? "",
+                    "textTinted":text?.contentTintColor == .controlAccentColor,
+                    "peersOff":overlay.controls.filter { ["Pen", "Rectangle", "Circle", "Arrow"].contains($0.cell?.accessibilityLabel() ?? "") }
+                        .allSatisfy { $0.state == .off && $0.contentTintColor == nil }]
+        case "annotationComposite":
+            guard let canvas = markup?.overlay?.canvas,
+                  let image = MarkupRenderer.composite(canvas.image, marks: canvas.document.marks, maxPixels: 2048),
+                  let encoded = MarkupEncoder.encode(canvas.image, marks: canvas.document.marks) else { return ["error":"Composite unavailable"] }
+            let bitmap = NSBitmapImageRep(cgImage: image)
+            let green = stride(from: 0, to: bitmap.pixelsHigh, by: 3).reduce(0) { count, y in
+                count + stride(from: 0, to: bitmap.pixelsWide, by: 3).filter { x in
+                    guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return false }
+                    return color.greenComponent > color.redComponent * 1.4 && color.greenComponent > color.blueComponent * 1.2
+                }.count
+            }
+            return ["data":encoded.data.base64EncodedString(), "type":encoded.type,
+                    "width":image.width, "height":image.height, "greenPixels":green]
         default: return ["error":"Unknown Mark up test action"]
         }
     }
@@ -209,6 +236,34 @@ extension Host {
             guard mouse(.leftMouseUp, locations.last!) else { return ["error":"Cannot post pointer up"] }
             await settle()
             return ["route":"real event route", "hit":"\(type(of: hit))", "marks":canvas.document.marks.count]
+        case "canvasText":
+            guard let overlay = markup?.overlay, overlay.tool == .text,
+                  let x = c["x"] as? Double, let y = c["y"] as? Double,
+                  let value = c["text"] as? String, !value.isEmpty else { return ["error":"Text edit unavailable"] }
+            let canvas = overlay.canvas
+            let point = canvas.convert(canvas.mapping.toView(CGPoint(x: x, y: y)), to: nil)
+            guard let hit = window.contentView?.superview?.hitTest(point), hit === canvas || hit.isDescendant(of: canvas),
+                  mouse(.leftMouseDown, point), mouse(.leftMouseUp, point) else { return ["error":"Canvas text point is not hit-testable"] }
+            await settle()
+            guard let editor = canvas.subviews.compactMap({ $0 as? NSTextField }).first,
+                  window.firstResponder === editor.currentEditor() else { return ["error":"Canvas text editor did not open"] }
+            let previous = editor.stringValue
+            if !previous.isEmpty {
+                guard key(.keyDown, "a", 0, .command), key(.keyUp, "a", 0, .command) else { return ["error":"Cannot select canvas text"] }
+                await settle()
+            }
+            for character in value {
+                let chars = String(character)
+                let code = chars == " " ? UInt16(49) : KeyShortcut.ansi.first(where: { $0.value.0 == chars.lowercased() })?.key
+                guard let code else { return ["error":"Unsupported canvas text character"] }
+                let flags: NSEvent.ModifierFlags = chars != chars.lowercased() ? .shift : []
+                guard key(.keyDown, chars, code, flags), key(.keyUp, chars, code, flags) else { return ["error":"Cannot post canvas text"] }
+                await settle()
+            }
+            guard window.makeFirstResponder(overlay) else { return ["error":"Cannot finish canvas text"] }
+            await settle()
+            return ["route":"real event route", "previous":previous, "text":canvas.document.marks.last?.text ?? "",
+                    "marks":canvas.document.marks.count]
         case "typeInstruction":
             guard markup?.overlay == nil, window.firstResponder === composer.text,
                   let instruction = c["text"] as? String, !instruction.isEmpty else { return ["error":"Composer does not own text focus"] }

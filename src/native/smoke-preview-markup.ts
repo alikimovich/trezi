@@ -12,6 +12,131 @@ import { nativeWorkspace } from './workspace-runtime'
 type State = Record<string, any>
 type Page = (code: string) => Promise<unknown>
 
+/** LKM-543: one opt-in path from a real captured page through the normal mocked Send. */
+export async function checkAnnotationCompositeSend(
+  host: NativeBridge,
+  page: Page,
+  artifacts: string
+) {
+  const { TREZI_NATIVE_BACKGROUND_TEST: background } = process.env
+  assert.notEqual(background, '1', 'foreground capture required')
+  const folder = join(artifacts, 'annotation-composite-send')
+  mkdirSync(folder, { recursive: true })
+  const inspect = (): Promise<State> => host.request('previewMarkupInspect')
+  const composer = (): Promise<State> => host.request('composerInspect')
+  const event = async (input: State) => {
+    const result = await host.request('previewMarkupTest', input)
+    assert.equal(result.error, undefined, `${input.action}: ${result.error}`)
+    assert.equal(result.route, 'real event route', `${input.action} uses AppKit input`)
+    return result
+  }
+  const record = async (name: string) => {
+    const state = await inspect()
+    writeFileSync(join(folder, `${name}.json`), JSON.stringify(state, null, 2))
+    const shot = await host.request('captureVisibleWindow')
+    writeFileSync(join(folder, `${name}.png`), Buffer.from(shot.png, 'base64'))
+    return state
+  }
+  await page(PAGE)
+  const chat = nativeChat.active
+  await host.request('composerPerform', { text: DRAFT })
+  await nativeChat.composer({ chat, action: 'files', files: [EXISTING] })
+  await waitFor(async () => (await composer()).attachments.length === 1, 'fixture attachment')
+  const messages = nativeChat.get(chat).messages.length
+  await host.request('previewMarkupTest', { action: 'open' })
+  const opened = await waitFor(async () => {
+    const state = await inspect()
+    return state.open && state
+  }, 'captured annotation opens')
+  assert.match(opened.frozen, /^[0-9a-f]{64}$/, 'actual preview capture has a digest')
+  assert.ok(
+    opened.image.width > 0 && opened.image.height > 0 && opened.magenta === 0,
+    'capture has pixels without Trezi chrome'
+  )
+  await record('capture')
+  await event({ action: 'button', label: 'Text' })
+  const chosen = await host.request('previewMarkupTest', {
+    action: 'annotationColorFocus',
+    color: 'Green'
+  })
+  assert.equal(chosen.error, undefined)
+  assert.deepEqual(
+    [
+      chosen.color,
+      chosen.focused,
+      chosen.tool,
+      chosen.textSelected,
+      chosen.textAccessible,
+      chosen.textTinted,
+      chosen.peersOff
+    ],
+    ['Green', true, 'text', true, 'selected', true, true],
+    'Text stays selected after color focus'
+  )
+  const x = opened.image.width * 0.15,
+    y = opened.image.height * 0.45
+  const created = await event({
+    action: 'canvasText',
+    x,
+    y,
+    text: 'Canvas note'
+  })
+  assert.equal(created.previous, '', 'canvas creates a new editor')
+  assert.equal(created.text, 'Canvas note')
+  const edited = await event({
+    action: 'canvasText',
+    x,
+    y,
+    text: 'Revised note'
+  })
+  assert.equal(edited.previous, 'Canvas note', 'canvas reopens the existing text')
+  assert.equal(edited.marks, 1, 'editing replaces the mark')
+  const beforeSelect = await record('edited')
+  assert.deepEqual(
+    beforeSelect.marks.map((mark: State) => [mark.tool, mark.ink, mark.text]),
+    [['text', 'green', 'Revised note']]
+  )
+  await event({ action: 'toolbarSegment', segment: 'select-object' })
+  const suspended = await record('select')
+  const selectShell = await host.request('shellInspect')
+  assert.equal(suspended.suspended, true, 'Select suspends the marked snapshot')
+  assert.equal(selectShell.selectSegmentProminent, true)
+  assert.equal(selectShell.markupSegmentProminent, false, 'selection is exclusive')
+  assert.deepEqual(suspended.marks, beforeSelect.marks, 'Select retains the edited text')
+  await event({ action: 'toolbarSegment', segment: 'markup' })
+  const resumed = await record('resumed')
+  const markupShell = await host.request('shellInspect')
+  assert.equal(resumed.open, true)
+  assert.equal(markupShell.selectSegmentProminent, false)
+  assert.equal(markupShell.markupSegmentProminent, true, 'Annotation owns the toolbar')
+  assert.deepEqual(resumed.marks, beforeSelect.marks, 'resume retains the exact edit')
+  assert.equal(resumed.frozen, opened.frozen, 'resume uses the captured pixels')
+  const nativeComposite = await host.request('previewMarkupTest', { action: 'annotationComposite' })
+  assert.equal(nativeComposite.error, undefined)
+  assert.ok(nativeComposite.greenPixels > 20, 'native composite paints the chosen green')
+  const expectedHash = createHash('sha256')
+    .update(Buffer.from(nativeComposite.data, 'base64'))
+    .digest('hex')
+  await event({ action: 'button', label: 'Add to chat' })
+  const attached = await waitFor(async () => {
+    const state = await composer()
+    return state.attachments.length === 2 && state
+  }, 'composite attached')
+  assert.equal(attached.text, DRAFT, 'Add keeps the draft')
+  const added = nativeChat.get(chat).attachments[1]
+  assert.equal(
+    createHash('sha256').update(Buffer.from(added.data, 'base64')).digest('hex'),
+    expectedHash,
+    'Add attaches the native composite bytes'
+  )
+  const retained = retainComposite(folder, added, opened.context, ['text'])
+  assert.equal(retained.sha256, expectedHash)
+  await event({ action: 'typeInstruction', text: INSTRUCTION })
+  await sendThroughComposer(host, folder, chat, retained, messages, () =>
+    event({ action: 'sendButton' })
+  )
+}
+
 const PIXEL =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 const DRAFT = 'Make the marked card larger'
