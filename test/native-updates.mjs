@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { appInfoPlist, serviceInfoPlist } from '../scripts/service-info.mjs'
@@ -202,6 +210,33 @@ assert.match(sheets.current.state.detail, /Network unavailable/)
 assert.equal(restarts, 2)
 await action('retry')
 assert.equal(sheets.current.state.title, 'Trezi updates', 'check retry returns to the check action')
+const unavailableCheck = new NativeUpdateController(
+  sheets,
+  '/fixture',
+  () => {
+    restarts++
+  },
+  {
+    updateCheck: async () => ({
+      status: 'unavailable',
+      behind: 0,
+      error: 'Check your connection, remote and access, then try again.'
+    }),
+    update: owner.update
+  },
+  () => null,
+  () => null
+)
+unavailableCheck.open()
+await action('check')
+assert.equal(sheets.current.state.title, 'Could not check for updates')
+assert.match(sheets.current.state.detail, /connection, remote and access/)
+assert.deepEqual(
+  sheets.current.state.actions.map((entry) => entry.id),
+  ['cancel', 'retry']
+)
+await action('retry')
+assert.equal(sheets.current.state.title, 'Trezi updates')
 
 // Real artifact proof in an isolated source checkout; no installed app or signing is touched.
 const source = mkdtempSync(join(tmpdir(), 'trezi-update-proof-'))
@@ -274,6 +309,59 @@ try {
   await proofUpdate.apply()
   assert.equal(artifactRestarts, 1, 'missing service executable blocks restart')
   assert.match(proofSheets.current.state.detail, /incomplete/)
+  writeFileSync(serviceExe, 'fixture')
+
+  // Git may lengthen --short=7 to disambiguate. A disposable git shim makes
+  // that rare case deterministic while the verifier still runs its real code.
+  const fullSha = git('rev-parse', 'HEAD')
+  const expanded = { ...info, commit: fullSha.slice(0, 9) }
+  writeFileSync(hostPlist, appInfoPlist(expanded))
+  writeFileSync(servicePlist, serviceInfoPlist(expanded))
+  const originalPath = process.env.PATH
+  const realGit = originalPath
+    .split(':')
+    .map((dir) => join(dir, 'git'))
+    .find(existsSync)
+  assert.ok(realGit, 'git executable for the disposable abbreviation fixture')
+  const bin = join(source, 'bin')
+  mkdirSync(bin)
+  const shim = join(bin, 'git')
+  writeFileSync(
+    shim,
+    `#!${process.execPath}
+import { spawnSync } from 'node:child_process'
+const args = process.argv.slice(2)
+if (args.includes('--short=7')) { console.log(${JSON.stringify(expanded.commit)}); process.exit(0) }
+const result = spawnSync(${JSON.stringify(realGit)}, args, { encoding: 'utf8' })
+process.stdout.write(result.stdout ?? '')
+process.stderr.write(result.stderr ?? '')
+process.exit(result.status ?? 1)
+`
+  )
+  chmodSync(shim, 0o755)
+  process.env.PATH = `${bin}:${originalPath}`
+  try {
+    const prove = () => {
+      const module = new URL('../src/native/update-controller.ts', import.meta.url).href
+      const code = `import { verifyUpdatedArtifact } from ${JSON.stringify(module)}; console.log(JSON.stringify(verifyUpdatedArtifact(${JSON.stringify(source)})))`
+      const result = spawnSync(process.execPath, ['-e', code], {
+        encoding: 'utf8',
+        env: process.env
+      })
+      assert.equal(result.status, 0, result.stderr)
+      return JSON.parse(result.stdout.trim())
+    }
+    assert.equal(
+      git('rev-parse', '--short=7', 'HEAD'),
+      expanded.commit,
+      'fixture provides an expanded abbreviation'
+    )
+    assert.equal(prove(), null, 'a unique abbreviation longer than seven characters passes')
+    writeFileSync(servicePlist, serviceInfoPlist(info))
+    assert.match(prove(), /does not match/, 'truncated service stamp blocks restart')
+  } finally {
+    process.env.PATH = originalPath
+  }
 } finally {
   rmSync(source, { recursive: true, force: true })
 }

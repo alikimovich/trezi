@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-529 update-check and commit-stamp repair
+
+- Artifact proof now reads the same `git rev-parse --short=7` abbreviation as build stamping, including Git's longer unique abbreviation, and still compares both built bundles before restart. A disposable source and app fixture proves a nine-character stamp passes and a truncated service stamp fails.
+- The workflow owner now reports failed fetches and missing remotes as unavailable rather than current. The update sheet shows a retryable check error; the focused Swift owner and controller fixtures cover those states. Exact-head CI, independent review and post-merge native acceptance remain with the manager.
+
 ## 2026-11-04 — LKM-529 signing and artifact proof repair
 
 - The guided updater now requires the build script's final identity signer line. An ad hoc fallback or missing signer proof fails the owner workflow before restart, with an actionable signing and Keychain access message; the existing build warning and failure journal remain available. The fake package manager supplies the signer line, and the focused Swift workflow-owner fixture covers a valid identity, ad hoc downgrade and absent proof without touching a real keychain.

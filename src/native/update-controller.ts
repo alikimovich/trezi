@@ -9,6 +9,12 @@ export function verifyUpdatedArtifact(root: string): string | null {
   const git = spawnSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' })
   const sha = git.status === 0 ? git.stdout.trim() : ''
   if (!/^[0-9a-f]{40}$/.test(sha)) return 'Could not prove the updated source revision.'
+  const abbreviated = spawnSync('git', ['-C', root, 'rev-parse', '--short=7', 'HEAD'], {
+    encoding: 'utf8'
+  })
+  const commit = abbreviated.status === 0 ? abbreviated.stdout.trim() : ''
+  if (!/^[0-9a-f]{7,40}$/.test(commit) || !sha.startsWith(commit))
+    return 'Could not prove the updated commit stamp.'
   const count = spawnSync('git', ['-C', root, 'rev-list', '--count', 'HEAD'], { encoding: 'utf8' })
   const build = count.status === 0 ? count.stdout.trim() : ''
   if (!/^\d+$/.test(build)) return 'Could not prove the updated build number.'
@@ -32,7 +38,7 @@ export function verifyUpdatedArtifact(root: string): string | null {
     if (
       !plist.includes(`<key>CFBundleShortVersionString</key><string>${version}</string>`) ||
       !plist.includes(`<key>CFBundleVersion</key><string>${build}</string>`) ||
-      !plist.includes(`<key>TreziCommit</key><string>${sha.slice(0, 7)}</string>`)
+      !plist.includes(`<key>TreziCommit</key><string>${commit}</string>`)
     )
       return 'The built application does not match the updated version and commit.'
   }
@@ -100,8 +106,13 @@ export class NativeUpdateController {
           if (checking !== this.sheets.generation) return
           this.inFlight = false
           if (status.status === 'available') this.available(status)
-          else if (status.status === 'error')
-            this.failure(status.error || 'Could not check for updates.', () => this.open())
+          else if (status.status === 'error' || status.status === 'unavailable')
+            this.failure(
+              status.error ||
+                'Update status is unavailable. Check your connection and source access, then try again.',
+              () => this.open(),
+              'Could not check for updates'
+            )
           else
             this.sheets.present(
               {
@@ -115,7 +126,11 @@ export class NativeUpdateController {
             )
         } catch (error) {
           if (checking === this.sheets.generation)
-            this.failure(error instanceof Error ? error.message : String(error), () => this.open())
+            this.failure(
+              error instanceof Error ? error.message : String(error),
+              () => this.open(),
+              'Could not check for updates'
+            )
         } finally {
           this.inFlight = false
         }
@@ -142,10 +157,14 @@ export class NativeUpdateController {
       }
     )
   }
-  private failure(message: string, retry: () => void | Promise<void> = () => this.apply()) {
+  private failure(
+    message: string,
+    retry: () => void | Promise<void> = () => this.apply(),
+    title = 'Update could not finish'
+  ) {
     this.sheets.present(
       {
-        title: 'Update could not finish',
+        title,
         detail: message,
         fields: [],
         actions: [

@@ -680,6 +680,19 @@ try {
     assert.match(remote.outside, /top-level folder/)
     assert.deepEqual(remote.update, { status: 'idle', behind: 0 }) // the fixture branch is not behind its own upstream
 
+    const unavailableUpdate = await owned('update-check-unavailable', async (owner, w) => {
+      git(w.local, 'checkout', '-q', 'main')
+      git(w.local, 'remote', 'set-url', 'origin', join(w.base, 'missing-remote.git'))
+      const failedFetch = await owner.updateCheck(w.local)
+      git(w.local, 'remote', 'remove', 'origin')
+      const noRemote = await owner.updateCheck(w.local)
+      return { failedFetch, noRemote }
+    })
+    for (const status of [unavailableUpdate.failedFetch, unavailableUpdate.noRemote]) {
+      assert.equal(status.status, 'unavailable')
+      assert.match(status.error, /connection, remote and access/)
+    }
+
     // Recovery from a dirty tree: drift, busy, conflict, retry and Switch (LKM-250).
     await owned('remote-recovery', async (owner, w) => {
       const peer = w.peer()
