@@ -129,8 +129,8 @@ final class ThreeDChrome {
             if model.separation != scene.separation { model.separation = scene.separation }
         }
     }
-    func receive(_ state: [String: Any]?, document nextDocument: String) {
-        guard let state else { clear(); return }
+    @discardableResult func receive(_ state: [String: Any]?, document nextDocument: String) -> Bool {
+        guard let state else { clear(); return true }
         // Bounds mirror THREE_D_LIMITS in src/shared/three-d-contract.ts.
         func finite(_ value: Any?, _ range: ClosedRange<Double>) -> Double? {
             guard let number = value as? Double, number.isFinite, range.contains(number) else { return nil }
@@ -146,9 +146,9 @@ final class ThreeDChrome {
               let hasSource = state["hasSource"] as? Bool,
               let limited = state["limited"] as? Bool,
               let simplified = state["simplified"] as? Bool,
-              let invalid = state["invalid"] as? Bool else { return }
-        if nextDocument == closedDocument && session == closedSession { return }
-        if active && document == nextDocument && model.session == session && revision < model.revision { return }
+              let invalid = state["invalid"] as? Bool else { return false }
+        if nextDocument == closedDocument && session == closedSession { return false }
+        if active && document == nextDocument && model.session == session && revision < model.revision { return false }
         var layers: [ThreeDLayer] = []
         for (index, row) in rows.enumerated() {
             guard let id = row["id"] as? Int, id == index,
@@ -159,11 +159,11 @@ final class ThreeDChrome {
                   let x = finite(row["x"], -100000...100000), let y = finite(row["y"], -100000...100000),
                   let w = finite(row["width"], 0...100000), let h = finite(row["height"], 0...100000),
                   let page = row["page"] as? Int, (0..<pages).contains(page),
-                  let ax = finite(row["ax"], 0...100000), let ay = finite(row["ay"], 0...100000) else { return }
+                  let ax = finite(row["ax"], 0...100000), let ay = finite(row["ay"], 0...100000) else { return false }
             layers.append(ThreeDLayer(id: id, label: label, depth: depth, parent: parent, x: x, y: y, width: w, height: h, page: page, ax: ax, ay: ay))
         }
         let selected = state["selected"] as? Int ?? -1
-        guard selected == -1 || layers.indices.contains(selected) else { return }
+        guard selected == -1 || layers.indices.contains(selected) else { return false }
         let opening = !active || model.session != session || document != nextDocument
         document = nextDocument
         active = true
@@ -185,6 +185,7 @@ final class ThreeDChrome {
                 .compactMap { $0 }.joined(separator: " · ")
         if capturedRevision == revision { scene.select(selected) }
         capture()
+        return true
     }
     /// One capture at a time; a newer revision recaptures when the running one ends.
     private func capture() {

@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-536 native 3D state forwarding repair
+
+- The host now forwards only accepted 3D state and matching-document close messages with its own preview view identity, after updating native chrome. This keeps the Bun Code guard synchronized with the current layer while rejected or stale states cannot replace its target. A non-GUI Swift relay fixture feeds the real Bun preview IPC and checks valid B Code, delayed A rejection, and close invalidation. Native UI acceptance and exact-head CI remain manager gates.
+
 ## 2026-11-04 — LKM-536 delayed Code after layer selection
 
 - A 3D Code action now carries the scene's selected layer index. The preview IPC accepts it only when that index matches the latest published selection in the same session and revision, so a delayed A action cannot open A after B is selected without a recapture. The existing native fixture sends that delayed A action after selecting B and checks that B's real Code action still opens B. Native execution and exact-head CI remain manager gates.
