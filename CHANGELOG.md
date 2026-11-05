@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.13.28] - 2026-11-04
+
 ### Removed
 
 - The selected-element inspector no longer offers a Custom tab or controls request field; Props and Styles remain available (LKM-538).
