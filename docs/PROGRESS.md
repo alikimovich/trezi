@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-529 review repair: read the updater's journaled step
+
+- The prior phase mapping read `workflow.step`, but the update owner only records `pull`, `install` and `build` as journaled `intent` steps. Routine progress now derives its short label from the latest running journal step; raw command output remains confined to the existing error path. The focused fixture uses owner-shaped summaries with completed earlier steps and a verbose current command output. Post-merge native acceptance remains pending.
+
 ## 2026-11-04 — LKM-529 review repair: concise progress and connected native fixture
 
 - The update poll now uses the workflow owner's pull, install and build phase to show short progress text. Raw compiler and package-manager lines remain available to the existing failure result and journal, and repeated polls do not resend the same phase. The focused update fixture checks that verbose owner output cannot appear in the sheet's routine progress.

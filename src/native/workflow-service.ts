@@ -38,9 +38,18 @@ const wallClock = (expire: () => void, ms: number) => {
   return () => clearTimeout(timer)
 }
 
-/** The journal's step is trusted workflow state; its progress is raw command output. */
-export function updatePhaseStatus(workflow: { step?: unknown; progress?: unknown }): string {
-  switch (workflow.step) {
+/** Update uses journaled intent steps; `progress` is raw command output. */
+export function updatePhaseStatus(workflow: {
+  kind?: unknown
+  state?: unknown
+  steps?: { name?: unknown; state?: unknown }[]
+  progress?: unknown
+}): string {
+  const active = workflow.steps
+    ?.slice()
+    .reverse()
+    .find((step) => step.state === 'intent')
+  switch (active?.name) {
     case 'pull':
       return 'Downloading changes…'
     case 'install':

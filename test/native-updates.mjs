@@ -5,13 +5,31 @@ import { updatePhaseStatus } from '../src/native/workflow-service.ts'
 
 const verbose =
   'bun run build:native\nCompiler diagnostic: /private/source/file.swift:99\nSigning output'
-for (const [step, expected] of [
-  ['pull', 'Downloading changes…'],
-  ['install', 'Installing dependencies…'],
-  ['build', 'Building Trezi…'],
-  [undefined, 'Preparing update…']
+for (const [steps, expected] of [
+  [[{ name: 'pull', state: 'intent' }], 'Downloading changes…'],
+  [
+    [
+      { name: 'pull', state: 'done' },
+      { name: 'install', state: 'intent' }
+    ],
+    'Installing dependencies…'
+  ],
+  [
+    [
+      { name: 'pull', state: 'done' },
+      { name: 'install', state: 'done' },
+      { name: 'build', state: 'intent' }
+    ],
+    'Building Trezi…'
+  ],
+  [[{ name: 'pull', state: 'done' }], 'Preparing update…']
 ]) {
-  const displayed = updatePhaseStatus({ step, progress: verbose })
+  const displayed = updatePhaseStatus({
+    kind: 'update',
+    state: 'running',
+    steps,
+    progress: verbose
+  })
   assert.equal(displayed, expected)
   assert.doesNotMatch(displayed, /Compiler|Signing|bun run/)
 }
@@ -114,7 +132,18 @@ const pending = new NativeUpdateController(
     updateCheck: owner.updateCheck,
     update: async (_root, progress) => {
       started++
-      progress(updatePhaseStatus({ step: 'build', progress: verbose }))
+      progress(
+        updatePhaseStatus({
+          kind: 'update',
+          state: 'running',
+          steps: [
+            { name: 'pull', state: 'done' },
+            { name: 'install', state: 'done' },
+            { name: 'build', state: 'intent' }
+          ],
+          progress: verbose
+        })
+      )
       return new Promise((resolve) => {
         releaseUpdate = resolve
       })

@@ -10,6 +10,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Reject a restart unless the running app is the source-built app and its rebuilt host/service match the updated version and commit.
 - [x] Extend focused build-status, update-controller and native sheet fixture assertions without running a production updater smoke.
 - [x] Review repair: display journaled update phases instead of raw command output, and drive the disposable native progress fixture through the badge's Update action.
+- [x] Review repair: derive each routine progress label from the update owner's running journal step, and test owner-shaped summaries across pull, install and build.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
 
 ## LKM-527 — Native suite failure on main a8687a1b6a94
