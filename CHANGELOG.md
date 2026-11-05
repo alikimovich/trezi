@@ -17,6 +17,12 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - New Chat stays at the chat column edge when the preview address needs to compress in a narrow toolbar (LKM-537).
 - New Chat follows the chat column when the sidebar is resized to a wider width (LKM-537).
 - Publish keeps its full trigger width when the toolbar is narrow (LKM-537).
+## [0.14.0] - 2026-11-05
+
+### Added
+
+- Mark up offers colored drawing and editable canvas text, with selected tool state and preserved edits when switching to Select (LKM-542).
+
 ## [0.13.30] - 2026-11-05
 
 ### Changed

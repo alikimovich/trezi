@@ -140,8 +140,14 @@ let original = shell.sidebarChatCell(loadingRow) as! SidebarChatCell
 root.addSubview(original)
 let replacement = shell.sidebarChatCell(loadingRow) as! SidebarChatCell
 root.addSubview(replacement)
+// Both cells inherit the same clock, but construction takes time. Compare their render at one
+// elapsed instant, and retain a zero-elapsed sample to catch a genuine progress reset.
+replacement.decipher?.render(elapsed: 0)
+let resetProgress = replacement.decipher?.resolved ?? -1
+original.decipher?.render(elapsed: 0.15)
+replacement.decipher?.render(elapsed: 0.15)
 report["rebuiltLoading"] = ["first":original.decipher?.inspect() ?? [:], "second":replacement.decipher?.inspect() ?? [:],
-                            "stored":shell.sidebarDecipherStarts[loadingRow.id] ?? 0]
+                            "resetProgress":resetProgress, "stored":shell.sidebarDecipherStarts[loadingRow.id] ?? 0]
 shell.rows = [ShellRow(["id":"project:p", "kind":"project", "project":"p", "title":"P", "recent":[]])]
 shell.pruneSidebarDecipherStarts()
 report["retiredLoading"] = shell.sidebarDecipherStarts[loadingRow.id] == nil
