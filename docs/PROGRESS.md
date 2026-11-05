@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-519 assigned Vite port in private previews
+
+- The Swift runtime and its TypeScript reference now add npm's script-argument separator only for npm when launching Vite or SvelteKit. Yarn, Bun and pnpm receive `--port` and `--host` directly, so the private server can bind to the assigned loopback port that Trezi probes. `--strictPort` makes a collision fail instead of silently moving to another port. The runtime command fixture checks exact commands and Swift/TypeScript parity; the existing private-runtime fixture rejects a foreign printed URL. The broken global agent-browser link is a separate host prerequisite already covered by browser-setup's missing-link fixture. CI, independent review and post-merge acceptance remain with the manager.
+
 ## 2026-11-04 — LKM-521 native chat and Settings suite repair
 
 - The Skills smoke now scrolls its first overview row into view before asserting that the rendered button is unclipped and hittable. Returning from a long GitHub detail editor could leave the overview at the editor's scroll offset, making the row geometry check depend on earlier navigation. The first native run progressed past that row, then timed out waiting for the Impeccable import; dependent chat checks were skipped. The Impeccable wait now stops on a visible import rejection and reports its reason; both the Skills wait and code-link reveal wait include their last inspected state on timeout. The native chat and Settings groups remain the acceptance gate.

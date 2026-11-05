@@ -404,6 +404,10 @@ try {
       assert.equal(applyPreviewChoice(plain, 'native'), plain, 'one preview: nothing to choose')
     const commandCases = [
       ['npm run dev', 'vite'],
+      ['yarn run dev', 'vite'],
+      ['yarn run dev', 'sveltekit'],
+      ['pnpm run dev', 'vite'],
+      ['bun run dev', 'vite'],
       ['bun run dev', 'sveltekit'],
       ['npm run dev', 'next'],
       ['npm run dev -- --turbo', 'next'],
@@ -435,6 +439,14 @@ try {
         JSON.stringify(item)
       )
     })
+    assert.equal(commands[0], 'npm run dev -- --port 7777 --host 127.0.0.1 --strictPort')
+    for (const index of [1, 2, 3, 4, 5]) {
+      assert.equal(
+        commands[index],
+        `${commandCases[index].command} --port 7777 --host 127.0.0.1 --strictPort`,
+        `${commandCases[index].command} forwards the assigned port without a literal --`
+      )
+    }
     failureCases.forEach((item, index) => {
       const actual = failures[commandCases.length + index]
       assert.equal(actual.message, interpretFailure(item.code, item.tail), JSON.stringify(item))
