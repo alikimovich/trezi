@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-537 native accepted-card capture repair
+
+- The chat UI foreground capture now reveals the accepted component's containing message after each width change. At 320 points, pressing Latest parked that older card outside the lazy stack's realized viewport, so its measured frame was zero before the pair geometry assertions could run. The capture retries the message reveal while layout settles and still requires a visible card and measured answer lines at each width. The wide fixture uses 460 points because the native test window caps chat width at 466. No user-facing layout changed; quick and native verification remain the final worker gates.
+
 ## 2026-11-04 — LKM-525 credential removal and pinned feedback repair
 
 - A successful Claude token or Gemini key removal now sends a one-update clear signal to the native Settings form, which discards both its typed secure value and matching retained draft. Failed removal leaves the draft intact; unrelated provider drafts still restore. The synthetic Settings fixture covers removal, Back, reopen and blocked resubmission for each credential. Validation and service messages now render beside the pinned action above long scrolling Settings forms, with windowless geometry and accessibility assertions. Current-head CI, independent review and native acceptance remain manager gates.

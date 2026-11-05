@@ -202,13 +202,14 @@ export async function checkChatUi(host: NativeBridge, artifacts: string) {
     assert.match(sent[2], /- Corner radius: 12 px/)
     assert.match(sent[2], /- Anything else: Keep the card calm and easy to scan\./)
     await inspectUntil(request, 'chatInspect', (s) => component(s, form.id)?.answered === true)
-    // Measure rendered SwiftUI line frames at narrow, ordinary and wide supported widths.
+    // Measure rendered SwiftUI line frames at narrow, ordinary and wide widths.
+    // The test window caps the chat at 466 pt (canvas width minus preview minimum).
     // The synthetic answer must wrap inside the card at all three sizes.
     let previousCardWidth = 0
     for (const [name, width] of [
       ['narrow', 320],
       ['ordinary', 400],
-      ['wide', 520]
+      ['wide', 460]
     ] as const) {
       const layout = await host.request('chatAcceptance', { prepare: true, width })
       assert.ok(Math.abs(layout.chatWidth - width) <= 1, `${name}: chat width ${layout.chatWidth}`)

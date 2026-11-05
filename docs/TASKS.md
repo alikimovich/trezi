@@ -3,6 +3,11 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-537 — Native chat UI accepted-card capture failure
+
+- [x] Reveal the accepted component's containing message before measuring its card and answer lines across chat widths.
+- [ ] Manager: confirm the native chat group and independent review on the exact tree.
+
 ## LKM-525 — Nested Settings navigation and actions
 
 - [x] Keep Skills overview actions and nested Skills/provider Back, context and actions visible above scrolling forms, with the sidebar section retained.
