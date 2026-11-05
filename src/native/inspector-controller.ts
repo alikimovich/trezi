@@ -38,6 +38,23 @@ type HeldDraft = {
   submittedTurn?: string
   completed?: boolean
 }
+/** Exact submitted turns survive another chat or workspace starting its own Apply. */
+export class InspectorDraftTurns {
+  private readonly pending = new Map<string, Set<string>>()
+  add(chat: string, turn: string) {
+    const turns = this.pending.get(chat) ?? new Set<string>()
+    turns.add(turn)
+    this.pending.set(chat, turns)
+  }
+  take(chat: string, turn: string | null): string[] {
+    const turns = this.pending.get(chat)
+    if (!turns) return []
+    const matched = turn ? (turns.has(turn) ? [turn] : []) : [...turns]
+    for (const item of matched) turns.delete(item)
+    if (!turns.size) this.pending.delete(chat)
+    return matched
+  }
+}
 export class NativeInspectorController {
   readonly state: NativeInspectorState = {
     root: '',

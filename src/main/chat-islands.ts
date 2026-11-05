@@ -60,6 +60,8 @@ export interface IslandSession {
       history: Record<string, IslandValue>[]
       preview: boolean
       submittedTurn?: string
+      /** A prior Apply changed source but its rendered readback was unavailable. */
+      sourceApplied?: boolean
     }
   >
 }
@@ -100,7 +102,8 @@ export class ChatIslands {
   private readonly confirmRendered?: (
     chat: string,
     record: IslandRecord,
-    values: Record<string, IslandValue>
+    values: Record<string, IslandValue>,
+    revision: string
   ) => Promise<boolean>
   /**
    * Finds a chat's record once its workspace is ready (a new chat's is prepared later);
@@ -120,7 +123,8 @@ export class ChatIslands {
       confirmRendered?: (
         chat: string,
         record: IslandRecord,
-        values: Record<string, IslandValue>
+        values: Record<string, IslandValue>,
+        revision: string
       ) => Promise<boolean>
     } = {}
   ) {
@@ -373,7 +377,7 @@ export class ChatIslands {
         successful && record ? await islandSource(session.root, record).catch(() => null) : null
       if (
         source &&
-        source.revision !== draft.sourceRevision &&
+        (source.revision !== draft.sourceRevision || draft.sourceApplied === true) &&
         Object.entries(draft.values).every(
           ([field, value]) => JSON.stringify(source.values[field]) === JSON.stringify(value)
         )
@@ -398,6 +402,8 @@ export class ChatIslands {
           }
           if (!rendered) {
             draft.submittedTurn = undefined
+            draft.sourceRevision = source.revision
+            draft.sourceApplied = true
             continue
           }
         } else {
@@ -405,8 +411,15 @@ export class ChatIslands {
           // its effect. Only an actual source-backed preview probe may settle it.
           let rendered = false
           const deadline = Date.now() + 8000
-          while (this.confirmRendered && Date.now() < deadline) {
-            if (await this.confirmRendered(chat, record!, source.values).catch(() => false)) {
+          const supported = ids.every((field) =>
+            record?.manifest.params.some((param) => param.id === field && param.rendered)
+          )
+          while (supported && this.confirmRendered && Date.now() < deadline) {
+            if (
+              await this.confirmRendered(chat, record!, draft.values, source.revision).catch(
+                () => false
+              )
+            ) {
               rendered = true
               break
             }
@@ -414,10 +427,19 @@ export class ChatIslands {
           }
           if (!rendered) {
             draft.submittedTurn = undefined
+            draft.sourceRevision = source.revision
+            draft.sourceApplied = true
+            session.notices.set(
+              id,
+              supported
+                ? 'Source changed, but the preview result is unconfirmed. Check the page and Retry Apply. Revert draft discards pending controls, not source.'
+                : 'This literal has no rendered-value check. Verify the source change in preview and Retry Apply. Revert draft discards pending controls, not source.'
+            )
             continue
           }
         }
         session.drafts.delete(id)
+        session.notices.delete(id)
         await this.overrides?.port.clear(`${chat}\n${id}`).catch(() => {})
       } else draft.submittedTurn = undefined
     }
@@ -589,6 +611,7 @@ export class ChatIslands {
       if (source.revision !== draft.sourceRevision)
         throw new Error('Source changed while this preview draft was pending. Review or revert it.')
       if (!this.applyDraft) throw new Error('Apply requires an active chat agent.')
+      session.notices.delete(record.id)
       const values = draft.values
       const prompt = `Apply these chat-island preview drafts as one source edit in this chat workspace. Verify the exact source revision before writing, preserve other edits, and confirm the rendered preview after the source reload. Island ${record.id}; source ${record.manifest.file}; revision ${draft.sourceRevision}. Values: ${JSON.stringify(values)}. Bindings: ${JSON.stringify(record.manifest.params.filter((param) => Object.hasOwn(values, param.id)).map((param) => ({ id: param.id, apply: param.apply })))}.`
       draft.submittedTurn = await this.applyDraft(command.chat, prompt)

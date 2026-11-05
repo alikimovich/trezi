@@ -3,6 +3,10 @@
 Status: first working slice implemented, 2026-09-25. The target design and remaining
 stages follow below; the current implementation is deliberately bounded.
 
+## Current Apply contract (LKM-539, 2026-11-05)
+
+The implementation has moved beyond the first slice described below. Control gestures collect frontend drafts without a source write or agent turn per adjustment. Shadow controls can project a temporary preview; other literals report when live projection is unavailable. Explicit Apply starts one regular chat agent turn for the accumulated values. A draft clears only after the requested source values and the rendered preview are confirmed. The currently supported literal readback is a declared unitless numeric opacity on one exact source-stamped element in the active preview project/session/frame; other literal effects remain pending with an actionable Retry or Revert. Arbitrary canvas, animation and application logic has no universal DOM readback. The native rendered check remains pending post-merge.
+
 ## Implemented slice
 
 - Claude/Codex/custom endpoints expose `chat_island` catalog/define/read. Background

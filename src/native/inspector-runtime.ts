@@ -10,7 +10,7 @@ import type { NativeBridge } from './bridge'
 import type { NativeChatController } from './chat-controller'
 import { turnBoundaries } from './chat-runtime'
 import type { NativeContextController } from './context-controller'
-import { NativeInspectorController } from './inspector-controller'
+import { InspectorDraftTurns, NativeInspectorController } from './inspector-controller'
 import { NavigationController } from './navigation-controller'
 import { dispatchIPC, serviceEvents } from './platform'
 import type { NativeWorkspaceController } from './workspace-controller'
@@ -25,7 +25,7 @@ export function installNativeInspector(
 ) {
   const send = (channel: string, ...args: any[]) =>
     dispatchIPC('main', { type: 'send', channel, args })
-  let draftTurn: { chat: string; turn: string } | null = null
+  const draftTurns = new InspectorDraftTurns()
   const controller = new NativeInspectorController(
     workspace.services.invoke,
     send,
@@ -49,7 +49,7 @@ export function installNativeInspector(
         await chat.command({ type: 'submit', chat: key, text: prompt })
         if (!session.turn || session.turn === previousTurn)
           throw new Error('The chat could not start the Apply turn. The draft is still pending.')
-        draftTurn = { chat: key, turn: session.turn }
+        draftTurns.add(key, session.turn)
         return session.turn
       } else await visualEdit(root, prompt)
     },
@@ -89,15 +89,9 @@ export function installNativeInspector(
   )
   turnBoundaries.add((key, kind, turn) => {
     void navigation.boundary(key, kind, turn).catch(report)
-    if (
-      draftTurn?.chat === key &&
-      draftTurn.turn === turn &&
-      (kind === 'landed' || kind === 'failed')
-    ) {
-      const submitted = draftTurn
-      draftTurn = null
-      void controller.settleDraftTurn(kind === 'landed', submitted.turn).catch(report)
-    }
+    if ((kind === 'landed' && turn) || kind === 'failed')
+      for (const submitted of draftTurns.take(key, turn))
+        void controller.settleDraftTurn(kind === 'landed', submitted).catch(report)
   })
   const render = workspace.services.render
   workspace.services.render = (state) => {

@@ -5,14 +5,20 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chatIslandShape } from '../bin/chat-island-schema.mjs'
 import { islandDefinition } from '../src/main/chat-island-schema.ts'
+import { islandSource } from '../src/main/chat-island-source.ts'
 import { ChatIslands, ISLAND_CONFLICT_NOTICE } from '../src/main/chat-islands.ts'
 import { selectControlCandidates } from '../src/main/control-selection.ts'
 import { chooseControlsWithJev } from '../src/main/controls-jev.ts'
+import { previewServers } from '../src/main/preview-evidence.ts'
+import { PAGE_PROBE } from '../src/main/preview-page.ts'
+import { registerPreviewSource } from '../src/main/preview-state.ts'
 import { enqueueRepoWrite } from '../src/main/repo-write-queue.ts'
+import { confirmIslandRendered } from '../src/native/island-rendered.ts'
 import {
   chatIslandControlPurposes,
   chatIslandGuidance
 } from '../src/shared/chat-island-guidance.ts'
+import { projectKey } from '../src/shared/projectKey.ts'
 
 const root = await mkdtemp(join(tmpdir(), 'trezi-islands-'))
 const storage = await mkdtemp(join(tmpdir(), 'trezi-island-store-'))
@@ -25,7 +31,10 @@ const number = (id, anchor, min = -1, max = 1) => ({
   min,
   max,
   step: 0.01,
-  apply: { strategy: 'literal', anchor }
+  apply: { strategy: 'literal', anchor },
+  ...(id === 'x'
+    ? { rendered: { kind: 'computed-style', selector: '#shadow-card', property: 'opacity' } }
+    : {})
 })
 const request = {
   action: 'define',
@@ -184,6 +193,28 @@ try {
   renderedDraft = true
   await islands.settle('chat', true, 'draft-turn-2')
   assert.equal(view().draft, undefined, 'source and rendered result settle the draft')
+  await writeFile(join(root, 'shadow.js'), code)
+  await islands.refresh('chat')
+  await islands.interact(command('draft', { y: 0.1 }))
+  await islands.interact(command('apply-draft'))
+  await writeFile(join(root, 'shadow.js'), code.replace('LIGHT_Y = -0.5', 'LIGHT_Y = 0.1'))
+  await islands.settle('chat', true, 'draft-turn-3')
+  assert.equal(
+    view().draft?.submitted,
+    false,
+    'unmapped literal does not remain endlessly submitted'
+  )
+  assert.equal(
+    view().draft?.conflict,
+    false,
+    'matching applied source keeps Retry and Revert available'
+  )
+  assert.match(view().notice, /no rendered-value check/)
+  await islands.interact(command('apply-draft'))
+  assert.equal(submittedDrafts.length, 4, 'retry is one explicit agent operation')
+  await islands.settle('chat', false, 'draft-turn-4')
+  assert.equal(view().draft?.submitted, false, 'failed retry keeps the pending draft')
+  await islands.interact(command('revert-draft'))
   await writeFile(join(root, 'shadow.js'), code)
   await islands.refresh('chat')
   await islands.interact(command('draft', { x: 0.6 }))
@@ -526,6 +557,102 @@ try {
     assert.deepEqual(result.flatMap((b) => b.params).sort(), groups.flat().sort())
   }
   assert.equal(evaluations, 2)
+  // The actual chat runtime uses this fixed preview transport. Only a declared
+  // computed opacity on the matching source-stamped element can confirm Apply.
+  const opacityCode = 'const OPACITY = 0.5;\n'
+  await writeFile(join(root, 'opacity.js'), opacityCode)
+  const opacityDefinition = islandDefinition({
+    manifest: {
+      file: 'opacity.js',
+      component: 'Card',
+      title: 'Card',
+      params: [
+        {
+          id: 'opacity',
+          label: 'Opacity',
+          kind: 'number',
+          min: 0,
+          max: 1,
+          apply: { strategy: 'literal', anchor: 'const OPACITY = ' },
+          rendered: { kind: 'computed-style', selector: '#card', property: 'opacity' }
+        }
+      ]
+    },
+    blocks: [{ id: 'surface', title: 'Surface', kind: 'group', params: ['opacity'] }]
+  })
+  const opacityRecord = {
+    ...opacityDefinition,
+    version: 1,
+    id: 'opacity',
+    revision: 1,
+    turn: 1,
+    engine: 'agent',
+    status: 'ready',
+    initial: { opacity: 1 }
+  }
+  const opacityRevision = (await islandSource(root, opacityRecord)).revision
+  let pageHref = 'http://127.0.0.1:7777/'
+  let renderedStamp = 'opacity.js:1:1'
+  let renderedValue = '0.5'
+  let startedAt = 1770000000000
+  let navigateDuringRead = false
+  previewServers.set(projectKey(root), { url: 'http://127.0.0.1:7777/', pid: 1 })
+  registerPreviewSource({
+    getUrl: () => pageHref,
+    capture: async () => null,
+    agent: {
+      evaluate: async (script, world) => {
+        assert.equal(world, 'preview')
+        if (script === PAGE_PROBE) return { href: pageHref, startedAt, ready: 'complete' }
+        assert.match(script, /querySelectorAll/)
+        const observedStart = startedAt
+        if (navigateDuringRead) startedAt += 1000
+        return {
+          href: pageHref,
+          startedAt: observedStart,
+          values: [{ stamp: renderedStamp, value: renderedValue }]
+        }
+      }
+    }
+  })
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, opacityRevision),
+    true,
+    'production callback checks a source-stamped rendered value in the current preview session'
+  )
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, 'stale-revision'),
+    false,
+    'the same rendered frame cannot settle a stale source revision'
+  )
+  renderedStamp = 'another-file.js:1:1'
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, opacityRevision),
+    false,
+    'a matching rendered value from another source cannot settle Apply'
+  )
+  renderedStamp = 'opacity.js:1:1'
+  renderedValue = '1'
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, opacityRevision),
+    false,
+    'source-only success cannot substitute for the rendered value'
+  )
+  renderedValue = '0.5'
+  navigateDuringRead = true
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, opacityRevision),
+    false,
+    'a frame that navigates during readback cannot settle Apply'
+  )
+  navigateDuringRead = false
+  pageHref = 'http://127.0.0.1:7778/'
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, opacityRevision),
+    false,
+    'another project preview is rejected even with the expected value and stamp'
+  )
+  previewServers.delete(projectKey(root))
   assert.deepEqual(
     chosen.map((b) => b.id),
     ['layers', 'light']

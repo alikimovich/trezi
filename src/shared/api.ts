@@ -1306,6 +1306,8 @@ export interface ControlParam {
   options?: string[]
   /** How the param writes back to source. */
   apply: ControlApply
+  /** Optional non-executable readback for a directly rendered numeric literal. */
+  rendered?: { kind: 'computed-style'; selector: string; property: 'opacity' }
 }
 
 /**

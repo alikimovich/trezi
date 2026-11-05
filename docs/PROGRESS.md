@@ -1,5 +1,13 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-539 declarative literal readback
+
+- Island definitions may now declare a non-executable readback for a unitless numeric literal directly controlling the computed opacity of one source-stamped element. The production chat runtime checks the live preview's project, session, document frame, exact element and source file, then rechecks the source hash after reading WebKit. An unsupported legacy literal or an unavailable/mismatched preview keeps its draft pending with an actionable notice, Retry and Revert; it never settles from source text alone. The focused island fixture covers a supported value, stale revision, wrong source stamp and wrong project; the native fixture adds real WebKit transport assertions for the post-merge run. Universal arbitrary-literal readback is unavailable because a source constant can feed canvas, animation or arbitrary program logic without a declarative DOM value to inspect. Independent review, exact-head CI and native acceptance remain manager gates.
+
+## 2026-11-05 — LKM-539 overlapping Apply repair, rendered probe unresolved
+
+- The inspector runtime now keeps independent submitted turns by chat and turn ID, so another workspace's Apply cannot overwrite a held completion. The focused inspector fixture exercises A and B submissions with out-of-order terminal events, a failed B draft and successful A restoration. The production literal island path still has no trustworthy way to read an arbitrary source literal's actual rendered effect from the user's page; the fixture-only probe cannot establish that behavior. Its draft remains pending rather than claiming an unverified Apply. The coordinator needs to resolve the rendering proof before review acceptance; native and exact-head gates remain pending.
+
 ## 2026-11-05 — LKM-539 submitted draft boundary repair
 
 - A literal island draft now needs a source-backed rendered probe before it can settle; otherwise it remains pending and actionable. The native island fixture holds its rendered probe behind the source edit and asserts the draft persists until the page changes. Styles now carries the submitted turn with a held draft when selection or workspace changes, and reconciles a terminal result only against that turn after restoring the target. Focused fixtures cover both lifecycle paths; exact-head CI, independent review and post-merge native acceptance remain manager gates.

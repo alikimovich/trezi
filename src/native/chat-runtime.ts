@@ -16,6 +16,7 @@ import { chatFrames } from './chat-frames'
 import { addReference, setIslandDirectory } from './chat-island-refs'
 import { islandLocator, islandRestorer } from './chat-island-session'
 import { islandPreviewPort } from './island-preview'
+import { confirmIslandRendered } from './island-rendered'
 import { LandingChecks, placeLandingCheck, previewLandingHost } from './landing-check'
 import { dispatchIPC, type NativeView, serviceEvents, views } from './platform'
 import { TurnBoundaries } from './turn-boundaries'
@@ -55,7 +56,7 @@ export function installNativeChat(
   )
   const turnOf = (key: string) =>
     nativeChat.get(key).messages.filter((m) => m.role === 'user').length
-  const islands = new ChatIslands(
+  const islands: ChatIslands = new ChatIslands(
     (key) => {
       const chat = nativeChat.chats.get(key)
       if (chat) nativeChat.changed(chat)
@@ -64,6 +65,10 @@ export function installNativeChat(
     {
       origin: currentTurn,
       overrides: new IslandOverrides(islandPreviewPort()),
+      confirmRendered: async (key, record, values, revision) => {
+        const root = islands.sessions.get(key)?.root
+        return root ? confirmIslandRendered(root, record, values, revision) : false
+      },
       applyDraft: async (key, prompt) => {
         const chat = nativeChat.chats.get(key)
         if (

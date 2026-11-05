@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import { setSourceOwner } from '../src/main/source-owner.ts'
-import { NativeInspectorController } from '../src/native/inspector-controller.ts'
+import {
+  InspectorDraftTurns,
+  NativeInspectorController
+} from '../src/native/inspector-controller.ts'
 
 const calls = [],
   sent = [],
@@ -614,6 +617,36 @@ assert.equal(
   undefined,
   'a terminal while another workspace is active confirms only after source-backed restoration'
 )
+const submitted = new InspectorDraftTurns()
+await draftAction('apply', { field: 'style:opacity', value: '0.8' })
+await draftAction('apply-drafts')
+submitted.add('chat-a', 'draft-turn-4')
+await drafts.activate('/b')
+await drafts.select(element)
+const actionB = (action, extra = {}) =>
+  drafts.action({ root: '/b', generation: drafts.state.generation, action, ...extra })
+await actionB('apply', { field: 'style:opacity', value: '0.9' })
+await actionB('apply-drafts')
+submitted.add('chat-b', 'draft-turn-5')
+assert.deepEqual(
+  submitted.take('chat-a', 'other-turn'),
+  [],
+  'an unrelated terminal matches neither Apply'
+)
+for (const turn of submitted.take('chat-b', 'draft-turn-5'))
+  await drafts.settleDraftTurn(false, turn)
+assert.equal(drafts.state.draft.submitted, false, 'B failure unlocks only the B draft')
+authoredHash = 'applied-a'
+authoredOpacity = '0.8'
+for (const turn of submitted.take('chat-a', 'draft-turn-4'))
+  await drafts.settleDraftTurn(true, turn)
+await drafts.activate('/a')
+await drafts.select(element)
+assert.equal(drafts.state.draft, undefined, 'A source and render settle after B completes first')
+await drafts.activate('/b')
+await drafts.select(element)
+assert.equal(drafts.state.draft.count, 1, 'B failed draft remains pending after A settles')
+await actionB('revert-draft')
 setSourceOwner(null)
 assert.deepEqual(spacingSnapshot('padding'), {
   'style:padding-right': '18px',
