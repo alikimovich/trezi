@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-542 sidebar marquee fixture phase timing
+
+- Exact-head CI sampled a row's planned 0.3-second start at 0.804 seconds; its 3-point offset matched the real clock after the 0.7-second delay. The windowless fixture now records each start immediately as that row begins hovering and checks the sample remains inside the delay. Later samples use the row's own clock; pixel, speed, resize, reset and cleanup assertions remain.
+
 ## 2026-11-05 — LKM-542 sidebar decipher fixture timing
 
 - The rebuilt sidebar title fixture now samples both cells through the deterministic render seam at the same elapsed instant. A zero-elapsed sample still detects a true reset, while retained start-time and clock retirement assertions remain. This addresses an exact-head CI race from comparing two live-clock samples during cell construction.
