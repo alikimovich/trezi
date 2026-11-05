@@ -100,7 +100,7 @@ async function checkSwitchDropsSelection(
     dispatchIPC('main', { type: 'invoke', channel, args })
   const send = (channel: string, ...args: unknown[]) =>
     dispatchIPC('main', { type: 'send', channel, args })
-  // The shadow overlay's children: selection outlines, then the hover box (preload.ts).
+  // The shadow overlay's selection outlines, hover box and toolbar (preload.ts).
   const overlay = () =>
     host.request('evaluate', {
       view: 'preview',
@@ -110,7 +110,7 @@ async function checkSwitchDropsSelection(
         return {
           page: !!document.querySelector('#native-title'),
           boxes: root ? [...root.querySelectorAll('[data-trezi-selbox]')].filter(shown).length : 0,
-          hover: !!root && shown(root.children[1]),
+          hover: !!root && shown(root.querySelector('[data-trezi-hover]')),
           toolbar: !!root && shown(root.querySelector('[data-trezi-toolbar]'))
         }
       })()`
