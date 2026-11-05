@@ -300,8 +300,13 @@ assert.ok(
 )
 assert.match(
   source,
-  /name: 'annotation-composite-send-native',\n\s*dependsOn: \['chat-ready'\],\n\s*run: \(\) => checkAnnotationCompositeSend\(host, page, artifacts\),\n\s*cleanup: \(\) => restorePreviewMarkup\(host, page\)/,
-  'the normal check runs the existing synthetic scenario and restores the preview before text-edit'
+  /name: 'annotation-composite-send-native',\n\s*dependsOn: \['chat-ready'\],\n\s*run: async \(\) => \{\n\s*await checkAnnotationCompositeSend\(host, page, artifacts\)\n\s*await restorePreviewMarkup\(host, page\)/,
+  'a successful composite check restores the preview before text-edit'
+)
+assert.match(
+  source,
+  /'annotation fixture page removed'\s*\)\s*assert\.equal\(\(await host\.request\('previewMarkupInspect'\)\)\.open, false\)\s*\},\s*cleanup: \(\) => restorePreviewMarkup\(host, page\)/,
+  'success waits for the synthetic page to disappear and verifies the overlay is closed; failure retains cleanup'
 )
 const markupSource = readFileSync(
   fileURLToPath(new URL('../src/native/smoke-preview-markup.ts', import.meta.url)),

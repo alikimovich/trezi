@@ -1342,7 +1342,15 @@ export async function runNativeCoreSmoke(
     {
       name: 'annotation-composite-send-native',
       dependsOn: ['chat-ready'],
-      run: () => checkAnnotationCompositeSend(host, page, artifacts),
+      run: async () => {
+        await checkAnnotationCompositeSend(host, page, artifacts)
+        await restorePreviewMarkup(host, page)
+        await wait(
+          () => page('!document.querySelector("#markup-smoke")'),
+          'annotation fixture page removed'
+        )
+        assert.equal((await host.request('previewMarkupInspect')).open, false)
+      },
       cleanup: () => restorePreviewMarkup(host, page)
     },
     {

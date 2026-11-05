@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-544 successful smoke handoff repair
+
+- Independent review found that the smoke runner calls a check's cleanup hook only after failure. The composite/Send check now restores its synthetic preview after success, waits for the fixture page to disappear and checks the overlay is closed before text editing starts. Its failure cleanup hook remains. The pure selection fixture checks this ordering and bounded handoff; manager review, exact-head CI and post-merge native acceptance remain pending.
+
 ## 2026-11-05 — LKM-544 normal annotation composite and Send selection
 
 - Registered the existing synthetic annotation composite/Send scenario in the ordinary core check list, immediately after preview Mark up and before text editing. The narrow opt-in still filters to this check and the disposable-project prelude. Pure selection assertions cover default and core runs, the narrow route, incompatible opt-ins, and the existing cleanup hook; the scenario still intercepts outbound Send and restores the preview before later checks. Independent review, exact-head CI, and post-merge serialized native acceptance remain manager gates.
