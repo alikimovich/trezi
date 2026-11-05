@@ -22,6 +22,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Production composition repair: provide a trustworthy source-backed rendered-value probe for supported literal islands before clearing their Apply drafts; leave unmappable literals pending with Retry and Revert.
 - [x] Review repair: require the parsed literal to feed the exact rendered opacity target and reject a same-file unrelated element even when its value matches.
 - [x] Review repair: reject later or aliased opacity writers and same-line element impersonation; bind the supported readback to the unique creation column.
+- [x] Review repair: close the admitted opacity syntax against every `cssText` write and shared-statement creation, with matching default-value and identity fixtures.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
 ## LKM-542 — Annotation colors, persistent tools and editable canvas text
 

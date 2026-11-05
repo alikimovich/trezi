@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-539 closed opacity readback subset
+
+The rendered-opacity proof now rejects every `cssText` writer, including a later reset whose computed default equals the requested value. A source stamp is admitted only for a single `createElement` declaration in its own statement; multiple creations in one declaration cannot share identity. The supported fixture uses direct opacity assignment and side-effect-free shadow arithmetic, while the production transport fixture covers the default-opacity reset and shared-statement creation negatives. Ambiguous sources retain pending Apply with Retry/Revert. Independent review, exact-head CI and post-merge native acceptance remain manager gates.
+
 ## 2026-11-05 — LKM-539 single-writer rendered identity repair
 
 The supported opacity readback now rejects later `setProperty`, `cssText`, aliased and other unrecognized uses of the target element. It requires one declared opacity writer, one source-authored stamp, and an exact creation line and column, so two creations on the same line cannot share evidence. Focused production-transport fixtures cover overrides and same-line impersonation alongside the linked positive, stale revision and frame guards. Unsupported source shapes keep Apply pending with Retry/Revert; independent review, exact-head CI and post-merge native acceptance remain manager gates.

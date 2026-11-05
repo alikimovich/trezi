@@ -73,6 +73,10 @@ export function linkedOpacityStamp(code: string, file: string, param: ControlPar
   const targets = declarations.filter(
     ({ decl, isConst }) =>
       isConst &&
+      // The source stamp names a statement position. Multiple creations in
+      // one statement would share it, so that position cannot identify one DOM node.
+      ts.isVariableDeclarationList(decl.parent) &&
+      decl.parent.declarations.length === 1 &&
       ts.isIdentifier(decl.name) &&
       !!decl.initializer &&
       ts.isCallExpression(decl.initializer) &&
@@ -81,6 +85,51 @@ export function linkedOpacityStamp(code: string, file: string, param: ControlPar
       ts.isStringLiteral(decl.initializer.arguments[0])
   )
   const created = new Set(targets.map(({ decl }) => (decl.name as ts.Identifier).text))
+  const primitiveNames = new Set(
+    declarations
+      .filter(
+        ({ decl, isConst }) =>
+          isConst &&
+          ts.isIdentifier(decl.name) &&
+          !!decl.initializer &&
+          (ts.isNumericLiteral(decl.initializer) ||
+            (ts.isPrefixUnaryExpression(decl.initializer) &&
+              ts.isNumericLiteral(decl.initializer.operand)))
+      )
+      .map(({ decl }) => (decl.name as ts.Identifier).text)
+  )
+  // Only arithmetic over declared numeric constants may compute the shadow.
+  // Calls, element reads and assignment expressions could change opacity as a
+  // side effect, even when the direct writer still appears unique.
+  const pureShadow = (node: ts.Node): boolean => {
+    if (
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node) ||
+      ts.isNumericLiteral(node)
+    )
+      return true
+    if (ts.isIdentifier(node)) return primitiveNames.has(node.text)
+    if (ts.isParenthesizedExpression(node)) return pureShadow(node.expression)
+    if (ts.isPrefixUnaryExpression(node))
+      return (
+        [ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken].includes(node.operator) &&
+        pureShadow(node.operand)
+      )
+    if (ts.isBinaryExpression(node))
+      return (
+        [
+          ts.SyntaxKind.PlusToken,
+          ts.SyntaxKind.MinusToken,
+          ts.SyntaxKind.AsteriskToken,
+          ts.SyntaxKind.SlashToken
+        ].includes(node.operatorToken.kind) &&
+        pureShadow(node.left) &&
+        pureShadow(node.right)
+      )
+    if (ts.isTemplateExpression(node))
+      return node.templateSpans.every((span) => pureShadow(span.expression))
+    return false
+  }
   // Do not claim a single writer in a file that can obtain the element by a
   // selector, pass it through another API, or hide an assignment in a callback.
   if (allAssignments.length !== assignments.length) return null
@@ -90,7 +139,7 @@ export function linkedOpacityStamp(code: string, file: string, param: ControlPar
         if (!ts.isIdentifier(decl.name) || !decl.initializer) return false
         const value = decl.initializer
         return (
-          created.has(decl.name.text) ||
+          targets.some((target) => target.decl === decl) ||
           ts.isNumericLiteral(value) ||
           ts.isStringLiteral(value) ||
           (ts.isArrayLiteralExpression(value) &&
@@ -110,14 +159,15 @@ export function linkedOpacityStamp(code: string, file: string, param: ControlPar
       expression.operatorToken.kind === ts.SyntaxKind.EqualsToken
     ) {
       return [...created].some(
-        (name) =>
-          (chain(expression.left, [name, 'id']) && ts.isStringLiteral(expression.right)) ||
-          chain(expression.left, [name, 'textContent']) ||
-          chain(expression.left, [name, 'style', 'boxShadow']) ||
-          (chain(expression.left, [name, 'style', 'cssText']) &&
-            ts.isStringLiteral(expression.right) &&
-            !/opacity/i.test(expression.right.text)) ||
-          chain(expression.left, [name, 'style', 'opacity'])
+        (elementName) =>
+          (chain(expression.left, [elementName, 'id']) && ts.isStringLiteral(expression.right)) ||
+          (chain(expression.left, [elementName, 'textContent']) &&
+            ts.isStringLiteral(expression.right)) ||
+          (chain(expression.left, [elementName, 'style', 'boxShadow']) &&
+            pureShadow(expression.right)) ||
+          (chain(expression.left, [elementName, 'style', 'opacity']) &&
+            ts.isIdentifier(expression.right) &&
+            expression.right.text === name)
       )
     }
     if (!ts.isCallExpression(expression)) return false
@@ -179,11 +229,8 @@ export function linkedOpacityStamp(code: string, file: string, param: ControlPar
           const safeProperty =
             expression === ids[0] ||
             expression === opacities[0] ||
-            chain(left, [variable, 'textContent']) ||
-            chain(left, [variable, 'style', 'boxShadow']) ||
-            (chain(left, [variable, 'style', 'cssText']) &&
-              ts.isStringLiteral(expression.right) &&
-              !/opacity/i.test(expression.right.text))
+            (chain(left, [variable, 'textContent']) && ts.isStringLiteral(expression.right)) ||
+            (chain(left, [variable, 'style', 'boxShadow']) && pureShadow(expression.right))
           if (!safeProperty) safe = false
         } else if (ts.isCallExpression(expression)) {
           if (

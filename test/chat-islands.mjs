@@ -646,6 +646,26 @@ try {
       `a later or aliased style writer stays unsupported: ${override}`
     )
   }
+  const defaultResetCode =
+    "const OPACITY = 1;\nconst card = document.createElement('div');\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:2:1');\ncard.style.opacity = OPACITY;\ncard.style.cssText = 'color: red';\ndocument.body.append(card);\n"
+  await writeFile(join(root, 'opacity.js'), defaultResetCode)
+  const defaultResetRevision = (await islandSource(root, opacityRecord)).revision
+  renderedValue = '1'
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 1 }, defaultResetRevision),
+    false,
+    'cssText that clears inline opacity cannot confirm the coincidentally matching default 1'
+  )
+  renderedValue = '0.5'
+  const multiDeclarationCode =
+    "const OPACITY = 0.5;\nconst other = document.createElement('div'), card = document.createElement('div');\nother.id = 'other';\nother.style.opacity = OPACITY;\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:2:1');\ncard.style.opacity = OPACITY;\ndocument.body.append(card);\n"
+  await writeFile(join(root, 'opacity.js'), multiDeclarationCode)
+  const multiDeclarationRevision = (await islandSource(root, opacityRecord)).revision
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, multiDeclarationRevision),
+    false,
+    'two creations in one declaration cannot share a source-node stamp'
+  )
   const sameLine =
     "const OPACITY = 0.5;\nconst other = document.createElement('div'); const card = document.createElement('div');\n"
   const cardColumn = sameLine.split('\n')[1].indexOf('const card') + 1
