@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-539 parser admission guard
+
+Opacity settlement and island source reads now reject a JavaScript/TypeScript program with any parser diagnostic before using a recovered AST or binding its literals. The source admission check also rejects duplicate top-level variable bindings; the narrow opacity proof rejects a local `document` binding that would make creation fail while an old preview remains. The production transport fixture keeps the valid linked positive and covers unterminated/invalid source, duplicate bindings, old-preview readback, the prior script reset and stale identity guards. A valid source edit that preserves the same stamp and value still lacks a runtime source-revision marker on its DOM node; source hash and frame identity alone cannot prove that WebKit loaded that edit. Independent review, exact-head CI and post-merge native acceptance remain manager gates.
+
 ## 2026-11-05 — LKM-539 inert rendered-opacity proof
 
 The prior opacity proof admitted executable elements: a source-stamped `div` could set opacity, then a same-file `script` could reset it before a coincidentally matching default was read. The supported grammar now admits only inert `div` creation, static id/text and source-stamp writes, direct opacity assignment, side-effect-free shadow arithmetic, and a final append. A script or any other element type is unsupported and leaves Apply pending with Retry/Revert. The production transport fixture covers a linked positive, script-reset negative, stale revision and identity controls. Runtime source-node instrumentation would require a broader preview capability and was not chosen for this bounded repair. Independent review, exact-head CI and post-merge native acceptance remain manager gates.

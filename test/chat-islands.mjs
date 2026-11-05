@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chatIslandShape } from '../bin/chat-island-schema.mjs'
 import { islandDefinition } from '../src/main/chat-island-schema.ts'
-import { islandSource } from '../src/main/chat-island-source.ts'
+import { islandSource, sourceHash } from '../src/main/chat-island-source.ts'
 import { ChatIslands, ISLAND_CONFLICT_NOTICE } from '../src/main/chat-islands.ts'
 import { selectControlCandidates } from '../src/main/control-selection.ts'
 import { chooseControlsWithJev } from '../src/main/controls-jev.ts'
@@ -621,6 +621,37 @@ try {
     true,
     'production callback links the exact source constant to the target opacity in the current preview session'
   )
+  for (const invalid of [
+    `${opacityCode}const junk = 'unterminated`,
+    `${opacityCode}const other = ;`,
+    `${opacityCode}const OPACITY = 0.5;`
+  ]) {
+    await writeFile(join(root, 'opacity.js'), invalid)
+    await assert.rejects(
+      islandSource(root, opacityRecord),
+      /doesn't parse right now/,
+      'malformed or duplicate bindings are not admitted as editable source'
+    )
+    assert.equal(
+      await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, sourceHash(invalid)),
+      false,
+      'an old preview with the same stamp and value cannot settle malformed source'
+    )
+  }
+  await writeFile(join(root, 'opacity.js'), opacityCode)
+  const shadowedDocumentCode = `${opacityCode}const document = 1;\n`
+  await writeFile(join(root, 'opacity.js'), shadowedDocumentCode)
+  assert.equal(
+    await confirmIslandRendered(
+      root,
+      opacityRecord,
+      { opacity: 0.5 },
+      sourceHash(shadowedDocumentCode)
+    ),
+    false,
+    'a local document binding cannot make an old rendered node prove a failed creation call'
+  )
+  await writeFile(join(root, 'opacity.js'), opacityCode)
   const unrelatedCode =
     "const OPACITY = 0.5;\nconst other = document.createElement('div');\nother.id = 'other';\nother.style.opacity = OPACITY;\nconst card = document.createElement('div');\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:5:1');\ncard.style.opacity = 0.5;\ndocument.body.append(card);\n"
   await writeFile(join(root, 'opacity.js'), unrelatedCode)

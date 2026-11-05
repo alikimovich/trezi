@@ -1,5 +1,6 @@
 import ts from 'typescript'
 import { lexLiteral, locateAnchor } from '../main/control-manifest'
+import { parseIslandProgram } from '../main/island-source-syntax'
 import type { ControlParam } from '../shared/api'
 
 /** A closed inert single-writer subset. The only created node is a div, and
@@ -15,11 +16,14 @@ export function linkedOpacityStamp(code: string, file: string, param: ControlPar
     !/^#[A-Za-z][\w-]*$/.test(param.rendered.selector)
   )
     return null
+  // A recovered AST can still expose the old declaration after a syntax error.
+  // Never use that partial tree as proof that the changed script could reload.
+  const source = parseIslandProgram(code, file)
+  if (!source) return null
   const anchor = locateAnchor(code, param.apply.anchor)
   if ('error' in anchor) return null
   const literal = lexLiteral(code, anchor.at, 'number')
   if (!literal || Number(literal.raw) < 0 || Number(literal.raw) > 1) return null
-  const source = ts.createSourceFile(file, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS)
   const statements = source.statements
   const chain = (node: ts.Node, names: string[]): boolean => {
     let cursor = node
@@ -53,6 +57,16 @@ export function linkedOpacityStamp(code: string, file: string, param: ControlPar
         }))
       : []
   )
+  const declarationNames = declarations.map(({ decl }) =>
+    ts.isIdentifier(decl.name) ? decl.name.text : ''
+  )
+  // Duplicate lexical bindings cannot run; shadowing document would also
+  // invalidate the only admitted createElement call after a stale preview.
+  if (
+    declarationNames.includes('document') ||
+    declarationNames.some((name, index) => !name || declarationNames.indexOf(name) !== index)
+  )
+    return null
   const bound = declarations.filter(
     ({ decl, isConst }) =>
       isConst &&
