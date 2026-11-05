@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-525 provider draft identity security repair
+
+- Retained provider form drafts now use the selected provider's stable ID, section and field ID instead of the displayed navigation title. Remove confirmation keeps the same identity through Back and clears only that provider's draft after confirmed removal. The existing windowless Settings fixture first reproduced a same-label collision, then checks that provider B cannot receive or submit provider A's synthetic key, URL or models while A's own draft still restores. The controller fixture checks that list, editor and confirmation states send the matching stable context; current-head CI and native acceptance remain with the manager.
+
 ## 2026-11-04 — LKM-525 CI fixture repair
 
 - The `resolved-lessons` unit fixture now checks that Undo restores the exact captured prior memory and that a real memory update occurred. Its old assertion rejected any prior content containing the word “lesson,” which could fail without showing an Undo regression. No memory owner or Settings product behavior changed; current-head CI must rerun this fixture.

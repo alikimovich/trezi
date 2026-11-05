@@ -33,6 +33,8 @@ export interface NativeSheetSection {
   detail?: string
   /** Context for a nested pane; keeps its actions above the scrolling form. */
   navigationTitle?: string
+  /** Stable identity for draft fields in this pane; never derived from a display label. */
+  draftContext?: string
 }
 export interface NativeSheetState {
   id: string

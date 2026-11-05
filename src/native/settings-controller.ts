@@ -96,6 +96,7 @@ const defaultChoices = (choices: ModelChoice[]) => [
 interface Pane {
   detail: string
   navigationTitle?: string
+  draftContext: string
   fields: Omit<NativeSheetField, 'section' | 'draft'>[]
   actions: NativeSheetState['actions']
 }
@@ -131,6 +132,8 @@ export class NativeSettingsController {
     const all = sections(),
       saved = this.preferences.get(SETTINGS_SECTION_KEY)
     const providers = this.list()
+    const providerSection = all.find((section) => section.id === 'providers')
+    if (providerSection) providerSection.draftContext = providers.draftContext
     this.sheets.present(
       {
         title: 'Settings',
@@ -418,6 +421,7 @@ export class NativeSettingsController {
     if (section) {
       section.detail = pane.detail
       section.navigationTitle = pane.navigationTitle
+      section.draftContext = pane.draftContext
     }
     sheet.state.message = undefined
     this.sheets.refresh()
@@ -451,6 +455,7 @@ export class NativeSettingsController {
     const connections = this.connections
     return {
       detail: PROVIDERS,
+      draftContext: 'overview',
       fields: connections.length
         ? [
             {
@@ -484,6 +489,7 @@ export class NativeSettingsController {
     return {
       detail: PROVIDERS,
       navigationTitle: `Remove ${connection.label}`,
+      draftContext: `provider:${connection.id}`,
       fields: [
         {
           id: 'remove-confirm',
@@ -508,6 +514,7 @@ export class NativeSettingsController {
   private editor(connection?: ProviderConnection): Pane {
     return {
       navigationTitle: connection ? `Edit ${connection.label}` : 'Add a provider',
+      draftContext: connection ? `provider:${connection.id}` : 'create',
       detail: `${connection ? `Edit ${connection.label}` : 'Add a provider'}: enter its API base URL and key, then load its models or enter model IDs below. The provider must support the Responses API.`,
       fields: [
         {

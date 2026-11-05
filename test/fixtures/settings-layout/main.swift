@@ -21,10 +21,13 @@ let generalFields: [[String: Any]] = [
     ["id":"projectUi", "section":"experimental", "label":"Gen UI", "kind":"choice", "value":"false", "help":"Generate UI using your project’s existing components and styles. Experimental; supports React and Svelte.", "choices":[["value":"false", "label":"Off"], ["value":"true", "label":"On"]]],
     ["id":"engine", "section":"experimental", "label":"UI layout method", "kind":"choice", "value":"agent", "visibleWhen":["field":"projectUi", "value":"true"], "help":"Chat model uses your selected chat model to arrange components. Jev uses a separate layout model and requires an AI Gateway API key.", "choices":[["value":"agent", "label":"Chat model"], ["value":"jev", "label":"Jev layout engine"]]]
 ]
-func settingsState(_ providers: [[String: Any]], _ actions: [[String: Any]], nested: Bool = false, navigationTitle: String = "Add a provider") throws -> SheetState {
+func settingsState(_ providers: [[String: Any]], _ actions: [[String: Any]], nested: Bool = false, navigationTitle: String = "Add a provider", draftContext: String? = nil) throws -> SheetState {
     let shownSections = sections.map { entry -> [String: Any] in
         var section = entry
-        if nested && entry["id"] as? String == "providers" { section["navigationTitle"] = navigationTitle }
+        if entry["id"] as? String == "providers" {
+            if nested { section["navigationTitle"] = navigationTitle }
+            if let draftContext { section["draftContext"] = draftContext }
+        }
         return section
     }
     let raw: [String: Any] = ["id":"fixture", "title":"Settings", "detail":"", "busy":false, "autosave":true, "sections":shownSections, "section":"general",
@@ -118,7 +121,7 @@ let editorFields: [[String: Any]] = [
 ] + (0..<12).map { index in
     ["id":"provider-help-\(index)", "section":"providers", "label":"More information \(index)", "kind":"readonly", "value":"This long provider help stays in the scrolling form."]
 }
-let editorState = try settingsState(editorFields, [["id":"back", "label":"Back", "section":"providers"], ["id":"connect", "label":"Load models", "section":"providers"], ["id":"save-provider", "label":"Add provider", "primary":true, "section":"providers"]], nested: true)
+let editorState = try settingsState(editorFields, [["id":"back", "label":"Back", "section":"providers"], ["id":"connect", "label":"Load models", "section":"providers"], ["id":"save-provider", "label":"Add provider", "primary":true, "section":"providers"]], nested: true, draftContext: "create")
 sheets.model.update(editorState)
 settle()
 require(sheets.model.values["label"] == "AI Gateway" && sheets.model.values["connection"] == nil && sheets.model.values["projectUi"] == "false", "In-place pane swap seeds and forgets only its own fields")
@@ -153,11 +156,28 @@ sheets.model.perform("save-provider")
 sheets.model.update(state)
 sheets.model.update(editorState)
 require(sheets.model.values["label"] == "AI Gateway", "A submitted provider edit clears the retained draft")
-let selectedEditorState = try settingsState(editorFields, [["id":"back", "label":"Back", "section":"providers"], ["id":"connect", "label":"Load models", "section":"providers"], ["id":"delete", "label":"Remove…", "section":"providers"], ["id":"save-provider", "label":"Save provider", "primary":true, "section":"providers"]], nested: true, navigationTitle: "Edit AI Gateway")
-let removeConfirmState = try settingsState([["id":"remove-confirm", "section":"providers", "label":"Remove AI Gateway?", "kind":"readonly", "value":"Confirm removal"]], [["id":"back", "label":"Back", "section":"providers"], ["id":"remove", "label":"Remove provider", "primary":true, "destructive":true, "section":"providers"]], nested: true, navigationTitle: "Remove AI Gateway")
+let selectedActions: [[String: Any]] = [["id":"back", "label":"Back", "section":"providers"], ["id":"connect", "label":"Load models", "section":"providers"], ["id":"delete", "label":"Remove…", "section":"providers"], ["id":"save-provider", "label":"Save provider", "primary":true, "section":"providers"]]
+let selectedEditorState = try settingsState(editorFields, selectedActions, nested: true, navigationTitle: "Edit AI Gateway", draftContext: "provider:a")
+let otherEditorFields = editorFields.map { original -> [String: Any] in
+    var field = original
+    if field["id"] as? String == "url" { field["value"] = "https://other.example/v1" }
+    return field
+}
+let otherEditorState = try settingsState(otherEditorFields, selectedActions, nested: true, navigationTitle: "Edit AI Gateway", draftContext: "provider:b")
+let removeConfirmState = try settingsState([["id":"remove-confirm", "section":"providers", "label":"Remove AI Gateway?", "kind":"readonly", "value":"Confirm removal"]], [["id":"back", "label":"Back", "section":"providers"], ["id":"remove", "label":"Remove provider", "primary":true, "destructive":true, "section":"providers"]], nested: true, navigationTitle: "Remove AI Gateway", draftContext: "provider:a")
 sheets.model.update(selectedEditorState); settle()
 let providerDraft = ["label":"Unsaved selected provider", "url":"https://draft.example/v1", "key":"synthetic-draft-key", "models":"draft-model"]
 for (field, value) in providerDraft { sheets.model.setValue(field, value) }
+sheets.model.perform("back")
+sheets.model.update(state)
+sheets.model.update(otherEditorState)
+require(sheets.model.values["key"] == "" && sheets.model.values["url"] == "https://other.example/v1" && sheets.model.values["models"] == "" && sheets.model.values["label"] == "AI Gateway", "A same-label provider must not receive another provider's unsaved key, URL, models or name")
+sheets.model.perform("save-provider")
+let otherSubmission = emitted.last?["values"] as? [String: String] ?? [:]
+require(otherSubmission["key"] == "" && otherSubmission["url"] == "https://other.example/v1" && otherSubmission["models"] == "", "Saving provider B cannot submit provider A's unsaved credentials or endpoint")
+sheets.model.update(state)
+sheets.model.update(selectedEditorState)
+require(providerDraft.allSatisfy { sheets.model.values[$0.key] == $0.value }, "Provider A's own draft restores after same-label provider B is opened")
 sheets.model.perform("delete")
 require(emitted.last?["action"] as? String == "delete" && emitted.last?["section"] as? String == "providers", "Editor Remove uses its selected provider route")
 sheets.model.update(removeConfirmState); settle()

@@ -5,19 +5,24 @@ struct SheetChoice: Decodable, Identifiable { let value: String; let label: Stri
 struct SheetFieldCondition: Decodable { let field: String; let value: String }
 struct SheetField: Decodable, Identifiable { let id: String; let label: String; let kind: String; let value: String; let choices: [SheetChoice]?; let help: String?; let visibleWhen: SheetFieldCondition?; let section: String?; let draft: Bool?; let placeholder: String?; let action: String?; let actionLabel: String?; let group: String?; let height: Double? }
 struct SheetAction: Decodable, Identifiable { let id: String; let label: String; let primary: Bool?; let destructive: Bool?; let section: String?; let cancel: Bool?; let copy: String?; let disabled: Bool? }
-struct SheetSection: Decodable, Identifiable { let id: String; let label: String; let symbol: String; let detail: String?; let navigationTitle: String? }
+struct SheetSection: Decodable, Identifiable { let id: String; let label: String; let symbol: String; let detail: String?; let navigationTitle: String?; let draftContext: String? }
 struct SheetState: Decodable { let id: String; let title: String; let detail: String; let fields: [SheetField]; let actions: [SheetAction]; let busy: Bool; let autosave: Bool?; let dismissible: Bool?; let message: String?; let sections: [SheetSection]?; let section: String?; let alert: Bool? }
+private struct SheetDraftKey: Hashable { let section: String; let context: String; let field: String }
 final class SheetModel: ObservableObject {
     @Published var state: SheetState?
     @Published var filters: [String: String] = [:]
     @Published var values: [String: String] = [:]
-    private var retainedDrafts: [String: String] = [:]
+    private var retainedDrafts: [SheetDraftKey: String] = [:]
     private var providerRemovalDraftContext: String?
     /// The sidebar pane of a sectioned window. Bun only seeds it; the window owns it after that.
     @Published var section: String?
-    private func draftKey(_ field: SheetField, in state: SheetState) -> String {
-        let context = state.sections?.first { $0.id == field.section }?.navigationTitle ?? ""
-        return "\(field.section ?? ""):\(context):\(field.id)"
+    private func draftKey(_ field: SheetField, in state: SheetState) -> SheetDraftKey? {
+        let section = field.section ?? ""
+        let pane = state.sections?.first { $0.id == section }
+        // A provider draft without an identity must never enter a shared fallback bucket.
+        if section == "providers" && pane?.draftContext == nil { return nil }
+        let context = section == "providers" ? pane?.draftContext ?? "" : pane?.navigationTitle ?? ""
+        return SheetDraftKey(section: section, context: context, field: field.id)
     }
     func update(_ next: SheetState) {
         if state?.id != next.id {
@@ -31,14 +36,15 @@ final class SheetModel: ObservableObject {
                 // Confirmation Back returns to the editor; a successful removal
                 // returns to the list and must not resurrect the removed draft.
                 if !next.actions.contains(where: { $0.id == "delete" }), let context = providerRemovalDraftContext {
-                    retainedDrafts = retainedDrafts.filter { !$0.key.hasPrefix("providers:\(context):") }
+                    retainedDrafts = retainedDrafts.filter { $0.key.section != "providers" || $0.key.context != context }
                 }
                 providerRemovalDraftContext = nil
             }
             // A pane swapped its fields in place (the provider editor): seed new ones, forget removed ones.
             let known = Set(previous.fields.map(\.id)), current = Set(next.fields.map(\.id))
             for field in next.fields where !known.contains(field.id) || field.kind == "readonly" {
-                values[field.id] = field.kind == "readonly" ? field.value : retainedDrafts[draftKey(field, in: next)] ?? field.value
+                let draft = draftKey(field, in: next).flatMap { retainedDrafts[$0] }
+                values[field.id] = field.kind == "readonly" ? field.value : draft ?? field.value
             }
             values = values.filter { current.contains($0.key) }
         }
@@ -54,13 +60,15 @@ final class SheetModel: ObservableObject {
         if action == "back" || action == "skill-back" || action == "delete" {
             for field in state.fields where field.section == section && field.draft == true {
                 let value = values[field.id] ?? field.value
-                if value != field.value { retainedDrafts[draftKey(field, in: state)] = value }
+                if let key = draftKey(field, in: state), value != field.value { retainedDrafts[key] = value }
             }
             if action == "delete" {
-                providerRemovalDraftContext = state.sections?.first { $0.id == "providers" }?.navigationTitle
+                providerRemovalDraftContext = state.sections?.first { $0.id == "providers" }?.draftContext
             }
         } else if ["save-provider", "skill-save", "skill-create", "skill-remove"].contains(action) {
-            for field in state.fields where field.section == section && field.draft == true { retainedDrafts.removeValue(forKey: draftKey(field, in: state)) }
+            for field in state.fields where field.section == section && field.draft == true {
+                if let key = draftKey(field, in: state) { retainedDrafts.removeValue(forKey: key) }
+            }
         }
         if let text = state.actions.first(where: { $0.id == action })?.copy, !state.busy {
             NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string)

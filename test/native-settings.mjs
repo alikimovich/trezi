@@ -75,6 +75,8 @@ const settings = new NativeSettingsController(sheets, preferences, () => notifie
 const action = (name, values = {}) =>
   sheets.action({ id: sheets.current.state.id, action: name, values })
 const field = (id) => sheets.current.state.fields.find((f) => f.id === id)
+const providerContext = () =>
+  sheets.current.state.sections.find((section) => section.id === 'providers').draftContext
 await settings.open()
 // One sidebar window: General, AI Providers (inline, no separate sheet), Skills and Experimental.
 assert.deepEqual(
@@ -89,6 +91,7 @@ assert.deepEqual(
   ]
 )
 assert.equal(sheets.current.state.section, 'general', 'first open shows General')
+assert.equal(providerContext(), 'overview', 'the provider list has a stable draft context')
 assert.deepEqual(
   sheets.current.state.fields.map((f) => [f.id, f.section]),
   [
@@ -404,6 +407,7 @@ assert.deepEqual(
   'only Add is a section-wide provider action'
 )
 await action('edit', { connection: 'connection-1' })
+assert.equal(providerContext(), 'provider:connection-1', 'the editor uses the selected provider ID')
 assert.equal(field('key').help, 'Leave blank to keep the current key.')
 assert.ok(
   sheets.current.state.actions.some((a) => a.id === 'delete'),
@@ -418,6 +422,7 @@ assert.ok(
 )
 await action('edit', { connection: 'connection-1' })
 await action('delete')
+assert.equal(providerContext(), 'provider:connection-1', 'Remove keeps the editor identity')
 assert.equal(connections.length, 1, 'deletion requires confirmation screen')
 assert.match(field('remove-confirm').label, /Remove Test\?/)
 assert.deepEqual(
@@ -429,6 +434,11 @@ await sheets.action({ id: inPlace, action: 'section', values: {}, section: 'gene
 await sheets.action({ id: inPlace, action: 'section', values: {}, section: 'providers' })
 assert.match(field('remove-confirm').label, /Remove Test\?/)
 await action('back')
+assert.equal(
+  providerContext(),
+  'provider:connection-1',
+  'confirmation Back restores the same identity'
+)
 assert.equal(
   sheets.current.state.sections.find((section) => section.id === 'providers').navigationTitle,
   'Edit Test',
