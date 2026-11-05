@@ -134,6 +134,24 @@ const sends = (calls) => calls.filter(([channel]) => channel === 'agent:send')
 const last = (sent, method) => sent.findLast(([name]) => name === method)?.[1]
 const added = (session, over = {}) => ({ session, ...file, capture, ...over })
 
+// Selection suspends the same snapshot; returning to Mark up resumes its session.
+{
+  const { chats, sent, markup } = fixture()
+  await chats.command({ type: 'context', context: context('a', '/one') })
+  markup.begin()
+  const { session } = last(sent, 'markupBegin')
+  markup.suspend()
+  assert.deepEqual(last(sent, 'markupSuspend'), { session })
+  assert.equal(markup.suspended, true)
+  markup.begin()
+  assert.deepEqual(last(sent, 'markupResume'), { session })
+  assert.equal(markup.suspended, false)
+  assert.equal(sent.filter(([method]) => method === 'markupBegin').length, 1)
+  markup.suspend()
+  markup.state({ session, state: 'cancelled' })
+  assert.equal(markup.suspended, false)
+}
+
 {
   const { calls, chats, sent, toasts, markup } = fixture()
   await chats.command({ type: 'context', context: context('a', '/one') })
@@ -330,8 +348,9 @@ for (const [label, next] of [
 // The top bar button goes through `toggle`; the Actions menu entry stays an opener.
 {
   const index = readFileSync('src/native/index.ts', 'utf8')
-  assert.match(index, /'shell-action'[\s\S]{0,140}action\.action === 'markup'\) markup\.toggle\(\)/)
-  assert.match(index, /'menu'[\s\S]{0,80}action === 'markup'\) markup\.begin\(\)/)
+  assert.match(index, /action\.action === 'markup'[\s\S]{0,220}markup\.toggle\(\)/)
+  assert.match(index, /action === 'markup'[\s\S]{0,220}markup\.begin\(\)/)
+  assert.match(index, /markup\.suspend\(\)/, 'Select suspends the current canvas')
   const host = readFileSync('src/native/Host.swift', 'utf8')
   // A host without an overlay object still answers `cancelled`, so a toggle never hangs.
   assert.match(

@@ -24,6 +24,7 @@ final class PreviewMarkup {
     private(set) var session: String?
     private(set) var overlay: PreviewMarkupOverlay?
     private(set) var context: [String: Any] = [:]
+    private var suspended = false
     private var area: NSRect?, page: NSRect?
     private weak var previousFocus: NSResponder?
 
@@ -73,15 +74,30 @@ final class PreviewMarkup {
         parent.addSubview(view, positioned: .above, relativeTo: nil)
         view.page = page
         overlay = view
+        view.isHidden = suspended
         view.layoutSubtreeIfNeeded()
         // The overlay takes the keys, so preview shortcuts never reach the page.
-        parent.window?.makeFirstResponder(view)
+        if !suspended { parent.window?.makeFirstResponder(view) }
         changed()
         report(token, "open")
     }
     private func close() {
         overlay?.removeFromSuperview()
-        overlay = nil; session = nil; context = [:]
+        overlay = nil; session = nil; context = [:]; suspended = false
+        changed()
+    }
+    /// Selection may use the live page while this snapshot and its edits remain in memory.
+    func suspend() {
+        suspended = true
+        overlay?.canvas.commitText()
+        overlay?.isHidden = true
+        if overlay != nil { restoreFocus(previousFocus) }
+        changed()
+    }
+    func resume() {
+        suspended = false
+        overlay?.isHidden = false
+        if let overlay { parent.window?.makeFirstResponder(overlay) }
         changed()
     }
     /// Discards everything; nothing was written, so nothing is left to clean.
@@ -105,6 +121,7 @@ final class PreviewMarkup {
         close()
     }
     func add() {
+        overlay?.canvas.commitText()
         guard let overlay, let token = session, overlay.addEnabled else { return }
         overlay.show(error: nil)
         let canvas = overlay.canvas
@@ -127,13 +144,13 @@ final class PreviewMarkup {
     }
     /// The host's Escape; the chat next to it keeps its own.
     func escape() -> Bool {
-        guard overlay?.ownsFocus == true else { return false }
+        guard overlay?.isHidden == false, overlay?.ownsFocus == true else { return false }
         cancel()
         return true
     }
     /// The menu's Undo, when no text view took it.
     func undo() -> Bool {
-        guard let overlay else { return false }
+        guard let overlay, !overlay.isHidden else { return false }
         overlay.undo()
         return true
     }

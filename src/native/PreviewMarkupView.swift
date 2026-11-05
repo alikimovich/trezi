@@ -3,11 +3,15 @@ import AppKit
 /// The frozen snapshot and the marks over it. `image` is the captured bitmap and never
 /// changes, whatever the page does underneath. Nothing here animates, so Reduce Motion has
 /// nothing to reduce.
-final class PreviewMarkupCanvas: NSView {
+final class PreviewMarkupCanvas: NSView, NSTextFieldDelegate {
     let image: CGImage
     private(set) var document: MarkupDocument
     var tool = MarkupTool.pen
+    var ink = MarkupInk.red
     var changed: (() -> Void)?
+    private var textEditor: NSTextField?
+    private var textPoint: CGPoint?
+    private var textIndex: Int?
 
     init(image: CGImage) {
         self.image = image
@@ -39,14 +43,46 @@ final class PreviewMarkupCanvas: NSView {
         setAccessibilityLabel("Preview snapshot, \(count) \(count == 1 ? "mark" : "marks")")
     }
     private func edited() { needsDisplay = true; updateLabel(); changed?() }
-    func pointerDown(_ point: NSPoint, tool: MarkupTool) { document.begin(tool, at: mapping.toImage(point)); edited() }
+    func pointerDown(_ point: NSPoint, tool: MarkupTool) {
+        commitText()
+        if tool == .text { editText(at: point); return }
+        document.begin(tool, at: mapping.toImage(point), ink: ink); edited()
+    }
     func pointerDragged(_ point: NSPoint) { document.extend(to: mapping.toImage(point)); edited() }
     func pointerUp() { document.finish(); edited() }
     func undo() { document.undo(); edited() }
     func clear() { document.clear(); edited() }
+    var hasDraft: Bool { textEditor?.stringValue.isEmpty == false }
+    func commitText() {
+        guard let editor = textEditor, let point = textPoint else { return }
+        let text = editor.stringValue, index = textIndex
+        textEditor = nil; textPoint = nil; textIndex = nil
+        editor.delegate = nil
+        editor.removeFromSuperview()
+        document.putText(text, at: point, ink: ink, replacing: index)
+        edited()
+    }
+    private func editText(at location: NSPoint) {
+        let point = mapping.toImage(location)
+        let index = document.marks.lastIndex { mark in
+            mark.tool == .text && mark.points.first.map { abs($0.x - point.x) < 220 && abs($0.y - point.y) < 36 } == true
+        }
+        let editor = NSTextField(string: index.map { document.marks[$0].text } ?? "")
+        editor.placeholderString = "Type on canvas"
+        editor.font = .systemFont(ofSize: max(12, MarkupRenderer.textSize * mapping.scale), weight: .semibold)
+        editor.textColor = NSColor(cgColor: ink.color)
+        editor.delegate = self
+        let width = min(bounds.width, max(130, 260 * mapping.scale))
+        editor.frame = CGRect(x: min(location.x, bounds.maxX - width), y: location.y, width: width, height: max(28, 38 * mapping.scale))
+        addSubview(editor)
+        textEditor = editor; textPoint = index.map { document.marks[$0].points[0] } ?? point; textIndex = index
+        window?.makeFirstResponder(editor)
+        changed?()
+    }
+    func controlTextDidEndEditing(_ notification: Notification) { commitText() }
 
     override func mouseDown(with event: NSEvent) {
-        if let overlay = superview { window?.makeFirstResponder(overlay) }
+        if tool != .text, let overlay = superview { window?.makeFirstResponder(overlay) }
         pointerDown(convert(event.locationInWindow, from: nil), tool: tool)
     }
     override func mouseDragged(with event: NSEvent) { pointerDragged(convert(event.locationInWindow, from: nil)) }
@@ -142,6 +178,7 @@ final class PreviewMarkupOverlay: NSView {
     /// Nil: the whole overlay.
     var page: NSRect? { didSet { if page != oldValue { needsLayout = true } } }
     private var toolButtons: [(MarkupTool, NSButton)] = []
+    private let colorButton = NSPopUpButton(frame: .zero, pullsDown: false)
     private let undoButton = MarkupButton(), clearButton = MarkupButton(), cancelButton = MarkupButton(), addButton = MarkupButton()
     private let statusLabel = NSTextField(labelWithString: PreviewMarkupOverlay.status)
     private let errorLabel = NSTextField(wrappingLabelWithString: "")
@@ -185,6 +222,15 @@ final class PreviewMarkupOverlay: NSView {
             button.tag = toolButtons.count; button.action = #selector(pick(_:))
             toolButtons.append((tool, button))
         }
+        colorButton.target = self; colorButton.action = #selector(pickColor(_:))
+        colorButton.toolTip = "Color for new marks and text"
+        colorButton.setAccessibilityLabel("Annotation color")
+        for ink in MarkupInk.allCases {
+            colorButton.addItem(withTitle: ink.rawValue.capitalized)
+            colorButton.lastItem?.representedObject = ink.rawValue
+        }
+        colorButton.selectItem(at: 0)
+        island.face.addSubview(colorButton)
         configure(undoButton, label: "Undo", symbol: "arrow.uturn.backward", hint: "Undo (⌘Z)"); undoButton.action = #selector(undo)
         configure(clearButton, label: "Clear", symbol: "trash", hint: "Clear all marks"); clearButton.action = #selector(clear)
         configure(cancelButton, label: "Cancel", symbol: nil, hint: "Discard this mark up (Esc)"); cancelButton.action = #selector(cancel)
@@ -196,7 +242,9 @@ final class PreviewMarkupOverlay: NSView {
         addSubview(island)
         // Tab walks the bar and comes back: it never reaches the views under the overlay.
         var previous: NSView = self
-        for control in controls { previous.nextKeyView = control; previous = control }
+        for control in toolButtons.map(\.1) { previous.nextKeyView = control; previous = control }
+        previous.nextKeyView = colorButton; previous = colorButton
+        for control in [undoButton, clearButton, cancelButton, addButton] { previous.nextKeyView = control; previous = control }
         previous.nextKeyView = self
         updateColors(); refresh()
     }
@@ -233,20 +281,22 @@ final class PreviewMarkupOverlay: NSView {
         let room = max(0, shown.width - Self.inset * 2)
         let buttons = toolButtons.map(\.1) + [undoButton, clearButton]
         let count = CGFloat(buttons.count)
-        let tools = count * Self.toolWidth + (count - 1) * gap, actions = Self.cancelWidth + gap + Self.addWidth
+        let colorWidth: CGFloat = 76
+        let tools = count * Self.toolWidth + (count - 1) * gap + gap + colorWidth, actions = Self.cancelWidth + gap + Self.addWidth
         let status = ceil(statusLabel.intrinsicContentSize.width) + padding
         let bare = padding + tools + padding + actions + padding
         let oneRow = room >= bare
         var width = oneRow ? min(room, bare + status) : min(room, padding * 2 + max(tools, actions))
         if errorShown { width = max(width, min(room, Self.errorWidth)) }
-        let side = max(16, min(Self.toolWidth, (width - padding * 2 - gap * (count - 1)) / count))
+        let side = max(12, min(Self.toolWidth, (width - padding * 2 - colorWidth - gap * count) / count))
         for (index, button) in buttons.enumerated() {
             button.frame = NSRect(x: padding + CGFloat(index) * (side + gap), y: padding, width: side, height: row)
         }
+        colorButton.frame = NSRect(x: padding + count * (side + gap), y: padding, width: colorWidth, height: row)
         let top = oneRow ? padding : padding * 1.5 + row
         addButton.frame = NSRect(x: width - padding - Self.addWidth, y: top, width: Self.addWidth, height: row)
         cancelButton.frame = NSRect(x: addButton.frame.minX - gap - Self.cancelWidth, y: top, width: Self.cancelWidth, height: row)
-        let left = oneRow ? padding + count * (side + gap) - gap + padding : padding
+        let left = oneRow ? colorButton.frame.maxX + padding : padding
         let space = cancelButton.frame.minX - padding - left
         statusLabel.frame = NSRect(x: left, y: top + 6, width: max(0, space), height: 16)
         statusLabel.isHidden = space < 120
@@ -269,7 +319,7 @@ final class PreviewMarkupOverlay: NSView {
         undoButton.isEnabled = !adding && canvas.document.canUndo
         clearButton.isEnabled = !adding && marks > 0
         // Only a marked image can leave: an unmarked original is never added.
-        addButton.isEnabled = !adding && marks > 0 && !canvas.document.isDrawing
+        addButton.isEnabled = !adding && (marks > 0 || canvas.hasDraft) && !canvas.document.isDrawing
         statusLabel.stringValue = adding ? "Adding…" : Self.status
     }
     /// A failure stays on screen, in its own row, until the next attempt.
@@ -278,12 +328,18 @@ final class PreviewMarkupOverlay: NSView {
         errorLabel.isHidden = error == nil
         needsLayout = true; layout()
     }
-    func select(_ tool: MarkupTool) { self.tool = tool; canvas.tool = tool; refresh() }
+    func select(_ tool: MarkupTool) { canvas.commitText(); self.tool = tool; canvas.tool = tool; refresh() }
     @objc private func pick(_ sender: NSButton) { select(MarkupTool.allCases[sender.tag]) }
-    @objc func undo() { if !adding { canvas.undo() } }
-    @objc func clear() { if !adding { canvas.clear() } }
+    @objc private func pickColor(_ sender: NSPopUpButton) {
+        canvas.commitText()
+        guard let raw = sender.selectedItem?.representedObject as? String, let ink = MarkupInk(rawValue: raw) else { return }
+        canvas.ink = ink
+        sender.setAccessibilityValue(ink.rawValue.capitalized)
+    }
+    @objc func undo() { if !adding { canvas.commitText(); canvas.undo() } }
+    @objc func clear() { if !adding { canvas.commitText(); canvas.clear() } }
     @objc func cancel() { onCancel?() }
-    @objc func add() { onAdd?() }
+    @objc func add() { canvas.commitText(); onAdd?() }
 
     /// Whether the keyboard is here, not on the chat next to it.
     var ownsFocus: Bool { (window?.firstResponder as? NSView)?.isDescendant(of: self) == true }

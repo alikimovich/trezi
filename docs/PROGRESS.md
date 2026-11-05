@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-542 annotation canvas controls
+
+- Mark up now stores a chosen palette color per drawing or canvas text mark. A text tool edits on the frozen canvas, and the existing native renderer carries both into the image attachment. Tool radio state remains selected after hover or focus changes.
+- Select suspends the overlay while retaining its snapshot and committed edits; returning to Mark up restores it after selection input ends. Focused fixture assertions cover colored composite pixels, encoded attachment pixels, direct canvas editing and tool state. The manager retains independent review, exact-head CI and post-merge native acceptance.
+
 ## 2026-11-04 — LKM-529 artifact verifier census classification
 
 - Classified the updater controller's read-only Git and bundle proof as a WorkflowOwner helper in the Swift backend retirement census. The verifier still checks the exact source revision, build number and host/service artifact before restart; the approved update flow and safeguards are unchanged. The exact-head retirement-census CI failure prompted this documentation repair; fresh review, CI and post-merge native acceptance remain with the manager.

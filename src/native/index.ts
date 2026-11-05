@@ -816,6 +816,8 @@ async function main() {
     shellController!.chatEffect(effect)
   }
   host.on('shell-action', (action) => {
+    if (action.action === 'select-object' && markup?.session && !shellController!.selecting)
+      markup.suspend()
     if (['expand', 'device', 'select-object', 'address', 'home'].includes(action.action))
       void shellController!
         .action(action)
@@ -844,20 +846,32 @@ async function main() {
   }
   // LKM-448: the top bar button toggles; the Actions menu entry only opens.
   host.on('shell-action', (action) => {
-    if (action.action === 'markup') markup.toggle()
+    if (action.action === 'markup') {
+      void (async () => {
+        if (shellController!.selecting) await shellController!.action({ action: 'select-object' })
+        markup.toggle()
+      })().catch((error) => activityController.append(String(error), 'error'))
+    }
   })
   host.on('menu', ({ action }) => {
-    if (action === 'markup') markup.begin()
+    if (action === 'markup') {
+      void (async () => {
+        if (shellController!.selecting) await shellController!.action({ action: 'select-object' })
+        markup.begin()
+      })().catch((error) => activityController.append(String(error), 'error'))
+    }
   })
   serviceEvents.on('event', (channel, value) => {
     if (channel === 'preview:url-changed') {
       shellController!.location = value
       shellController!.schedule()
     }
-    if (channel === 'preview:toggle-select')
+    if (channel === 'preview:toggle-select') {
+      if (markup.session && !shellController!.selecting) markup.suspend()
       void shellController!
         .action({ action: 'select-object' })
         .catch((error) => activityController.append(String(error), 'error'))
+    }
     if (channel === 'preview:select-cancelled') {
       shellController!.selecting = false
       shellController!.schedule()

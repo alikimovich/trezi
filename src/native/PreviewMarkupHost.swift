@@ -12,7 +12,7 @@ extension Host {
         markup = PreviewMarkup(parent: canvas, emit: { emit($0) }, refusal: { [weak self] in self?.markupRefusal },
                                capture: { [weak self] done in self?.captureForMarkup(done) },
                                restoreFocus: { [weak self] responder in if let responder { self?.window.makeFirstResponder(responder) } },
-                               changed: { [weak self] in self?.sendPreviewCover(); self?.shell.updateMarkup(active: self?.markup?.overlay != nil) })
+                               changed: { [weak self] in self?.sendPreviewCover(); self?.shell.updateMarkup(active: self?.markup?.overlay?.isHidden == false) })
     }
     /// Keys are the overlay's only while this window is really taking them.
     var markupTakesKeys: Bool { NSApp.keyWindow === window && window.attachedSheet == nil && !menuTracking }
@@ -88,9 +88,9 @@ extension Host {
             "hitBesideDetail":beside.map(name)
         ]
         let marks: [[String: Any]] = canvas.document.marks.map { mark in
-            ["tool":mark.tool.rawValue, "points":mark.points.map { [$0.x, $0.y] }, "view":mark.points.map { point -> [CGFloat] in let p = mapping.toView(point); return [p.x, p.y] }]
+            ["tool":mark.tool.rawValue, "ink":mark.ink.rawValue, "text":mark.text, "points":mark.points.map { [$0.x, $0.y] }, "view":mark.points.map { point -> [CGFloat] in let p = mapping.toView(point); return [p.x, p.y] }]
         }
-        return ["open":true, "session":markup?.session ?? NSNull(), "frame":rect(overlay.frame), "canvas":rect(canvas.frame), "bar":rect(overlay.barFrame), "shown":rect(mapping.frame),
+        return ["open":!overlay.isHidden, "suspended":overlay.isHidden, "session":markup?.session ?? NSNull(), "frame":rect(overlay.frame), "canvas":rect(canvas.frame), "bar":rect(overlay.barFrame), "shown":rect(mapping.frame),
                 "image":["width":canvas.image.width, "height":canvas.image.height], "frozen":MarkupDigest.hex(canvas.image),
                 "backing":window.backingScaleFactor, "tool":overlay.tool.rawValue, "marks":marks, "addEnabled":overlay.addEnabled, "undoEnabled":overlay.undoEnabled,
                 "adding":overlay.adding, "status":overlay.statusText, "error":overlay.errorShown, "animates":overlay.animates, "focused":overlay.ownsFocus,

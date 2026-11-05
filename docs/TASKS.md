@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-542 — Annotation colors, persistent tools and editable canvas text
+
+- [x] Store chosen colors with drawing and canvas text in the native composite and attachment path.
+- [x] Keep the active annotation tool selected and accessible, and edit text directly on the canvas.
+- [x] Suspend a marked-up snapshot when Select takes input, and resume it with its edits intact.
+- [x] Extend focused native model and controller fixtures for color, text, and mode transitions.
+- [ ] Manager: independent review, exact-head CI, merge and post-merge native acceptance.
+
 ## LKM-529 — Simplify Trezi update availability and guided update flow
 
 - [x] Replace the behind-build diagnostics sheet with a concise Update / Not Now decision; retain diagnostics in the badge tooltip, About and Copy Commit menu.

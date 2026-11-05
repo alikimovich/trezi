@@ -125,7 +125,7 @@ if (process.platform !== 'darwin') {
   const arrow = history.slice(history.indexOf('func arrow('), history.indexOf('func install()'))
   assert.match(
     arrow,
-    /markup\?\.overlay\?\.ownsFocus == true \{ return true \}/,
+    /markup\?\.overlay\?\.isHidden == false, host\.markup\?\.overlay\?\.ownsFocus == true \{ return true \}/,
     'the arrow keys are consumed while the overlay has focus'
   )
   assert.ok(
@@ -136,7 +136,11 @@ if (process.platform !== 'darwin') {
     history.indexOf('func validateMenuItem'),
     history.indexOf('func menuItems')
   )
-  assert.match(validate, /markup\?\.overlay != nil/, 'Back and Forward are disabled during Mark up')
+  assert.match(
+    validate,
+    /markup\?\.overlay\?\.isHidden == false/,
+    'Back and Forward are disabled during visible Mark up'
+  )
   assert.match(source('PreviewMarkupHost.swift'), /"frozen":MarkupDigest\.hex\(/, 'a real digest')
   // The native smoke retains the Add composite and presses the composer's normal Send; the live
   // harness takes that exact composite and labels its own synthetic picture. (Checked as

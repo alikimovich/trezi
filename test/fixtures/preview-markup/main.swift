@@ -47,6 +47,9 @@ document.begin(.circle, at: CGPoint(x: 500, y: 100)); document.extend(to: CGPoin
 document.begin(.arrow, at: CGPoint(x: 400, y: 380)); document.extend(to: CGPoint(x: 600, y: 350)); document.finish()
 check(document.marks.map(\.tool) == [.rectangle, .pen, .circle, .arrow], "one mark per tool")
 check(document.marks[1].points.count == 3, "the pen keeps its path")
+document.putText("Review this heading", at: CGPoint(x: 120, y: 70), ink: .blue)
+check(document.marks.last?.text == "Review this heading" && document.marks.last?.ink == .blue, "canvas text keeps its color")
+document.undo()
 // A click draws no shape, and a stroke stays on the snapshot.
 document.begin(.rectangle, at: CGPoint(x: 5, y: 5)); document.finish()
 check(document.marks.count == 4, "a click is no rectangle")
@@ -79,6 +82,19 @@ for bounds in [NSRect(x: 0, y: 0, width: 300, height: 700), NSRect(x: 0, y: 0, w
 let base = solid(800, 400, .systemBlue)
 var marks = MarkupDocument(size: size)
 marks.begin(.rectangle, at: CGPoint(x: 100, y: 100)); marks.extend(to: CGPoint(x: 300, y: 200)); marks.finish()
+var colored = MarkupDocument(size: size)
+colored.begin(.pen, at: CGPoint(x: 30, y: 40), ink: .green)
+colored.extend(to: CGPoint(x: 180, y: 40)); colored.finish()
+colored.putText("COLOR", at: CGPoint(x: 30, y: 70), ink: .purple)
+let coloredImage = Pixels(MarkupRenderer.composite(solid(800, 400, .white), marks: colored.marks, maxPixels: 2048)!)
+let greenPixel = coloredImage.rgb(100, 40)
+check(greenPixel.g > greenPixel.r && greenPixel.g > greenPixel.b, "chosen drawing color reaches native composite")
+let textPixelCount = (70..<110).reduce(0) { total, y in total + (30..<190).filter { x in
+    let c = coloredImage.rgb(x, y); return c.b > c.g && c.r > c.g
+}.count }
+check(textPixelCount > 30, "chosen canvas text color reaches native composite")
+let coloredAttachment = MarkupEncoder.encode(solid(800, 400, .white), marks: colored.marks)!
+check(Pixels(decode(coloredAttachment.data)).rgb(100, 40).g > 70, "attachment encodes the chosen color")
 for (maxPixels, ratio) in [(CGFloat(2048), CGFloat(1)), (400, 0.5)] {
     let image = MarkupRenderer.composite(base, marks: marks.marks, maxPixels: maxPixels)!
     let pixels = Pixels(image)
@@ -93,6 +109,22 @@ window.isReleasedWhenClosed = false
 let retina = solid(2880, 1800, .systemBlue)
 let canvas = PreviewMarkupCanvas(image: retina)
 window.contentView!.addSubview(canvas)
+canvas.frame = NSRect(x: 0, y: 0, width: 720, height: 450)
+canvas.ink = .purple
+canvas.pointerDown(canvas.mapping.toView(CGPoint(x: 200, y: 180)), tool: .text)
+check(canvas.hasDraft == false, "empty canvas editor does not create a mark")
+check(canvas.subviews.compactMap { $0 as? NSTextField }.count == 1, "text editor is on the canvas")
+canvas.subviews.compactMap { $0 as? NSTextField }.first?.stringValue = "Editable"
+canvas.commitText()
+check(canvas.document.marks.last?.text == "Editable" && canvas.document.marks.last?.ink == .purple, "canvas editor commits colored text")
+canvas.pointerDown(canvas.mapping.toView(CGPoint(x: 200, y: 180)), tool: .text)
+check(canvas.subviews.compactMap { $0 as? NSTextField }.first?.stringValue == "Editable", "clicking text edits the existing mark")
+canvas.subviews.compactMap { $0 as? NSTextField }.first?.stringValue = "Revised"
+canvas.commitText()
+check(canvas.document.marks.count == 1 && canvas.document.marks[0].text == "Revised", "editing replaces text in place")
+canvas.undo()
+canvas.undo()
+canvas.ink = .red
 func paint(_ view: NSView) -> Pixels {
     let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
     view.cacheDisplay(in: view.bounds, to: rep)
@@ -214,6 +246,9 @@ overlay.keyDown(with: key("r", 15, window: window)); check(overlay.tool == .rect
 overlay.keyDown(with: key("c", 8, window: window)); check(overlay.tool == .circle, "C picks the circle")
 overlay.keyDown(with: key("a", 0, window: window)); check(overlay.tool == .arrow, "A picks the arrow")
 overlay.keyDown(with: key("p", 35, window: window)); check(overlay.tool == .pen, "P picks the pen")
+overlay.keyDown(with: key("t", 17, window: window)); check(overlay.tool == .text, "T picks canvas text")
+check(overlay.controls.first { $0.cell?.accessibilityLabel() == "Text" }?.state == .on, "text tool stays selected accessibly")
+overlay.keyDown(with: key("p", 35, window: window))
 overlay.keyDown(with: key("x", 7, window: window)); check(overlay.tool == .pen, "another key does nothing and goes nowhere")
 let mapping = overlay.canvas.mapping
 overlay.canvas.pointerDown(mapping.toView(CGPoint(x: 100, y: 100)), tool: overlay.tool)
@@ -377,9 +412,13 @@ check(state() == "failed" && events.last?["message"] as? String == refusal, "ref
 check(pendingCapture == nil && session.overlay == nil, "and nothing is captured")
 refusal = nil
 
-// A capture that finishes after the session ended opens nothing.
+// Selection during capture holds the snapshot; ending still rejects late capture callbacks.
 session.begin("s1"); check(pendingCapture != nil && session.overlay == nil, "capture first")
-session.end("s1"); pendingCapture?(.success(captured(solid(400, 300, .white)))); pendingCapture = nil
+let lateCapture = pendingCapture
+session.suspend(); pendingCapture?(.success(captured(solid(400, 300, .white)))); pendingCapture = nil
+check(session.overlay?.isHidden == true, "Select during capture never opens an active overlay")
+session.resume(); check(session.overlay?.isHidden == false, "a pending snapshot can resume")
+session.end("s1"); lateCapture?(.success(captured(solid(400, 300, .white))))
 check(session.overlay == nil && session.session == nil, "a late capture is dropped")
 
 // A failed capture is said, never an empty overlay.
@@ -419,6 +458,12 @@ check(session.overlay?.canvas.convert(session.overlay!.canvas.bounds, to: parent
 check(frames() == closedFrames, "opening moves and resizes nothing")
 session.overlay?.canvas.pointerDown(CGPoint(x: 100, y: 100), tool: .pen)
 session.overlay?.canvas.pointerDragged(CGPoint(x: 140, y: 120)); session.overlay?.canvas.pointerUp()
+let retained = session.overlay?.canvas.document.marks
+session.suspend()
+check(session.overlay?.isHidden == true && session.overlay?.canvas.document.marks == retained, "Select suspends the snapshot without losing edits")
+check(!session.undo(), "Select keeps Undo with the active mode")
+session.resume()
+check(session.overlay?.isHidden == false && session.overlay?.canvas.document.marks == retained, "Mark up restores the same marked snapshot")
 let beforeStale = events.count
 session.cancel("t0")
 check(session.overlay != nil && session.session == "t1", "a stale token closes nothing")

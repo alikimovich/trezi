@@ -34,11 +34,11 @@ final class PreviewHistory: NSObject, NSMenuItemValidation {
         view.go(to: item)
         return true
     }
-    @objc func goBack(_ sender: Any?) { if host?.markup?.overlay == nil { go(true) } }
-    @objc func goForward(_ sender: Any?) { if host?.markup?.overlay == nil { go(false) } }
+    @objc func goBack(_ sender: Any?) { if host?.markup?.overlay?.isHidden != false { go(true) } }
+    @objc func goForward(_ sender: Any?) { if host?.markup?.overlay?.isHidden != false { go(false) } }
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         // LKM-391: the page under a Mark up overlay stays where it is.
-        if host?.markup?.overlay != nil { return false }
+        if host?.markup?.overlay?.isHidden == false { return false }
         switch item.action {
         case #selector(goBack(_:)): return target(true) != nil
         case #selector(goForward(_:)): return target(false) != nil
@@ -78,7 +78,7 @@ final class PreviewHistory: NSObject, NSMenuItemValidation {
         if responder is WKWebView || responder is NSTextField || (responder as? NSTextView)?.isEditable == true { return false }
         if let focus = responder as? NSView, host.sourceEditors.values.contains(where: { focus.isDescendant(of: $0) }) { return false }
         // LKM-391: Mark up's overlay takes the keys; they neither navigate nor reach the page.
-        if host.markup?.overlay?.ownsFocus == true { return true }
+        if host.markup?.overlay?.isHidden == false, host.markup?.overlay?.ownsFocus == true { return true }
         return go(event.keyCode == 123)
     }
     func install() {

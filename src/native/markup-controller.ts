@@ -44,10 +44,12 @@ const DISCARDED = 'Mark up discarded because the chat or project changed. Nothin
  */
 export class NativeMarkupController {
   session: string | null = null
+  suspended = false
   private bound: MarkupBinding | null = null
   constructor(private readonly options: MarkupOptions) {}
 
   begin() {
+    if (this.session && this.suspended) return this.resume()
     if (this.session) return
     const bound = this.options.binding()
     if (!bound) {
@@ -66,11 +68,23 @@ export class NativeMarkupController {
    */
   toggle() {
     if (!this.session) return this.begin()
+    if (this.suspended) return this.resume()
     this.options.host.send('markupCancel', { session: this.session })
+  }
+  suspend() {
+    if (!this.session || this.suspended) return
+    this.suspended = true
+    this.options.host.send('markupSuspend', { session: this.session })
+  }
+  resume() {
+    if (!this.session || !this.suspended) return
+    this.suspended = false
+    this.options.host.send('markupResume', { session: this.session })
   }
   private clear() {
     this.session = null
     this.bound = null
+    this.suspended = false
   }
   /** Run whenever the active chat or project may have changed. */
   check() {
