@@ -4,6 +4,16 @@
 
 - The chat title, preview address and branch/status label now use native system monospace at their existing sizes and weights. The loading title remains fixed width; address truncation and branch spacing use their actual font. Publish remains a standard native `NSMenuToolbarItem`, whose public API has no font property; the trigger's typography needs a product choice if its glass and action behavior must remain native.
 - Follow-up authorization resolves Publish with a custom glass-backed AppKit segmented control. Its primary segment uses system monospace and still dispatches the toolbar Publish action; the chevron opens the existing menu, and an active publish routes the primary segment to that menu. The original spinner frames, menu entries and enablement remain. The toolbar fixture now checks the Publish font, size, glass and label fit; post-merge rendered inspection remains required.
+## 2026-11-04 — LKM-533 review repair: accepted-card geometry evidence
+
+- The existing chat UI native smoke now records SwiftUI question and answer line frames for synthetic accepted forms at 320, 400 and 520 point chat widths. It asserts pair order, leading alignment, card-width use, bounds, and long-answer wrapping, and writes a PNG plus geometry JSON for each width. The manager's post-merge native chat run remains the visual acceptance gate.
+
+## 2026-11-04 — LKM-533 accepted answer layout
+
+- Accepted form cards now stack each question and answer in field order, with leading alignment and available-width wrapping. The existing header, status and pending controls remain on their prior paths. The chat UI smoke uses a synthetic long answer in its accepted-card foreground capture and checks that the submitted note reaches the turn. Native visual acceptance remains with the post-merge run.
+## 2026-11-04 — LKM-532 Mark up foreground activation in native smoke
+
+- The `preview-markup` posted-event seam now waits up to five seconds for the host window to become key in the active app, re-requesting activation every half second. The prior single 90 ms wait could fail before AppKit completed activation after another native smoke. Events still require a foreground window without a sheet; failure now reports active, key, sheet and frontmost state. This changes only the disposable-profile smoke seam, so there is no user-visible changelog entry.
 
 ## 2026-11-04 — LKM-527 native suite timing and glass evidence repair
 
