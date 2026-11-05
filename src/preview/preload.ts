@@ -1799,6 +1799,14 @@ function onKey(e: KeyboardEvent): void {
     threeD.key(e)
     return
   }
+  // Escape mid-drag cancels only the spacing drag (inline value restored): this runs
+  // before blockPageInput and the Escape branch below, which would exit Selection mode.
+  if (e.key === 'Escape' && e.isTrusted && spacing.dragging()) {
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    spacing.cancel()
+    return
+  }
   // Stop page shortcuts at window capture, but retain the browser's editing
   // defaults (caret movement, selection, typing, clipboard and IME).
   if (blockPageInput(e)) {

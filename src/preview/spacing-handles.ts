@@ -3,7 +3,9 @@
  * padding side and one in the gap between its first two laid-out children. A drag
  * previews the value inline at once (the Styles preview stash, no source write, HMR
  * or agent turn); release sends one draft that the inspector stages for its Apply.
- * Escape, a cancelled pointer or a drag back to the start leave no draft.
+ * Escape, a cancelled pointer or a drag back to the start leave no draft. Escape
+ * arrives through `cancel()` from the preload's key handler, which must see it
+ * before its own Escape branch (that one exits Selection mode).
  *
  * Geometry comes from client rects, so a scroll needs only a re-position. A CSS zoom
  * or scale above the element is the ratio of its rendered to its layout width:
@@ -280,12 +282,6 @@ export function createSpacingHandles(deps: SpacingHandleDeps) {
       if (event.pointerId === e.pointerId) finish(true)
     }
     const onCancel = () => finish(false)
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      event.stopImmediatePropagation()
-      finish(false)
-    }
     try {
       grip.setPointerCapture(e.pointerId)
     } catch {
@@ -294,7 +290,6 @@ export function createSpacingHandles(deps: SpacingHandleDeps) {
     grip.addEventListener('pointermove', onMove)
     grip.addEventListener('pointerup', onUp)
     grip.addEventListener('pointercancel', onCancel)
-    window.addEventListener('keydown', onKey, true)
     drag = {
       prop: handle.prop,
       start: handle.value,
@@ -304,7 +299,6 @@ export function createSpacingHandles(deps: SpacingHandleDeps) {
         grip.removeEventListener('pointermove', onMove)
         grip.removeEventListener('pointerup', onUp)
         grip.removeEventListener('pointercancel', onCancel)
-        window.removeEventListener('keydown', onKey, true)
       }
     }
     label(handle.prop, handle.value)

@@ -5,9 +5,12 @@
  * Run via bun so the .ts imports transpile: bun run test:spacing-handles
  */
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import vm from 'node:vm'
 import { setSourceOwner } from '../src/main/source-owner.ts'
 import { NativeInspectorController } from '../src/native/inspector-controller.ts'
 import {
+  createSpacingHandles,
   dragValue,
   gapBetween,
   renderScale,
@@ -15,6 +18,7 @@ import {
 } from '../src/preview/spacing-handles.ts'
 import { parseSpacingDraft } from '../src/shared/spacing-draft.ts'
 
+const source = readFileSync(new URL('../src/preview/preload.ts', import.meta.url), 'utf8')
 const box = (left, top, width, height) => ({ left, top, width, height })
 const byProp = (handles) => Object.fromEntries(handles.map((h) => [h.prop, h]))
 
@@ -185,4 +189,187 @@ assert.doesNotMatch(agent[0][1], /column-gap/)
 assert.equal(await inspector.gesture('padding-left', '30'), false)
 assert.match(inspector.state.error, /Wait for Apply/)
 setSourceOwner(null)
+
+// Cancel mid-drag restores the exact inline value and commits no draft. A small DOM model
+// stands in for WebKit; real pointer and paint evidence stays with the native fixture.
+{
+  class FakeStyle {
+    values = new Map()
+    getPropertyValue(prop) {
+      return this.values.get(prop) ?? ''
+    }
+    setProperty(prop, value) {
+      this.values.set(prop, value)
+    }
+  }
+  class FakeElement {
+    style = new FakeStyle()
+    dataset = {}
+    attrs = new Map()
+    kids = []
+    children = []
+    listeners = new Map()
+    parentNode = null
+    ownerDocument = null
+    rect = { left: 100, top: 50, width: 200, height: 120 }
+    offsetWidth = 200
+    get isConnected() {
+      return true
+    }
+    setAttribute(key, value) {
+      this.attrs.set(key, value)
+    }
+    appendChild(node) {
+      node.parentNode = this
+      this.kids.push(node)
+    }
+    remove() {
+      if (this.parentNode) this.parentNode.kids = this.parentNode.kids.filter((n) => n !== this)
+      this.parentNode = null
+    }
+    querySelectorAll(selector) {
+      const attr = selector.slice(1, -1)
+      return this.kids.filter((node) => node.attrs.has(attr))
+    }
+    getBoundingClientRect() {
+      return this.rect
+    }
+    getClientRects() {
+      return [this.rect]
+    }
+    setPointerCapture() {}
+    addEventListener(type, fn) {
+      this.listeners.set(type, fn)
+    }
+    removeEventListener(type, fn) {
+      if (this.listeners.get(type) === fn) this.listeners.delete(type)
+    }
+  }
+  const fakeDocument = { createElement: () => new FakeElement() }
+  Object.assign(globalThis, {
+    document: fakeDocument,
+    HTMLElement: FakeElement,
+    getComputedStyle: () => ({
+      paddingTop: '20px',
+      paddingRight: '10px',
+      paddingBottom: '30px',
+      paddingLeft: '16px',
+      display: 'block',
+      rowGap: '0px',
+      columnGap: '0px'
+    })
+  })
+  const node = new FakeElement()
+  node.ownerDocument = fakeDocument
+  node.style.setProperty('padding-top', '5px')
+  const layer = new FakeElement()
+  const commits = [],
+    previews = []
+  const handles = createSpacingHandles({
+    layer: () => layer,
+    enabled: () => true,
+    preview: (el, prop, value) => {
+      previews.push([prop, value])
+      el.style.setProperty(prop, value)
+    },
+    restore: (el, prop, before) => el.style.setProperty(prop, before),
+    commit: (prop, value) => commits.push([prop, value])
+  })
+  handles.target(node, 1)
+  const grip = layer.kids.find((g) => g.dataset.prop === 'padding-top')
+  assert.ok(grip, 'the selected element shows a padding-top grip')
+  const press = (clientY) => ({
+    isTrusted: true,
+    button: 0,
+    pointerId: 1,
+    clientX: 200,
+    clientY,
+    preventDefault() {},
+    stopPropagation() {}
+  })
+  const move = (clientY) =>
+    grip.listeners.get('pointermove')({ pointerId: 1, clientY, preventDefault() {} })
+  grip.onpointerdown(press(10))
+  assert.equal(handles.dragging(), true)
+  move(30)
+  assert.equal(node.style.getPropertyValue('padding-top'), '40px', 'the drag previews at once')
+  handles.cancel()
+  assert.equal(handles.dragging(), false)
+  assert.equal(
+    node.style.getPropertyValue('padding-top'),
+    '5px',
+    'cancel restores the inline value'
+  )
+  assert.deepEqual(commits, [], 'cancel stages no draft')
+  assert.equal(grip.listeners.size, 0, 'cancel removes the drag listeners')
+
+  // Release at a new value commits exactly once; the preview stays for the inspector draft.
+  const regrip = layer.kids.find((g) => g.dataset.prop === 'padding-top')
+  regrip.onpointerdown(press(10))
+  regrip.listeners.get('pointermove')({ pointerId: 1, clientY: 14, preventDefault() {} })
+  regrip.listeners.get('pointerup')({ pointerId: 1 })
+  assert.deepEqual(commits, [['padding-top', '24']])
+  assert.equal(handles.dragging(), false)
+}
+
+// Escape mid-drag through the production key handler: only the drag ends. Selection mode and
+// the selection stay; without a drag the same key still exits Selection mode.
+{
+  const start = source.indexOf('function onKey(')
+  assert.ok(start >= 0, 'preload onKey')
+  const onKey = source.slice(start, source.indexOf('\n}', start) + 2)
+  const sent = [],
+    log = []
+  let dragging = true
+  const noop = () => {}
+  const context = vm.createContext({
+    threeD: { active: () => false },
+    spacing: {
+      dragging: () => dragging,
+      cancel: () => {
+        dragging = false
+        log.push('cancel')
+      }
+    },
+    blockPageInput: () => {
+      log.push('block')
+      return true
+    },
+    ipcRenderer: { send: (...args) => sent.push(args) },
+    CANCELLED: 'cancelled',
+    inputEl: null,
+    setActive: (next) => {
+      log.push(`active:${next}`)
+      state.active = next
+    },
+    refreshMeasure: noop,
+    isTypingTarget: () => false,
+    latinKey: () => ''
+  })
+  const state = { active: true }
+  vm.runInContext(
+    new Bun.Transpiler({ loader: 'ts' }).transformSync(`
+let editing = null, commenting = null, commentMode = null, altHeld = false;
+Object.defineProperty(globalThis, 'active', { get: () => globalThis.state.active });
+${onKey}
+globalThis.onKey = onKey;
+`),
+    Object.assign(context, { state })
+  )
+  const escapeKey = () => ({
+    key: 'Escape',
+    isTrusted: true,
+    composedPath: () => [],
+    preventDefault: () => log.push('prevent'),
+    stopImmediatePropagation: () => log.push('stop')
+  })
+  context.onKey(escapeKey())
+  assert.deepEqual(log, ['prevent', 'stop', 'cancel'], 'Escape mid-drag only cancels the drag')
+  assert.equal(state.active, true, 'Selection mode stays on')
+  assert.deepEqual(sent, [], 'no selection-cancelled event')
+  log.length = 0
+  context.onKey(escapeKey())
+  assert.deepEqual(sent, [['cancelled']], 'Escape with no drag still exits Selection mode')
+  assert.equal(state.active, false)
+}
 console.log('spacing-handles: ok')
