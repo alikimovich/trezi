@@ -17,7 +17,7 @@ interface MarkupAdded extends MarkupFile {
 }
 interface MarkupState {
   session: string
-  state: 'open' | 'failed' | 'cancelled'
+  state: 'open' | 'failed' | 'cancelled' | 'suspended'
   message?: string
 }
 interface MarkupOptions {
@@ -97,6 +97,13 @@ export class NativeMarkupController {
   }
   state(event: MarkupState) {
     if (event.session !== this.session || event.state === 'open') return
+    if (event.state === 'suspended') {
+      this.suspended = true
+      this.options.toast(
+        event.message ?? 'The preview changed; your mark up remains saved in this session.'
+      )
+      return
+    }
     this.clear()
     if (event.state === 'failed') this.options.toast(event.message ?? 'Mark up failed.')
   }

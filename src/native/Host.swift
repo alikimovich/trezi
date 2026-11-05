@@ -98,6 +98,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     var previewCover: [[String: Double]] = []
     /// LKM-391: the Mark up session over the preview (`PreviewMarkupHost.swift`).
     var markup: PreviewMarkup?
+    var previewNavigationRevision = 0
     let world = WKContentWorld.world(name: "TreziPreview")
     let directory: String
     let ephemeral: Bool

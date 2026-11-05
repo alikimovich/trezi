@@ -125,7 +125,7 @@ if (process.platform !== 'darwin') {
   const arrow = history.slice(history.indexOf('func arrow('), history.indexOf('func install()'))
   assert.match(
     arrow,
-    /markup\?\.overlay\?\.isHidden == false, host\.markup\?\.overlay\?\.ownsFocus == true \{ return true \}/,
+    /host\.markup\?\.session != nil \{ return true \}/,
     'the arrow keys are consumed while the overlay has focus'
   )
   assert.ok(
@@ -138,8 +138,8 @@ if (process.platform !== 'darwin') {
   )
   assert.match(
     validate,
-    /markup\?\.overlay\?\.isHidden == false/,
-    'Back and Forward are disabled during visible Mark up'
+    /markup\?\.session != nil/,
+    'Back and Forward are disabled through the whole Mark up session'
   )
   assert.match(source('PreviewMarkupHost.swift'), /"frozen":MarkupDigest\.hex\(/, 'a real digest')
   // The native smoke retains the Add composite and presses the composer's normal Send; the live

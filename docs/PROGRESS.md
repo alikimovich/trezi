@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-542 suspended snapshot navigation guard
+
+- Back and Forward now remain disabled through a Mark up session, including while Select uses the live preview. The retained snapshot carries the captured page identity; a changed page cannot display it on resume, and the user gets a preservation notice. The windowless fixture asserts preview hit testing leaves the canvas during suspension and returns on resume, with the marks intact. Exact-head CI, independent review and post-merge native acceptance remain with the manager.
+
 ## 2026-11-05 — LKM-542 text hit area and popup fixture repair
 
 - Text editing now tests the Core Text line's rendered bounds rather than a fixed box, so a nearby click can place a second label. The windowless canvas fixture checks two adjacent labels and drives the color popup action before asserting the chosen ink in the encoded attachment. Manager review, exact-head CI and post-merge native acceptance remain pending.

@@ -9,6 +9,10 @@ final class PreviewMarkup {
         let image: CGImage
         /// `url`, CSS viewport, zoom and scroll at the moment of capture.
         let context: [String: Any]
+        let pageIdentity: String
+        init(image: CGImage, context: [String: Any], pageIdentity: String = "") {
+            self.image = image; self.context = context; self.pageIdentity = pageIdentity
+        }
     }
     struct Failure: Error { let message: String }
     typealias Capture = (@escaping (Result<Captured, Failure>) -> Void) -> Void
@@ -19,20 +23,23 @@ final class PreviewMarkup {
     private let capture: Capture
     private let restoreFocus: (NSResponder?) -> Void
     private let changed: () -> Void
+    private let currentPageIdentity: () -> String
     private let budget: Int
     private let captureTimeout: TimeInterval
     private(set) var session: String?
     private(set) var overlay: PreviewMarkupOverlay?
     private(set) var context: [String: Any] = [:]
     private var suspended = false
+    private var capturedPageIdentity = ""
     private var area: NSRect?, page: NSRect?
     private weak var previousFocus: NSResponder?
 
     init(parent: NSView, emit: @escaping ([String: Any]) -> Void, refusal: @escaping () -> String?, capture: @escaping Capture,
-         restoreFocus: @escaping (NSResponder?) -> Void, changed: @escaping () -> Void, budget: Int = MarkupEncoder.budget,
+         restoreFocus: @escaping (NSResponder?) -> Void, changed: @escaping () -> Void, currentPageIdentity: @escaping () -> String = { "" }, budget: Int = MarkupEncoder.budget,
          captureTimeout: TimeInterval = PreviewMarkup.captureTimeout) {
         self.parent = parent; self.emit = emit; self.refusal = refusal; self.capture = capture
-        self.restoreFocus = restoreFocus; self.changed = changed; self.budget = budget; self.captureTimeout = captureTimeout
+        self.restoreFocus = restoreFocus; self.changed = changed; self.currentPageIdentity = currentPageIdentity
+        self.budget = budget; self.captureTimeout = captureTimeout
     }
     /// Under the page's own 3 s fail-safe that brings its chrome back (`PreviewMarkupScript`),
     /// so a snapshot is never taken after the chrome returned: a slower capture is given up.
@@ -64,8 +71,15 @@ final class PreviewMarkup {
         }
     }
     private func open(_ captured: Captured, _ token: String) {
+        let currentIdentity = currentPageIdentity()
+        if !captured.pageIdentity.isEmpty && !currentIdentity.isEmpty && captured.pageIdentity != currentIdentity {
+            session = nil
+            report(token, "failed", message: "The preview changed before Mark up opened. Try again on the current page.")
+            return
+        }
         let view = PreviewMarkupOverlay(image: captured.image)
         context = captured.context
+        capturedPageIdentity = captured.pageIdentity
         previousFocus = parent.window?.firstResponder
         view.onCancel = { [weak self] in self?.cancel() }
         view.onAdd = { [weak self] in self?.add() }
@@ -83,7 +97,7 @@ final class PreviewMarkup {
     }
     private func close() {
         overlay?.removeFromSuperview()
-        overlay = nil; session = nil; context = [:]; suspended = false
+        overlay = nil; session = nil; context = [:]; suspended = false; capturedPageIdentity = ""
         changed()
     }
     /// Selection may use the live page while this snapshot and its edits remain in memory.
@@ -95,6 +109,11 @@ final class PreviewMarkup {
         changed()
     }
     func resume() {
+        let currentIdentity = currentPageIdentity()
+        if let token = session, !capturedPageIdentity.isEmpty, !currentIdentity.isEmpty, capturedPageIdentity != currentIdentity {
+            report(token, "suspended", message: "The preview changed. Your mark up is preserved; return to its page or Cancel it.")
+            return
+        }
         suspended = false
         overlay?.isHidden = false
         if let overlay { parent.window?.makeFirstResponder(overlay) }

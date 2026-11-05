@@ -422,10 +422,10 @@ let parent = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
 window.contentView!.addSubview(parent)
 var events: [[String: Any]] = []
 var pendingCapture: ((Result<PreviewMarkup.Captured, PreviewMarkup.Failure>) -> Void)?
-var focused = 0, refusal: String?
-let session = PreviewMarkup(parent: parent, emit: { events.append($0) }, refusal: { refusal }, capture: { pendingCapture = $0 }, restoreFocus: { if $0 != nil { focused += 1 } }, changed: {})
+var focused = 0, refusal: String?, pageIdentity = "page-a"
+let session = PreviewMarkup(parent: parent, emit: { events.append($0) }, refusal: { refusal }, capture: { pendingCapture = $0 }, restoreFocus: { if $0 != nil { focused += 1 } }, changed: {}, currentPageIdentity: { pageIdentity })
 func captured(_ image: CGImage) -> PreviewMarkup.Captured {
-    PreviewMarkup.Captured(image: image, context: ["url":"http://localhost:5173/a?b=1", "viewportWidth":640, "viewportHeight":400, "zoom":1, "scrollX":0, "scrollY":12])
+    PreviewMarkup.Captured(image: image, context: ["url":"http://localhost:5173/a?b=1", "viewportWidth":640, "viewportHeight":400, "zoom":1, "scrollX":0, "scrollY":12], pageIdentity: pageIdentity)
 }
 let temporary = Set((try? FileManager.default.contentsOfDirectory(atPath: NSTemporaryDirectory())) ?? [])
 func state() -> String? { events.last(where: { $0["event"] as? String == "markup-state" })?["state"] as? String }
@@ -483,11 +483,19 @@ check(frames() == closedFrames, "opening moves and resizes nothing")
 session.overlay?.canvas.pointerDown(CGPoint(x: 100, y: 100), tool: .pen)
 session.overlay?.canvas.pointerDragged(CGPoint(x: 140, y: 120)); session.overlay?.canvas.pointerUp()
 let retained = session.overlay?.canvas.document.marks
+let inputPoint = NSPoint(x: 500, y: 350)
+check(parent.hitTest(inputPoint) === session.overlay?.canvas, "active annotation owns preview input")
 session.suspend()
 check(session.overlay?.isHidden == true && session.overlay?.canvas.document.marks == retained, "Select suspends the snapshot without losing edits")
+check(parent.hitTest(inputPoint) === livePage, "suspended annotation returns preview input to Select")
 check(!session.undo(), "Select keeps Undo with the active mode")
+pageIdentity = "page-b"
+session.resume()
+check(session.overlay?.isHidden == true && session.overlay?.canvas.document.marks == retained && state() == "suspended", "a changed page cannot display the retained snapshot")
+pageIdentity = "page-a"
 session.resume()
 check(session.overlay?.isHidden == false && session.overlay?.canvas.document.marks == retained, "Mark up restores the same marked snapshot")
+check(parent.hitTest(inputPoint) === session.overlay?.canvas, "resumed annotation owns preview input again")
 let beforeStale = events.count
 session.cancel("t0")
 check(session.overlay != nil && session.session == "t1", "a stale token closes nothing")

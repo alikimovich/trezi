@@ -28,17 +28,17 @@ final class PreviewHistory: NSObject, NSMenuItemValidation {
         return nil
     }
     @discardableResult func go(_ back: Bool) -> Bool {
-        guard let view, let item = target(back) else { return false }
+        guard host?.markup?.session == nil, let view, let item = target(back) else { return false }
         stepping = item; steps += 1
         ProductLog.info("preview", "Preview \(back ? "back" : "forward") to \(Host.logURL(item.url))")
         view.go(to: item)
         return true
     }
-    @objc func goBack(_ sender: Any?) { if host?.markup?.overlay?.isHidden != false { go(true) } }
-    @objc func goForward(_ sender: Any?) { if host?.markup?.overlay?.isHidden != false { go(false) } }
+    @objc func goBack(_ sender: Any?) { go(true) }
+    @objc func goForward(_ sender: Any?) { go(false) }
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         // LKM-391: the page under a Mark up overlay stays where it is.
-        if host?.markup?.overlay?.isHidden == false { return false }
+        if host?.markup?.session != nil { return false }
         switch item.action {
         case #selector(goBack(_:)): return target(true) != nil
         case #selector(goForward(_:)): return target(false) != nil
@@ -78,7 +78,7 @@ final class PreviewHistory: NSObject, NSMenuItemValidation {
         if responder is WKWebView || responder is NSTextField || (responder as? NSTextView)?.isEditable == true { return false }
         if let focus = responder as? NSView, host.sourceEditors.values.contains(where: { focus.isDescendant(of: $0) }) { return false }
         // LKM-391: Mark up's overlay takes the keys; they neither navigate nor reach the page.
-        if host.markup?.overlay?.isHidden == false, host.markup?.overlay?.ownsFocus == true { return true }
+        if host.markup?.session != nil { return true }
         return go(event.keyCode == 123)
     }
     func install() {
@@ -119,6 +119,9 @@ final class PreviewHistory: NSObject, NSMenuItemValidation {
 
 extension Host {
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-        if webView === views["preview"] { previewHistory.committed(navigation) }
+        if webView === views["preview"] {
+            previewNavigationRevision += 1
+            previewHistory.committed(navigation)
+        }
     }
 }

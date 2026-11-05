@@ -10,6 +10,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Suspend a marked-up snapshot when Select takes input, and resume it with its edits intact.
 - [x] Extend focused native model and controller fixtures for color, text, and mode transitions.
 - [x] Review repair: hit-test rendered text bounds and prove popup-selected color in the encoded attachment fixture.
+- [x] Review repair: retain the snapshot across Select, guard history and stale-page resume, and assert input routing in the windowless fixture.
 - [ ] Manager: independent review, exact-head CI, merge and post-merge native acceptance.
 
 ## LKM-529 — Simplify Trezi update availability and guided update flow

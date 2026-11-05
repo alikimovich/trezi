@@ -148,6 +148,8 @@ const added = (session, over = {}) => ({ session, ...file, capture, ...over })
   assert.equal(markup.suspended, false)
   assert.equal(sent.filter(([method]) => method === 'markupBegin').length, 1)
   markup.suspend()
+  markup.state({ session, state: 'suspended', message: 'The preview changed.' })
+  assert.equal(markup.suspended, true)
   markup.state({ session, state: 'cancelled' })
   assert.equal(markup.suspended, false)
 }
