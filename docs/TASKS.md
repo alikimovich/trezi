@@ -12,6 +12,10 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: display journaled update phases instead of raw command output, and drive the disposable native progress fixture through the badge's Update action.
 - [x] Review repair: derive each routine progress label from the update owner's running journal step, and test owner-shaped summaries across pull, install and build.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
+## LKM-532 — Native preview-markup foreground failure on main
+
+- [x] Bound the posted-event seam's foreground activation wait and retry activation while AppKit settles; retain the no-sheet guard and report focus state on failure.
+- [ ] Confirm the `core` native group on the repaired tree through the manager's desktop lock.
 
 ## LKM-527 — Native suite failure on main a8687a1b6a94
 

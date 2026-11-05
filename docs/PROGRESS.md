@@ -13,6 +13,9 @@
 
 - The build badge now opens a short availability sheet with Update and Not Now; technical details remain in its existing tooltip, About credits and Copy Commit menu. A known behind state enters the owner update directly, while the general Updates menu shows a checking state first. The owner still refuses dirty trees and non-fast-forward pulls and runs its journaled install/build workflow.
 - Update and check actions share an in-flight guard. Update progress remains in the sheet, errors retain the useful owner output, and restart waits for active work to clear. The running app must resolve to the source build, and its built host/service Info.plists and executables must match the updated source version and commit before restart. Focused unit fixtures and the native badge dialog fixture cover the affected states; exact-head CI, independent review and post-merge native acceptance remain.
+## 2026-11-04 — LKM-532 Mark up foreground activation in native smoke
+
+- The `preview-markup` posted-event seam now waits up to five seconds for the host window to become key in the active app, re-requesting activation every half second. The prior single 90 ms wait could fail before AppKit completed activation after another native smoke. Events still require a foreground window without a sheet; failure now reports active, key, sheet and frontmost state. This changes only the disposable-profile smoke seam, so there is no user-visible changelog entry.
 
 ## 2026-11-04 — LKM-527 native suite timing and glass evidence repair
 
