@@ -15,6 +15,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: exclude destructive pinned actions from Return and assert Back and Save Revision remain usable after long Skills detail scrolling.
 - [x] Review repair: open selected provider Remove confirmation from editor state without a provider picker value.
 - [x] Review repair: return from provider Remove confirmation to the selected editor with its unsaved draft, including sidebar reentry, and clear that draft on confirmed removal.
+- [x] CI fixture repair: assert Undo restores the exact captured prior memory in `resolved-lessons`.
 - [ ] Manager: current-head CI, independent review and post-merge native Settings acceptance.
 ## LKM-527 — Native suite failure on main a8687a1b6a94
 

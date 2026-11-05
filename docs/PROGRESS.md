@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-525 CI fixture repair
+
+- The `resolved-lessons` unit fixture now checks that Undo restores the exact captured prior memory and that a real memory update occurred. Its old assertion rejected any prior content containing the word “lesson,” which could fail without showing an Undo regression. No memory owner or Settings product behavior changed; current-head CI must rerun this fixture.
+
 ## 2026-11-04 — LKM-525 provider removal confirmation Back repair
 
 - Remove confirmation now returns to its immediate selected provider editor. The native sheet retains that editor's unsaved fields across confirmation and sidebar reentry, and clears the obsolete draft after a successful removal. Focused controller and windowless Settings fixtures cover the route, exact synthetic draft restoration and confirmed-remove cleanup; current-head CI and post-merge native acceptance remain with the manager.
