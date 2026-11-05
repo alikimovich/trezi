@@ -1076,6 +1076,7 @@ Staged plan with statuses: `docs/SWIFT-PREVIEWS-PLAN.md`.
 
 ## Conversational New Project (LKM-233)
 
+- [x] LKM-520: Keep a rootless planning chat and composer visible when the shell still selects the old project chat; retain the ordinary cross-project guard, cancellation and explicit destination confirmation (`src/native/smoke-start.ts`). Native acceptance remains for the manager's post-merge run.
 - [x] Home has no sidebar or preview toolbar; an empty restored project chat remains docked, and the composer names New Project by default.
 - [x] New Project entries open a planning chat without a sheet or project files. The first send docks it and uses a tool-free provider completion; its transcript is saved by the Swift conversation owner.
 - [x] The plan and editable destination appear in a native chat form. A confirmed destination calls the service-owned creation workflow, then opens the project with the same session record and a provider handoff.

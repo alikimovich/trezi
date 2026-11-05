@@ -398,6 +398,46 @@ export async function checkStartComposer(host: NativeBridge, _fixture: string, a
     (state) => !state.wantsCentered && nativeWorkspace.active?.root === project.root,
     'fixture reopened'
   )
+  const oldChat = nativeChat.active
+  const oldSelection = (await host.request('shellInspect')).selected
+  assert.equal(oldSelection, `chat:${oldChat}`)
+  assert.equal(
+    (await host.request('chatVisibilityProbe', { selected: 'chat:other-project' })).visible,
+    false,
+    'An ordinary project chat stays hidden under another project selection'
+  )
+  await nativeChat.beginPlanning(false)
+  const fromProject = await until(
+    start,
+    (state) => state.start.planning && state.progress === 1,
+    'planning from an open project'
+  )
+  const projectPlanningChat = nativeChat.active
+  assert.notEqual(projectPlanningChat, oldChat)
+  assert.equal(nativeChat.get(projectPlanningChat).root, '')
+  assert.equal((await host.request('shellInspect')).selected, oldSelection)
+  assert.equal((await host.request('chatInspect')).chat, projectPlanningChat)
+  assert.equal((await host.request('chatInspect')).visible, true)
+  assert.equal((await host.request('composerInspect')).visible, true)
+  await host.request('composerPerform', { text: 'Plan from this project' })
+  assert.equal((await host.request('composerInspect')).enabled, true)
+  assert.equal((await host.request('composerInspect')).text, 'Plan from this project')
+  await host.request('composerPerform', { action: 'send' })
+  const visiblePlan = await until(
+    () => host.request('chatInspect'),
+    (state) =>
+      state.visible &&
+      state.chat === projectPlanningChat &&
+      state.messages.some((message: { text: string }) => message.text === 'Plan from this project'),
+    'planning message remains visible under the old selection'
+  )
+  assert.equal(visiblePlan.visible, true)
+  assert.equal((await host.request('composerInspect')).visible, true)
+  assert.equal(nativeWorkspace.state.activeKey, project.key, 'Planning creates no destination')
+  assert.equal(fromProject.start.planning, true)
+  await nativeChat.action({ chat: projectPlanningChat, action: 'planning-cancel' })
+  assert.equal(nativeChat.active, oldChat, 'Cancel returns to the selected project chat')
+  assert.equal((await host.request('chatInspect')).visible, true)
 }
 
 export async function restoreStartComposer(host: NativeBridge) {
