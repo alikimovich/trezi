@@ -173,6 +173,13 @@ assert.match(layout, /interaction = \["select-object", "overlay", "speed", "mark
 assert.match(layout, /viewport = \["device", "expand"\]/)
 assert.match(layout, /tools = \["code", "layers"\]/)
 const shell = source('Shell.swift')
+assert.match(shell, /if action == "nested-back", nestedActive \{ nestedBack\.performClick\(nil\)/)
+assert.match(shell, /if action == "nested-code", nestedActive, nestedCodeEnabled/)
+assert.match(
+  shell,
+  /if action == "header-new-chat", let item = toolbarItems\["chat-new"\], item\.isEnabled, chatNewVisible/
+)
+assert.match(shell, /headerNewChat\(item\); return true/)
 assert.match(shell, /key == "viewport" \? ToolbarIslands\.viewport/)
 assert.ok(!/"expand"\]\s*:\s*\[/.test(shell), 'no second copy of the group lists')
 assert.equal(

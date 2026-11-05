@@ -16,6 +16,12 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Narrow toolbar resizing keeps the chat header and preview address in their final positions without a later shift (LKM-537).
 - New Chat stays at the chat column edge when the preview address needs to compress in a narrow toolbar (LKM-537).
 - Publish keeps its full trigger width when the toolbar is narrow (LKM-537).
+## [0.13.30] - 2026-11-05
+
+### Changed
+
+- Nested 3D inspection uses the native toolbar for Back and the selected object's Code action, without the in-preview navigation row or visible camera reset controls (LKM-536).
+
 ## [0.13.29] - 2026-11-05
 
 ### Changed
