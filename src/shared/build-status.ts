@@ -308,6 +308,3 @@ export function buildDetails(status: BuildStatus): string[] {
 export function buildStatusLine(status: BuildStatus): string {
   return `Build: ${status.label} (version ${status.version || 'unbuilt'}, build ${status.build || '-'}, commit ${status.commit || '-'}, branch ${status.branch || '-'}, tag ${status.tag || 'none'}, dirty ${status.dirty ?? 'unknown'}, main ${status.main || 'unknown'}, checked ${status.checkedAt === null ? 'never' : new Date(status.checkedAt).toISOString()}, git ${status.git}, built ${status.builtAt || 'unknown'})`
 }
-
-export const UPDATE_STEPS =
-  'In Terminal, in your Trezi folder:\n  git pull\n  bun run build\nThen quit and reopen Trezi.'

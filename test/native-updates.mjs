@@ -26,7 +26,8 @@ const update = new NativeUpdateController(
     restarts++
   },
   owner,
-  () => blocked
+  () => blocked,
+  () => null
 )
 const action = async (name) =>
   sheets.action({ id: sheets.current.state.id, action: name, values: {} })
@@ -43,7 +44,7 @@ assert.match(sheets.current.state.detail, /local changes/)
 assert.equal(restarts, 0)
 blocked = 'Save source drafts'
 await action('retry')
-assert.match(sheets.current.state.message, /Save source drafts/)
+assert.match(sheets.current.state.detail, /Save source drafts/)
 assert.equal(
   calls.filter((c) => c[0] === 'update').length,
   1,
@@ -66,10 +67,88 @@ const changingDraft = new NativeUpdateController(
     restarts++
   },
   owner,
-  () => (++checks === 1 ? null : 'New unsaved content draft')
+  () => (++checks === 1 ? null : 'New unsaved content draft'),
+  () => null
 )
 await changingDraft.apply()
 assert.equal(restarts, 1)
 assert.equal(sheets.current.state.title, 'Update could not finish')
 assert.match(sheets.current.state.detail, /New unsaved content draft/)
+let proofRestarted = false
+const invalidArtifact = new NativeUpdateController(
+  sheets,
+  '/fixture',
+  () => {
+    proofRestarted = true
+  },
+  owner,
+  () => null,
+  () => 'The built application does not match the updated version and commit.'
+)
+await invalidArtifact.apply()
+assert.equal(proofRestarted, false, 'an unproved build cannot restart')
+assert.match(sheets.current.state.detail, /does not match/)
+let releaseUpdate
+let started = 0
+const pending = new NativeUpdateController(
+  sheets,
+  '/fixture',
+  () => {
+    restarts++
+  },
+  {
+    updateCheck: owner.updateCheck,
+    update: async () => {
+      started++
+      return new Promise((resolve) => {
+        releaseUpdate = resolve
+      })
+    }
+  },
+  () => null,
+  () => null
+)
+const first = pending.apply()
+assert.equal(sheets.current.state.title, 'Updating Trezi')
+await pending.apply()
+assert.equal(started, 1, 'duplicate Update cannot start another owner workflow')
+releaseUpdate({ ok: true })
+await first
+assert.equal(restarts, 2)
+const current = new NativeUpdateController(
+  sheets,
+  '/fixture',
+  () => {
+    restarts++
+  },
+  { updateCheck: async () => ({ status: 'idle', behind: 0 }), update: owner.update },
+  () => null,
+  () => null
+)
+current.open()
+await action('check')
+assert.equal(sheets.current.state.title, 'No update found')
+assert.deepEqual(
+  sheets.current.state.actions.map((entry) => entry.id),
+  ['cancel']
+)
+const failedCheck = new NativeUpdateController(
+  sheets,
+  '/fixture',
+  () => {
+    restarts++
+  },
+  {
+    updateCheck: async () => ({ status: 'error', behind: 0, error: 'Network unavailable' }),
+    update: owner.update
+  },
+  () => null,
+  () => null
+)
+failedCheck.open()
+await action('check')
+assert.match(sheets.current.state.detail, /Network unavailable/)
+assert.equal(restarts, 2)
+await action('retry')
+assert.equal(sheets.current.state.title, 'Trezi updates', 'check retry returns to the check action')
 console.log('Native updates: owner-run update, draft guards, failure recovery and restart passed')

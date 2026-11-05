@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-529 guided Trezi update
+
+- The build badge now opens a short availability sheet with Update and Not Now; technical details remain in its existing tooltip, About credits and Copy Commit menu. A known behind state enters the owner update directly, while the general Updates menu shows a checking state first. The owner still refuses dirty trees and non-fast-forward pulls and runs its journaled install/build workflow.
+- Update and check actions share an in-flight guard. Update progress remains in the sheet, errors retain the useful owner output, and restart waits for active work to clear. The running app must resolve to the source build, and its built host/service Info.plists and executables must match the updated source version and commit before restart. Focused unit fixtures and the native badge dialog fixture cover the affected states; exact-head CI, independent review and post-merge native acceptance remain.
+
 ## 2026-11-04 — LKM-527 native suite timing and glass evidence repair
 
 - The chat-gate smoke now waits for the native collapse animation to finish before checking the preview status frame. The earlier assertion ran while the chat column was already hidden but the layout fraction was still moving, aborting the check before its window and sidebar restoration and cascading into Settings, core and chat failures.

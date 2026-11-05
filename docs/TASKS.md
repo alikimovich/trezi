@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-529 — Simplify Trezi update availability and guided update flow
+
+- [x] Replace the behind-build diagnostics sheet with a concise Update / Not Now decision; retain diagnostics in the badge tooltip, About and Copy Commit menu.
+- [x] Route Update directly to the owner-backed pull, install and build workflow; show checking, current, progress and failure states with duplicate-action and restart guards.
+- [x] Reject a restart unless the running app is the source-built app and its rebuilt host/service match the updated version and commit.
+- [x] Extend focused build-status, update-controller and native sheet fixture assertions without running a production updater smoke.
+- [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
+
 ## LKM-527 — Native suite failure on main a8687a1b6a94
 
 - [x] Wait for the manual chat collapse to reach its final native layout before asserting status placement, so the smoke restores its window and sidebar state.
