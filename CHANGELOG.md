@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.13.26] - 2026-11-04
+
 ### Changed
 
 - Skills and nested Settings panes keep existing actions above scrolling content; nested panes also show Back and their context (LKM-525).
@@ -19,6 +21,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Fixed
 
 - Removed Claude and Gemini credentials no longer reappear as unsaved Settings drafts; validation and service messages stay visible beside pinned Settings actions (LKM-525).
+
 ## [0.13.25] - 2026-11-04
 
 ### Fixed
