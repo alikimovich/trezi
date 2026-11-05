@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-11-05
+
 ### Fixed
 
 - Chat latest-message recovery keeps lazy rows above the composer after sending or switching chats (LKM-545).
