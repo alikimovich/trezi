@@ -11,6 +11,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Repair candidate core native failures in Publish sizing, toolbar inspection, branch-dot geometry and private document-start recording without relaxing their assertions.
 - [x] Reject a padded foreground toolbar capture before frame-based glass sampling at normal/narrow widths and light/dark appearances.
 - [x] Map padded foreground captures into toolbar coordinates, wait for New Chat layout after resize, and verify the full failed-CI label at a width where it fits.
+- [x] Measure the toolbar within the resize pass and assert that the chat header width cannot change after its snapshot.
+- [x] Keep a truncated branch title's ellipsis close to the chevron when its status dot slot cannot fit, with a rendered-ink regression check.
 - [ ] Manager: confirm the native chat group and independent review on the exact tree.
 ## LKM-529 — Simplify Trezi update availability and guided update flow
 

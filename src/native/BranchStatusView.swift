@@ -126,9 +126,10 @@ final class BranchPopUpCell: NSPopUpButtonCell {
     /// LKM-440: AppKit's tail truncation drops the whitespace before its "…", the dot's en-space slot
     /// with it, so the ellipsis ran into the drawn dot and the chevron fell up to 18 pt behind. The
     /// title is cut at the longest start that fits with "…" and keeps its first `kept` UTF-16 units;
-    /// whitespace after them is dropped as AppKit does. Nil when the title fits or that start does not.
+    /// whitespace after them is dropped as AppKit does. With no kept dot slot, the same cut
+    /// keeps the ellipsis close to the chevron. Nil when the title fits or no start fits.
     static func cut(_ title: NSAttributedString, width: CGFloat, keeping kept: Int) -> NSAttributedString? {
-        guard kept > 0, title.length > kept, title.size().width > width else { return nil }
+        guard kept >= 0, title.length > kept, title.size().width > width else { return nil }
         let text = title.string as NSString
         var end = title.length
         while end > kept {
@@ -137,7 +138,7 @@ final class BranchPopUpCell: NSPopUpButtonCell {
             var stop = end
             while stop > kept, let scalar = UnicodeScalar(text.character(at: stop - 1)), CharacterSet.whitespaces.contains(scalar) { stop -= 1 }
             let candidate = NSMutableAttributedString(attributedString: title.attributedSubstring(from: NSRange(location: 0, length: stop)))
-            candidate.append(NSAttributedString(string: "…", attributes: title.attributes(at: stop - 1, effectiveRange: nil)))
+            candidate.append(NSAttributedString(string: "…", attributes: title.attributes(at: max(0, stop - 1), effectiveRange: nil)))
             if candidate.size().width <= width { return candidate }
         }
         return nil

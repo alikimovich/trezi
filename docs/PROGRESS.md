@@ -1,5 +1,13 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-537 truncated branch title and chevron
+
+- Manager native verification passed 61 of 62 checks on the candidate and failed toolbar-address at the default 1320-point width. The measured branch title was cut, its dot slot was not retained, and AppKit left 19.375 points between the ellipsis and chevron. The branch cell now uses its existing explicit longest-prefix truncation even when no dot slot fits. The offscreen branch fixture checks the rendered ink gap for that case; final-tree quick and native chat/core verification remain the gates.
+
+## 2026-11-05 — LKM-537 synchronous toolbar resize measurement
+
+- The latest native core failure showed the resize snapshot at 950 points with a 144-point chat header, followed by a settled 100-point header and a 44-point address shift. One synchronous measurement still failed: it left a 152-point header and New Chat visible, then AppKit hid New Chat and shifted the address 96 points. The test resize now completes bounded layout and measurement passes so the item visibility change is reflected before its snapshot. The existing address-position assertion remains, and a new header-width assertion catches this ordering regression directly. Quick and native chat/core acceptance are pending on this tree.
+
 ## 2026-11-04 — LKM-537 native fixture geometry follow-up
 
 - The native call showed that the narrow capture's black left band persisted for five seconds. The fixture now measures that band and translates glass and enabled/disabled pixel coordinates by the same offset; it records the offset with every PNG. A focused pixel test proves the translation reaches a painted button outside the unshifted sample area. The glass reference keeps a visible interior-or-border assertion because the saved light capture had a distinct capsule edge but little center contrast. Toolbar-address waits for New Chat's nonzero rendered frame after resize, then keeps its exact edge and title checks. Publish-progress tests a full failed-CI label at 1800 points while the branch-dot fixture still covers 1320 and 850 points. These changes require the manager's next native run; the current worker's native call limit is exhausted.

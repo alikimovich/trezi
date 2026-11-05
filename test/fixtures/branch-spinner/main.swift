@@ -42,7 +42,9 @@ out["cutAfterDot"] = report(cut)
 let (name, w3) = scene(width: 92, branch: long); keep.append(w3)
 out["cutInName"] = report(name)
 let (idle, w4) = scene(width: 92, branch: long, busy: false); keep.append(w4)
-out["idle"] = report(idle)
+let idleRuns = renderedText(idle, text: idle.itemTitle(at: 0), font: small)?.runs ?? []
+out["idle"] = report(idle).merging(["cut": idle.titleCut, "kept": idle.keptSlots,
+                                  "runs": idleRuns.map { [$0.0, $0.1] }]) { _, new in new }
 // The old placement: the spinner at the end of its slot in the text, over the ellipsis.
 let (over, w5) = scene(width: 92, branch: long); keep.append(w5)
 over.progress.frame.origin.x = over.bounds.width - 16 - 12 - 14

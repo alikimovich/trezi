@@ -295,6 +295,10 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
         Math.abs(live[key] - settled[key]) <= 1,
         `Toolbar ${name}: ${key} is final in the resize pass (no reflow later): ${JSON.stringify({ live: pick(live), settled: pick(settled) })}`
       )
+    assert.ok(
+      Math.abs(live.chatHeaderWidth - settled.chatHeaderWidth) <= 1,
+      `Toolbar ${name}: chat header width is final in the resize pass: ${JSON.stringify({ live: pick(live), settled: pick(settled) })}`
+    )
     const inset = settled.windowWidth - settled.rightGroupLeading
     const moreShown = Boolean(settled.moreVisible)
     assert.equal(

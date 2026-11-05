@@ -785,8 +785,14 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
         if action == "window-width", let width = Double(id ?? ""), let window, width >= 850 && width <= 2000 {
             var frame = window.frame; frame.size.width = width; window.setFrame(frame, display: true)
-            window.contentView?.superview?.layoutSubtreeIfNeeded()
-            // Read before returning to the run loop: no deferred alignment has run yet.
+            // The first measurement can change chat-new visibility. AppKit then needs
+            // another layout to remove its slot before the header and address are final.
+            // Finish those bounded layout/measurement passes in this resize operation.
+            for _ in 0..<4 {
+                layoutToolbar()
+                measureToolbar()
+            }
+            layoutToolbar()
             resizeSnapshot = toolbarInspect(); return true
         }
         // Test captures force the window's own appearance (nil: follow the system); system settings are never touched.
