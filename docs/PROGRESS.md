@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-527 native suite timing and glass evidence repair
+
+- The chat-gate smoke now waits for the native collapse animation to finish before checking the preview status frame. The earlier assertion ran while the chat column was already hidden but the layout fraction was still moving, aborting the check before its window and sidebar restoration and cascading into Settings, core and chat failures.
+- The New Chat foreground pixel check now measures its glass against the adjacent chat header in each appearance. The neighboring island remains a separate painted-glass control check; its light preview background cannot define the contrast required on the dark chat header. Native acceptance is still required.
+
 ## 2026-11-04 — LKM-523 review repair: unresolved title unmount
 
 - The existing offscreen sidebar title fixture now detaches a row while glyphs remain unresolved. It asserts the decipher timer was active before removal, stops on detachment, leaves a readable label, and does not retain the decipher object after the cell is discarded. `sidebar-shimmer` is registered in the unit tier for the manager's CI command. The reported prior-head `contentTintColor` Swift error is absent from this checkout; exact-head CI remains required.
