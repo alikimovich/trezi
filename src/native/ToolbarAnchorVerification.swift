@@ -1,5 +1,64 @@
 import AppKit
 
+/// Disposable-profile probe of AppKit's own toolbar buttons. It invokes each native
+/// control's state callbacks directly; no event is posted to the app or system.
+extension NativeShell {
+    /// The actual AppKit control inside a standard toolbar item, shared by the
+    /// foreground interaction probe and the VoiceOver inspection.
+    func nativeToolbarButton(_ id: String) -> NSButton? {
+        guard let host = toolbarWindow, let root = host.contentView?.superview ?? host.contentView else {
+            return nil
+        }
+        let itemKey = NSSelectorFromString("item")
+        func descendant(_ view: NSView) -> NSButton? {
+            if let button = view as? NSButton { return button }
+            return view.subviews.lazy.compactMap(descendant).first
+        }
+        func walk(_ view: NSView) -> NSButton? {
+            if NSStringFromClass(type(of: view)).contains("Toolbar"), view.responds(to: itemKey),
+               let item = view.value(forKey: "item") as? NSToolbarItem,
+               item.itemIdentifier.rawValue == id { return descendant(view) }
+            return view.subviews.lazy.compactMap(walk).first
+        }
+        return walk(root)
+    }
+    /// The rendered control, distinct from its enclosing toolbar item, in main-window coordinates.
+    func nativeToolbarButtonFrame(_ id: String) -> NSRect? {
+        nativeToolbarButton(id).flatMap { mainFrame($0) }
+    }
+    @MainActor func toolbarInteractionProbe(_ stage: String) -> [String: Any] {
+        guard let host = toolbarWindow else { return ["error":"Toolbar window unavailable"] }
+        let ids = ["chat-new", "more", NSToolbarItem.Identifier.toggleSidebar.rawValue]
+        let found = ids.compactMap { id -> (String, NSButton)? in nativeToolbarButton(id).map { (id, $0) } }
+        guard found.count == ids.count else {
+            return ["error":"Native toolbar buttons missing", "found":found.map(\.0)]
+        }
+        let buttons = Dictionary(uniqueKeysWithValues: found)
+        func hover(_ button: NSButton, enter: Bool) {
+            guard let event = NSEvent.enterExitEvent(with: enter ? .mouseEntered : .mouseExited,
+                  location: button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil),
+                  modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                  windowNumber: button.window?.windowNumber ?? 0, context: nil, eventNumber: 0,
+                  trackingNumber: 0, userData: nil) else { return }
+            if enter { button.mouseEntered(with: event) } else { button.mouseExited(with: event) }
+        }
+        // Leave the preceding state before entering another one. Focus uses the actual
+        // window responder chain; pressed uses NSButton's native highlight painting.
+        for (_, button) in found { hover(button, enter: false); button.highlight(false) }
+        if stage == "reset" { _ = host.makeFirstResponder(nil) }
+        else if stage == "hover" { for (_, button) in found { hover(button, enter: true) } }
+        else if stage == "pressed" { for (_, button) in found { button.highlight(true) } }
+        else if stage.hasPrefix("focus-"),
+                let id = ["new":"chat-new", "more":"more", "sidebar":ids[2]][String(stage.dropFirst(6))],
+                let button = buttons[id] {
+            guard host.makeFirstResponder(button) else { return ["error":"Toolbar button refused focus", "stage":stage] }
+        } else { return ["error":"Unknown toolbar interaction stage", "stage":stage] }
+        host.contentView?.displayIfNeeded()
+        return ["stage":stage, "buttons":found.map { ["id":$0.0, "class":NSStringFromClass(type(of: $0.1)),
+                   "focused":host.firstResponder === $0.1, "highlighted":$0.1.cell?.isHighlighted ?? false] }]
+    }
+}
+
 /// Test-broker commands for where the toolbar's popover and menus open (LKM-229), in screen
 /// coordinates, in a normal or a full-screen window. In full screen AppKit moves the toolbar
 /// into its own window. A menu opens for real and a timer cancels it during its tracking, so

@@ -29,6 +29,16 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: clear native Claude/Gemini secure values and retained drafts after successful removal, preserving failed-removal and unrelated drafts.
 - [x] Review repair: show exact validation and service messages beside pinned Settings actions above long scrolling forms.
 - [ ] Manager: current-head CI, independent review and post-merge native Settings acceptance.
+## LKM-535 — Standalone New Chat toolbar item
+
+- [x] Move New Chat from the title's custom glass view to a standalone system-rendered AppKit toolbar item, retaining its guarded action, label, tooltip and visibility.
+- [x] Reserve the native item's measured width beside the resizable chat title and update layout and appearance fixture assertions.
+- [x] Review repair: assert foreground hover, pressed and keyboard-focus painting for New Chat beside More and the sidebar toggle in both appearances, with capture paths in the fixture receipt.
+- [x] Review repair: keep New Chat's title-driven visibility on macOS 13/14 and assert the rendered toolbar button's VoiceOver role and label.
+- [x] Review repair: assert enabled-to-disabled foreground paint changes and measured height and vertical-center alignment beside More and the sidebar toggle at normal and narrow widths.
+- [x] Review repair: measure the rendered New Chat, More and sidebar NSButtons for foreground height and vertical-center alignment, separately from toolbar item frames.
+- [ ] Manager: independent review, exact-head CI, PR to main and post-merge foreground native acceptance in light and dark modes.
+
 ## LKM-533 — Stack accepted question and answer pairs
 
 - [x] Render each accepted form question immediately above its answer, leading-aligned across the card width.

@@ -154,24 +154,29 @@ export async function checkSidebarChats(host: NativeBridge, artifacts: string) {
   const header = await shell()
   assert.equal(header.chatNewVisible, true, 'the chat header shows New Chat')
   assert.equal(header.chatNewEnabled, true, 'the chat header New Chat is enabled for the project')
+  assert.equal(header.chatNewStandalone, true, 'New Chat is a standalone system toolbar item')
   assert.equal(
-    header.chatNewSegmented,
-    true,
-    'New Chat uses the same segmented control as the islands'
+    header.chatNewAccessibilityRole,
+    'AXButton',
+    'VoiceOver reads toolbar New Chat as a button'
   )
-  assert.equal(header.chatNewTextured, true, 'New Chat matches the textured toolbar islands')
-  assert.equal(header.chatNewMomentary, true, 'New Chat stays momentary')
-  assert.equal(header.chatNewButtonRole, true, 'VoiceOver keeps New Chat as a button')
+  assert.equal(
+    header.chatNewAccessibilityLabel,
+    'New Chat',
+    'VoiceOver receives the New Chat label'
+  )
   assert.equal(header.chatNewToolTip, 'New Chat', 'New Chat keeps its tooltip')
   assert.equal(header.chatNewGlyph, 'New Chat', 'New Chat keeps its symbol description')
   const rect = (value: string) => (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
   const [titleX, , titleWidth] = rect(header.chatTitleFrame)
   const [buttonX, , buttonWidth] = rect(header.chatNewFrame)
   assert.ok(
-    buttonWidth === 32 &&
+    buttonWidth >= 28 &&
+      buttonWidth <= 48 &&
       buttonX >= titleX + titleWidth + 7 &&
-      Math.abs(buttonX + buttonWidth - (header.chatHeaderTrailing - 4)) <= 1,
-    'New Chat is at the chat header trailing edge with room for the title'
+      buttonX >= header.chatHeaderTrailing &&
+      Math.abs(buttonX + buttonWidth - (header.detailLeading + header.chatWidth - 4)) <= 3,
+    'New Chat is at the chat column trailing edge with room for the title'
   )
   // Grow to more than five open chats; each gets a draft, so New chat never reuses it. Five new
   // chats: one takes the attachment, four get a prompt and fill History past "Show N more".
