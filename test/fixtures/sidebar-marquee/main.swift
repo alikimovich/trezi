@@ -11,6 +11,7 @@ _ = NSApplication.shared
 
 final class NativeShell: NSObject {
     var rows: [ShellRow] = []
+    var sidebarDecipherStarts: [String: CFTimeInterval] = [:]
     var currentProject: String?
     var selectedID: String?
     var sidebarHistory = SidebarHistoryState()
@@ -130,7 +131,7 @@ func resize(_ cell: SidebarChatCell, to width: CGFloat, at time: Double) {
 /// Selection: the row's title gets wider with no change to the title's own frame.
 func select(_ cell: SidebarChatCell, at time: Double) {
     plan.append((time, "select", {
-        cell.title!.label.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        cell.title!.label.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
         cell.backgroundStyle = .emphasized
     }))
 }
@@ -140,6 +141,9 @@ func phases(_ scenario: String, _ cell: SidebarChatCell) {
     take(scenario, "start", cell, at: 0.3)
     take(scenario, "mid", cell, at: delay + travel / speed / 2)
     take(scenario, "end", cell, at: delay + travel / speed + 0.5)
+}
+func endTime(_ cell: SidebarChatCell, extraTravel: Double = 0) -> Double {
+    delay + (Double(cell.title!.travel) + 26 + extraTravel) / speed + 0.5
 }
 
 let selected = makeCell(long, width: 230, selected: true)
@@ -171,27 +175,27 @@ take("timing", "late", unselected, at: delay + 1.1)
 
 resize(narrowedInDelay, to: 170, at: 0.3)
 take("narrowedInDelay", "mid", narrowedInDelay, at: 3.0)
-take("narrowedInDelay", "end", narrowedInDelay, at: 7.8)
+take("narrowedInDelay", "end", narrowedInDelay, at: endTime(narrowedInDelay, extraTravel: 60))
 resize(narrowedMid, to: 170, at: 1.2)
 take("narrowedMid", "after", narrowedMid, at: 1.5)
-take("narrowedMid", "end", narrowedMid, at: 7.8)
-take("narrowedAtEnd", "held", narrowedAtEnd, at: 5.7)
-resize(narrowedAtEnd, to: 170, at: 5.8)
-take("narrowedAtEnd", "end", narrowedAtEnd, at: 7.8)
-take("widenedAtEnd", "held", widenedAtEnd, at: 6.7)
-resize(widenedAtEnd, to: 240, at: 6.8)
-take("widenedAtEnd", "end", widenedAtEnd, at: 7.0)
-take("widenedToFit", "held", widenedToFit, at: 6.7)
-resize(widenedToFit, to: 400, at: 6.8)
-take("widenedToFit", "end", widenedToFit, at: 7.0)
+take("narrowedMid", "end", narrowedMid, at: endTime(narrowedMid, extraTravel: 60))
+take("narrowedAtEnd", "held", narrowedAtEnd, at: endTime(narrowedAtEnd))
+resize(narrowedAtEnd, to: 170, at: endTime(narrowedAtEnd) + 0.1)
+take("narrowedAtEnd", "end", narrowedAtEnd, at: endTime(narrowedAtEnd, extraTravel: 60))
+take("widenedAtEnd", "held", widenedAtEnd, at: endTime(widenedAtEnd))
+resize(widenedAtEnd, to: 240, at: endTime(widenedAtEnd) + 0.1)
+take("widenedAtEnd", "end", widenedAtEnd, at: endTime(widenedAtEnd) + 0.3)
+take("widenedToFit", "held", widenedToFit, at: endTime(widenedToFit))
+resize(widenedToFit, to: 600, at: endTime(widenedToFit) + 0.1)
+take("widenedToFit", "end", widenedToFit, at: endTime(widenedToFit) + 0.3)
 select(selectedMid, at: 1.2)
-take("selectedMid", "end", selectedMid, at: 7.8)
-take("selectedAtEnd", "held", selectedAtEnd, at: 6.7)
-select(selectedAtEnd, at: 6.8)
-take("selectedAtEnd", "end", selectedAtEnd, at: 7.8)
+take("selectedMid", "end", selectedMid, at: endTime(selectedMid))
+take("selectedAtEnd", "held", selectedAtEnd, at: endTime(selectedAtEnd))
+select(selectedAtEnd, at: endTime(selectedAtEnd) + 0.1)
+take("selectedAtEnd", "end", selectedAtEnd, at: endTime(selectedAtEnd) + 0.3)
 resize(overflowsLater, to: 90, at: 0.9)
 take("overflowsLater", "start", overflowsLater, at: 0.6)
-take("overflowsLater", "end", overflowsLater, at: 3.0)
+take("overflowsLater", "end", overflowsLater, at: endTime(overflowsLater, extraTravel: 140))
 take("fits", "end", fits, at: 1.5)
 take("leaving", "scrolling", leaving, at: 1.4)
 plan.append((1.5, "leave", { leaving.setHovered(false) }))

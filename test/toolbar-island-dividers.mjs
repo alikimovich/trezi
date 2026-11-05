@@ -10,6 +10,30 @@ const binary = swiftBuild('toolbar-island-dividers', [
   'src/native/ToolbarLayout.swift'
 ])
 const result = JSON.parse(runFixture(binary))
+const glass = result.newChatGlass
+assert.deepEqual(
+  Object.keys(glass).sort(),
+  ['disabled', 'focus', 'hover', 'idle', 'pressed', 'restored'].sort(),
+  'New Chat fixture covers each native interaction state'
+)
+for (const stage of ['idle', 'hover', 'pressed', 'focus', 'disabled', 'restored']) {
+  assert.equal(glass[stage].textured, true, `${stage}: shared textured cell`)
+  assert.equal(glass[stage].momentary, true, `${stage}: momentary action`)
+  assert.equal(glass[stage].template, true, `${stage}: native template tint`)
+  assert.equal(
+    glass[stage].glyphSize,
+    glass[stage].neighborGlyphSize,
+    `${stage}: neighboring glyph size`
+  )
+}
+assert.equal(glass.idle.bordered, false, 'idle: only the enclosing native glass paints')
+assert.equal(glass.hover.bordered, true, 'hover: native textured bezel appears')
+assert.equal(glass.pressed.bordered, true, 'pressed: native textured bezel remains')
+assert.equal(glass.focus.focused, true, 'keyboard focus reaches the control')
+assert.equal(glass.focus.bordered, true, 'focus: native textured bezel appears')
+assert.equal(glass.disabled.enabled, false, 'disabled state')
+assert.equal(glass.disabled.bordered, false, 'disabled hover does not brighten the control')
+assert.equal(glass.restored.bordered, false, 'idle treatment returns')
 const ISLANDS = ['interaction', 'viewport', 'tools']
 // The boundary is darker than the bezel beside it by this much where a divider draws.
 const VISIBLE = 0.05
