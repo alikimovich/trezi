@@ -13,6 +13,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Changed
 
 - New Chat is a standalone native toolbar button with system-managed Liquid Glass and interaction states (LKM-535).
+## [0.13.25] - 2026-11-04
+
+### Fixed
+
+- Accepted answer cards now show each question directly above its full-width answer (LKM-533).
 
 ## [0.13.24] - 2026-11-04
 

@@ -11,6 +11,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: keep New Chat's title-driven visibility on macOS 13/14 and assert the rendered toolbar button's VoiceOver role and label.
 - [ ] Manager: independent review, exact-head CI, PR to main and post-merge foreground native acceptance in light and dark modes.
 
+## LKM-533 — Stack accepted question and answer pairs
+
+- [x] Render each accepted form question immediately above its answer, leading-aligned across the card width.
+- [x] Capture a synthetic long-answer example in the existing chat UI smoke fixture and retain submitted-value assertions.
+- [x] Review repair: assert the rendered accepted-card pair geometry and wrapping at narrow, ordinary and wide chat widths; save PNG and frame JSON for each.
+- [ ] Manager: independent review, exact-head CI and post-merge native chat acceptance.
 ## LKM-532 — Native preview-markup foreground failure on main
 
 - [x] Bound the posted-event seam's foreground activation wait and retry activation while AppKit settles; retain the no-sheet guard and report focus state on failure.
