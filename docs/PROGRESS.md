@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-538 retirement census CI repair
+
+- The revised native inspector smoke checks the two-tab UI without writing a fixture file. Its old test-effect row is removed from the executable retirement census; the Bun-owned retirement gate remains open. Current-head CI must rerun the census and unit shards.
+
 ## 2026-11-04 — LKM-538 provider rule review repair
 
 - Provider rules no longer tell an agent to answer a retired Inspector Custom request with a `trezi-controls` block. The control-capable providers continue to use the existing `chat_island` guidance; rules version 49 and the rules fixture cover the changed prompt. Current-head CI and post-merge native acceptance remain manager gates.
