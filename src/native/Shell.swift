@@ -785,6 +785,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
         if action == "window-width", let width = Double(id ?? ""), let window, width >= 850 && width <= 2000 {
             var frame = window.frame; frame.size.width = width; window.setFrame(frame, display: true)
+            window.contentView?.superview?.layoutSubtreeIfNeeded()
             // Read before returning to the run loop: no deferred alignment has run yet.
             resizeSnapshot = toolbarInspect(); return true
         }

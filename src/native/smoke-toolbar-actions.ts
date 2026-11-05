@@ -274,7 +274,7 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
 
     // Capture each interaction beside More and the sidebar toggle at normal and narrower
     // widths. The narrower case collapses the sidebar so all three items stay visible.
-    const originalWidth = (await host.request('toolbarInspect')).windowWidth
+    const originalWidth = (await host.request('shellInspect')).windowWidth
     const originalSidebarCollapsed = (await shell()).sidebarCollapsed
     for (const { layout, appearance } of [
       { layout: 'normal', appearance: 'light' },

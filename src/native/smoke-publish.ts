@@ -466,7 +466,12 @@ export async function checkPublishProgress(
     git.statuses.set(root, { ...sample, ci: 'failed', failing: ['build', 'lint'] })
     git.render()
     const failed = await until(
-      (s) => String(s.branchAccessibilityValue).includes('●2') && s.branchDotState === 'failed',
+      (s) =>
+        Math.abs(s.windowWidth - 1320) < 1 &&
+        String(s.branchAccessibilityValue).includes('●2') &&
+        s.branchDotState === 'failed' &&
+        !s.branchTruncated &&
+        s.branchTitleWidth <= s.branchTitleRoom + 0.5,
       'Failed CI'
     )
     assert.equal(failed.branchBusy, false, 'Failed CI stops the spinner')

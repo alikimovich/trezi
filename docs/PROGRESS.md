@@ -1,5 +1,13 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-537 native follow-up from candidate check
+
+- The first worker native run got past the original Publish-width, unsupported-command and private receipt assertions, then reported later core failures. The test resize now lays out the window's view tree before taking its synchronous toolbar snapshot. The Publish progress check waits for the restored 1320-point width and a fitting failed-CI title before asserting it. The narrow light glass capture showed white interior and exterior samples at the fixture's current points; its paint failure remains unresolved without another native run. The manager's native acceptance is still required.
+
+## 2026-11-04 — LKM-537 candidate core native repair
+
+- The preserved candidate native log identified four core failures in addition to the earlier chat capture. Publish now gives its custom toolbar view its intrinsic frame when created and when its label changes; the toolbar fixture still requires a measured full-width control. Toolbar actions use the host's supported shell inspection command. The branch-dot fixture reads the title rect's actual slot and ellipsis clearance instead of a fixed 90-point proxy. Private WebKit load recording retries a temporarily unavailable document-start read and reports both starts if exact-source verification still rejects a replacement. The existing exact-source comparison remains required. Quick and native chat/core checks are pending the final tree.
+
 ## 2026-11-04 — LKM-537 review toolbar layout root cause
 
 - The deferred-frame wait showed a stable 87-point New Chat offset from the chat column edge, not a transient AppKit placement delay. The chat header was reserving the preview address's preferred 180-point width when the toolbar could only fit that address at its existing 80-point floor. Header sizing now reserves the floor; the address still chooses its own preferred width whenever it fits. The fixture keeps its exact edge and title-clearance assertion and reports measured frames on failure.

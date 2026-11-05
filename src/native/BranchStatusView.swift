@@ -60,6 +60,10 @@ final class BranchPopUpButton: NSPopUpButton {
         let title = fullTitle
         return NSRect(x: title.minX + width(dotPrefix), y: title.minY, width: width(BranchStatusDot.slot), height: title.height)
     }
+    var dotCanKeepCutTitle: Bool {
+        let title = cell?.titleRect(forBounds: bounds) ?? bounds
+        return dotSlot.maxX + width("…") <= title.maxX
+    }
     override func layout() {
         super.layout()
         let full = fullTitle, slot = dotSlot, size = BranchStatusDot.diameter, side = Self.spinnerSize
@@ -75,7 +79,7 @@ final class BranchPopUpButton: NSPopUpButton {
         // Tail truncation keeps the slot only while it and the ellipsis still fit; clipping has none.
         let title = cell?.titleRect(forBounds: bounds) ?? bounds
         titleCut = width(itemTitle(at: 0)) > title.width
-        dot.isHidden = spinnerMode != .clipped && titleCut && slot.maxX + width("…") > title.maxX
+        dot.isHidden = spinnerMode != .clipped && titleCut && !dotCanKeepCutTitle
         // Inline, a cut title already leaves the spinner's slot and the ellipsis room (`spinnerMode`).
         let kept = spinnerMode == .inline && !progress.isHidden ? progressPrefix + BranchStatusDot.slot : dotPrefix + BranchStatusDot.slot
         keptSlots = titleCut && !dot.isHidden ? (kept as NSString).length : 0
@@ -99,6 +103,7 @@ final class BranchPopUpButton: NSPopUpButton {
                 "branchProgressFits":fullTitle.contains(progress.frame) && spinnerClear(),
                 "branchAccessibilityValue":accessibilityValue() as? String ?? ""]
             .merging(dot.inspect(slot: dotSlot, in: self)) { _, new in new }
+            .merging(["branchDotCanKeepCutTitle":dotCanKeepCutTitle]) { _, new in new }
     }
     override var intrinsicContentSize: NSSize {
         let size = super.intrinsicContentSize

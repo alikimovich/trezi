@@ -8,6 +8,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Reveal the accepted component's containing message before measuring its card and answer lines across chat widths.
 - [x] Wait for the standalone New Chat toolbar frame to meet its existing geometry assertion before the review chat smoke continues.
 - [x] Let the preview address compress to its existing floor so New Chat reaches the chat column edge at the standard window width.
+- [x] Repair candidate core native failures in Publish sizing, toolbar inspection, branch-dot geometry and private document-start recording without relaxing their assertions.
 - [ ] Manager: confirm the native chat group and independent review on the exact tree.
 ## LKM-530 — System monospace in top bar
 
