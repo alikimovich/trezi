@@ -129,6 +129,43 @@ extension Host {
             markup?.place(area: NSRect(x: frame.minX, y: frame.minY, width: width, height: height))
             markup?.overlay?.layoutSubtreeIfNeeded()
             return ["ok":true]
+        case "annotationColorFocus":
+            guard let overlay = markup?.overlay, let name = c["color"] as? String,
+                  let popup = overlay.island.face.subviews.compactMap({ $0 as? NSPopUpButton }).first,
+                  popup.item(withTitle: name) != nil else { return ["error":"Color unavailable"] }
+            popup.selectItem(withTitle: name)
+            _ = NSApp.sendAction(popup.action!, to: popup.target, from: popup)
+            guard window.makeFirstResponder(popup) else { return ["error":"Color focus unavailable"] }
+            let text = overlay.controls.first { $0.cell?.accessibilityLabel() == "Text" }
+            return ["color":popup.accessibilityValue() as? String ?? "", "focused":window.firstResponder === popup,
+                    "tool":overlay.tool.rawValue, "textSelected":text?.state == .on,
+                    "textAccessible":text?.cell?.accessibilityValue() as? String ?? "",
+                    "textTinted":text?.contentTintColor == .controlAccentColor,
+                    "peersOff":overlay.controls.filter { ["Pen", "Rectangle", "Circle", "Arrow"].contains($0.cell?.accessibilityLabel() ?? "") }
+                        .allSatisfy { $0.state == .off && $0.contentTintColor == nil }]
+        case "annotationEditText":
+            guard let overlay = markup?.overlay, overlay.tool == .text,
+                  let x = c["x"] as? Double, let y = c["y"] as? Double,
+                  let value = c["text"] as? String else { return ["error":"Text edit unavailable"] }
+            overlay.canvas.pointerDown(overlay.canvas.mapping.toView(CGPoint(x: x, y: y)), tool: .text)
+            guard let editor = overlay.canvas.subviews.compactMap({ $0 as? NSTextField }).first else { return ["error":"No canvas editor"] }
+            let previous = editor.stringValue
+            editor.stringValue = value; overlay.canvas.commitText()
+            return ["previous":previous, "text":overlay.canvas.document.marks.last?.text ?? "",
+                    "marks":overlay.canvas.document.marks.count]
+        case "annotationComposite":
+            guard let canvas = markup?.overlay?.canvas,
+                  let image = MarkupRenderer.composite(canvas.image, marks: canvas.document.marks, maxPixels: 2048),
+                  let encoded = MarkupEncoder.encode(canvas.image, marks: canvas.document.marks) else { return ["error":"Composite unavailable"] }
+            let bitmap = NSBitmapImageRep(cgImage: image)
+            let green = stride(from: 0, to: bitmap.pixelsHigh, by: 3).reduce(0) { count, y in
+                count + stride(from: 0, to: bitmap.pixelsWide, by: 3).filter { x in
+                    guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return false }
+                    return color.greenComponent > color.redComponent * 1.4 && color.greenComponent > color.blueComponent * 1.2
+                }.count
+            }
+            return ["data":encoded.data.base64EncodedString(), "type":encoded.type,
+                    "width":image.width, "height":image.height, "greenPixels":green]
         default: return ["error":"Unknown Mark up test action"]
         }
     }

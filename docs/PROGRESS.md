@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-543 narrow annotation composite and Send fixture
+
+- Added an opt-in native smoke that captures a disposable page, selects green ink and Text, moves focus to the color chooser, creates and revises canvas text, and checks exclusive Select/Mark up handover with the same marks and frozen capture. The fixture records state and foreground PNGs, compares the native encoded composite with the chat attachment by SHA-256, then uses the existing intercepted normal Send path to check the outbound image hash and prompt. Shipping annotation behavior is unchanged. Independent review, exact-current-head CI and the operator's serialized post-merge native run remain pending.
+
+
 ## 2026-11-05 — LKM-542 persistent Text selection fixture
 
 - The windowless Mark up fixture now moves focus from the selected Text tool to the color chooser and checks its on state, accent tint and accessible selected value while other tools remain off. This covers persistent tool selection across a real focus change without altering the approved annotation controls.
