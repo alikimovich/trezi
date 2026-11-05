@@ -377,6 +377,10 @@ export function installNativeInspector(
         void controller.select(value).catch(report)
       }
     } else if (channel === 'preview:selection-lost') dropSelection()
+    // LKM-541: Layers closed with Select off; the preview already dropped its outline.
+    else if (channel === 'preview:layers-released') selectToolOff()
+    else if (channel === 'preview:spacing-draft')
+      void controller.gesture(value.prop, value.value).catch(report)
     else if (channel === 'preview:select-cancelled') {
       context.selection(null)
       void controller.select(null).catch(report)

@@ -298,6 +298,7 @@ export const UNIT = [
   'layers-labels',
   'measure-distance',
   'guide-distance',
+  'spacing-handles',
   'sibling-drop',
   'inline-style',
   'css-values',

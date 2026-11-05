@@ -148,6 +148,7 @@
     "test:layers-labels": "bun test/layers-labels.mjs",
     "test:measure-distance": "bun test/measure-distance.mjs",
     "test:guide-distance": "bun test/guide-distance.mjs",
+    "test:spacing-handles": "bun test/spacing-handles.mjs",
     "test:preview-overlay": "bun test/preview-overlay.mjs",
     "test:preview-markup": "bun test/preview-markup.mjs",
     "test:markup-controller": "bun test/markup-controller.mjs",

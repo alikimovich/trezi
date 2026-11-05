@@ -787,6 +787,49 @@ export class NativeInspectorController {
       }
     }
   }
+  /**
+   * LKM-541: a Selection-mode spacing handle was released at `value` px. It stages the
+   * same draft as typing into that Styles field, so one explicit Apply batches it
+   * through the agent with any other drafts. A side without its own field, a field
+   * without a proven source owner or a changed source drops the gesture's preview.
+   */
+  async gesture(prop: string, value: string): Promise<boolean> {
+    if (!this.element || !/^\d+$/.test(value)) {
+      await this.send('styles:clear-preview', { prop })
+      return false
+    }
+    this.state.error = ''
+    if (/^padding-/.test(prop) && !this.expanded.has('padding')) this.expanded.add('padding')
+    if (this.state.tab !== 'styles') this.state.tab = 'styles'
+    this.build()
+    const field = 'style:' + prop
+    const before = this.drafts.get(field)
+    const target = this.state.fields.find((item) => item.id === field)
+    if (target && !target.disabled && this.bindings.get(field)?.preview)
+      await this.action({
+        root: this.state.root,
+        generation: this.state.generation,
+        action: 'apply',
+        field,
+        value
+      })
+    const staged = this.drafts.get(field)
+    if (staged && staged !== before) {
+      // The draft and its Apply live in the inspector: show it.
+      this.state.visible = true
+      this.publish()
+      return true
+    }
+    await this.send('styles:clear-preview', { prop })
+    if (this.drafts.size) await this.projectDrafts()
+    if (!this.state.error)
+      this.state.error = target
+        ? `${prop} has no source-backed preview here. Edit it in Styles or ask the agent.`
+        : `${prop} is not editable for this element. Edit it in Styles or ask the agent.`
+    this.state.visible = true
+    this.publish()
+    return false
+  }
   async action(action: NativeInspectorAction) {
     if (action.root !== this.state.root || action.generation !== this.state.generation) return
     const root = this.state.root,

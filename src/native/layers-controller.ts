@@ -79,6 +79,12 @@ export class NativeLayersController {
   selection: LayerSelection | null = null
   private pending: PendingMove | null = null
   private generation = 0
+  /** A row was picked while this Layers session was open (LKM-541). */
+  private picked = false
+  /** Selection mode is on: closing Layers keeps the selection. */
+  selectionMode: () => boolean = () => false
+  /** Closing Layers with Selection mode off drops the transient selection, outline and inspector. */
+  release: () => void = () => {}
   constructor(
     readonly invoke: (channel: string, ...args: any[]) => Promise<any>,
     readonly send: (channel: string, ...args: any[]) => Promise<any>,
@@ -117,7 +123,14 @@ export class NativeLayersController {
       ++this.generation
       this.notice = ''
       await this.send('layers:hover', null)
+      // LKM-541: Select off makes a row pick transient; Select on keeps it. Neither
+      // opening nor closing Layers changes Selection mode itself.
+      if (this.picked && !this.selectionMode()) {
+        this.selection = null
+        this.release()
+      }
     }
+    this.picked = false
     this.publish()
     if (this.visible) await this.refresh()
   }
@@ -147,11 +160,14 @@ export class NativeLayersController {
     }
     const moved = this.settleMove()
     this.publish()
-    if (moved)
+    if (moved) {
+      this.picked = true
       await this.send('layers:select', {
         path: moved.path,
-        fingerprint: { tag: moved.tag, source: moved.source }
+        fingerprint: { tag: moved.tag, source: moved.source },
+        from: 'layers'
       })
+    }
   }
   /** The moved element once the page shows the move; it becomes the selection. */
   private settleMove(): LayerNode | null {
@@ -214,11 +230,20 @@ export class NativeLayersController {
     }
     if (action.action === 'hover' || action.action === 'select') {
       // A row click is the selection until the page reports the pick back.
-      if (action.action === 'select' && node)
+      if (action.action === 'select' && node) {
+        if (!this.visible) return
         this.selection = { path: node.path, tag: node.tag, source: node.source, id: node.id }
+        this.picked = true
+      }
       await this.send(
         `layers:${action.action}`,
-        node ? { path: node.path, fingerprint: { tag: node.tag, source: node.source } } : null
+        node
+          ? {
+              path: node.path,
+              fingerprint: { tag: node.tag, source: node.source },
+              ...(action.action === 'select' && { from: 'layers' })
+            }
+          : null
       )
       return
     }

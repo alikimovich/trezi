@@ -87,6 +87,35 @@ extension Host {
         let (_, owners) = try await movePointer(over: preview, to: over ? island : page, from: over ? page : island)
         return ["owners":owners.count, "picks":previewPicks - picks, "picksTotal":previewPicks, "expectedCover":previewCoverRects()]
     }
+    /// LKM-541: a real pointer drag on the page from (x, y) by (dx, dy) page points. The events
+    /// are queued on the app for this window like ChatClickVerification's: no CGEvent, nothing
+    /// posted to the system, the cursor stays put, and WebKit reports them as trusted input.
+    @MainActor func previewDrag(_ c: [String: Any]) async throws -> [String: Any] {
+        func fail(_ reason: String) -> NSError { NSError(domain: "LayersIsland", code: 3, userInfo: [NSLocalizedDescriptionKey: reason]) }
+        NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil)
+        for _ in 0..<40 where !(window.isKeyWindow && NSApp.isActive) { try await Task.sleep(nanoseconds: 50_000_000) }
+        guard let preview = views["preview"], window.isKeyWindow, NSApp.isActive else { throw fail("Show a foreground preview first") }
+        var to = c
+        to["x"] = (c["x"] as? Double ?? 20) + (c["dx"] as? Double ?? 0)
+        to["y"] = (c["y"] as? Double ?? 20) + (c["dy"] as? Double ?? 0)
+        let start = previewWindowPoint(preview, c), end = previewWindowPoint(preview, to)
+        func event(_ type: NSEvent.EventType, _ point: NSPoint) throws -> NSEvent {
+            guard let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                 windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1) else {
+                throw fail("Cannot create \(type)")
+            }
+            return event
+        }
+        var events = [try event(.leftMouseDown, start)]
+        for step in 1...6 {
+            let share = CGFloat(step) / 6
+            events.append(try event(.leftMouseDragged, NSPoint(x: start.x + (end.x - start.x) * share, y: start.y + (end.y - start.y) * share)))
+        }
+        events.append(try event(.leftMouseUp, end))
+        for event in events { NSApp.postEvent(event, atStart: false) }
+        try await Task.sleep(nanoseconds: 300_000_000)
+        return ["start": NSStringFromPoint(start), "end": NSStringFromPoint(end)]
+    }
     /// The whole window in light or dark: only this window's appearance is forced, then restored.
     @MainActor func captureLayersIsland(dark: Bool) async throws -> [String: Any] {
         guard let content = window.contentView?.superview else { throw NSError(domain: "LayersIsland", code: 2, userInfo: [NSLocalizedDescriptionKey: "No window content"]) }

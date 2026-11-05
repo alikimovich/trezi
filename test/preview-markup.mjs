@@ -31,6 +31,9 @@ if (process.platform !== 'darwin') {
     'data-trezi-selbox',
     'data-trezi-size',
     'data-trezi-source',
+    // LKM-541 spacing grips and their readout sit in the overlay's grips layer.
+    'data-trezi-spacing-handle',
+    'data-trezi-spacing-readout',
     'data-trezi-toolbar',
     // A style sheet that hides the scrollbars; it paints nothing.
     'data-trezi-frame-style'

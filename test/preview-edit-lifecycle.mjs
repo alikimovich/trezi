@@ -66,6 +66,7 @@ const context = vm.createContext({
   CANCELLED: 'cancel',
   sourceStamp: () => 'index.html:3:1',
   threeD: { active: () => false },
+  spacing: { position: noop },
   previewTimings: { enabled: false },
   isOverlay: () => false,
   hover: { clear: noop },
