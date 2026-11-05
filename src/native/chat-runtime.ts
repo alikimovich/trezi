@@ -64,6 +64,23 @@ export function installNativeChat(
     {
       origin: currentTurn,
       overrides: new IslandOverrides(islandPreviewPort()),
+      applyDraft: async (key, prompt) => {
+        const chat = nativeChat.chats.get(key)
+        if (
+          !chat ||
+          nativeChat.active !== key ||
+          !chat.ready ||
+          chat.root !== islands.sessions.get(key)?.root ||
+          chat.isRunning ||
+          chat.queue.length
+        )
+          throw new Error('Finish the current chat turn before applying this draft.')
+        const previousTurn = chat.turn
+        await nativeChat.command({ type: 'submit', chat: key, text: prompt })
+        if (!chat.turn || chat.turn === previousTurn)
+          throw new Error('The chat could not start the Apply turn. The draft is still pending.')
+        return chat.turn
+      },
       locate: islandLocator(
         (channel, ...args) => dispatchIPC('main', { type: 'invoke', channel, args }),
         turnOf,

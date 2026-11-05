@@ -52,7 +52,13 @@ const request = {
   ]
 }
 let changes = 0
-const islands = new ChatIslands(() => changes++)
+const submittedDrafts = []
+const islands = new ChatIslands(() => changes++, undefined, {
+  applyDraft: async (_chat, prompt) => {
+    submittedDrafts.push(prompt)
+    return `draft-turn-${submittedDrafts.length}`
+  }
+})
 try {
   // Catalog guidance is available before registration and stays within the wire catalog.
   const catalog = await islands.tool('not-registered', root, { action: 'catalog' })
@@ -164,10 +170,19 @@ try {
   await islands.interact(command('undo-draft'))
   assert.equal(view().fields.find((field) => field.id === 'x').value, 0.2)
   await islands.interact(command('apply-draft'))
-  assert.match(await source(), /LIGHT_X = 0.2;/, 'one Apply writes the accumulated draft')
-  assert.equal(view().draft, undefined)
-  await islands.interact(command('undo'))
-  assert.equal(await source(), code, 'source Undo survives a draft Apply')
+  assert.equal(await source(), code, 'Apply only starts an agent turn; it does not write source')
+  assert.equal(submittedDrafts.length, 1, 'one Apply submits one accumulated agent operation')
+  assert.equal(view().draft.submitted, true, 'draft remains pending during the agent turn')
+  await islands.settle('chat', true, 'draft-turn-1')
+  assert.equal(view().draft.count, 1, 'a landed agent turn with no matching source keeps the draft')
+  assert.equal(view().draft.submitted, false, 'unconfirmed draft becomes actionable again')
+  await islands.interact(command('apply-draft'))
+  assert.equal(submittedDrafts.length, 2)
+  await writeFile(join(root, 'shadow.js'), code.replace('LIGHT_X = 0', 'LIGHT_X = 0.2'))
+  await islands.settle('chat', true, 'draft-turn-2')
+  assert.equal(view().draft, undefined, 'matching source after the turn settles the draft')
+  await writeFile(join(root, 'shadow.js'), code)
+  await islands.refresh('chat')
   await islands.interact(command('draft', { x: 0.6 }))
   await islands.interact(command('draft-reset'))
   assert.equal(await source(), code, 'Reset does not bypass draft Apply')
@@ -182,6 +197,21 @@ try {
   await assert.rejects(islands.interact(command('apply-draft')), /Source changed/)
   assert.equal(view().draft.count, 1, 'failed Apply retains the unsatisfied draft')
   await islands.interact(command('revert-draft'))
+  await writeFile(join(root, 'shadow.js'), code)
+  await islands.refresh('chat')
+  await islands.interact(command('draft', { x: 0.8 }))
+  await writeFile(join(root, 'shadow.js'), 'const unrelated = 1;\n')
+  await islands.refresh('chat')
+  assert.equal(view().status, 'disabled', 'removed bindings disable the island')
+  await islands.interact(command('undo-draft'))
+  assert.equal(view().draft, undefined, 'Undo can dismiss a draft with broken bindings')
+  await writeFile(join(root, 'shadow.js'), code)
+  await islands.refresh('chat')
+  await islands.interact(command('draft', { x: 0.8 }))
+  await writeFile(join(root, 'shadow.js'), 'const unrelated = 1;\n')
+  await islands.refresh('chat')
+  await islands.interact(command('revert-draft'))
+  assert.equal(view().draft, undefined, 'Revert can dismiss a draft with broken bindings')
   await writeFile(join(root, 'shadow.js'), code)
   await islands.refresh('chat')
   const oldCommand = command('commit', { x: 0.3, y: 0.8 })

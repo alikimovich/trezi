@@ -10,7 +10,12 @@ import { captureForegroundChat } from './smoke-input'
 import { missingShadowCaptureSemantics } from './smoke-shadow-semantics'
 
 /** Called inside smoke-islands' disposable fixture and restoration scope. */
-export async function checkShadowIsland(host: NativeBridge, fixture: string, artifacts: string) {
+export async function checkShadowIsland(
+  host: NativeBridge,
+  fixture: string,
+  artifacts: string,
+  settleApply: () => Promise<void>
+) {
   const chat = nativeChat.get(nativeChat.active)
   const file = join(fixture, 'island-light.js')
   const initial: ShadowLightInput = {
@@ -199,12 +204,19 @@ document.body.append(card);
     assert.equal(readFileSync(file, 'utf8'), code, 'shadow draft leaves source unchanged')
     await wait(() => previewMatches(expected))
     await host.request('islandPerform', { island: result.id, action: 'apply-draft' })
+    await wait(async () =>
+      (await host.request('chatInspect')).islands.some(
+        (i: any) => i.id === result.id && i.draftSubmitted === true
+      )
+    )
+    await settleApply()
     await wait(() =>
       Object.entries(values).every(([key, value]) =>
         readFileSync(file, 'utf8').includes(`const SHADOW_${key} = ${JSON.stringify(value)};`)
       )
     )
     await wait(() => previewMatches(expected))
+    assert.equal(view().draft, undefined, 'source-backed computed shadow clears the agent draft')
     await wait(
       () => view().fields.find((f) => f.id === 'output')?.value === shadowLight(expected).css
     )

@@ -69,7 +69,6 @@ export class NativeInspectorController {
   private draftConflict = false
   private previewAvailable = false
   private readonly heldDrafts = new Map<string, HeldDraft>()
-  private directSettle: ReturnType<typeof setTimeout> | null = null
   private holdDraft() {
     if (!this.draftTarget) return
     if (this.drafts.size)
@@ -133,6 +132,14 @@ export class NativeInspectorController {
   }
   private async projectDrafts() {
     await this.send('styles:clear-preview', {})
+    // Rebuild from the last source read before overlaying the current draft.
+    // Otherwise Undo, Revert and a restored held draft can leave the controls
+    // displaying values from a draft that is no longer present.
+    this.build()
+    for (const draft of this.drafts.values()) {
+      const field = this.state.fields.find((item) => item.id === draft.field)
+      if (field) field.value = draft.value
+    }
     try {
       for (const draft of this.drafts.values()) {
         const binding = this.bindings.get(draft.field)
@@ -257,8 +264,6 @@ export class NativeInspectorController {
    *  and publishes the hidden island now; a refresh still in flight is discarded. */
   clear() {
     this.holdDraft()
-    if (this.directSettle) clearTimeout(this.directSettle)
-    this.directSettle = null
     this.clearReconciles()
     ++this.sequence
     ++this.state.generation
@@ -287,8 +292,6 @@ export class NativeInspectorController {
       ? JSON.stringify([this.state.root, element.source, element.tag, element.id, element.selector])
       : ''
     if (nextTarget !== this.target()) this.holdDraft()
-    if (this.directSettle) clearTimeout(this.directSettle)
-    this.directSettle = null
     this.clearReconciles()
     await this.send('styles:clear-preview', {})
     this.state.busy = false
@@ -786,6 +789,7 @@ export class NativeInspectorController {
           this.draftTarget = ''
           this.draftConflict = false
         }
+        await this.refresh(true)
         await this.projectDrafts()
         return
       }
@@ -801,7 +805,6 @@ export class NativeInspectorController {
         this.submitting = true
         this.state.busy = true
         this.publish()
-        let direct = false
         try {
           for (const draft of this.drafts.values()) {
             const selectedFile = this.styleSourceFile(draft.field)
@@ -818,30 +821,19 @@ export class NativeInspectorController {
               )
             }
           }
-          const edits = [...this.drafts.values()].map(
-            (draft) =>
-              `${draft.file} (SHA-256 ${draft.hash}): set ${draft.field.slice(6)} to ${draft.value}`
+          const edits = [...this.drafts.values()].map((draft) => {
+            const token = draft.tokenChoice
+              ? this.state.fields
+                  .find((field) => field.id === draft.field)
+                  ?.tokens?.find((item) => item.id === draft.tokenChoice)?.label
+              : undefined
+            return `${draft.file} (SHA-256 ${draft.hash}): set ${draft.field.slice(6)} to ${draft.value}${token ? ` using token ${token}` : ''}`
+          })
+          await this.agent(
+            root,
+            `Apply this single batch of Styles preview drafts to the actual application source. Target ${this.element?.selector ?? ''} from ${this.element?.source ?? ''} in workspace ${root}. Preserve all other edits. Refuse any changed source hash, stale selection or unsupported target. Edits:\n${edits.join('\n')}`,
+            true
           )
-          if (this.drafts.size === 1) {
-            const draft = [...this.drafts.values()][0]
-            const binding = this.bindings.get(draft.field)
-            if (!binding) throw new Error('The selected style changed. Review the draft.')
-            const result =
-              draft.tokenChoice && binding.token
-                ? await binding.token(draft.tokenChoice)
-                : await binding.apply(draft.value)
-            if (result?.needsAgent && result.agentPrompt)
-              await this.agent(root, result.agentPrompt, true)
-            else if (!result?.applied)
-              throw new Error(result?.error ?? 'The draft was not applied.')
-            else direct = true
-          } else {
-            await this.agent(
-              root,
-              `Apply this single batch of Styles preview drafts to the actual application source. Target ${this.element?.selector ?? ''} from ${this.element?.source ?? ''} in workspace ${root}. Preserve all other edits. Refuse any changed source hash, stale selection or unsupported target. Edits:\n${edits.join('\n')}`,
-              true
-            )
-          }
           if (root !== this.state.root || generation !== this.state.generation) return
           this.submitted = true
           this.state.edits = (this.state.edits ?? 0) + 1
@@ -850,23 +842,6 @@ export class NativeInspectorController {
           this.submitting = false
           this.state.busy = false
           this.publish()
-        }
-        if (direct) {
-          // Direct owner writes have no agent terminal event. Give the page's
-          // normal source reload a bounded chance, then confirm or unlock.
-          const target = this.target()
-          const timer = setTimeout(() => {
-            if (this.directSettle !== timer || this.target() !== target) return
-            this.directSettle = null
-            void this.settleDraftTurn(true).catch((error) => {
-              this.submitted = false
-              this.previewAvailable = false
-              this.state.error = `Apply confirmation failed: ${String(error)}`
-              this.publishDraft()
-            })
-          }, 600)
-          timer.unref?.()
-          this.directSettle = timer
         }
         return
       }

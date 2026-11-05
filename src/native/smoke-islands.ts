@@ -23,6 +23,41 @@ export async function checkChatIslands(host: NativeBridge, fixture: string, arti
     chat.context = { ...context, tokens: { ...context.tokens, needed: false }, notes: [] }
   const session = nativeIslands.sessions.get(chat.chat)
   assert.ok(session, 'Chat islands registered against the durable session record')
+  // Replace only the provider turn in this fixture. It still exercises the
+  // island's one-Apply request, source owner write, terminal reconciliation and
+  // the rendered page; no real provider or desktop login is required.
+  const agentPort = nativeIslands as unknown as {
+    applyDraft: (key: string, prompt: string) => Promise<string>
+  }
+  const originalApply = agentPort.applyDraft
+  let applyTurn = 0
+  let pendingApplyTurn = ''
+  agentPort.applyDraft = async (key, prompt) => {
+    const active = nativeIslands.sessions.get(key)
+    const entry = [...(active?.drafts.entries() ?? [])].find(([id]) => active?.views.has(id))
+    assert.ok(entry, 'Apply has a source-bound draft')
+    const [id, draft] = entry
+    const view = active?.views.get(id)
+    assert.ok(view)
+    assert.ok(prompt.includes(view.sourceRevision), 'agent request carries exact source revision')
+    await nativeIslands.interact({
+      chat: key,
+      id,
+      revision: view.revision,
+      sourceRevision: view.sourceRevision,
+      action: 'commit',
+      operation: randomUUID(),
+      values: draft.values
+    })
+    pendingApplyTurn = `smoke-island-apply-${++applyTurn}`
+    return pendingApplyTurn
+  }
+  const settleApply = async () => {
+    assert.ok(pendingApplyTurn, 'exactly one agent source operation was requested')
+    const turn = pendingApplyTurn
+    pendingApplyTurn = ''
+    await nativeIslands.settle(chat.chat, true, turn)
+  }
   // Smoke islands go to scratch histories, so the chat's own history (and every later
   // check) never sees them; the owner writes each history, so nothing is reset by hand.
   const { root: islandRoot, recordId, turn } = session
@@ -165,6 +200,12 @@ document.body.append(card);
         values: { x: 0.75, y: -0.25 }
       })
       await host.request('islandPerform', { island: result.id, action: 'apply-draft' })
+      await wait(async () =>
+        (await host.request('chatInspect')).islands.some(
+          (i: any) => i.id === result.id && i.draftSubmitted === true
+        )
+      )
+      await settleApply()
       await wait(
         () =>
           readFileSync(file, 'utf8').includes('LIGHT_X = 0.75') &&
@@ -180,6 +221,11 @@ document.body.append(card);
           return false
         }
       })
+      assert.equal(
+        nativeIslands.sessions.get(chat.chat)?.views.get(result.id)?.draft,
+        undefined,
+        'source-backed island value clears the submitted draft'
+      )
       await new Promise((r) => setTimeout(r, 150))
       await host.request('islandPerform', { island: result.id, action: 'undo' })
       await wait(() => readFileSync(file, 'utf8') === code)
@@ -192,12 +238,13 @@ document.body.append(card);
       scratch()
       await nativeIslands.refresh(chat.chat)
     }
-    if (parts.shadow) await checkShadowIsland(host, fixture, artifacts)
+    if (parts.shadow) await checkShadowIsland(host, fixture, artifacts, settleApply)
     if (parts.islands)
       console.log(
         'NATIVE ISLANDS PASS — Swift rendering, typed point action, source batch/Undo, landing gate, disabled/hidden states; no live model calls.'
       )
   } finally {
+    agentPort.applyDraft = originalApply
     writeFileSync(indexFile, originalIndex)
     // Restoring the page reloads the preview; let that finish so the next check (in a
     // filtered run, shell-layout directly) never styles a document about to be replaced.

@@ -32,10 +32,24 @@ export function installNativeInspector(
     (state) => host.send('inspectorState', { state }),
     async (root, prompt, submit) => {
       const entry = workspace.state.projects.find((p) => p.root === root)
-      if (!entry) return
+      if (!entry) throw new Error('The project is no longer open. The draft is still pending.')
       if (submit) {
-        draftChat = entry.activeSessionKey
-        await chat.command({ type: 'submit', chat: entry.activeSessionKey, text: prompt })
+        const key = entry.activeSessionKey
+        const session = chat.chats.get(key)
+        if (
+          !session ||
+          chat.active !== key ||
+          !session.ready ||
+          session.root !== root ||
+          session.isRunning ||
+          session.queue.length
+        )
+          throw new Error('Finish the current chat turn before applying this draft.')
+        const previousTurn = session.turn
+        await chat.command({ type: 'submit', chat: key, text: prompt })
+        if (!session.turn || session.turn === previousTurn)
+          throw new Error('The chat could not start the Apply turn. The draft is still pending.')
+        draftChat = key
       } else await visualEdit(root, prompt)
     },
     () => chat.action({ chat: chat.active, action: 'setup' }),

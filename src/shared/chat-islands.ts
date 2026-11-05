@@ -70,7 +70,7 @@ export interface IslandView {
   /** Inline note, e.g. a bound value changed outside the island and the controls were refreshed. */
   notice?: string
   /** Unapplied frontend values; never imply that they are already in source. */
-  draft?: { count: number; preview: boolean; conflict: boolean }
+  draft?: { count: number; preview: boolean; conflict: boolean; submitted?: boolean }
 }
 export interface IslandCommand {
   chat: string

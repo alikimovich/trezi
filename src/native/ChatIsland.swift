@@ -9,7 +9,7 @@ struct IslandField: Decodable, Identifiable {
     let disabled: String?
 }
 struct IslandBlock: Decodable, Identifiable { let id: String; let title: String; let kind: String; let params: [String] }
-struct IslandDraftState: Decodable { let count: Int; let preview: Bool; let conflict: Bool }
+struct IslandDraftState: Decodable { let count: Int; let preview: Bool; let conflict: Bool; let submitted: Bool? }
 /// `status`: waiting, ready, partially-disabled, disabled (`disabledBy` code or user) or hidden.
 struct IslandView: Decodable, Identifiable {
     let id: String; let revision: Int; let title: String; let blocks: [IslandBlock]; let fields: [IslandField]
@@ -122,7 +122,7 @@ struct NativeChatIsland: View {
                 .fixedSize(horizontal: false, vertical: true).accessibilityLabel(notice)
         }
         if let draft = island.draft {
-            Text(draft.conflict ? "Preview draft pending · source changed" : draft.preview ? "Preview draft pending · shown in preview" : "Draft pending · live preview unavailable for these bindings")
+            Text(draft.submitted == true ? "Applying draft with agent…" : draft.conflict ? "Preview draft pending · source changed" : draft.preview ? "Preview draft pending · shown in preview" : "Draft pending · live preview unavailable for these bindings")
                 .font(.caption).foregroundStyle(draft.conflict ? Color.orange : Color.secondary)
                 .accessibilityLabel("\(draft.count) pending control values")
         }
@@ -150,14 +150,14 @@ struct NativeChatIsland: View {
                         } else { fieldView(field) }
                     }.disabled(field.disabled != nil).help(field.disabled ?? "")
                 }
-            }.disabled(!island.live || broken != nil).help(broken ?? "")
+            }.disabled(!island.live || broken != nil || island.draft?.submitted == true).help(broken ?? "")
                 .opacity(island.live ? 1 : 0.6)
         }
         HStack {
-            Button("Apply") { action("apply-draft") }.disabled(!island.live || island.draft == nil || island.draft?.conflict == true)
-            Button("Undo draft") { discardLocalDraft(); action("undo-draft") }.disabled(island.draft == nil)
-            Button("Revert draft") { discardLocalDraft(); action("revert-draft") }.disabled(island.draft == nil)
-            Button("Reset") { discardLocalDraft(); action("draft-reset") }.disabled(!island.live)
+            Button("Apply") { action("apply-draft") }.disabled(!island.live || island.draft == nil || island.draft?.conflict == true || island.draft?.submitted == true)
+            Button("Undo draft") { discardLocalDraft(); action("undo-draft") }.disabled(island.draft == nil || island.draft?.submitted == true)
+            Button("Revert draft") { discardLocalDraft(); action("revert-draft") }.disabled(island.draft == nil || island.draft?.submitted == true)
+            Button("Reset") { discardLocalDraft(); action("draft-reset") }.disabled(!island.live || island.draft?.submitted == true)
         }.controlSize(.small)
         HStack {
             Button("Reload") { discardLocalDraft(); action("reload") }

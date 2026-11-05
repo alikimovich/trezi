@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-539 agent Apply contract correction
+
+- The latest product decision supersedes direct source writes on Apply: every Styles draft, including one field, now submits one regular chat agent operation; island Apply submits its accumulated binding values to the active chat turn. Gesture drafts remain source-free. Inspector fields rebuild from authored values plus the current draft after restore, Undo and Revert. An island can dismiss a broken or stale draft without writing its source. Focused fixtures cover these transitions, a turn that lands without the requested edit, and a single-field agent request. Native fixtures simulate the agent's source edit and assert source-backed rendering; the post-merge native gate is still pending.
+
 ## 2026-11-05 — LKM-539 bounded draft completion repair
 
 - A direct Styles source write now has a bounded confirmation path even without an agent terminal event or page invalidation: it clears the temporary preview, checks changed source and rendered value, then either confirms Apply or returns an actionable pending draft. Pending Styles intent is held by workspace and selected element across selection and project changes; reactivation checks its source hash and rebuilds the preview binding. The island native fixture now reads the Swift text controls' accessibility values after Undo instead of treating backend fields as rendered evidence. Focused inspector tests cover direct completion and both draft transitions; the native fixture remains for the post-merge gate.

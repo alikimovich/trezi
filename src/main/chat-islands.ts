@@ -59,6 +59,7 @@ export interface IslandSession {
       values: Record<string, IslandValue>
       history: Record<string, IslandValue>[]
       preview: boolean
+      submittedTurn?: string
     }
   >
 }
@@ -95,6 +96,7 @@ export class ChatIslands {
   private readonly given?: EditingOwner
   /** Shadow gestures shown in the preview, written once (LKM-140); without it every frame writes. */
   readonly overrides?: IslandOverrides
+  private readonly applyDraft?: (chat: string, prompt: string) => Promise<string>
   /**
    * Finds a chat's record once its workspace is ready (a new chat's is prepared later);
    * without `wait` it answers at once, with why there is no record yet. Null is "no locator".
@@ -109,11 +111,13 @@ export class ChatIslands {
       origin?: (chat: string) => string | null
       overrides?: IslandOverrides
       locate?: LocateIslands
+      applyDraft?: (chat: string, prompt: string) => Promise<string>
     } = {}
   ) {
     this.given = options.owner
     this.origin = options.origin ?? (() => null)
     this.overrides = options.overrides
+    this.applyDraft = options.applyDraft
     this.locate = options.locate ?? (async (): Promise<null> => null)
   }
   get owner(): EditingOwner {
@@ -307,7 +311,8 @@ export class ChatIslands {
                 count: Object.keys(draft.values).length,
                 preview: draft.preview,
                 conflict:
-                  draft.revision !== record.revision || draft.sourceRevision !== sourceRevision
+                  draft.revision !== record.revision || draft.sourceRevision !== sourceRevision,
+                submitted: !!draft.submittedTurn
               }
             }
           : {})
@@ -349,6 +354,46 @@ export class ChatIslands {
     const settled = await this.owner.islandSettle(chat, turn, successful)
     if (settled.cancelled) cancelControlComposition(`island:${chat}`)
     this.adopt(chat, session, settled.records)
+    await this.refresh(chat)
+    for (const [id, draft] of session.drafts) {
+      if (!draft.submittedTurn || draft.submittedTurn !== turn) continue
+      const record = session.records.find((item) => item.id === id)
+      const source =
+        successful && record ? await islandSource(session.root, record).catch(() => null) : null
+      if (
+        source &&
+        source.revision !== draft.sourceRevision &&
+        Object.entries(draft.values).every(
+          ([field, value]) => JSON.stringify(source.values[field]) === JSON.stringify(value)
+        )
+      ) {
+        const ids = Object.keys(draft.values)
+        const block = draft.preview
+          ? record?.blocks.find(
+              (item) => item.kind === 'shadow' && ids.every((field) => item.params.includes(field))
+            )
+          : undefined
+        if (block && this.overrides) {
+          const css = shadowBlockCss(block, source.values)
+          const { port, timing } = this.overrides
+          const deadline = Date.now() + timing.timeout
+          let rendered = false
+          while (Date.now() < deadline) {
+            if (await port.settle(`${chat}\n${id}`, css).catch(() => null)) {
+              rendered = true
+              break
+            }
+            await new Promise((resolve) => setTimeout(resolve, timing.poll))
+          }
+          if (!rendered) {
+            draft.submittedTurn = undefined
+            continue
+          }
+        }
+        session.drafts.delete(id)
+        await this.overrides?.port.clear(`${chat}\n${id}`).catch(() => {})
+      } else draft.submittedTurn = undefined
+    }
     await this.refresh(chat)
   }
   attachments(chat: string) {
@@ -429,6 +474,31 @@ export class ChatIslands {
     await session.opening
     const record = session.records.find((r) => r.id === command.id)
     const view = session.views.get(command.id)
+    let draft = session.drafts.get(command.id)
+    const dismissing = command.action === 'undo-draft' || command.action === 'revert-draft'
+    const brokenDismissal =
+      dismissing &&
+      draft &&
+      (!record ||
+        !view ||
+        record.revision !== command.revision ||
+        !['ready', 'partially-disabled'].includes(view.status) ||
+        draft.sourceRevision !== view.sourceRevision)
+    if (brokenDismissal && draft) {
+      if (
+        command.sourceRevision !== draft.sourceRevision &&
+        command.sourceRevision !== view?.sourceRevision
+      )
+        throw new Error('This island draft changed. Reload its controls.')
+      if (draft.submittedTurn) throw new Error('Apply is in progress.')
+      if (command.action === 'undo-draft') {
+        draft.values = draft.history.pop() ?? {}
+        if (!Object.keys(draft.values).length) session.drafts.delete(command.id)
+      } else session.drafts.delete(command.id)
+      await this.overrides?.port.clear(`${command.chat}\n${command.id}`).catch(() => {})
+      await this.refresh(command.chat)
+      return
+    }
     if (
       !record ||
       !view ||
@@ -438,7 +508,8 @@ export class ChatIslands {
       session.busy
     )
       throw new Error('This island changed or is unavailable. Reload its controls.')
-    let draft = session.drafts.get(record.id)
+    draft = session.drafts.get(record.id)
+    if (draft?.submittedTurn) throw new Error('Apply is in progress.')
     const key = `${command.chat}\n${record.id}`
     if (command.action === 'draft' || command.action === 'draft-reset') {
       if (
@@ -490,32 +561,10 @@ export class ChatIslands {
       const source = await islandSource(session.root, record)
       if (source.revision !== draft.sourceRevision)
         throw new Error('Source changed while this preview draft was pending. Review or revert it.')
-      const ids = Object.keys(draft.values)
-      const block =
-        draft.preview && this.overrides
-          ? record.blocks.find(
-              (b) => b.kind === 'shadow' && ids.every((id) => b.params.includes(id))
-            )
-          : undefined
-      if (block && this.overrides) {
-        const base = session.seen.get(record.id) ?? {}
-        const fallback = await this.overrides.frame({
-          key,
-          gesture: command.operation || `draft:${record.id}`,
-          values: draft.values,
-          ended: true,
-          from: () => shadowBlockCss(block, base),
-          css: (values) => shadowBlockCss(block, { ...base, ...values }),
-          write: async (values) => {
-            await this.enqueue(session, { ...command, action: 'commit', values })
-            return 'written'
-          }
-        })
-        if (fallback)
-          await this.enqueue(session, { ...command, action: 'commit', values: fallback })
-      } else await this.enqueue(session, { ...command, action: 'commit', values: draft.values })
-      session.drafts.delete(record.id)
-      if (!block) await this.overrides?.port.clear(key).catch(() => {})
+      if (!this.applyDraft) throw new Error('Apply requires an active chat agent.')
+      const values = draft.values
+      const prompt = `Apply these chat-island preview drafts as one source edit in this chat workspace. Verify the exact source revision before writing, preserve other edits, and confirm the rendered preview after the source reload. Island ${record.id}; source ${record.manifest.file}; revision ${draft.sourceRevision}. Values: ${JSON.stringify(values)}. Bindings: ${JSON.stringify(record.manifest.params.filter((param) => Object.hasOwn(values, param.id)).map((param) => ({ id: param.id, apply: param.apply })))}.`
+      draft.submittedTurn = await this.applyDraft(command.chat, prompt)
       await this.refresh(command.chat)
       return
     }
