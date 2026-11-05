@@ -64,6 +64,12 @@ func push(_ card: [String: Any]?, question: Bool = false, chatId: String = "fixt
     chat.update(state, composer: composer)
     chat.model.pressLatest()
     spin(0.6)
+    if tall {
+        // Switching to a tall lazy stack can finish laying out after the first
+        // latest request. Re-request the pinned end once those rows exist.
+        chat.model.pressLatest()
+        spin(0.6)
+    }
 }
 /// Sends the acceptance's events for `label` (a click, or focus then Space) and returns what the card emitted.
 func press(_ label: String, key: Bool = false) -> [String: Any] {

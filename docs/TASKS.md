@@ -11,6 +11,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Make the Impeccable smoke report a visible import rejection immediately, retaining the success assertion.
 - [x] Repair USTAR long paths in the native GitHub fixture and add an archive regression for the full Impeccable playbook path.
 - [x] Include both installed recommendations in the final Settings overview expectation and cover their rendered installed values.
+- [x] Repair the tall offscreen recovery-card fixture's post-switch latest request exposed by PR CI, retaining its geometry and click assertions.
 - [ ] Manager: confirm the native chat and Settings groups and required gates on this tree.
 
 ## LKM-516 — Curate Settings Skills recommendations for design craft
