@@ -70,6 +70,24 @@ assert(
   'error' in validateManifest(validManifest({ replay: true })),
   'replay requires an animation panel'
 )
+const opacityBinding = { kind: 'computed-style', selector: '#hero', property: 'opacity' }
+const opacityPanel = validateManifest(
+  validManifest({ params: [validParam({ unit: undefined, rendered: opacityBinding })] })
+)
+assert(
+  !('error' in opacityPanel) && opacityPanel.params[0].rendered?.selector === '#hero',
+  'validated declarative rendered binding survives manifest generation'
+)
+for (const rendered of [
+  { ...opacityBinding, selector: 'body *' },
+  { ...opacityBinding, property: 'background-image' },
+  { ...opacityBinding, code: 'alert(1)' }
+])
+  assert(
+    'error' in
+      validateManifest(validManifest({ params: [validParam({ unit: undefined, rendered })] })),
+    'untrusted or executable rendered bindings are rejected'
+  )
 
 // A maximal valid manifest — every kind, every strategy, full caps in play.
 const maximal = validManifest({

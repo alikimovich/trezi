@@ -63,7 +63,8 @@ final class SourceStore: @unchecked Sendable {
 
     // MARK: Undo
 
-    struct UndoResult { var ok = false, empty = false, conflict = false; var file: String? }
+    struct Effect { var path: String; var hash: String? = nil; var absent = false }
+    struct UndoResult { var ok = false, empty = false, conflict = false; var file: String?; var effects: [Effect] = [] }
 
     /// Undo (`undo: true`) or redo the top batch of `root`'s history.
     func step(root: String, undo: Bool, operationID: String) throws -> UndoResult {
@@ -71,7 +72,7 @@ final class SourceStore: @unchecked Sendable {
         guard let top = batch.first else { return UndoResult(empty: true) }
         let result = try restore(root: root, batch, toBefore: undo, kind: undo ? "undo" : "redo", operationID: operationID)
         if result.ok { history.moved(root: root, undo: undo, count: batch.count) }
-        return result.ok ? UndoResult(ok: true, file: top.display) : result
+        return result.ok ? UndoResult(ok: true, file: top.display, effects: result.effects) : result
     }
 
     /// Reverts one recorded group anywhere in the undo stack.
@@ -81,7 +82,7 @@ final class SourceStore: @unchecked Sendable {
         // Newest first, so a file the group wrote twice ends at its oldest before.
         let result = try restore(root: root, batch.reversed(), toBefore: true, kind: "revert", operationID: operationID)
         if result.ok { history.reverted(root: root, group) }
-        return result.ok ? UndoResult(ok: true, file: last.display) : result
+        return result.ok ? UndoResult(ok: true, file: last.display, effects: result.effects) : result
     }
 
     func revertable(root: String, group: String) -> Bool {
@@ -106,7 +107,8 @@ final class SourceStore: @unchecked Sendable {
         }
         do {
             switch try transact(kind: kind, operationID: operationID, root: root, writes) {
-            case .applied: return UndoResult(ok: true)
+            case .applied:
+                return UndoResult(ok: true, effects: writes.map { Effect(path: $0.display, hash: SourcePaths.hash($0.content)) })
             case .conflict(let file): return UndoResult(conflict: true, file: file)
             }
         } catch let refusal as RepositoryRefusal where refusal.code == .ioFailure {
@@ -117,7 +119,7 @@ final class SourceStore: @unchecked Sendable {
 
     // MARK: File operations (outside the history, as before)
 
-    struct FileResult { var ok: Bool; var path: String?; var error: String? }
+    struct FileResult { var ok: Bool; var path: String?; var error: String?; var effects: [Effect] = [] }
     static let badPath = FileResult(ok: false, error: "That path is not allowed.")
 
     func create(_ t: SourcePaths.Target) -> FileResult {
@@ -129,7 +131,7 @@ final class SourceStore: @unchecked Sendable {
             guard fd >= 0 else { throw POSIXError(.EEXIST) }
             close(fd)
         } catch { return FileResult(ok: false, error: "Could not create that file.") }
-        return FileResult(ok: true, path: t.rel)
+        return FileResult(ok: true, path: t.rel, effects: [Effect(path: t.rel, hash: SourcePaths.hash(Data()))])
     }
 
     func rename(_ from: SourcePaths.Target, _ to: SourcePaths.Target) -> FileResult {
@@ -139,11 +141,16 @@ final class SourceStore: @unchecked Sendable {
         // A case-only rename "exists" on a case-insensitive volume; refusing it would make case fixes impossible.
         let caseOnly = from.rel.lowercased() == to.rel.lowercased()
         if !caseOnly, exists(to.lexical) { return FileResult(ok: false, error: "Something already exists at that path.") }
+        // Capture bytes before moving the file. A concurrent external rewrite after this
+        // read will fail the live watch's resulting-state check instead of being hidden.
+        let movedHash = (try? SourcePaths.read(from.lexical)).flatMap { $0 }.map(SourcePaths.hash)
         do {
             try FileManager.default.createDirectory(atPath: (to.lexical as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
             guard Darwin.rename(from.lexical, to.lexical) == 0 else { throw POSIXError(.EIO) }
         } catch { return FileResult(ok: false, error: "Could not rename that file.") }
-        return FileResult(ok: true, path: to.rel)
+        var effects = [Effect(path: from.rel, absent: true)]
+        if let movedHash { effects.append(Effect(path: to.rel, hash: movedHash)) }
+        return FileResult(ok: true, path: to.rel, effects: effects)
     }
 
     /// To the Trash when possible (the only undo a deletion has); removed outright otherwise.
@@ -151,10 +158,10 @@ final class SourceStore: @unchecked Sendable {
         guard exists(t.lexical) else { return FileResult(ok: false, error: "That file no longer exists.") }
         guard SourcePaths.isRegularFile(t.lexical) else { return FileResult(ok: false, error: "Only files can be deleted.") }
         if (try? FileManager.default.trashItem(at: URL(fileURLWithPath: t.lexical), resultingItemURL: nil)) != nil {
-            return FileResult(ok: true, path: t.rel)
+            return FileResult(ok: true, path: t.rel, effects: [Effect(path: t.rel, absent: true)])
         }
         guard unlink(t.lexical) == 0 else { return FileResult(ok: false, error: "Could not delete that file.") }
-        return FileResult(ok: true, path: t.rel)
+        return FileResult(ok: true, path: t.rel, effects: [Effect(path: t.rel, absent: true)])
     }
 
     private func exists(_ path: String) -> Bool { var info = stat(); return lstat(path, &info) == 0 }

@@ -19,6 +19,7 @@ import { islandMessageContext } from './chat-island-context'
 import { islandDefinition } from './chat-island-schema'
 import { islandSource, undoIsland, writeIsland } from './chat-island-source'
 import { islandTool } from './chat-island-tool'
+import { renderLiteral } from './control-manifest'
 import { selectControlCandidates } from './control-selection'
 import { cancelControlComposition } from './controls-jev'
 import { type EditingOwner, editingOwner } from './editing-owner'
@@ -50,6 +51,19 @@ export interface IslandSession {
   conflicted: Set<string>
   /** island id → its running gesture's merged values; `live` once it must write every frame (LKM-133). */
   gestures: Map<string, { gesture: string; values: Record<string, IslandValue>; live: boolean }>
+  drafts: Map<
+    string,
+    {
+      revision: number
+      sourceRevision: string
+      values: Record<string, IslandValue>
+      history: Record<string, IslandValue>[]
+      preview: boolean
+      submittedTurn?: string
+      /** A prior Apply changed source but its rendered readback was unavailable. */
+      sourceApplied?: boolean
+    }
+  >
 }
 type Session = IslandSession
 interface Queued {
@@ -84,6 +98,13 @@ export class ChatIslands {
   private readonly given?: EditingOwner
   /** Shadow gestures shown in the preview, written once (LKM-140); without it every frame writes. */
   readonly overrides?: IslandOverrides
+  private readonly applyDraft?: (chat: string, prompt: string) => Promise<string>
+  private readonly confirmRendered?: (
+    chat: string,
+    record: IslandRecord,
+    values: Record<string, IslandValue>,
+    revision: string
+  ) => Promise<boolean>
   /**
    * Finds a chat's record once its workspace is ready (a new chat's is prepared later);
    * without `wait` it answers at once, with why there is no record yet. Null is "no locator".
@@ -98,11 +119,20 @@ export class ChatIslands {
       origin?: (chat: string) => string | null
       overrides?: IslandOverrides
       locate?: LocateIslands
+      applyDraft?: (chat: string, prompt: string) => Promise<string>
+      confirmRendered?: (
+        chat: string,
+        record: IslandRecord,
+        values: Record<string, IslandValue>,
+        revision: string
+      ) => Promise<boolean>
     } = {}
   ) {
     this.given = options.owner
     this.origin = options.origin ?? (() => null)
     this.overrides = options.overrides
+    this.applyDraft = options.applyDraft
+    this.confirmRendered = options.confirmRendered
     this.locate = options.locate ?? (async (): Promise<null> => null)
   }
   get owner(): EditingOwner {
@@ -128,7 +158,8 @@ export class ChatIslands {
       broken: new Map(),
       queued: new Map(),
       conflicted: new Set(),
-      gestures: new Map()
+      gestures: new Map(),
+      drafts: new Map()
     }
     session.opening = this.owner
       .islandsOpen(chat, root, recordId)
@@ -197,6 +228,8 @@ export class ChatIslands {
     this.locating.delete(chat)
     cancelControlComposition(`island:${chat}`)
     this.overrides?.clearAll(`${chat}\n`)
+    for (const id of this.sessions.get(chat)?.drafts.keys() ?? [])
+      void this.overrides?.port.clear(`${chat}\n${id}`).catch(() => {})
     if (this.sessions.delete(chat)) void this.owner.islandsClose(chat).catch(() => {})
   }
   adopt(chat: string, session: IslandSession, records: IslandRecord[] | null) {
@@ -264,6 +297,7 @@ export class ChatIslands {
           JSON.stringify(record.reasons ?? {}) !== JSON.stringify(fieldReasons))
       )
         changes.push({ record, ...check, reasons: fieldReasons })
+      const draft = session.drafts.get(record.id)
       views.set(record.id, {
         id: record.id,
         name: `#${record.name}`,
@@ -272,7 +306,7 @@ export class ChatIslands {
         blocks: record.blocks,
         fields: record.manifest.params.map((p) => ({
           ...p,
-          value: values[p.id] ?? null,
+          value: draft?.values[p.id] ?? values[p.id] ?? null,
           ...(fieldReasons[p.id] ? { disabled: fieldReasons[p.id] } : {})
         })),
         sourceRevision,
@@ -285,7 +319,18 @@ export class ChatIslands {
             : (record.fallback ?? ''),
         engine: record.engine,
         replay: !!record.manifest.replay,
-        notice: session.notices.get(record.id) ?? ''
+        notice: session.notices.get(record.id) ?? '',
+        ...(draft
+          ? {
+              draft: {
+                count: Object.keys(draft.values).length,
+                preview: draft.preview,
+                conflict:
+                  draft.revision !== record.revision || draft.sourceRevision !== sourceRevision,
+                submitted: !!draft.submittedTurn
+              }
+            }
+          : {})
       })
     }
     if (this.sessions.get(chat) !== session || session.epoch !== epoch) return
@@ -324,6 +369,80 @@ export class ChatIslands {
     const settled = await this.owner.islandSettle(chat, turn, successful)
     if (settled.cancelled) cancelControlComposition(`island:${chat}`)
     this.adopt(chat, session, settled.records)
+    await this.refresh(chat)
+    for (const [id, draft] of session.drafts) {
+      if (!draft.submittedTurn || draft.submittedTurn !== turn) continue
+      const record = session.records.find((item) => item.id === id)
+      const source =
+        successful && record ? await islandSource(session.root, record).catch(() => null) : null
+      if (
+        source &&
+        (source.revision !== draft.sourceRevision || draft.sourceApplied === true) &&
+        Object.entries(draft.values).every(
+          ([field, value]) => JSON.stringify(source.values[field]) === JSON.stringify(value)
+        )
+      ) {
+        const ids = Object.keys(draft.values)
+        const block = draft.preview
+          ? record?.blocks.find(
+              (item) => item.kind === 'shadow' && ids.every((field) => item.params.includes(field))
+            )
+          : undefined
+        if (block && this.overrides) {
+          const css = shadowBlockCss(block, source.values)
+          const { port, timing } = this.overrides
+          const deadline = Date.now() + timing.timeout
+          let rendered = false
+          while (Date.now() < deadline) {
+            if (await port.settle(`${chat}\n${id}`, css).catch(() => null)) {
+              rendered = true
+              break
+            }
+            await new Promise((resolve) => setTimeout(resolve, timing.poll))
+          }
+          if (!rendered) {
+            draft.submittedTurn = undefined
+            draft.sourceRevision = source.revision
+            draft.sourceApplied = true
+            continue
+          }
+        } else {
+          // A matching literal in source does not prove the running page rendered
+          // its effect. Only an actual source-backed preview probe may settle it.
+          let rendered = false
+          const deadline = Date.now() + 8000
+          const supported = ids.every((field) =>
+            record?.manifest.params.some((param) => param.id === field && param.rendered)
+          )
+          while (supported && this.confirmRendered && Date.now() < deadline) {
+            if (
+              await this.confirmRendered(chat, record!, draft.values, source.revision).catch(
+                () => false
+              )
+            ) {
+              rendered = true
+              break
+            }
+            await new Promise((resolve) => setTimeout(resolve, 50))
+          }
+          if (!rendered) {
+            draft.submittedTurn = undefined
+            draft.sourceRevision = source.revision
+            draft.sourceApplied = true
+            session.notices.set(
+              id,
+              supported
+                ? 'Source changed, but the preview result is unconfirmed. Check the page and Retry Apply. Revert draft discards pending controls, not source.'
+                : 'This literal has no rendered-value check. Verify the source change in preview and Retry Apply. Revert draft discards pending controls, not source.'
+            )
+            continue
+          }
+        }
+        session.drafts.delete(id)
+        session.notices.delete(id)
+        await this.overrides?.port.clear(`${chat}\n${id}`).catch(() => {})
+      } else draft.submittedTurn = undefined
+    }
     await this.refresh(chat)
   }
   attachments(chat: string) {
@@ -385,6 +504,12 @@ export class ChatIslands {
       case 'reference':
       case 'recreate':
         throw new Error('Unknown island action.')
+      case 'draft':
+      case 'draft-reset':
+      case 'undo-draft':
+      case 'revert-draft':
+      case 'apply-draft':
+        return this.draftCommand(session, command)
     }
     if (this.overrides && command.action === 'commit' && command.gesture) {
       const live = await this.gestureFrame(session, command)
@@ -393,6 +518,125 @@ export class ChatIslands {
     } else if (this.overrides && command.action !== 'commit')
       await this.overrides.clear(`${command.chat}\n${command.id}`)
     return this.enqueue(session, command)
+  }
+  private async draftCommand(session: Session, command: IslandCommand) {
+    await session.opening
+    const record = session.records.find((r) => r.id === command.id)
+    const view = session.views.get(command.id)
+    let draft = session.drafts.get(command.id)
+    const dismissing = command.action === 'undo-draft' || command.action === 'revert-draft'
+    const brokenDismissal =
+      dismissing &&
+      draft &&
+      (!record ||
+        !view ||
+        record.revision !== command.revision ||
+        !['ready', 'partially-disabled'].includes(view.status) ||
+        draft.sourceRevision !== view.sourceRevision)
+    if (brokenDismissal && draft) {
+      if (
+        command.sourceRevision !== draft.sourceRevision &&
+        command.sourceRevision !== view?.sourceRevision
+      )
+        throw new Error('This island draft changed. Reload its controls.')
+      if (draft.submittedTurn) throw new Error('Apply is in progress.')
+      if (command.action === 'undo-draft') {
+        draft.values = draft.history.pop() ?? {}
+        if (!Object.keys(draft.values).length) session.drafts.delete(command.id)
+      } else session.drafts.delete(command.id)
+      await this.overrides?.port.clear(`${command.chat}\n${command.id}`).catch(() => {})
+      await this.refresh(command.chat)
+      return
+    }
+    if (
+      !record ||
+      !view ||
+      record.revision !== command.revision ||
+      !['ready', 'partially-disabled'].includes(view.status) ||
+      session.composing ||
+      session.busy
+    )
+      throw new Error('This island changed or is unavailable. Reload its controls.')
+    draft = session.drafts.get(record.id)
+    if (draft?.submittedTurn) throw new Error('Apply is in progress.')
+    const key = `${command.chat}\n${record.id}`
+    if (command.action === 'draft' || command.action === 'draft-reset') {
+      if (
+        view.sourceRevision !== command.sourceRevision ||
+        (draft && draft.sourceRevision !== view.sourceRevision)
+      )
+        throw new Error('Source changed while this preview draft was pending.')
+      // Reset is a preview gesture too. Keep the original values in the draft
+      // until Apply, and leave bindings that no longer exist or are broken alone.
+      const values =
+        command.action === 'draft-reset'
+          ? Object.fromEntries(
+              Object.entries(record.initial).filter(([id]) =>
+                view.fields.some((field) => field.id === id && !field.disabled)
+              )
+            )
+          : (command.values ?? {})
+      if (!Object.keys(values).length) return
+      for (const [id, value] of Object.entries(values)) {
+        const field = view.fields.find((f) => f.id === id)
+        if (!field || field.disabled) throw new Error('This control is no longer editable.')
+        if (command.action === 'draft') {
+          const rendered = renderLiteral(field.kind, value, field)
+          if (typeof rendered !== 'string') throw new Error(rendered.error)
+        }
+      }
+      if (!draft) {
+        draft = {
+          revision: record.revision,
+          sourceRevision: view.sourceRevision,
+          values: {},
+          history: [],
+          preview: false
+        }
+        session.drafts.set(record.id, draft)
+      }
+      draft.history.push({ ...draft.values })
+      draft.values = { ...draft.values, ...values }
+    } else if (command.action === 'undo-draft') {
+      if (!draft) return
+      draft.values = draft.history.pop() ?? {}
+      if (!Object.keys(draft.values).length) session.drafts.delete(record.id)
+    } else if (command.action === 'revert-draft') {
+      session.drafts.delete(record.id)
+    } else {
+      if (!draft) return
+      if (draft.revision !== record.revision || draft.sourceRevision !== view.sourceRevision)
+        throw new Error('Source changed while this preview draft was pending. Review or revert it.')
+      const source = await islandSource(session.root, record)
+      if (source.revision !== draft.sourceRevision)
+        throw new Error('Source changed while this preview draft was pending. Review or revert it.')
+      if (!this.applyDraft) throw new Error('Apply requires an active chat agent.')
+      session.notices.delete(record.id)
+      const values = draft.values
+      const prompt = `Apply these chat-island preview drafts as one source edit in this chat workspace. Verify the exact source revision before writing, preserve other edits, and confirm the rendered preview after the source reload. For a supported source-stamped opacity div, add or update a literal data-trezi-revision attribute on that div containing the lowercase SHA-256 hash of the full UTF-8 source after replacing only that 64-character hash with 64 zeros. Keep data-trezi-source in file:line:column form. If this binding cannot be made safely, report that rendered confirmation is unavailable. Island ${record.id}; source ${record.manifest.file}; revision ${draft.sourceRevision}. Values: ${JSON.stringify(values)}. Bindings: ${JSON.stringify(record.manifest.params.filter((param) => Object.hasOwn(values, param.id)).map((param) => ({ id: param.id, apply: param.apply })))}.`
+      draft.submittedTurn = await this.applyDraft(command.chat, prompt)
+      await this.refresh(command.chat)
+      return
+    }
+    draft = session.drafts.get(record.id)
+    if (draft && this.overrides) {
+      const ids = Object.keys(draft.values)
+      const block = record.blocks.find(
+        (b) => b.kind === 'shadow' && ids.every((id) => b.params.includes(id))
+      )
+      if (block) {
+        const base = session.seen.get(record.id) ?? {}
+        const shown = await this.overrides.port
+          .apply(
+            key,
+            shadowBlockCss(block, base),
+            shadowBlockCss(block, { ...base, ...draft.values })
+          )
+          .catch(() => 0)
+        draft.preview = shown > 0
+      } else draft.preview = false
+    } else await this.overrides?.port.clear(key).catch(() => {})
+    await this.refresh(command.chat)
   }
   /**
    * LKM-140: a frame of a Shadow island gesture. The preview shows the derived box-shadow at
@@ -538,7 +782,8 @@ export class ChatIslands {
           reset ? undefined : session.seen.get(record.id),
           values,
           guard,
-          command.gesture ? `island:${record.id}:${command.gesture}` : undefined
+          command.gesture ? `island:${record.id}:${command.gesture}` : undefined,
+          session.drafts.get(record.id)?.sourceRevision
         )
         if (result) {
           session.writes++

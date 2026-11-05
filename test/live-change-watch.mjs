@@ -19,6 +19,8 @@ import {
 import { enqueueRepoWrite } from '../src/main/repo-write-queue.ts'
 import { setRepositoryOwner } from '../src/main/repository-owner.ts'
 import { LIVE_EFFECT_TOOLS } from '../src/main/session-tools.ts'
+import { observedSourceOwner } from '../src/main/source-changes.ts'
+import { contentHash } from '../src/main/source-owner.ts'
 import { newChat, reduce } from '../src/native/chat-state.ts'
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'trezi-live-change-')))
@@ -126,6 +128,136 @@ try {
   assert.equal(await turn(landing), null, 'lane effects are subtracted')
   git(live, 'add', '-A')
   git(live, 'commit', '-qm', 'resolved')
+
+  // Styles, chat islands and the internal editor all reach this source-owner seam.
+  // A successful first-party write is attributed without hiding a simultaneous
+  // external edit; a stale proposal that wrote nothing cannot claim the path.
+  const source = observedSourceOwner(
+    {
+      commit: async (_root, edits) => {
+        const edit = edits[0]
+        if (edit.expectedHash === 'stale') {
+          write(live, edit.path, 'external after stale proposal\n')
+          return { ok: false, conflict: true, file: edit.path }
+        }
+        write(live, edit.path, edit.content)
+        if (edit.expectedHash === 'concurrent') write(live, 'outside.md', 'external\n')
+        if (edit.expectedHash === 'same-path')
+          write(live, edit.path, 'external after owner write\n')
+        return { ok: true, files: [edit.path], hashes: [] }
+      }
+    },
+    enqueueRepoWrite
+  )
+  const sourceEdit = (expectedHash, content) =>
+    source.commit(live, [{ path: 'README.md', expectedHash, content }])
+  assert.equal(await turn(() => sourceEdit('current', 'editor save\n')), null)
+  const mixed = await turn(() => sourceEdit('concurrent', 'Styles value\n'))
+  assert.deepEqual(mixed?.files, ['outside.md'], 'an external file is still reported')
+  const overwritten = await turn(() => sourceEdit('same-path', 'island value\n'))
+  assert.deepEqual(
+    overwritten?.files,
+    ['README.md'],
+    'an external overwrite of the same source path is still reported'
+  )
+  const stale = await turn(() => sourceEdit('stale', 'must not land\n'))
+  assert.deepEqual(
+    stale?.files,
+    ['README.md'],
+    'a refused source edit does not claim an external write'
+  )
+  assert.equal(readFileSync(join(live, 'README.md'), 'utf8'), 'external after stale proposal\n')
+
+  // Owner results authenticate the exact bytes left by Undo/Redo/Revert and file
+  // operations. An external editor writing the same path after the owner returns
+  // must remain visible, even though it lands inside the effect snapshot window.
+  let overwrite = false
+  const restored = (path, value) => {
+    write(live, path, value)
+    if (overwrite) write(live, path, 'external after owner operation\n')
+    return { ok: true, file: path, effects: [{ path, hash: contentHash(value) }] }
+  }
+  const sourceOperations = observedSourceOwner(
+    {
+      undo: async () => restored('README.md', 'undone\n'),
+      redo: async () => restored('README.md', 'redone\n'),
+      revert: async () => restored('README.md', 'reverted\n'),
+      createFile: async (_root, path) => {
+        write(live, path, '')
+        if (overwrite) write(live, path, 'external after create\n')
+        return { ok: true, path, effects: [{ path, hash: contentHash('') }] }
+      },
+      renameFile: async (_root, from, to) => {
+        const value = readFileSync(join(live, from), 'utf8')
+        rmSync(join(live, from))
+        write(live, to, value)
+        if (overwrite) write(live, to, 'external after rename\n')
+        return {
+          ok: true,
+          path: to,
+          effects: [
+            { path: from, absent: true },
+            { path: to, hash: contentHash(value) }
+          ]
+        }
+      },
+      deleteFile: async (_root, path) => {
+        rmSync(join(live, path))
+        if (overwrite) write(live, path, 'external after delete\n')
+        return { ok: true, path, effects: [{ path, absent: true }] }
+      }
+    },
+    enqueueRepoWrite
+  )
+  for (const method of ['undo', 'redo', 'revert']) {
+    overwrite = false
+    assert.equal(
+      await turn(() => sourceOperations[method](live, 'group')),
+      null,
+      `${method} is owned`
+    )
+    overwrite = true
+    assert.deepEqual(
+      (await turn(() => sourceOperations[method](live, 'group')))?.files,
+      ['README.md'],
+      `${method} does not claim an external same-path overwrite`
+    )
+  }
+  overwrite = false
+  assert.equal(await turn(() => sourceOperations.createFile(live, 'created.txt')), null)
+  overwrite = true
+  assert.deepEqual(
+    (await turn(() => sourceOperations.createFile(live, 'created-again.txt')))?.files,
+    ['created-again.txt'],
+    'create does not claim an external same-path write'
+  )
+  write(live, 'rename-from.txt', 'rename me\n')
+  overwrite = false
+  assert.equal(
+    await turn(() => sourceOperations.renameFile(live, 'rename-from.txt', 'renamed.txt')),
+    null
+  )
+  write(live, 'rename-from-again.txt', 'rename me again\n')
+  overwrite = true
+  assert.deepEqual(
+    (
+      await turn(() =>
+        sourceOperations.renameFile(live, 'rename-from-again.txt', 'renamed-again.txt')
+      )
+    )?.files,
+    ['renamed-again.txt'],
+    'rename does not claim an external destination overwrite'
+  )
+  write(live, 'delete-me.txt', 'delete me\n')
+  overwrite = false
+  assert.equal(await turn(() => sourceOperations.deleteFile(live, 'delete-me.txt')), null)
+  write(live, 'delete-me-again.txt', 'delete me again\n')
+  overwrite = true
+  assert.deepEqual(
+    (await turn(() => sourceOperations.deleteFile(live, 'delete-me-again.txt')))?.files,
+    ['delete-me-again.txt'],
+    'delete does not claim an external same-path recreation'
+  )
 
   // (4) Dev-server output never counts, untracked or not ignored.
   assert.equal(

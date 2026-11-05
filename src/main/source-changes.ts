@@ -1,4 +1,11 @@
-import type { SourceOwner } from './source-owner'
+import type { EffectPath } from './live-change-watch'
+import { contentHash, type SourceOwner } from './source-owner'
+
+type SourceEffect = <T>(
+  root: string,
+  operation: () => Promise<T>,
+  affected: (result: T) => EffectPath[]
+) => Promise<T>
 
 /**
  * LKM-216: one in-process signal for "the live checkout changed", so every cache in the
@@ -31,7 +38,8 @@ export function noteSourceChange(root: string, files: string[], reason: SourceCh
 }
 
 /** The owner, reporting each successful write of its own. Reads pass through. */
-export function observedSourceOwner(owner: SourceOwner): SourceOwner {
+export function observedSourceOwner(owner: SourceOwner, effect?: SourceEffect): SourceOwner {
+  const run: SourceEffect = effect ?? ((_root, operation) => operation())
   const edited = (root: string, files: (string | undefined)[]) =>
     noteSourceChange(
       root,
@@ -57,7 +65,14 @@ export function observedSourceOwner(owner: SourceOwner): SourceOwner {
     clearDraft: (root, path) => owner.clearDraft(root, path),
     status: () => owner.status(),
     async commit(root, edits, options) {
-      const result = await owner.commit(root, edits, options)
+      const result = await run(
+        root,
+        () => owner.commit(root, edits, options),
+        (result) =>
+          result.ok
+            ? edits.map((edit) => ({ path: edit.path, hash: contentHash(edit.content) }))
+            : []
+      )
       if (result.ok)
         edited(
           root,
@@ -66,32 +81,56 @@ export function observedSourceOwner(owner: SourceOwner): SourceOwner {
       return result
     },
     async undo(root) {
-      const result = await owner.undo(root)
+      const result = await run(
+        root,
+        () => owner.undo(root),
+        (result) => (result.ok ? (result.effects ?? []) : [])
+      )
       if (result.ok) edited(root, [result.file])
       return result
     },
     async redo(root) {
-      const result = await owner.redo(root)
+      const result = await run(
+        root,
+        () => owner.redo(root),
+        (result) => (result.ok ? (result.effects ?? []) : [])
+      )
       if (result.ok) edited(root, [result.file])
       return result
     },
     async revert(root, group) {
-      const result = await owner.revert(root, group)
+      const result = await run(
+        root,
+        () => owner.revert(root, group),
+        (result) => (result.ok ? (result.effects ?? []) : [])
+      )
       if (result.ok) edited(root, [result.file])
       return result
     },
     async createFile(root, path) {
-      const result = await owner.createFile(root, path)
+      const result = await run(
+        root,
+        () => owner.createFile(root, path),
+        (result) => (result.ok ? (result.effects ?? []) : [])
+      )
       if (result.ok) edited(root, [result.path ?? path])
       return result
     },
     async renameFile(root, from, to) {
-      const result = await owner.renameFile(root, from, to)
+      const result = await run(
+        root,
+        () => owner.renameFile(root, from, to),
+        (result) => (result.ok ? (result.effects ?? []) : [])
+      )
       if (result.ok) edited(root, [from, result.path ?? to])
       return result
     },
     async deleteFile(root, path) {
-      const result = await owner.deleteFile(root, path)
+      const result = await run(
+        root,
+        () => owner.deleteFile(root, path),
+        (result) => (result.ok ? (result.effects ?? []) : [])
+      )
       if (result.ok) edited(root, [path])
       return result
     }

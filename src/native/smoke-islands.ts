@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { islandSource, sourceHash } from '../main/chat-island-source'
 import { runChatIslandTool } from '../main/chat-islands'
 import type { NativeBridge } from './bridge'
 import { nativeChat, nativeIslands } from './chat-runtime'
@@ -23,6 +24,49 @@ export async function checkChatIslands(host: NativeBridge, fixture: string, arti
     chat.context = { ...context, tokens: { ...context.tokens, needed: false }, notes: [] }
   const session = nativeIslands.sessions.get(chat.chat)
   assert.ok(session, 'Chat islands registered against the durable session record')
+  // Replace only the provider turn in this fixture. It still exercises the
+  // island's one-Apply request, source owner write, terminal reconciliation and
+  // the rendered page; no real provider or desktop login is required.
+  const agentPort = nativeIslands as unknown as {
+    applyDraft: (key: string, prompt: string) => Promise<string>
+    confirmRendered?: (
+      key: string,
+      record: unknown,
+      values: Record<string, number>,
+      revision: string
+    ) => Promise<boolean>
+  }
+  const originalApply = agentPort.applyDraft
+  const productionConfirm = agentPort.confirmRendered
+  assert.ok(productionConfirm, 'production chat runtime installs the rendered-value probe')
+  let applyTurn = 0
+  let pendingApplyTurn = ''
+  agentPort.applyDraft = async (key, prompt) => {
+    const active = nativeIslands.sessions.get(key)
+    const entry = [...(active?.drafts.entries() ?? [])].find(([id]) => active?.views.has(id))
+    assert.ok(entry, 'Apply has a source-bound draft')
+    const [id, draft] = entry
+    const view = active?.views.get(id)
+    assert.ok(view)
+    assert.ok(prompt.includes(view.sourceRevision), 'agent request carries exact source revision')
+    await nativeIslands.interact({
+      chat: key,
+      id,
+      revision: view.revision,
+      sourceRevision: view.sourceRevision,
+      action: 'commit',
+      operation: randomUUID(),
+      values: draft.values
+    })
+    pendingApplyTurn = `smoke-island-apply-${++applyTurn}`
+    return pendingApplyTurn
+  }
+  const settleApply = async () => {
+    assert.ok(pendingApplyTurn, 'exactly one agent source operation was requested')
+    const turn = pendingApplyTurn
+    pendingApplyTurn = ''
+    await nativeIslands.settle(chat.chat, true, turn)
+  }
   // Smoke islands go to scratch histories, so the chat's own history (and every later
   // check) never sees them; the owner writes each history, so nothing is reset by hand.
   const { root: islandRoot, recordId, turn } = session
@@ -33,15 +77,30 @@ export async function checkChatIslands(host: NativeBridge, fixture: string, arti
   const indexFile = join(fixture, 'index.html')
   const originalIndex = readFileSync(indexFile, 'utf8')
   const page = (code: string) => host.request('evaluate', { view: 'preview', code })
-  const code =
-    'const LIGHT_X = 0;\nconst LIGHT_Y = -0.5;\nconst SOFTNESS = 20;\nconst EASING = [0.25, 0.1, 0.25, 1];\n' +
-    `
+  let initialShadow = ''
+  const revisionStamp = (text: string) => {
+    const normalized = text.includes('data-trezi-revision')
+      ? text.replace(
+          /data-trezi-revision', '[a-f0-9]{64}/,
+          `data-trezi-revision', '${'0'.repeat(64)}`
+        )
+      : text.replace(
+          /(card\.setAttribute\('data-trezi-source', '[^\n]+\n)/,
+          `$1card.setAttribute('data-trezi-revision', '${'0'.repeat(64)}');\n`
+        )
+    return normalized.replace('0'.repeat(64), sourceHash(normalized))
+  }
+  const code = revisionStamp(
+    'const LIGHT_X = 0;\nconst LIGHT_Y = -0.5;\nconst SOFTNESS = 20;\nconst EASING = [0.25, 0.1, 0.25, 1];\nconst OPACITY = 1;\n' +
+      `
 const card = document.createElement('div');
 card.id = 'island-shadow-demo'; card.textContent = 'Light-driven shadow';
-card.style.cssText = 'margin:80px;padding:40px;background:white;border-radius:20px;width:180px';
-card.style.boxShadow = [-1,-2,-3].map((n,i) => (LIGHT_X*n*12)+'px '+(LIGHT_Y*n*12)+'px '+(SOFTNESS*(i+1))+'px rgba(0,0,0,0.12)').join(',');
+card.setAttribute('data-trezi-source', 'island-light.js:7:1');
+card.style.opacity = OPACITY;
+card.style.boxShadow = (LIGHT_X * -12) + 'px ' + (LIGHT_Y * -12) + 'px ' + SOFTNESS + 'px rgba(0,0,0,0.12)';
 document.body.append(card);
 `
+  )
   writeFileSync(file, code)
   writeFileSync(indexFile, originalIndex + '<script src="/island-light.js"></script>')
   const wait = async (check: () => Promise<boolean> | boolean) => {
@@ -72,9 +131,7 @@ document.body.append(card);
         }
       ]
       await wait(async () => await page("!!document.querySelector('#island-shadow-demo')"))
-      const initialShadow = await page(
-        "document.querySelector('#island-shadow-demo').style.boxShadow"
-      )
+      initialShadow = await page("document.querySelector('#island-shadow-demo').style.boxShadow")
       const result = (await runChatIslandTool(chat.chat, fixture, {
         action: 'define',
         engine: 'agent',
@@ -131,11 +188,59 @@ document.body.append(card);
           (i: any) => i.id === result.id && i.status === 'ready'
         )
       )
+      await host.request('revealChatIsland', { island: result.id })
       await host.request('islandPerform', {
         island: result.id,
-        action: 'commit',
+        action: 'draft',
         values: { x: 0.75, y: -0.25 }
       })
+      assert.equal(readFileSync(file, 'utf8'), code, 'island draft does not write source')
+      await wait(async () =>
+        (await host.request('chatInspect')).islands.some(
+          (i: any) => i.id === result.id && i.draftCount === 2 && i.draftPreview === false
+        )
+      )
+      await wait(
+        async () =>
+          (await host.request('islandControlInspect', { label: 'Light X' })).value === '0.75'
+      )
+      await host.request('islandPerform', { island: result.id, action: 'undo-draft' })
+      await wait(
+        async () =>
+          !(await host.request('chatInspect')).islands.some(
+            (i: any) => i.id === result.id && i.draftCount !== 0
+          )
+      )
+      await wait(
+        async () =>
+          (await host.request('islandControlInspect', { label: 'Light X' })).value === '0' &&
+          (await host.request('islandControlInspect', { label: 'Light Y' })).value === '-0.5'
+      )
+      await host.request('islandPerform', {
+        island: result.id,
+        action: 'draft',
+        values: { x: 0.75, y: -0.25 }
+      })
+      await host.request('islandPerform', { island: result.id, action: 'apply-draft' })
+      await wait(async () =>
+        (await host.request('chatInspect')).islands.some(
+          (i: any) => i.id === result.id && i.draftSubmitted === true
+        )
+      )
+      await settleApply()
+      assert.ok(
+        nativeIslands.sessions.get(chat.chat)?.drafts.has(result.id),
+        'unmapped literal source cannot clear a draft without rendered confirmation'
+      )
+      assert.match(
+        nativeIslands.sessions.get(chat.chat)?.views.get(result.id)?.notice ?? '',
+        /no rendered-value check/
+      )
+      assert.equal(
+        nativeIslands.sessions.get(chat.chat)?.views.get(result.id)?.draft?.conflict,
+        false,
+        'unsupported readback remains retryable after its source change'
+      )
       await wait(
         () =>
           readFileSync(file, 'utf8').includes('LIGHT_X = 0.75') &&
@@ -151,6 +256,12 @@ document.body.append(card);
           return false
         }
       })
+      await host.request('islandPerform', { island: result.id, action: 'revert-draft' })
+      assert.equal(
+        nativeIslands.sessions.get(chat.chat)?.views.get(result.id)?.draft,
+        undefined,
+        'unsupported source edit leaves a draft the user can explicitly dismiss'
+      )
       await new Promise((r) => setTimeout(r, 150))
       await host.request('islandPerform', { island: result.id, action: 'undo' })
       await wait(() => readFileSync(file, 'utf8') === code)
@@ -160,15 +271,67 @@ document.body.append(card);
       )
       assert.deepEqual(await host.request('webViews'), ['preview'])
       await checkIslandStatus(host, chat.chat, result.id, file, code, artifacts, wait)
+      // Exercise the production callback and real WebKit transport. A literal's
+      // source hash alone cannot pass this check.
+      const record = nativeIslands.sessions
+        .get(chat.chat)
+        ?.records.find((item) => item.id === result.id)
+      assert.ok(record)
+      const opacityRecord = {
+        ...record,
+        manifest: {
+          ...record.manifest,
+          params: [
+            {
+              id: 'opacity',
+              label: 'Opacity',
+              kind: 'number' as const,
+              min: 0,
+              max: 1,
+              apply: { strategy: 'literal' as const, anchor: 'const OPACITY = ' },
+              rendered: {
+                kind: 'computed-style' as const,
+                selector: '#island-shadow-demo',
+                property: 'opacity' as const
+              }
+            }
+          ]
+        },
+        blocks: [{ id: 'opacity', title: 'Opacity', kind: 'group' as const, params: ['opacity'] }]
+      }
+      const oldRevision = (await islandSource(fixture, opacityRecord)).revision
+      const updatedCode = revisionStamp(code.replace('const OPACITY = 1;', 'const OPACITY = 0.5;'))
+      writeFileSync(file, updatedCode)
+      await wait(async () => {
+        const loaded = (await page(
+          "({opacity:getComputedStyle(document.querySelector('#island-shadow-demo')).opacity, revision:document.querySelector('#island-shadow-demo').getAttribute('data-trezi-revision')})"
+        )) as { opacity?: string; revision?: string } | null
+        return (
+          loaded?.opacity === '0.5' &&
+          loaded.revision === updatedCode.match(/data-trezi-revision', '([a-f0-9]{64})/)?.[1]
+        )
+      })
+      const newRevision = (await islandSource(fixture, opacityRecord)).revision
+      assert.equal(
+        await productionConfirm(chat.chat, opacityRecord, { opacity: 0.5 }, oldRevision),
+        false,
+        'a stale source revision cannot confirm a rendered value'
+      )
+      assert.equal(
+        await productionConfirm(chat.chat, opacityRecord, { opacity: 0.5 }, newRevision),
+        true,
+        'the actual source-stamped preview frame confirms the new rendered value'
+      )
       scratch()
       await nativeIslands.refresh(chat.chat)
     }
-    if (parts.shadow) await checkShadowIsland(host, fixture, artifacts)
+    if (parts.shadow) await checkShadowIsland(host, fixture, artifacts, settleApply)
     if (parts.islands)
       console.log(
         'NATIVE ISLANDS PASS — Swift rendering, typed point action, source batch/Undo, landing gate, disabled/hidden states; no live model calls.'
       )
   } finally {
+    agentPort.applyDraft = originalApply
     writeFileSync(indexFile, originalIndex)
     // Restoring the page reloads the preview; let that finish so the next check (in a
     // filtered run, shell-layout directly) never styles a document about to be replaced.

@@ -5,6 +5,7 @@ import type { IslandRecord, IslandValue } from '../shared/chat-islands'
 import { checkBindings, IslandBindingError } from './chat-island-bindings'
 import { lexLiteral, locateAnchor, renderLiteral } from './control-manifest'
 import { revertGroup } from './edit-history'
+import { parseIslandProgram } from './island-source-syntax'
 import { jsxAttributeLiterals, renderJsxAttribute } from './jsx-attribute-literals'
 import { enqueueRepoWrite } from './repo-write-queue'
 import { shadowOutput } from './shadow-controls'
@@ -49,6 +50,11 @@ export async function islandSource(root: string, record: IslandRecord) {
 }
 /** The island's bound values as `code` holds them, and the bindings that no longer hold. */
 async function sourceValues(code: string, file: string, record: IslandRecord) {
+  if (/\.[cm]?[jt]sx?$/.test(file) && !parseIslandProgram(code, file))
+    throw new IslandBindingError(
+      `${record.manifest.file} doesn't parse right now; these controls wait until it does.`,
+      true
+    )
   let attributes: Awaited<ReturnType<typeof jsxAttributeLiterals>>
   try {
     attributes = await jsxAttributeLiterals(code, file)
@@ -86,11 +92,14 @@ export function writeIsland(
   seen: Record<string, IslandValue> | undefined,
   values: Record<string, IslandValue>,
   guard: () => boolean,
-  gestureGroup?: string
+  gestureGroup?: string,
+  expectedRevision?: string
 ) {
   return enqueueRepoWrite(root, async (): Promise<IslandWrite | undefined> => {
     if (!guard()) throw new Error('This island changed or closed. Reload its controls.')
     const source = await islandSource(root, record)
+    if (expectedRevision && source.revision !== expectedRevision)
+      throw new Error('Source changed while this preview draft was pending. Review or revert it.')
     if (seen && changedBindings(record, seen, source.values).length)
       return { conflict: true, revision: source.revision, values: source.values }
     const changes: { start: number; end: number; text: string }[] = []

@@ -402,8 +402,9 @@ wins; otherwise the sole saved Gateway is used. Environment overrides and ambigu
 connection handling are documented in PROJECT_UI.md.
 
 Claude and Codex/custom endpoints expose Jev selection in `chat_island`. Its
-`auto`/`jev` modes fall back to the chat model’s validated candidates only when no
-Gateway key is configured, returning the actual engine and fallback reason. The
+`auto` mode uses the chat model's validated candidates directly. Explicit `jev`
+mode falls back to those candidates only when no Gateway key is configured,
+returning the actual engine and fallback reason. The
 bundled `surface-controls` skill is portable across providers; experimental Gemini
 explains its missing tools. The `content_controls` tool was removed with content
 controls in LKM-114, and the `component-states` skill, `/states` command and states
@@ -418,9 +419,10 @@ item-level warnings remain visible with their full text, once per item per turn.
 Interactive Claude and Codex/custom-endpoint sessions expose `chat_island` with
 catalog, define and read actions. Definitions bind literal values in the session's
 source tree and attach to its native conversation. Detached/background children
-cannot create islands. The default auto engine uses saved Gateway credentials for
-Jev to select/order whole prepared blocks; missing credentials use the agent's
-layout with explicit fallback reporting. Runtime failures are not hidden.
+cannot create islands. The default auto engine uses the agent's prepared blocks
+without a separate model call. Explicit `engine:jev` uses saved Gateway credentials
+to select/order them; missing credentials retain the prepared blocks with an explicit
+fallback reason. Other runtime failures are not hidden.
 
 A chat's island session is attached when its workspace is ready (LKM-199;
 `ChatIslands.attach`): at restore, on a new chat once its preparation ends, at the
@@ -468,8 +470,9 @@ and turn completion on the initiating user entry after landing/reconciliation.
 Native chat shows elapsed turn time and message/commentary timestamp tooltips;
 legacy records without completion metadata omit duration.
 
-Control surfacing publishes a disabled source-validated draft before Jev finishes
-selecting/ordering its blocks. Drafts are ephemeral and removed on failure or
+Control surfacing publishes a disabled source-validated draft before block selection
+finishes. With the default prepared blocks this step has no Jev network wait. Drafts
+are ephemeral and removed on failure or
 cancellation; only completed definitions persist. Controls still activate after
 successful landing. Redefining an island from an earlier turn creates a new ID
 and attaches it to the current response; same-turn definitions still update in

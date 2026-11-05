@@ -127,6 +127,24 @@ function validateParam(p: unknown, seen: Set<string>): { param: ControlParam } |
   if (isFin(q.max)) param.max = q.max
   if (isFin(q.step)) param.step = q.step
   if (kind === 'select') param.options = (q.options as string[]).slice()
+  if (q.rendered !== undefined) {
+    const rendered = q.rendered as Record<string, unknown> | null
+    if (
+      kind !== 'number' ||
+      apply.strategy !== 'literal' ||
+      q.unit !== undefined ||
+      !rendered ||
+      rendered.kind !== 'computed-style' ||
+      rendered.property !== 'opacity' ||
+      !isStr(rendered.selector) ||
+      !/^#[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(rendered.selector) ||
+      Object.keys(rendered).some((key) => !['kind', 'selector', 'property'].includes(key))
+    )
+      return {
+        error: `${where}: rendered binding must be a unitless numeric literal on one element's opacity`
+      }
+    param.rendered = { kind: 'computed-style', selector: rendered.selector, property: 'opacity' }
+  }
   return { param }
 }
 

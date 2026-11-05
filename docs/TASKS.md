@@ -3,6 +3,30 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-539 — Faster source-bound chat controls
+
+- [x] Trace the photo-hover island creation and source-to-preview update paths against the reported session and DialKit's live-value model.
+- [x] Use prepared controls by default without a Jev network wait; retain explicit Jev selection and its fallback semantics.
+- [x] Keep direct literal source writes, project HMR and no-model control gestures; cover six-control default selection in a focused fixture.
+- [x] Trace eligible Styles preview and source commits, and attribute Styles, chat-island and internal editor writes through the source owner during active turns.
+- [x] Preserve stale-source and landing conflict guards; prove first-party and external attribution plus an internal editor save racing a landing in focused fixtures.
+- [x] Extend the native Styles fixture to assert an applied value reaches the rendered preview as well as the source and Undo history.
+- [x] Review repair: authenticate Undo, Redo, Revert and file-operation effects against the source owner's resulting state; cover same-path external interleavings and a source-backed CSS reload assertion.
+- [x] Stage eligible Styles and island adjustments as preview drafts with explicit Apply, Undo and Revert; retain unsatisfied drafts and source revision guards.
+- [x] Cover source-free draft gestures and batch Apply in focused fixtures, with native fixture assertions for the rendered preview and source-backed reload.
+- [x] Review repair: reconcile island Undo display, stage Reset through Apply, unlock unconfirmed Styles batches, and report cleared inspector previews truthfully.
+- [x] Bounded review repair: confirm direct Styles Apply after source/render settle, preserve drafts across selection and workspace changes, and assert the displayed Swift island value after Undo.
+- [x] Superseding Apply contract: submit single and accumulated Styles/island drafts through one regular chat agent turn; restore authored plus draft field display and allow safe Undo/Revert after broken island bindings, with focused fixtures.
+- [x] Review repair: require rendered confirmation before settling literal island drafts, and retain the Styles submitted turn across selection and workspace changes.
+- [x] Production composition repair: track Styles Apply terminals by exact chat and turn, including overlapping submissions in different workspaces.
+- [x] Production composition repair: provide a trustworthy source-backed rendered-value probe for supported literal islands before clearing their Apply drafts; leave unmappable literals pending with Retry and Revert.
+- [x] Review repair: require the parsed literal to feed the exact rendered opacity target and reject a same-file unrelated element even when its value matches.
+- [x] Review repair: reject later or aliased opacity writers and same-line element impersonation; bind the supported readback to the unique creation column.
+- [x] Review repair: close the admitted opacity syntax against every `cssText` write and shared-statement creation, with matching default-value and identity fixtures.
+- [x] Architecture discriminator: restrict rendered-opacity proof to inert `div` syntax; reject executable-element resets while retaining linked positive and stale/identity controls.
+- [x] Parser admission repair: reject malformed JavaScript/TypeScript and duplicate top-level bindings before island source admission or opacity proof; cover old-preview settlement and record the remaining same-stamp freshness limit.
+- [x] Review repair: bind the supported opacity target's rendered stamp to a validated full-source revision and keep a same-position old frame pending until the matching revision loads.
+- [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
 ## LKM-545 — Native suite failure on main 109acab68c80
 
 - [x] Realize the latest lazy chat row at the reading edge above the overlaid composer, with a targeted anchor check.

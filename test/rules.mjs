@@ -20,7 +20,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 49, 'version bumped to 49')
+assert(TREZI_RULES_VERSION === 50, 'version bumped to 50')
 // LKM-281: a merge waits for the user's card; no model-supplied flag approves it.
 assert(!/confirmed: true/.test(r), 'no model-supplied merge confirmation')
 assert(/publish_merge first shows the user a card/.test(r), 'merge waits for the host card')
@@ -364,8 +364,8 @@ for (const rules of [withTools, codexControls]) {
     'R-islands: inspect only the relevant code'
   )
   assert(
-    /define the island early, before\s+editing source: action:define with planned:true/.test(rules),
-    'R-islands: define a planned island before editing source'
+    /action:define with manifest, blocks and engine:auto.*Use planned:true only when/.test(rules),
+    'R-islands: define against existing literals, plan only when new ones are needed'
   )
   assert(
     /planned binding resolves; otherwise the island shows the reason with Recreate/.test(rules),
@@ -373,10 +373,10 @@ for (const rules of [withTools, codexControls]) {
   )
 }
 assert(
-  /\(1\) call catalog and check readiness.*\(2\).*preview identity.*\(3\) Inspect only the code.*\(4\) Define the island early, before editing source: define with planned:true/.test(
+  /\(1\) call catalog and check readiness.*\(2\).*preview identity.*\(3\) Inspect only the code.*\(4\) Define the island with the manifest and prepared blocks.*Use planned:true only when/.test(
     chatIslandGuidance
   ),
-  'Catalog guidance orders readiness, preview identity, focused inspection, early planned define'
+  'Catalog guidance orders readiness, preview identity, focused inspection and necessary planned definitions'
 )
 assert(
   !/Define controls before long checks/.test(chatIslandGuidance),

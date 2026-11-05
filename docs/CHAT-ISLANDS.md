@@ -3,16 +3,22 @@
 Status: first working slice implemented, 2026-09-25. The target design and remaining
 stages follow below; the current implementation is deliberately bounded.
 
+## Current Apply contract (LKM-539, 2026-11-05)
+
+The implementation has moved beyond the first slice described below. Control gestures collect frontend drafts without a source write or agent turn per adjustment. Shadow controls can project a temporary preview; other literals report when live projection is unavailable. Explicit Apply starts one regular chat agent turn for the accumulated values. A draft clears only after the requested source values and the rendered preview are confirmed. The currently supported literal readback is a declared unitless numeric opacity whose exact parsed top-level constant directly sets the opacity of one inert `div` with the declared id. JavaScript/TypeScript source with parser diagnostics or duplicate top-level variable bindings is not admitted. This closed source subset permits one direct opacity writer, static text/id/source-stamp writes, side-effect-free shadow arithmetic and a final append, with the stamp naming a unique, single-declaration creation statement in the active preview project/session/frame. The same target must also set `data-trezi-revision` to a SHA-256 hash of the full UTF-8 file with that hash literal replaced by 64 zeros. The source proof validates this attribute and the actual preview node must carry the same revision. An older frame with the same value and creation position therefore cannot confirm Apply after a source edit. Executable elements, URL or event writes, `cssText`, aliases, dynamic calls or ambiguous creation make the rendered check unavailable, even if computed opacity happens to match. Dynamic or ambiguous source relationships, unstamped legacy files and other literal effects remain pending with an actionable Retry or Revert. Arbitrary canvas, animation and application logic has no universal DOM readback. The native rendered check remains pending post-merge.
+
 ## Implemented slice
 
 - Claude/Codex/custom endpoints expose `chat_island` catalog/define/read. Background
   children cannot create islands. Agent-prepared groups and 2D points render in
   SwiftUI inside the originating assistant turn, with standard fields and Bézier
   handles/presets. Springs use grouped parameters for the project's actual engine.
-- Jev selects and orders whole prepared blocks via the installed json-render
-  evaluator. The coding agent determines group membership. Arbitrary nested layout
-  and Jev-generated regrouping are not implemented yet. Missing credentials retain
-  the prepared layout and report the actual agent engine.
+- The default auto engine uses prepared blocks directly, without a second model
+  request. Explicit `engine:jev` selects and orders whole prepared blocks via the
+  installed json-render evaluator. The coding agent determines group membership.
+  Arbitrary nested layout and Jev-generated regrouping are not implemented yet.
+  Missing credentials on an explicit Jev request retain the prepared layout and
+  report the actual agent engine.
 - Up to 12 literal fields in one source file; points batch x/y into one queued,
   revision-checked write and undo group. Reset, Reload and instrumented Replay are
   supported. Sliders, points and curves write at most once per 120 ms during dragging,
@@ -294,7 +300,7 @@ The host supplies session/turn identity; tool arguments cannot redirect delivery
 Expose tools through supported provider seams and update the bundled controls
 workflow guidance. Scope tools to native clients that advertise the capability.
 
-Use Jev when configured to select prepared block alternatives and group structure.
+Use Jev only when explicitly requested to select prepared block alternatives and group structure.
 First verify the installed API supports the required constraints. If nested output
 is insufficient, use bounded typed decisions for block/group membership and order,
 then deterministically assemble the same validated tree. This is a composition
