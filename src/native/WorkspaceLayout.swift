@@ -262,7 +262,7 @@ final class WorkspaceLayout {
         host.placeSpeedBadge()
         var occluders: [NSRect] = []
         if host.threeD.active {
-            let top: CGFloat = 48, bottom: CGFloat = 44
+            let top: CGFloat = 0, bottom: CGFloat = 44
             let stage = NSRect(x: page.minX, y: page.minY + top, width: page.width, height: max(0, page.height - top - bottom))
             func confined(_ frame: NSRect) -> NSRect {
                 let lower = max(frame.minY, stage.minY), upper = min(frame.maxY, stage.maxY)
@@ -283,8 +283,9 @@ final class WorkspaceLayout {
         }
         let threeDVisible = host.threeD.place(in: page, visible: shown && host.views["preview"]?.isHidden == false, occluders: occluders)
         if host.threeD.active && !threeDVisible { host.threeD.dismiss() }
+        host.shell.setNestedObject(host.threeD.active ? host.threeD.model.title : nil, hasSource: host.threeD.active && host.threeD.model.hasSource)
         if host.threeD.active {
-            // The scene sits just above the page, under the islands; the bars over everything.
+            // The scene sits just above the page, under the islands; the footer is above them.
             // Reorder only when needed: re-adding a view drops its first-responder status.
             if let preview = host.views["preview"] {
                 if let at = host.canvas.subviews.firstIndex(of: preview), host.canvas.subviews.firstIndex(of: host.threeD.backdrop) != at + 1 {
@@ -294,7 +295,6 @@ final class WorkspaceLayout {
                     host.canvas.addSubview(host.threeD.scene, positioned: .above, relativeTo: host.threeD.backdrop)
                 }
             }
-            host.canvas.addSubview(host.threeD.header, positioned: .above, relativeTo: nil)
             host.canvas.addSubview(host.threeD.footer, positioned: .above, relativeTo: nil)
             host.canvas.addSubview(host.speedBadge, positioned: .above, relativeTo: nil)
         }

@@ -225,6 +225,7 @@ export const UNIT = [
   'skills-discovery',
   'provider-skills',
   'three-d-contract',
+  'three-d-state-routing',
   'github-connect',
   'html-source',
   'project-key',

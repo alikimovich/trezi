@@ -150,6 +150,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         _ = makeView("preview")
         threeD.preview = views["preview"]; threeD.world = world
         shell = NativeShell(window: window, canvas: canvas)
+        shell.nestedBackAction = { [weak self] in self?.threeD.model.action("close") }
+        shell.nestedCodeAction = { [weak self] in self?.threeD.model.action("code") }
         previewSurface = PreviewSurface(preview: views["preview"]!, canvas: canvas, container: canvas.superview!)
         previewSurface.colorChanged = { [weak self] color in if self?.nativeLayout?.start.tint.isEmpty != false { self?.shell.updatePreviewColor(color) } }
         startSurface.appearanceChanged = { [weak self] in self?.nativeLayout?.layout() }
@@ -159,7 +161,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         canvas.addSubview(previewLoad)
         canvas.addSubview(threeD.backdrop, positioned: .above, relativeTo: views["preview"])
         canvas.addSubview(threeD.scene, positioned: .above, relativeTo: threeD.backdrop)
-        canvas.addSubview(threeD.header); canvas.addSubview(threeD.footer)
+        canvas.addSubview(threeD.footer)
         canvas.addSubview(editingInspector)
         canvas.addSubview(layers)
         // Over the islands: it hangs under the toolbar, where they float.
@@ -492,15 +494,18 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         if body["channel"] as? String == "trezi:preview:element-picked" { previewPicks += 1 }
         // Scroll and selection geometry for the native rulers and guides stays in the host.
         if name == "preview", body["channel"] as? String == "trezi:preview:overlay-geometry" { previewOverlay?.receive(body["args"]); return }
-        if name == "preview", body["channel"] as? String == "trezi:preview:three-d-state" {
-            let document = body["document"] as? String ?? ""
-            guard !document.isEmpty, let args = body["args"] as? [Any], args.count == 1 else { return }
-            if args[0] is NSNull { if threeD.document == document { threeD.clear(); nativeLayout.layout() } }
-            else if let state = args[0] as? [String: Any] {
-                threeD.receive(state, document: document); nativeLayout.layout()
+        if ThreeDStateRelay.handle(view: name, body: body, accept: { document, state in
+            if let state {
+                guard threeD.receive(state, document: document) else { return false }
+                shell.setNestedObject(threeD.model.title, hasSource: threeD.model.hasSource)
+            } else {
+                guard threeD.document == document else { return false }
+                threeD.clear()
+                shell.setNestedObject(nil)
             }
-            return
-        }
+            nativeLayout.layout()
+            return true
+        }, forward: { emit($0) }) { return }
         // ⌘← / ⌘→ the page left unhandled outside its fields (`src/preview/history-keys.ts`).
         if name == "preview", body["channel"] as? String == "trezi:preview:history" {
             if let step = (body["args"] as? [Any])?.first as? String, ["back", "forward"].contains(step) { previewHistory.go(step == "back") }
