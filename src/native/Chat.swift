@@ -418,12 +418,15 @@ struct ChatConversation: View {
                 relayoutEnd = step == .relayout ? latestEnd : nil
                 let action = ChatLatestSettle.escalated(step, unresolved: unresolved, relayouts: relayouts, latest: model.snapshot?.messages.last?.id)
                 if case .realize = action { relayouts = 0; realized = true }
-                // Past the limit nothing scrolls through SwiftUI any more: every realize,
-                // to the first row or to the latest (parked under the composer), moves
-                // the clip off the end and the next chunk's pin moves it back.
-                if case .realize(let id) = action, unresolvedSettles <= ChatLatestSettle.unresolvedRestarts {
+                // Past the limit nothing scrolls through SwiftUI any more while a turn
+                // streams: every realize, to the first row or to the latest (parked under
+                // the composer), moves the clip off the end and the next chunk's pin moves
+                // it back. An idle conversation still realizes (ChatLatestSettle.mayRealize).
+                let running = model.snapshot?.running ?? false
+                if case .realize(let id) = action, ChatLatestSettle.mayRealize(unresolved: unresolvedSettles, running: running) {
                     realizingLatest = true; latestNudge.toggle(); stuck += 1; model.latestRealizes += 1
-                    let target = ChatLatestSettle.realizeTarget(latest: id, first: model.snapshot?.messages.first?.id, stuck: stuck)
+                    let target = ChatLatestSettle.realizeTarget(latest: id, first: model.snapshot?.messages.first?.id, stuck: stuck, running: running,
+                                                               readingHeight: readingHeight(), viewportHeight: viewportHeight)
                     proxy.scrollTo(target.id, anchor: target.anchor)
                 } else {
                     stuck = 0; realizingLatest = false
