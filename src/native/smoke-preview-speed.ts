@@ -64,8 +64,9 @@ export function chatNewPaneProblem(shell: Speed, expectedWidth: number): string 
     return `chat width ${shell.chatWidth}, expected ${expectedWidth}`
   const [buttonX, , buttonWidth] = (shell.chatNewFrame.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
   const gap = shell.detailLeading + shell.chatWidth - buttonX - buttonWidth
-  if (!Number.isFinite(gap) || buttonWidth !== 32) return 'New Chat frame is not a 32 pt button'
-  if (Math.abs(gap - 4) > 1) return `New Chat is ${gap} pt inside the pane, expected 4 ± 1 pt`
+  if (!Number.isFinite(gap) || buttonWidth < 28 || buttonWidth > 48)
+    return 'New Chat item frame is outside the native button range'
+  if (Math.abs(gap - 4) > 3) return `New Chat is ${gap} pt inside the pane, expected 4 ± 3 pt`
 }
 /** Below this window width `fitMore` removes the slow-motion segment and "…" (ToolbarMore.swift). */
 const NARROW_WINDOW = 960

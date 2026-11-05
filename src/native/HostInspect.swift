@@ -474,6 +474,9 @@ extension Host {
             guard ephemeral else { reply(id, error: "Test profile required"); return true }
             shell.testChatNewEnabled(c["enabled"] as? Bool ?? false)
             reply(id, shell.inspect())
+        case "toolbarInteractionProbe":
+            guard ephemeral else { reply(id, error: "Test profile required"); return true }
+            reply(id, shell.toolbarInteractionProbe(c["stage"] as? String ?? ""))
         case "captureToolbarWindow":
             // LKM-321: in full screen the toolbar is in AppKit's own window, outside the main window's capture.
             guard ephemeral, let host = shell.toolbarWindow else { reply(id, error: "Test profile required"); return true }

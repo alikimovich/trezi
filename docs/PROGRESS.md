@@ -39,6 +39,30 @@
 ## 2026-11-04 — LKM-525 nested Settings header
 
 - Skills overview and nested Skills/provider panes now use the existing section and action state to keep registered actions in a fixed header. Nested panes show Back and context; the grouped form holds metadata and help below it, and the large section title stays only on overviews. Unsaved draft values survive Back and reopen in the same window, scoped to their pane context. Skills and windowless native fixtures cover parent/detail/back, draft preservation and section reentry; native visual acceptance remains for the manager after merge.
+## 2026-11-04 — LKM-535 review repair: rendered toolbar button geometry
+
+- The toolbar inspection now exposes the actual AppKit NSButton bounds for New Chat, More and the sidebar toggle, converted to the main window's coordinates. The existing toolbar item frames retain their layout and pixel-sampling meanings.
+- The normal/narrow, light/dark foreground fixture now asserts height and vertical-center alignment from those rendered button frames and records the measurements beside each capture. The prior enabled/disabled paint-delta assertion remains. Native acceptance still runs in the manager's post-merge pipeline.
+
+## 2026-11-04 — LKM-535 review repair: enabled paint and toolbar alignment evidence
+
+- The existing light/dark foreground fixture now compares New Chat's enabled and disabled PNG pixels at normal and narrow widths, asserting a visible change and recording the measured difference with both capture paths.
+- The same captures now record each native button's height and vertical center, and assert New Chat aligns with More and the sidebar toggle at both widths. Foreground native execution remains the manager's post-merge acceptance gate.
+
+## 2026-11-04 — LKM-535 review repair: older macOS visibility and VoiceOver
+
+- On macOS 13/14, New Chat now leaves or rejoins the toolbar beside the title when the title hides or returns; macOS 15+ keeps the system item hidden property. The chat resize fixture asserts the button and title share the same visibility rule.
+- The sidebar-chat fixture now reads the rendered toolbar button's unignored accessibility element and asserts AXButton and New Chat, alongside its existing action, tooltip and glyph checks. The cited CI aggregate had canceled unit shards, not a failing test assertion; exact-head CI remains the manager's gate.
+
+## 2026-11-04 — LKM-535 review repair: foreground interaction evidence
+
+- The disposable-profile toolbar fixture now captures New Chat, More and the sidebar toggle at normal and narrower widths in light and dark appearances at idle, hover, press and keyboard focus. A native-button test seam invokes the existing AppKit hover callback pattern, native highlight and responder chain directly, without posting input. Each foreground capture has a recorded path, control state and pixel-change assertion against its idle image. The registered unit fixture checks that the shared pixel detector sees hover fill and an exterior focus ring. Agent OS still owns the post-merge native run and acceptance.
+
+## 2026-11-04 — LKM-535 standalone New Chat toolbar item
+
+- New Chat is now its own system-rendered AppKit toolbar item beside the conversation title. The title reserves the measured native item advance so the action follows the chat column across resizing and sidebar changes. The custom glass wrapper, full-frame alignment and hover/bezel emulation are gone; shared island divider behavior remains.
+- Existing toolbar fixtures now assert the standalone item, action and chat-column geometry. Foreground light/dark captures still inspect painted appearance; independent review, exact-head CI and post-merge native acceptance remain with Agent OS.
+
 ## 2026-11-04 — LKM-533 review repair: accepted-card geometry evidence
 
 - The existing chat UI native smoke now records SwiftUI question and answer line frames for synthetic accepted forms at 320, 400 and 520 point chat widths. It asserts pair order, leading alignment, card-width use, bounds, and long-answer wrapping, and writes a PNG plus geometry JSON for each width. The manager's post-merge native chat run remains the visual acceptance gate.

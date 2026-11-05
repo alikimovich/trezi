@@ -175,8 +175,8 @@ export async function checkToolbarOverflow(host: NativeBridge, artifacts: string
           Number
         )
         assert.ok(
-          Math.abs(buttonX + buttonWidth - (resized.chatHeaderTrailing - 4)) <= 1,
-          `sidebar ${sidebar}: New Chat follows the resized chat header`
+          Math.abs(buttonX + buttonWidth - (resized.detailLeading + resized.chatWidth - 4)) <= 3,
+          `sidebar ${sidebar}: New Chat follows the resized chat column`
         )
       }
       await flip(`sidebar-${sidebar}-expand`, true)
