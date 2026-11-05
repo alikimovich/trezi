@@ -38,6 +38,11 @@ struct ChatUiFrames: PreferenceKey {
     static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) { value.merge(nextValue()) { _, new in new } }
 }
 
+struct ChatUiAcceptedLineFrames: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) { value.merge(nextValue()) { _, new in new } }
+}
+
 private struct ChatUiHeader: View {
     let component: ChatUiComponent
     var body: some View {
@@ -200,10 +205,20 @@ struct ChatUiFormView: View {
                     ForEach(fields, id: \.id) { field in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(field.label).font(.system(size: 12)).foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(GeometryReader { geometry in
+                                    Color.clear.preference(key: ChatUiAcceptedLineFrames.self,
+                                        value: ["\(record.id):\(field.id):question":geometry.frame(in: .named("chatScroll"))])
+                                })
                             Text(ChatUiFormat.value(answer.values?[field.id], unit: field.unit))
                                 .font(.system(size: 12, weight: .medium))
                                 .multilineTextAlignment(.leading)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(GeometryReader { geometry in
+                                    Color.clear.preference(key: ChatUiAcceptedLineFrames.self,
+                                        value: ["\(record.id):\(field.id):answer":geometry.frame(in: .named("chatScroll"))])
+                                })
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityElement(children: .combine)
@@ -361,7 +376,12 @@ extension Host {
         for _ in 0..<60 {
             try await Task.sleep(nanoseconds: 50_000_000)
             let frame = chat.model.chatUiFrames[id] ?? .zero
-            if frame == last && frame != .zero { break }
+            let linesReady = chat.model.chatUiAcceptedLineFrames.contains { entry in
+                entry.key.hasPrefix("\(id):") && abs(entry.value.width - (frame.width - 24)) <= 3
+            }
+            let widthReady = (c["expectedChatWidth"] as? Double).map { abs(Double(frame.width) - ($0 - 36)) <= 20 } ?? true
+            if frame == last && frame != .zero && widthReady &&
+                (c["acceptedLayout"] as? Bool != true || linesReady) { break }
             last = frame
         }
         let reading = NSRect(x: 0, y: 0, width: chat.bounds.width, height: max(1, chat.bounds.height - chat.model.bottomInset))
@@ -369,6 +389,7 @@ extension Host {
         let frame = chat.model.chatUiFrames[id] ?? .zero
         return ["png": captured["png"] ?? "", "appearance": window.effectiveAppearance.name.rawValue,
                 "readingHeight": Double(reading.height), "frame": NSStringFromRect(frame),
+                "acceptedLines": chat.model.chatUiAcceptedLineFrames.mapValues { NSStringFromRect($0) },
                 "inView": frame.height > 0 && frame.minY >= -1 && frame.maxY <= reading.height + 1]
     }
 }

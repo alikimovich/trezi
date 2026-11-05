@@ -103,6 +103,7 @@ final class ChatModel: ObservableObject {
     var seenAgentQuestions: Set<String> = [], agentCardFrames: [String: CGRect] = [:]
     /// Answer components (ChatUi.swift) by record id, for inspection and captures.
     var chatUiFrames: [String: CGRect] = [:]
+    var chatUiAcceptedLineFrames: [String: CGRect] = [:]
     var bottomPosition: CGFloat = 0
     var latestButtonFrame = CGRect.zero
     /// What the conversation's SwiftUI views read (see ChatAccessibilityEcho).
@@ -477,6 +478,7 @@ struct ChatConversation: View {
                     .onPreferenceChange(AttachmentFrames.self) { model.attachmentFrames = $0 }
                     .onPreferenceChange(AgentCardFrames.self) { model.agentCardFrames = $0 }
                     .onPreferenceChange(ChatUiFrames.self) { model.chatUiFrames = $0 }
+                    .onPreferenceChange(ChatUiAcceptedLineFrames.self) { model.chatUiAcceptedLineFrames = $0 }
                     .onPreferenceChange(BottomPosition.self) { bottom in
                         // Read below the overlay: above it the end marker reads 0, so
                         // every settle ran out its attempts relaying out (LKM-312).

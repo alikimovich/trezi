@@ -7,6 +7,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 - [x] Render each accepted form question immediately above its answer, leading-aligned across the card width.
 - [x] Capture a synthetic long-answer example in the existing chat UI smoke fixture and retain submitted-value assertions.
+- [x] Review repair: assert the rendered accepted-card pair geometry and wrapping at narrow, ordinary and wide chat widths; save PNG and frame JSON for each.
 - [ ] Manager: independent review, exact-head CI and post-merge native chat acceptance.
 
 ## LKM-527 — Native suite failure on main a8687a1b6a94
