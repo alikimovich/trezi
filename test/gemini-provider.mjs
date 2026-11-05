@@ -181,7 +181,7 @@ try {
   await open()
   assert.deepEqual(
     providerFields().map((f) => f.id),
-    ['connections', 'geminiEnabled']
+    ['connections', 'claude-settings', 'geminiEnabled', 'gemini-settings']
   )
   // Laid out like the other provider rows: the fallback row's kind, choices and pane.
   const row = field('geminiEnabled'),
@@ -191,6 +191,12 @@ try {
     [fallback.kind, fallback.section, fallback.choices, fallback.draft]
   )
   assert.equal(row.value, 'off')
+  assert.equal(field('gemini-settings').action, 'gemini')
+  assert.deepEqual(
+    sheets.current.state.actions.filter((a) => a.primary).map((a) => a.id),
+    ['add'],
+    'Gemini configuration is a row; its On/Off choice stays separate'
+  )
   assert.deepEqual(
     sheets.current.state.actions.map((a) => a.id),
     ['clean-workspaces', 'add', 'claude', 'gemini'],
@@ -255,6 +261,13 @@ try {
   assert.match(field('report').value, /Gemini CLI/)
   assert.deepEqual(owned.at(-1), ['checkLogin', 'gemini'])
   await action('gemini-remove')
+  assert.ok(
+    sent.some(
+      ([method, data]) =>
+        method === 'sheetState' && data.state.clearDraftFields?.includes('geminiKey')
+    ),
+    'a successful removal tells the native form to clear the key draft'
+  )
   assert.deepEqual(calls.filter((c) => c[0] === 'providers:seat-token-save').at(-1), [
     'providers:seat-token-save',
     '',
@@ -264,7 +277,7 @@ try {
   await action('back')
   assert.deepEqual(
     providerFields().map((f) => f.id),
-    ['connections', 'geminiEnabled']
+    ['connections', 'claude-settings', 'geminiEnabled', 'gemini-settings']
   )
   assert.deepEqual(
     sheets.current.state.actions.map((a) => a.id),

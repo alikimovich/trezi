@@ -27,6 +27,10 @@ import {
 import { serviceSkills } from '../src/native/skills-service.ts'
 import { assertSkillsEvidence } from '../src/native/skills-verification.ts'
 import { recommendationUrl, SKILL_RECOMMENDATIONS } from '../src/shared/skills-catalog.ts'
+import {
+  recommendationImport,
+  SKILL_RECOMMENDATION_IMPORTS
+} from '../src/shared/skills-recommendations.ts'
 import { compileSkills, link, scratchSpace, skillMd } from './helpers/skills-fixture.mjs'
 
 // --- The catalog: metadata only, GitHub sources, allowed licenses, no file content ---
@@ -154,19 +158,34 @@ try {
   )
   assert.deepEqual(footer(), OVERVIEW)
   assert.equal(field('recommendations-note').label, 'Not installed until you choose Install')
-  for (const entry of SKILL_RECOMMENDATIONS) {
+  for (const entry of SKILL_RECOMMENDATIONS.filter(
+    (candidate) => recommendationImport(candidate) && SKILL_RECOMMENDATION_IMPORTS[candidate.id]
+  )) {
     const row = field(`recommendation:${entry.id}`)
     assert.ok(row.group.startsWith('Recommended · '))
-    assert.equal(
-      row.value,
-      entry.importable ? `${entry.publisher} · ${entry.license}` : 'Not importable'
-    )
+    assert.equal(row.value, `${entry.publisher} · ${entry.license}`)
     assert.equal(row.action, `skill-recommendation:${entry.id}`)
     assert.ok(
       state().actions.some((a) => a.id === row.action && !a.section),
       'Row actions are registered without a footer button'
     )
   }
+  for (const entry of SKILL_RECOMMENDATIONS.filter(
+    (candidate) => !recommendationImport(candidate)
+  )) {
+    assert.equal(
+      field(`recommendation:${entry.id}`),
+      undefined,
+      'Unavailable recommendation hidden from the list'
+    )
+    assert.ok(!state().actions.some((a) => a.id === `skill-recommendation:${entry.id}`))
+  }
+  assert.ok(
+    !skillsFields().some(
+      (f) => f.group === 'Recommended · Writing' || f.group === 'Recommended · Explore and review'
+    ),
+    'Empty recommendation categories are omitted'
+  )
   // The other panes keep their rows and actions.
   assert.ok(state().actions.some((a) => a.id === 'clean-workspaces'))
   assert.ok(state().fields.some((f) => f.id === 'default'))
@@ -191,32 +210,26 @@ try {
   assert.equal(field('recommendation-license').value, 'Apache-2.0')
   assert.equal(field('recommendation-status').value, 'Not installed')
   assert.deepEqual(footer(), ['skill-back', 'skill-install'])
+  assert.equal(state().sections.find((s) => s.id === 'skills').navigationTitle, 'Frontend Design')
   assert.deepEqual(disabled(), [])
   await act('skill-back')
+  assert.equal(state().sections.find((s) => s.id === 'skills').navigationTitle, undefined)
   await act('skill-recommendation:impeccable')
   assert.equal(field('recommendation-status').value, 'Not installed')
   assert.equal(field('recommendation-source').value, 'pbakaus/impeccable/plugin/skills/impeccable')
   assert.match(field('recommendation-status').help, /17 static Markdown playbooks/)
   assert.deepEqual(disabled(), [])
   await act('skill-back')
-  // One that cannot be imported: Install is shown disabled and refused if sent anyway.
+  // Hidden catalog suggestions cannot be opened through the Settings action router.
   await act('skill-recommendation:variant')
-  assert.equal(field('recommendation-status').value, 'Can’t be installed')
-  assert.ok(field('recommendation-status').help, 'It says why')
-  assert.equal(
-    field('recommendation-link').value,
-    recommendationUrl(SKILL_RECOMMENDATIONS.find((r) => r.id === 'variant'))
-  )
-  assert.deepEqual(disabled(), ['skill-install'])
-  await act('skill-install')
-  assert.equal(state().message, undefined, 'A disabled action is not handled')
-  await act('skill-back')
+  assert.equal(field('recommendations-note')?.label, 'Not installed until you choose Install')
   assert.equal((await registry.list()).skills.length, 0, 'Viewing recommendations installs nothing')
   assert.deepEqual(github.requests, [], 'Nothing was fetched before Install')
 
   // Manual add: a template, a refused SKILL.md keeps the draft, then the real one.
   await act('skill-add')
   assert.deepEqual(footer(), ['skill-back', 'skill-create'])
+  assert.equal(state().sections.find((s) => s.id === 'skills').navigationTitle, 'Add a Skill')
   assert.equal(field(NEW_SKILL_FIELD).value, NEW_SKILL_TEMPLATE)
   assert.equal(field(NEW_SKILL_FIELD).kind, 'multiline')
   await act('skill-create', { [NEW_SKILL_FIELD]: '# no front matter\n' })
@@ -257,6 +270,12 @@ try {
   assert.equal(field('skill-source').value, 'Added manually')
   assert.ok(!ids().includes('skill-commit'), 'A local skill has no pinned commit')
   assert.deepEqual(footer(), ['skill-back', 'skill-toggle', 'skill-remove', 'skill-save'])
+  assert.equal(state().sections.find((s) => s.id === 'skills').navigationTitle, 'ui-notes')
+  await sheets.action({ id: state().id, action: 'section', values: {}, section: 'general' })
+  assert.equal(state().section, 'general')
+  await sheets.action({ id: state().id, action: 'section', values: {}, section: 'skills' })
+  assert.equal(state().sections.find((s) => s.id === 'skills').navigationTitle, 'ui-notes')
+  assert.equal(field(editor).value, text, 'Section reentry retains the opened detail')
 
   // Save: unchanged text is not a revision; an edit is.
   await act('skill-save', { [editor]: text })
@@ -424,7 +443,7 @@ try {
   assert.equal(installed.source.license, 'Apache-2.0')
   assert.equal(field('skill-license').value, 'Apache-2.0')
   await act('skill-back')
-  assert.equal(field('recommendation:frontend-design').value, 'Installed')
+  assert.equal(field('recommendation:frontend-design').value, 'Installed · On')
   await act('skill-recommendation:frontend-design')
   assert.equal(field('recommendation-status').value, 'Installed')
   assert.deepEqual(footer(), ['skill-back'], 'No second install')

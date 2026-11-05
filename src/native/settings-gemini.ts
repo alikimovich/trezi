@@ -88,6 +88,7 @@ async function geminiAction(
   action: NativeSheetAction
 ) {
   let report: ProviderLoginReport | undefined, message: string | undefined
+  let removed = false
   if (action.action === 'gemini-check')
     report = await sheets.invoke('providers:check-login', 'gemini')
   else if (action.action !== 'gemini') {
@@ -97,6 +98,7 @@ async function geminiAction(
     const result = await sheets.invoke('providers:seat-token-save', key, 'gemini')
     if (!result.ok) throw new Error(result.error ?? 'Could not save the key.')
     message = result.hasToken ? 'Key saved. New Gemini chats use it.' : 'Key removed.'
+    removed = remove && !result.hasToken
   }
   const next = await pane(sheets, report)
   if (sheets.current !== sheet) return
@@ -110,12 +112,15 @@ async function geminiAction(
     ...next.actions
   ]
   const section = sheet.state.sections?.find((s) => s.id === 'providers')
-  if (section) section.detail = next.detail
+  if (section) {
+    section.detail = next.detail
+    section.navigationTitle = 'Gemini'
+  }
   sheet.state.message = message
-  sheets.refresh()
+  sheets.refresh(removed ? ['geminiKey'] : undefined)
 }
 
-/** The row and the entry on the provider list (the pane with "Add provider…"), once each. */
+/** Keep the Gemini On/Off picker separate from its configuration row. */
 function offer(sheet: Sheet) {
   const actions = sheet.state.actions,
     add = actions.findIndex((a) => a.id === 'add')
@@ -126,10 +131,18 @@ function offer(sheet: Sheet) {
     sheet.state.actions = [...actions.slice(0, at), ENTRY, ...actions.slice(at)]
   }
   const fields = sheet.state.fields
-  if (fields.some((f) => f.id === 'geminiEnabled')) return
-  // Right after the added providers, before the fallback row.
-  const at = fields.findIndex((f) => f.id === 'connection' || f.id === 'connections')
-  fields.splice(at < 0 ? fields.length : at + 1, 0, geminiField())
+  if (add < 0 || fields.some((field) => field.id === 'geminiEnabled')) return
+  const after = fields.findIndex((field) => field.id === 'claude-settings')
+  fields.splice(after < 0 ? fields.length : after + 1, 0, geminiField(), {
+    id: 'gemini-settings',
+    section: 'providers',
+    label: 'Gemini configuration',
+    help: 'Configure Gemini CLI login or an API key; this does not change On/Off.',
+    kind: 'readonly',
+    value: '',
+    action: ENTRY.id,
+    actionLabel: 'Configure…'
+  })
 }
 
 /** New default-model choices; a Gemini default that is gone falls back to the last selected model. */
