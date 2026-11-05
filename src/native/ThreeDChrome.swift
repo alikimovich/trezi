@@ -37,40 +37,6 @@ final class ThreeDChromeModel: ObservableObject {
     }
 }
 
-struct ThreeDHeader: View {
-    @ObservedObject var model: ThreeDChromeModel
-    var body: some View {
-        Group {
-          if model.compact {
-            HStack(spacing: 6) {
-                Button { model.action("close") } label: { Image(systemName: "chevron.left") }
-                    .accessibilityLabel("Back to page").help("Back to page")
-                Text(model.title).font(.headline).lineLimit(1).truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading).help(model.title)
-                if model.hasSource {
-                    Button { model.action("code") } label: { Image(systemName: "chevron.left.forwardslash.chevron.right") }
-                        .accessibilityLabel("Code").help("View selected layer source")
-                }
-                Button("Front") { model.action("front") }.accessibilityLabel("Front view")
-                Button { model.action("reset") } label: { Image(systemName: "arrow.counterclockwise") }
-                    .accessibilityLabel("Reset view").help("Reset view")
-            }
-          } else {
-            HStack(spacing: 8) {
-                Button("Back to page") { model.action("close") }.accessibilityLabel("Back to page")
-                Text(model.title).font(.headline).lineLimit(1).truncationMode(.tail).help(model.title)
-                    .layoutPriority(-1)
-                Spacer(minLength: 4)
-                if model.hasSource { Button("Code") { model.action("code") }.help("View selected layer source") }
-                Button("Front") { model.action("front") }
-                Button("Reset view") { model.action("reset") }
-            }
-          }
-        }
-        .padding(.horizontal, 12).padding(.vertical, 8)
-    }
-}
-
 struct ThreeDFooter: View {
     @ObservedObject var model: ThreeDChromeModel
     private var separation: Binding<Double> {
@@ -128,7 +94,6 @@ struct ThreeDInsets {
 
 final class ThreeDChrome {
     let model = ThreeDChromeModel()
-    let header: ThreeDBar<ThreeDHeader>
     let footer: ThreeDBar<ThreeDFooter>
     let scene = ThreeDSceneView(frame: .zero)
     let backdrop = ThreeDBackdrop(frame: .zero)
@@ -151,9 +116,8 @@ final class ThreeDChrome {
     private var capturedRevision = -1
     private var focusOnShow = false
     init() {
-        header = ThreeDBar(rootView: ThreeDHeader(model: model))
         footer = ThreeDBar(rootView: ThreeDFooter(model: model))
-        header.isHidden = true; footer.isHidden = true; scene.isHidden = true; backdrop.isHidden = true
+        footer.isHidden = true; scene.isHidden = true; backdrop.isHidden = true
         scene.onSelect = { [weak self] index in self?.model.action("layer", value: index) }
         model.local = { [weak self] name, value in
             guard let self else { return }
@@ -268,33 +232,31 @@ final class ThreeDChrome {
     }
     func clear() {
         if active { closedSession = model.session; closedDocument = document }
-        if let window = header.window, ownsFocus(window.firstResponder), let preview { window.makeFirstResponder(preview) }
+        if let window = scene.window, ownsFocus(window.firstResponder), let preview { window.makeFirstResponder(preview) }
         active = false; document = ""; model.session = ""; model.revision = 0
         insets = ThreeDInsets(); invalid = false; capturedRevision = -1; recaptureQueued = false; failNextCapture = false; holdNextCapture = 0
         scene.clearPlanes(message: "")
-        header.isHidden = true; footer.isHidden = true; scene.isHidden = true; backdrop.isHidden = true
+        footer.isHidden = true; scene.isHidden = true; backdrop.isHidden = true
     }
     func dismiss() { if active { model.action("close"); clear() } }
     func ownsFocus(_ responder: NSResponder?) -> Bool {
         guard let view = responder as? NSView else { return false }
-        return ([header, footer, scene] as [NSView]).contains { view === $0 || view.isDescendant(of: $0) }
+        return ([footer, scene] as [NSView]).contains { view === $0 || view.isDescendant(of: $0) }
     }
     @discardableResult func place(in page: NSRect, visible: Bool, occluders: [NSRect]) -> Bool {
         let show = active && visible && page.width >= 190 && page.height >= 280
-        header.isHidden = !show; footer.isHidden = !show; scene.isHidden = !show; backdrop.isHidden = !show
+        footer.isHidden = !show; scene.isHidden = !show; backdrop.isHidden = !show
         guard show else { insets = ThreeDInsets(); return false }
         let compact = page.width < 520
         if model.compact != compact { model.compact = compact }
-        let top: CGFloat = 48, bottom: CGFloat = 44
+        let bottom: CGFloat = 44
         // The safe-area edge may round one device pixel below the window's content edge.
-        // Extend only the chrome/backdrop across that seam; the stage and camera keep
-        // their existing 48-point reservation below the page origin.
-        let contentTop = header.window.map { header.superview?.convert(NSPoint(x: 0, y: $0.contentLayoutRect.maxY), from: nil).y ?? page.minY } ?? page.minY
+        // Extend the backdrop across a one-pixel safe-area seam.
+        let contentTop = scene.window.map { scene.superview?.convert(NSPoint(x: 0, y: $0.contentLayoutRect.maxY), from: nil).y ?? page.minY } ?? page.minY
         let seam = page.minY <= 0.5 ? max(0, page.minY - contentTop) : 0
-        header.frame = NSRect(x: page.minX, y: page.minY - seam, width: page.width, height: top + seam)
         footer.frame = NSRect(x: page.minX, y: page.maxY - bottom, width: page.width, height: bottom)
-        var next = ThreeDInsets(top: Double(top), bottom: Double(bottom))
-        let stage = NSRect(x: page.minX, y: page.minY + top, width: page.width, height: page.height - top - bottom)
+        var next = ThreeDInsets(bottom: Double(bottom))
+        let stage = NSRect(x: page.minX, y: page.minY, width: page.width, height: page.height - bottom)
         for panel in occluders {
             let overlap = panel.intersection(stage)
             if overlap.isNull || overlap.width <= 0 || overlap.height <= 0 { continue }

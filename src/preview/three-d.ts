@@ -98,7 +98,7 @@ export function createThreeDInspector(options: {
       options.publish({
         session,
         revision,
-        title: `3D · ${surfaces[0]?.label ?? root.localName}`.slice(0, THREE_D_LIMITS.title),
+        title: (surfaces[0]?.label ?? root.localName).slice(0, THREE_D_LIMITS.title),
         layers: surfaces.map((s, id) => ({
           id,
           label: s.label.slice(0, THREE_D_LIMITS.label),

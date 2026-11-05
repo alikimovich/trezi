@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-536 nested 3D navigation
+
+- The 3D inspector now puts its Back chevron and object name in the native preview title location. The floating Code island routes through the inspected layer's guarded source action; unavailable source disables it. The in-content header and visible Front/Reset controls are removed while camera gestures, separation and layer picker remain. The existing native 3D fixture covers the rendered toolbar context, island Code route, and Back restoration; post-merge native acceptance remains required.
+
+
 ## 2026-11-04 — LKM-532 Mark up foreground activation in native smoke
 
 - The `preview-markup` posted-event seam now waits up to five seconds for the host window to become key in the active app, re-requesting activation every half second. The prior single 90 ms wait could fail before AppKit completed activation after another native smoke. Events still require a foreground window without a sheet; failure now reports active, key, sheet and frontmost state. This changes only the disposable-profile smoke seam, so there is no user-visible changelog entry.
