@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-538 documentation review repair
+
+- After the 0.13.27 sync, the Custom removal entry is separated from the dated release heading under Unreleased. The provider guide now describes the retired inspector request route while retaining historical control parsing and saved panels. Current-head CI and post-merge native acceptance remain manager gates.
+
 ## 2026-11-04 — LKM-538 inspector Custom removal
 
 - The selected-element inspector now offers Props and Styles only. Old Custom tab selections resolve to Styles, and its request, comment, cancel, remove and Create controls routes no longer run. The Swift request view is removed from the native build, while saved panel data and shared control parsing remain intact. The existing controller and core native inspector fixtures now check the two-tab surface and legacy fallback; focused verification and manager gates are reported separately.
