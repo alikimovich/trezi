@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-542 text hit area and popup fixture repair
+
+- Text editing now tests the Core Text line's rendered bounds rather than a fixed box, so a nearby click can place a second label. The windowless canvas fixture checks two adjacent labels and drives the color popup action before asserting the chosen ink in the encoded attachment. Manager review, exact-head CI and post-merge native acceptance remain pending.
+
 ## 2026-11-05 — LKM-542 annotation canvas controls
 
 - Mark up now stores a chosen palette color per drawing or canvas text mark. A text tool edits on the frozen canvas, and the existing native renderer carries both into the image attachment. Tool radio state remains selected after hover or focus changes.

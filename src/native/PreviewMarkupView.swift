@@ -65,7 +65,7 @@ final class PreviewMarkupCanvas: NSView, NSTextFieldDelegate {
     private func editText(at location: NSPoint) {
         let point = mapping.toImage(location)
         let index = document.marks.lastIndex { mark in
-            mark.tool == .text && mark.points.first.map { abs($0.x - point.x) < 220 && abs($0.y - point.y) < 36 } == true
+            MarkupRenderer.textBounds(mark).insetBy(dx: -2, dy: -2).contains(point)
         }
         let editor = NSTextField(string: index.map { document.marks[$0].text } ?? "")
         editor.placeholderString = "Type on canvas"

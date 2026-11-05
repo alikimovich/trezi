@@ -122,6 +122,14 @@ check(canvas.subviews.compactMap { $0 as? NSTextField }.first?.stringValue == "E
 canvas.subviews.compactMap { $0 as? NSTextField }.first?.stringValue = "Revised"
 canvas.commitText()
 check(canvas.document.marks.count == 1 && canvas.document.marks[0].text == "Revised", "editing replaces text in place")
+let firstBounds = MarkupRenderer.textBounds(canvas.document.marks[0])
+check(firstBounds.width < 150 && firstBounds.insetBy(dx: -2, dy: -2).contains(CGPoint(x: 205, y: 180)), "text hit area follows rendered width")
+canvas.pointerDown(canvas.mapping.toView(CGPoint(x: 350, y: 180)), tool: .text)
+check(canvas.subviews.compactMap { $0 as? NSTextField }.first?.stringValue == "", "nearby point starts a new label")
+canvas.subviews.compactMap { $0 as? NSTextField }.first?.stringValue = "Nearby"
+canvas.commitText()
+check(canvas.document.marks.map(\.text) == ["Revised", "Nearby"], "two nearby canvas labels coexist")
+canvas.undo()
 canvas.undo()
 canvas.undo()
 canvas.ink = .red
@@ -230,6 +238,22 @@ let overlay = PreviewMarkupOverlay(image: solid(1600, 1000, .systemBlue))
 overlay.frame = NSRect(x: 0, y: 0, width: 1000, height: 700)
 window.contentView!.addSubview(overlay)
 overlay.layoutSubtreeIfNeeded(); overlay.layout()
+let chooserOverlay = PreviewMarkupOverlay(image: solid(1600, 1000, .systemBlue))
+chooserOverlay.frame = overlay.frame
+chooserOverlay.layoutSubtreeIfNeeded(); chooserOverlay.layout()
+let colorPopup = chooserOverlay.island.face.subviews.compactMap { $0 as? NSPopUpButton }.first!
+check(colorPopup.accessibilityLabel() == "Annotation color", "color chooser has an accessible label")
+colorPopup.selectItem(withTitle: "Green")
+check(NSApp.sendAction(colorPopup.action!, to: colorPopup.target, from: colorPopup), "popup selection reaches its action")
+check(chooserOverlay.canvas.ink == .green && colorPopup.accessibilityValue() as? String == "Green", "popup chooses and exposes green")
+let colorMapping = chooserOverlay.canvas.mapping
+chooserOverlay.canvas.pointerDown(colorMapping.toView(CGPoint(x: 80, y: 90)), tool: .pen)
+chooserOverlay.canvas.pointerDragged(colorMapping.toView(CGPoint(x: 180, y: 90)))
+chooserOverlay.canvas.pointerUp()
+check(chooserOverlay.canvas.document.marks.last?.ink == .green, "popup color reaches the canvas mark")
+let popupAttachment = MarkupEncoder.encode(chooserOverlay.canvas.image, marks: chooserOverlay.canvas.document.marks)!
+let popupPixel = Pixels(decode(popupAttachment.data)).rgb(130, 90)
+check(popupPixel.g > 70 && popupPixel.b < 130 && popupPixel.r < 70, "popup color reaches the encoded attachment")
 let names = overlay.controls.map { $0.cell?.accessibilityLabel() ?? "" }
 for name in ["Pen", "Rectangle", "Circle", "Arrow", "Undo", "Clear", "Cancel", "Add to chat"] { check(names.contains(name), "VoiceOver reads \(name)") }
 check(overlay.controls.allSatisfy { $0.cell?.accessibilityRole() == .button || $0.cell?.accessibilityRole() == .radioButton }, "control roles")

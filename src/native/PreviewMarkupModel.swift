@@ -120,6 +120,18 @@ struct MarkupMapping {
 enum MarkupRenderer {
     private static let halo = CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.9)
     static let textSize: CGFloat = 28
+    private static func textLine(_ mark: MarkupMark) -> CTLine {
+        let font = CTFontCreateWithName(".AppleSystemUIFont" as CFString, textSize, nil)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: mark.ink.color]
+        return CTLineCreateWithAttributedString(NSAttributedString(string: mark.text, attributes: attributes))
+    }
+    /// The same Core Text line used by the composite, in captured top-left pixels.
+    static func textBounds(_ mark: MarkupMark) -> CGRect {
+        guard mark.tool == .text, let point = mark.points.first else { return .null }
+        var ascent: CGFloat = 0, descent: CGFloat = 0
+        let width = CTLineGetTypographicBounds(textLine(mark), &ascent, &descent, nil)
+        return CGRect(x: point.x, y: point.y + textSize - ascent, width: width, height: ascent + descent)
+    }
     /// In captured pixels: heavy enough to survive the send size and the provider's own scaling.
     static func lineWidth(for size: CGSize) -> CGFloat { max(4, max(size.width, size.height) * 0.003) }
 
@@ -154,9 +166,7 @@ enum MarkupRenderer {
         for mark in marks {
             if mark.tool == .text {
                 guard let point = mark.points.first else { continue }
-                let font = CTFontCreateWithName(".AppleSystemUIFont" as CFString, textSize, nil)
-                let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: mark.ink.color]
-                let line = CTLineCreateWithAttributedString(NSAttributedString(string: mark.text, attributes: attributes))
+                let line = textLine(mark)
                 context.saveGState()
                 context.translateBy(x: point.x, y: point.y + textSize)
                 context.scaleBy(x: 1, y: -1)
