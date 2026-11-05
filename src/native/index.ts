@@ -1,4 +1,5 @@
 import '../shared/rename-compat'
+import { realpathSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import {
   conversationsClosed,
@@ -927,6 +928,20 @@ async function main() {
     void operation?.catch((error) => activityController.append(String(error), 'error'))
   })
   // The service drains before it relaunches Trezi (with the active project).
+  let runningAppPath = ''
+  host.on('ready', (event: { appPath?: string }) => {
+    runningAppPath = event.appPath ?? ''
+  })
+  const sourceAppIsRunning = () => {
+    try {
+      return (
+        !!runningAppPath &&
+        realpathSync(runningAppPath) === realpathSync(join(root, 'out/native/Trezi.app'))
+      )
+    } catch {
+      return false
+    }
+  }
   const updates = new NativeUpdateController(
     sheetController,
     root,
@@ -935,19 +950,20 @@ async function main() {
     },
     workflowOwner(),
     () =>
-      [...chatController.chats.values()].some(
-        (chat) => chat.isRunning || chat.text || chat.attachments.length
-      )
-        ? 'Finish running chats and send or clear your drafts before restarting.'
-        : [...editorController.sessions.values()].some((session) =>
-              [...session.documents.values()].some((doc) => doc.text !== doc.baseline)
+      !sourceAppIsRunning()
+        ? 'This Trezi app is running from a different installation. Update its source installation and reopen that app.'
+        : [...chatController.chats.values()].some(
+              (chat) => chat.isRunning || chat.text || chat.attachments.length
             )
-          ? 'Save source editor drafts before restarting.'
-          : null
+          ? 'Finish running chats and send or clear your drafts before restarting.'
+          : [...editorController.sessions.values()].some((session) =>
+                [...session.documents.values()].some((doc) => doc.text !== doc.baseline)
+              )
+            ? 'Save source editor drafts before restarting.'
+            : null
   )
   host.on('menu', ({ action }) => {
-    if (action === 'updates')
-      void updates.open().catch((error) => activityController.append(String(error), 'error'))
+    if (action === 'updates') updates.open()
   })
   // LKM-226: the sidebar build badge. Tests never read GitHub; the smoke shows each state.
   const buildStatus = new NativeBuildStatusController(
@@ -955,7 +971,7 @@ async function main() {
     preferences,
     sheetController,
     root,
-    () => void updates.open().catch((error) => activityController.append(String(error), 'error')),
+    () => void updates.apply().catch((error) => activityController.append(String(error), 'error')),
     testing ? { compare: async () => null } : {}
   )
   nativeBuildStatus.current = buildStatus

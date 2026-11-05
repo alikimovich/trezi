@@ -503,20 +503,36 @@ for (const local of [{ dirty: true }, { branch: 'candidate' }]) {
   assert.equal(compared.length, 1)
 }
 {
-  // The badge's click: details with the update steps and an Update button when behind.
+  // The badge's click: one decision, with diagnostics in the existing tooltip/About/menu.
   const presented = []
   const { controller } = harness()
   controller.sheets.present = (state, handle) => presented.push({ state, handle })
   await controller.check()
   controller.open()
   const { state } = presented[0]
-  assert.equal(state.title, 'A newer Trezi is on main')
-  assert.match(state.detail, /git pull\n {2}bun run build/)
+  assert.equal(state.title, 'Trezi update available')
+  assert.match(state.detail, /Version 0\.1\.0 is 3 changes behind main/)
+  assert.doesNotMatch(state.detail, /git pull|Commit:|Built:/)
   assert.deepEqual(
     state.actions.map((a) => a.id),
-    ['cancel', 'copy-commit', 'check', 'update']
+    ['cancel', 'update']
   )
-  assert.equal(state.actions[1].copy, 'bbbbbbb')
+  assert.equal(state.actions[0].label, 'Not Now')
+  for (const [status, text, actions] of [
+    [equal, /current/, ['cancel', 'check']],
+    [dirtyMain, /local changes/, ['cancel']],
+    [outside, /outside main/, ['cancel']],
+    [offline, /unknown/, ['cancel', 'check']]
+  ]) {
+    controller.publish(status)
+    controller.open()
+    const shown = presented.at(-1).state
+    assert.match(shown.detail, text)
+    assert.deepEqual(
+      shown.actions.map((action) => action.id),
+      actions
+    )
+  }
 }
 {
   // Settings → General → "Check whether this build is on main": after Version, saved as 'off'.

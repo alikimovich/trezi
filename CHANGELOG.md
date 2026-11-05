@@ -10,6 +10,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Changed
+
+- Update availability now offers a concise guided update with guarded progress and a source artifact check before restart (LKM-529).
 ## [0.13.28] - 2026-11-04
 
 ### Removed

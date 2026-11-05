@@ -4,8 +4,7 @@ import {
   type BuildStamp,
   type BuildStatus,
   buildDetails,
-  deriveBuildStatus,
-  UPDATE_STEPS
+  deriveBuildStatus
 } from '../shared/build-status'
 import { buildStamp } from './app-version'
 import type { NativeBridge } from './bridge'
@@ -33,7 +32,8 @@ export interface BuildStatusDeps {
  * offline) need no network; otherwise origin main is read in the background at launch
  * and every 30 minutes. Each result goes to the host (`buildStatus`: the sidebar badge
  * and About Trezi) and to Copy Logs / the feedback diagnostics (`currentBuildStatus`).
- * Clicking the badge opens its details with the update steps when behind.
+ * Clicking the badge opens a concise update sheet. Full build diagnostics remain
+ * in the badge tooltip, About Trezi and its Copy Commit menu item.
  */
 export class NativeBuildStatusController {
   status: BuildStatus
@@ -115,24 +115,32 @@ export class NativeBuildStatusController {
         branch: status.branch
       })
   }
-  /** The badge's click: version, build, commit (copyable), branch, tag, check time; update steps when behind. */
+  /** The badge's click: a decision about this build, with no terminal steps on the normal path. */
   open() {
     const status = this.status
     const behind = status.state === 'behind'
     this.sheets.present(
       {
-        title: behind ? 'A newer Trezi is on main' : 'This build of Trezi',
-        detail: [...buildDetails(status), ...(behind ? ['', UPDATE_STEPS] : [])].join('\n'),
+        title: behind ? 'Trezi update available' : 'Trezi updates',
+        detail: behind
+          ? `Version ${status.version} is ${status.behind ? `${status.behind} ${status.behind === 1 ? 'change' : 'changes'}` : 'changes'} behind main. Update Trezi and restart when it is ready.`
+          : status.state === 'on-main'
+            ? `Version ${status.version} is current.`
+            : status.state === 'local-changes' || status.state === 'not-on-main'
+              ? 'This build has local changes or is outside main. Check the source tree before updating.'
+              : status.reason === 'pending'
+                ? 'Checking for updates…'
+                : 'Update availability is unknown. Check again when connected.',
         fields: [],
         actions: [
-          { id: 'cancel', label: 'Close', cancel: true },
-          ...(status.commit
-            ? [{ id: 'copy-commit', label: 'Copy Commit', copy: status.commit }]
-            : []),
-          ...(status.state === 'unknown' && status.reason === 'off'
-            ? []
-            : [{ id: 'check', label: 'Check Now' }]),
-          ...(behind ? [{ id: 'update', label: 'Update…', primary: true }] : [])
+          { id: 'cancel', label: behind ? 'Not Now' : 'Close', cancel: true },
+          ...(behind
+            ? [{ id: 'update', label: 'Update', primary: true }]
+            : status.state === 'local-changes' ||
+                status.state === 'not-on-main' ||
+                status.reason === 'off'
+              ? []
+              : [{ id: 'check', label: 'Check Now', primary: true }])
         ]
       },
       async (action) => {
@@ -141,9 +149,6 @@ export class NativeBuildStatusController {
           await this.check()
           return this.open()
         }
-        // The host already put the commit on the pasteboard (the action's `copy`).
-        if (action.action === 'copy-commit' && this.sheets.current)
-          this.sheets.current.state.message = `Copied ${status.commit}.`
       }
     )
   }
