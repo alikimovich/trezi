@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-545 idle realize after the unresolved count is spent
+
+- A locked native run of chat, composer, core and sidebar on the previous tree passed inspector and parallel-stream, but `composer/visible-composer` 320-submitted still failed as in run 81: the stack pinned at the document end (scrollY 3621 of 4397), no row and no end marker measured, 80 settle attempts used. The send, delta and done settles of the one tall turn each count as unresolved (a realize counts), so by `done` the count exceeded `unresolvedRestarts` and the settle only pinned, which moves nothing at the end. The limit exists so streamed chunks stop jumping the clip; an idle conversation has no chunk. `ChatLatestSettle.mayRealize` now lets a realize scroll through SwiftUI when no turn is running, whatever the count. The offscreen fixture checks the three cases (spent while streaming, spent while idle, fresh while streaming). That native run's result was visible-composer failed; it could not be repeated on this tree (one native call per session), so the manager's native run is the first evidence for this change.
+
 ## 2026-11-05 — LKM-545 native composer and inspector recovery
 
 - The failing composer capture was pinned at the document end with no measured latest row; parallel-stream also found no realized row after returning to a chat. The latest-row realization target now uses the reading edge above the overlaid composer, as the existing bottom marker and follow anchor already do. The offscreen settle fixture checks that anchor and its first-row fallback.

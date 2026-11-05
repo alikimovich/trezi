@@ -58,6 +58,10 @@ if (process.platform !== 'darwin') {
     const cases = JSON.parse(run([binary, '--cases']))
     assert.ok(Math.abs(cases.realizeReadingAnchor - 570 / 776) < 0.001)
     assert.equal(cases.realizeFirstAnchor, 0)
+    // LKM-545: a spent count stops realizing only while a turn streams.
+    assert.equal(cases.realizeStreamingSpent, false)
+    assert.equal(cases.realizeIdleSpent, true)
+    assert.equal(cases.realizeStreamingFresh, true)
     assert.equal(cases.atEdge, 'settled')
     assert.equal(cases.markerBelow, 'bottom')
     assert.equal(

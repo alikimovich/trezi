@@ -7,7 +7,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 - [x] Realize the latest lazy chat row at the reading edge above the overlaid composer, with a targeted anchor check.
 - [x] Cross from the inspector island into the page on initial and repeated synthetic hover moves.
-- [ ] Manager: quick and locked native composer/core verification, independent review, exact-head CI and merge.
+- [x] Let an idle conversation realize the latest row after the unresolved-settle count is spent (`ChatLatestSettle.mayRealize`), with a fixture check.
+- [ ] Manager: quick and locked native chat, composer, core and sidebar verification, independent review, exact-head CI and merge.
 
 ## LKM-544 — Include annotation composite Send proof in normal native smoke
 

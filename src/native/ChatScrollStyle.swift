@@ -107,6 +107,14 @@ enum ChatLatestSettle: Equatable {
     /// settle only pins and no longer realizes through SwiftUI, which jumped
     /// the clip with every chunk for the whole turn.
     static let unresolvedRestarts = 2
+    /// Whether a realize step may scroll through SwiftUI. Past `unresolvedRestarts`
+    /// it only pins while a turn streams, but an idle conversation has no chunk
+    /// whose pin would undo the jump, and a tall stack pinned at its end with
+    /// no row in view (the send, delta and done settles of one turn had used
+    /// the count up) would otherwise stay blank until the user scrolled.
+    static func mayRealize(unresolved: Int, running: Bool) -> Bool {
+        !running || unresolved <= unresolvedRestarts
+    }
     /// The count after a settle ended with `last`. `realized`: one of its steps
     /// needed a realize. That settle is unresolved too, whatever it read last:
     /// the realize moved the stack and the next layout can measure rows that are
