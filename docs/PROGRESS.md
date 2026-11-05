@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-535 standalone New Chat toolbar item
+
+- New Chat is now its own system-rendered AppKit toolbar item beside the conversation title. The title reserves the measured native item advance so the action follows the chat column across resizing and sidebar changes. The custom glass wrapper, full-frame alignment and hover/bezel emulation are gone; shared island divider behavior remains.
+- Existing toolbar fixtures now assert the standalone item, action and chat-column geometry. Foreground light/dark captures still inspect painted appearance; independent review, exact-head CI and post-merge native acceptance remain with Agent OS.
+
 ## 2026-11-04 — LKM-532 Mark up foreground activation in native smoke
 
 - The `preview-markup` posted-event seam now waits up to five seconds for the host window to become key in the active app, re-requesting activation every half second. The prior single 90 ms wait could fail before AppKit completed activation after another native smoke. Events still require a foreground window without a sheet; failure now reports active, key, sheet and frontmost state. This changes only the disposable-profile smoke seam, so there is no user-visible changelog entry.

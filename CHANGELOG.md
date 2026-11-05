@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Changed
+
+- New Chat is a standalone native toolbar button with system-managed Liquid Glass and interaction states (LKM-535).
+
 ## [0.13.24] - 2026-11-04
 
 ### Changed

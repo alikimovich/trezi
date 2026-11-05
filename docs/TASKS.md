@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-535 — Standalone New Chat toolbar item
+
+- [x] Move New Chat from the title's custom glass view to a standalone system-rendered AppKit toolbar item, retaining its guarded action, label, tooltip and visibility.
+- [x] Reserve the native item's measured width beside the resizable chat title and update layout and appearance fixture assertions.
+- [ ] Manager: independent review, exact-head CI, PR to main and post-merge foreground native acceptance in light and dark modes.
+
 ## LKM-532 — Native preview-markup foreground failure on main
 
 - [x] Bound the posted-event seam's foreground activation wait and retry activation while AppKit settles; retain the no-sheet guard and report focus state on failure.

@@ -16,9 +16,9 @@ const INTERACTION = ['select-object', 'overlay', 'speed', 'markup']
 const TOOLS = ['code', 'layers']
 const MINIMUM_WINDOW = 850
 
-/** Read painted glass from the foreground PNG, using the capture's crop and the native frames.
- * The left interior of each 32 pt control avoids its glyph; the point just left is bare toolbar.
- * Compare with the device segment in the same image so appearance and wallpaper cancel out. */
+/** Read painted glass from the foreground PNG, using the capture's crop and native frames.
+ * The left interior avoids each glyph; the point just left is bare toolbar.
+ * Compare with adjacent controls in the same image so appearance and wallpaper cancel out. */
 function glassInk(image: State, frame: string) {
   const pixels = decodePng(Buffer.from(image.png, 'base64'))
   const numbers = (value: string) => (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
@@ -222,16 +222,18 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
           const state = await shell()
           const image: State = await host.request('captureVisibleWindow')
           const name = `toolbar-actions-chat-new-${appearance}-${enabled ? 'idle' : 'disabled'}`
-          assert.equal(state.chatNewSystemGlass, true, `${name}: AppKit owns the glass surface`)
           assert.equal(
-            state.chatNewGlassFrame,
-            state.chatNewFrame,
-            `${name}: glass follows New Chat's 32 pt frame`
+            state.chatNewStandalone,
+            true,
+            `${name}: AppKit owns the standalone toolbar item`
           )
+          assert.equal(state.chatNewBordered, true, `${name}: AppKit draws the button border`)
           writeFileSync(join(artifacts, `${name}.png`), Buffer.from(image.png, 'base64'))
           const chat = glassInk(image, state.chatNewFrame)
           const neighbor = glassInk(image, state.chatNewNeighborFrame)
-          results[name] = { state, geometry: image.geometry, chat, neighbor }
+          const more = glassInk(image, state.chatNewMoreFrame)
+          const sidebar = glassInk(image, state.chatNewSidebarFrame)
+          results[name] = { state, geometry: image.geometry, chat, neighbor, more, sidebar }
           save()
           assert.equal(state.chatNewEnabled, enabled, `${name}: enabled state`)
           assert.ok(

@@ -36,9 +36,7 @@ export const pick = (state: Toolbar) => ({
   chatHeaderTrailing: state.chatHeaderTrailing,
   chatNewFrame: state.chatNewFrame,
   chatTitleFrame: state.chatTitleFrame,
-  chatNewSegmented: state.chatNewSegmented,
-  chatNewTextured: state.chatNewTextured,
-  chatNewMomentary: state.chatNewMomentary,
+  chatNewStandalone: state.chatNewStandalone,
   detailLeading: state.detailLeading,
   chatWidth: state.chatWidth,
   measuredRightInset: state.rightInset,
@@ -159,10 +157,13 @@ export function assertToolbar(state: Toolbar, stage: string) {
     const [titleX, , titleWidth] = rect(state.chatTitleFrame)
     const [buttonX, , buttonWidth] = rect(state.chatNewFrame)
     assert.ok(
-      buttonWidth === 32 &&
+      state.chatNewStandalone &&
+        buttonWidth >= 28 &&
+        buttonWidth <= 48 &&
         buttonX >= titleX + titleWidth + 7 &&
-        Math.abs(buttonX + buttonWidth - (state.chatHeaderTrailing - 4)) <= 1,
-      `Toolbar ${stage}: New Chat stays on the chat header's trailing edge without clipping the title: ${detail}`
+        buttonX >= state.chatHeaderTrailing &&
+        Math.abs(buttonX + buttonWidth - (state.detailLeading + state.chatWidth - 4)) <= 3,
+      `Toolbar ${stage}: New Chat stays on the chat column's trailing edge without clipping the title: ${detail}`
     )
   }
   assert.equal(
@@ -284,8 +285,9 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
     trailingInset ??= settled.publishTrailingInset
     assertPublishLast(settled, name, trailingInset as number)
     if (name === 'wide') {
+      const [newX, , newWidth] = (settled.chatNewFrame.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
       assert.ok(
-        Math.abs(settled.chatHeaderTrailing - (settled.detailLeading + settled.chatWidth)) <= 3,
+        Math.abs(newX + newWidth - (settled.detailLeading + settled.chatWidth - 4)) <= 3,
         `Toolbar wide: New Chat follows the actual chat pane boundary: ${JSON.stringify(pick(settled))}`
       )
       assert.ok(
