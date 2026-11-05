@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.14.3] - 2026-11-05
+
 ### Changed
 
 - Chat tuning islands now use prepared source-bound controls immediately by default; Jev selection runs only when requested explicitly (LKM-539).
@@ -20,6 +22,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Fixed
 
 - A stale preview frame can no longer complete a supported source-stamped opacity island Apply after a same-position source edit (LKM-539).
+
 ## [0.14.2] - 2026-11-05
 
 ### Fixed
