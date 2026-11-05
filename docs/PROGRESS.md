@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-535 review repair: foreground interaction evidence
+
+- The disposable-profile toolbar fixture now captures New Chat, More and the sidebar toggle at normal and narrower widths in light and dark appearances at idle, hover, press and keyboard focus. A native-button test seam invokes the existing AppKit hover callback pattern, native highlight and responder chain directly, without posting input. Each foreground capture has a recorded path, control state and pixel-change assertion against its idle image. The registered unit fixture checks that the shared pixel detector sees hover fill and an exterior focus ring. Agent OS still owns the post-merge native run and acceptance.
+
 ## 2026-11-04 — LKM-535 standalone New Chat toolbar item
 
 - New Chat is now its own system-rendered AppKit toolbar item beside the conversation title. The title reserves the measured native item advance so the action follows the chat column across resizing and sidebar changes. The custom glass wrapper, full-frame alignment and hover/bezel emulation are gone; shared island divider behavior remains.
