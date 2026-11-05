@@ -19,9 +19,6 @@ export interface NativeInspectorField {
   axis?: 'horizontal' | 'vertical' | 'top' | 'right' | 'bottom' | 'left'
   mixed?: boolean
   expanded?: boolean
-  /** A Custom tab control's panel id: its group header carries the panel's Comment and
-   *  Remove menu, the control its own (LKM-323). */
-  panel?: string
 }
 /** The Custom tab's request field and the request it runs (LKM-323). */
 export interface NativeInspectorCustom {
@@ -52,8 +49,6 @@ export interface NativeInspectorState {
   /** Counts edits whose write (and Undo record) finished, applied or not. A selection
    *  change resets `busy` but never this, so a test can wait for one specific edit. */
   edits?: number
-  /** Only on the Custom tab. */
-  custom?: NativeInspectorCustom
 }
 export interface NativeInspectorAction {
   root: string

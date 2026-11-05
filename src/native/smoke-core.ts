@@ -225,9 +225,7 @@ export async function runNativeCoreSmoke(
   const customSmoke: CustomSmoke = {
     host,
     fixture,
-    artifacts,
     inspector,
-    invoke,
     select: async (source) => {
       await page(
         `document.querySelector('#native-title').setAttribute('data-trezi-source',${JSON.stringify(source)})`

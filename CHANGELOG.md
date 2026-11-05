@@ -14,6 +14,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 - New Chat stays at the chat column edge when the preview address needs to compress in a narrow toolbar (LKM-537).
 - Publish keeps its full trigger width when the toolbar is narrow (LKM-537).
+## [0.13.28] - 2026-11-04
+
+### Removed
+
+- The selected-element inspector no longer offers a Custom tab or controls request field; Props and Styles remain available (LKM-538).
 
 ## [0.13.27] - 2026-11-04
 

@@ -15,7 +15,6 @@ import type {
 } from '../shared/native-inspector'
 import { describeSelectionForPrompt } from '../shared/selection-context'
 import { tokensForProp } from '../shared/token-match'
-import { InspectorCustom } from './inspector-custom'
 
 type Binding = {
   apply(value: string): Promise<any>
@@ -48,8 +47,6 @@ export class NativeInspectorController {
   styles: StyleReadResult | null = null
   classRule: { file: string; className: string } | null = null
   readonly bindings = new Map<string, Binding>()
-  /** The Custom tab's requests and comments (LKM-323). */
-  readonly custom = new InspectorCustom(this)
   private sequence = 0
   private readonly saved = new Map<
     string,
@@ -109,7 +106,10 @@ export class NativeInspectorController {
       'This element may come from a library or generated markup.'
   ) {}
   publish() {
-    this.state.custom = this.state.tab === 'custom' ? this.custom.view() : undefined
+    if (this.state.tab !== 'props' && this.state.tab !== 'styles') {
+      this.state.tab = 'styles'
+      this.build()
+    }
     this.render({ ...this.state, fields: [...this.state.fields], actions: [...this.state.actions] })
   }
   async activate(root: string) {
@@ -136,7 +136,7 @@ export class NativeInspectorController {
   async restore(root: string, element: SelectedElement) {
     const saved = this.saved.get(root)
     if (!saved || root !== this.state.root) return
-    this.state.tab = saved.tab
+    this.state.tab = saved.tab === 'props' ? 'props' : 'styles'
     this.state.visible = saved.visible
     await this.select(element)
   }
@@ -273,11 +273,7 @@ export class NativeInspectorController {
     if (element && this.state.tab === 'styles') {
       this.state.actions.unshift({ id: 'replay-style', label: 'Replay transition' })
     }
-    if (element)
-      this.state.actions.unshift(
-        { id: 'controls', label: 'Create controls…' },
-        { id: 'animation', label: 'Add animation…' }
-      )
+    if (element) this.state.actions.unshift({ id: 'animation', label: 'Add animation…' })
     if (element?.componentSource)
       this.state.actions.unshift({ id: 'owner', label: 'Inspect owning component' })
     if (element && !element.source)
@@ -556,93 +552,6 @@ export class NativeInspectorController {
         }
         style(prop)
       }
-    } else if (this.state.tab === 'custom') {
-      for (const panel of this.controls) {
-        if (panel.params.some((p) => !p.valid))
-          this.state.actions.unshift({
-            id: `regenerate:${panel.manifest.id}`,
-            label: `Repair ${panel.manifest.title}…`
-          })
-        this.state.actions.unshift({
-          id: `remove:${panel.manifest.id}`,
-          label: `Remove ${panel.manifest.title}`
-        })
-        if (panel.manifest.replay)
-          this.state.actions.unshift({
-            id: `replay:${panel.manifest.id}`,
-            label: `Replay ${panel.manifest.title}`
-          })
-        for (const param of panel.params) {
-          const id = `custom:${panel.manifest.id}:${param.id}`,
-            apply = param.apply
-          const kind = param.kind === 'toggle' ? 'toggle' : param.kind
-          add(
-            {
-              id,
-              label: param.label,
-              group: panel.manifest.title,
-              panel: panel.manifest.id,
-              kind,
-              value: String(param.value ?? ''),
-              disabled: !param.valid,
-              detail: param.reason,
-              options: param.options,
-              min: param.min,
-              max: param.max,
-              step: param.step,
-              unit: param.unit
-            },
-            {
-              apply: async (raw) => {
-                const value =
-                  param.kind === 'number'
-                    ? finite(raw)
-                    : param.kind === 'toggle'
-                      ? raw === 'true'
-                      : raw
-                if (apply.strategy === 'literal')
-                  return this.invoke(
-                    'controls:apply-literal',
-                    root,
-                    panel.manifest.id,
-                    param.id,
-                    value
-                  )
-                if (!element?.source)
-                  throw new Error('Select this component before editing its controls.')
-                if (apply.strategy === 'style')
-                  return this.invoke('styles:apply', root, {
-                    source: element.source,
-                    prop: apply.styleProp,
-                    value: String(value),
-                    classes: element.classes
-                  })
-                return this.invoke('props:apply', root, {
-                  source: inspection?.source ?? element.componentSource ?? element.source,
-                  name: apply.propName,
-                  kind:
-                    param.kind === 'number'
-                      ? 'number'
-                      : param.kind === 'toggle'
-                        ? 'boolean'
-                        : 'string',
-                  value
-                })
-              }
-            }
-          )
-        }
-      }
-      if (!this.controls.length)
-        add({
-          id: 'empty',
-          label: 'Custom controls',
-          group: '',
-          kind: 'readonly',
-          value: element?.source
-            ? 'Ask for controls below, e.g. “corner radius and shadow”. The agent wires them to this element’s source.'
-            : 'Select an element to ask for controls for its source parameters.'
-        })
     }
   }
   async action(action: NativeInspectorAction) {
@@ -661,9 +570,7 @@ export class NativeInspectorController {
         return
       }
       if (action.action === 'tab') {
-        this.state.tab = ['props', 'styles', 'custom'].includes(action.value ?? '')
-          ? action.value!
-          : 'styles'
+        this.state.tab = action.value === 'props' ? 'props' : 'styles'
         this.build()
         this.publish()
         return
@@ -698,43 +605,6 @@ export class NativeInspectorController {
         await this.agent(root, describeSelectionForPrompt(this.element, root))
         return
       }
-      // LKM-323: "Create controls…" opens the Custom tab's request field.
-      if (action.action === 'controls') {
-        this.state.tab = 'custom'
-        this.build()
-        if (action.value?.trim()) await this.custom.request(action.value)
-        else this.custom.focusField()
-        return
-      }
-      if (action.action === 'custom-request') {
-        await this.custom.request(action.value ?? '')
-        return
-      }
-      if (action.action === 'comment-panel' || action.action === 'comment-control') {
-        const panel = this.controls.find(
-          (p) =>
-            p.manifest.id === action.value ||
-            p.params.some((q) => `custom:${p.manifest.id}:${q.id}` === action.field)
-        )
-        if (panel)
-          this.custom.comment(
-            panel.manifest.id,
-            action.action === 'comment-control' ? action.field : undefined
-          )
-        return
-      }
-      if (action.action === 'custom-cancel') {
-        this.custom.cancel(root)
-        return
-      }
-      if (action.action === 'custom-target') {
-        this.custom.clearTarget()
-        return
-      }
-      if (action.action === 'remove-control') {
-        await this.custom.removeControl(action.field ?? '')
-        return
-      }
       if (action.action === 'animation') {
         if (this.element)
           await this.agent(
@@ -756,31 +626,6 @@ export class NativeInspectorController {
           from: '0.5',
           to: this.styles?.values.opacity || '1'
         })
-        return
-      }
-      if (action.action.startsWith('regenerate:')) {
-        // A repair is a comment on the panel: the working controls are kept (LKM-323).
-        const panel = this.controls.find((p) => p.manifest.id === action.action.slice(11))
-        if (panel) {
-          this.custom.comment(panel.manifest.id)
-          await this.custom.request(
-            action.value ||
-              `Repair the controls that no longer resolve in the source: ${panel.params
-                .filter((p) => !p.valid)
-                .map((p) => `${p.id} (${p.reason ?? 'unresolved'})`)
-                .join(', ')}.`
-          )
-        }
-        return
-      }
-      if (action.action.startsWith('replay:')) {
-        const panel = this.controls.find((p) => p.manifest.id === action.action.slice(7))
-        if (panel) await this.send('preview:animation-replay', panel.manifest.component)
-        return
-      }
-      if (action.action.startsWith('remove:')) {
-        await this.invoke('controls:remove', root, action.action.slice(7))
-        await this.refresh()
         return
       }
       const binding = this.bindings.get(action.field ?? '')
