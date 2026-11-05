@@ -31,6 +31,9 @@ final class ProjectCell: SourceListCell {
     private var pointerActive = false
     private var focusActive = false
     private var actionsVisible = false
+    private var resumedScrollStart: CFTimeInterval?
+    var showingActions: Bool { actionsVisible }
+    var scrollStart: CFTimeInterval? { pointerActive ? title?.scrollStart : nil }
     override var backgroundStyle: NSView.BackgroundStyle { didSet { updateVisibility() } }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -61,6 +64,24 @@ final class ProjectCell: SourceListCell {
         pointerActive = overTitle || overActions
         updateActionState()
     }
+    /// An outline reload replaces the cell without sending a new mouse-enter event. Recheck the
+    /// stationary pointer against the new title; an already open overlay also keeps its controls.
+    func restorePointer(at windowPoint: NSPoint, wasActive: Bool, scrollingSince: CFTimeInterval?) {
+        let point = convert(windowPoint, from: nil)
+        guard bounds.contains(point) else { return }
+        layoutSubtreeIfNeeded()
+        if wasActive, let title {
+            let region = NSRect(x: title.frame.minX, y: 0,
+                                width: max(0, newChat.frame.maxX - title.frame.minX), height: bounds.height)
+            if region.contains(point) {
+                resumedScrollStart = scrollingSince
+                pointerActive = true
+                updateActionState()
+                return
+            }
+        }
+        pointer(at: point)
+    }
     func focusChanged(_ focused: Bool) { focusActive = focused; updateActionState() }
     private func updateActionState() {
         setActionsVisible(pointerActive || focusActive)
@@ -73,7 +94,8 @@ final class ProjectCell: SourceListCell {
         title?.stop()
         needsLayout = true
         layoutSubtreeIfNeeded()
-        if visible { title?.start() }
+        if visible { title?.start(since: resumedScrollStart) }
+        resumedScrollStart = nil
         updateVisibility()
     }
     private func updateVisibility() {

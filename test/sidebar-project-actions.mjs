@@ -83,6 +83,18 @@ if (process.platform !== 'darwin') {
   assert.equal(report.long.stopped, true, 'exit stops the marquee')
   assert.equal(report.long.offset, 0, 'exit resets the marquee offset')
   assert.equal(report.longDetachedStopped, true, 'row removal stops its marquee')
+  assert.equal(
+    report.stationaryReload.visible,
+    true,
+    'stationary title hover survives row replacement'
+  )
+  assert.equal(
+    report.stationaryReload.constrained,
+    true,
+    'replacement keeps the active title inset'
+  )
+  assert.equal(report.stationaryReload.selected, false, 'hover restoration does not select the row')
+  assert.equal(report.stationaryReloadExit, true, 'replacement restores width after exit')
   assert.equal(report.pressed.more.highlighted, true, 'pressed reaches the button')
   assert.equal(report.disabled.more.enabled, false)
   assert.equal(report.focus.more, report.focus.newChat, 'one rule for keyboard focus')

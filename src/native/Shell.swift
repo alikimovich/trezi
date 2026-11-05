@@ -622,8 +622,10 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
 
         if rowsChanged || projectChanged {
             let hover = sidebarHover()
+            let projectHover = sidebarProjectHover()
             outline.reloadData(); expandNested()
             restoreSidebarHover(hover)
+            restoreSidebarProjectHover(projectHover)
         }
         // A state older than the latest pick keeps the picked row highlighted (LKM-204).
         if selection.answers(state) {

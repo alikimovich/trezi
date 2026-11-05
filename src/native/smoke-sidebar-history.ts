@@ -192,6 +192,31 @@ export async function checkSidebarHistory(
     await capture('projects')
     await select(full)
     await expectHistory('back on the first project', full, 3, [full])
+    const beforeOtherMenu = await shell()
+    const visibleChats = (state: Shell) =>
+      rows(state, 'chat').map((item) => ({
+        id: item.id,
+        project: item.project,
+        selected: item.selected
+      }))
+    const otherMenu = await menu(other)
+    assert.ok(otherMenu.opened && otherMenu.closed, 'the other project menu opened and closed')
+    const afterOtherMenu = await shell()
+    assert.equal(
+      nativeWorkspace.active?.key,
+      full,
+      'opening another project menu keeps the active project'
+    )
+    assert.equal(
+      afterOtherMenu.selected,
+      beforeOtherMenu.selected,
+      'the menu does not select another row'
+    )
+    assert.deepEqual(
+      visibleChats(afterOtherMenu),
+      visibleChats(beforeOtherMenu),
+      'the visible chats do not change'
+    )
     await menu(other, { pick: 'Show History' })
     await waitFor(() => nativeWorkspace.active?.key === other, 'Show History selected its project')
     const both = await expectHistory('other revealed', other, 1, [full, other])

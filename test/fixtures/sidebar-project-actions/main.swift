@@ -131,6 +131,23 @@ long.pointer(at: NSPoint(x: long.title!.frame.minX + 2, y: long.title!.frame.mid
 window.contentView = cell
 report["longDetachedStopped"] = !long.title!.running && long.title!.offset == 0
 
+// A reload replaces the row without a new mouse-enter. Keep the pointer fixed in window space.
+cell.pointer(at: NSPoint(x: cell.title!.frame.minX + 2, y: cell.title!.frame.midY))
+let stationary = cell.convert(NSPoint(x: cell.title!.frame.minX + 2, y: cell.title!.frame.midY), to: nil)
+let previousScrollStart = cell.scrollStart
+let replacement = ProjectCell(frame: cell.frame)
+replacement.installActions(title: "lkmv.ch", project: "p", target: shell,
+                           newChatAction: #selector(NativeShell.sidebarNewChat(_:)), moreAction: #selector(NativeShell.sidebarMore(_:)))
+replacement.installTitle("lkmv.ch", image: NSImage(systemSymbolName: "folder", accessibilityDescription: nil)!)
+let priorActive = cell.showingActions
+window.contentView = replacement
+replacement.restorePointer(at: stationary, wasActive: priorActive, scrollingSince: previousScrollStart)
+report["stationaryReload"] = ["visible": replacement.more.alphaValue == 1,
+                              "constrained": replacement.title!.bounds.width < cell.bounds.width - 8,
+                              "selected": replacement.selected]
+replacement.mouseExited(with: event(.mouseExited))
+report["stationaryReloadExit"] = replacement.more.alphaValue == 0 && replacement.title!.bounds.width > 200
+
 // The persistent pill as it was: the check above must see it.
 let pill = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 28, height: 24), pullsDown: true)
 pill.bezelStyle = .inline

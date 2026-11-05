@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-531 review repair: project hover across reload
+
+- Project-row replacement now rechecks the stationary pointer against the new title and the prior overlay region, carrying the marquee start for the same hovered project. The existing offscreen action fixture replaces a row under a fixed pointer and checks that its controls and title width stay active until exit.
+- The sidebar History fixture now opens another project's action menu without choosing an item and checks that the selected project, selected row and visible chats remain unchanged. Native pointer/rendered acceptance, exact-head CI and independent review remain with the manager.
+
 ## 2026-11-04 — LKM-531 project title hover actions
 
 - Project titles now occupy the available row width at rest. Hovering the actual title reveals the existing project buttons over its trailing space, with a continuous pointer path into them; leaving restores the width. The title uses the existing marquee with the active width and stops it on exit or removal.
