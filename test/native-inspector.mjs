@@ -487,7 +487,10 @@ const drafts = new NativeInspectorController(
   },
   async (...args) => draftCalls.push(args),
   () => {},
-  async (...args) => draftAgent.push(args),
+  async (...args) => {
+    draftAgent.push(args)
+    return `draft-turn-${draftAgent.length}`
+  },
   async () => {}
 )
 await drafts.activate('/a')
@@ -552,7 +555,7 @@ await draftAction('apply', { field: 'style:width', value: '12px' })
 await draftAction('apply-drafts')
 assert.equal(draftAgent.length, 1, 'one agent operation submits all values')
 assert.equal(drafts.state.draft.submitted, true)
-await drafts.settleDraftTurn(true)
+await drafts.settleDraftTurn(true, 'draft-turn-1')
 assert.equal(
   drafts.state.draft.submitted,
   false,
@@ -564,10 +567,20 @@ assert.equal(drafts.state.draft.count, 1, 'unconfirmed draft remains actionable'
 await draftAction('apply', { field: 'style:width', value: '12px' })
 await draftAction('apply-drafts')
 assert.equal(draftAgent.length, 2, 'pending draft can be submitted again')
+await drafts.select({ ...element, source: 'b.tsx' })
+assert.equal(drafts.state.draft, undefined, 'another selection cannot display the submitted draft')
+await drafts.select(element)
+assert.equal(
+  drafts.state.draft.submitted,
+  true,
+  'returning during the same Apply retains its turn lock'
+)
+await drafts.settleDraftTurn(true, 'unrelated-turn')
+assert.equal(drafts.state.draft.submitted, true, 'another turn cannot complete this draft')
 authoredHash = 'applied'
 authoredOpacity = '0.6'
 authoredWidth = '12px'
-await drafts.settleDraftTurn(true)
+await drafts.settleDraftTurn(true, 'draft-turn-2')
 assert.equal(drafts.state.draft, undefined, 'source and rendered values confirm Apply')
 await draftAction('apply', { field: 'style:opacity', value: '0.4' })
 await draftAction('revert-draft')
@@ -588,13 +601,18 @@ assert.equal(
 )
 assert.equal(draftAgent.length, 3, 'single-field Apply submits one regular agent operation')
 assert.equal(drafts.state.draft.submitted, true, 'Apply waits for rendered confirmation')
+await drafts.activate('/b')
+await drafts.select(element)
+assert.equal(drafts.state.draft, undefined, 'another workspace cannot display the submitted draft')
 authoredHash = 'direct-applied'
 authoredOpacity = '0.3'
-await drafts.settleDraftTurn(true)
+await drafts.settleDraftTurn(true, 'draft-turn-3')
+await drafts.activate('/a')
+await drafts.select(element)
 assert.equal(
   drafts.state.draft,
   undefined,
-  'agent Apply confirms source and rendered value on terminal turn'
+  'a terminal while another workspace is active confirms only after source-backed restoration'
 )
 setSourceOwner(null)
 assert.deepEqual(spacingSnapshot('padding'), {

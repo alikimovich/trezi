@@ -35,6 +35,8 @@ type HeldDraft = {
   drafts: Map<string, StyleDraft>
   history: Map<string, StyleDraft>[]
   conflict: boolean
+  submittedTurn?: string
+  completed?: boolean
 }
 export class NativeInspectorController {
   readonly state: NativeInspectorState = {
@@ -65,6 +67,7 @@ export class NativeInspectorController {
   private drafts = new Map<string, StyleDraft>()
   private draftHistory: Map<string, StyleDraft>[] = []
   private submitted = false
+  private submittedTurn: string | undefined
   private submitting = false
   private draftConflict = false
   private previewAvailable = false
@@ -75,7 +78,8 @@ export class NativeInspectorController {
       this.heldDrafts.set(this.draftTarget, {
         drafts: new Map(this.drafts),
         history: this.draftHistory.map((step) => new Map(step)),
-        conflict: this.draftConflict
+        conflict: this.draftConflict,
+        submittedTurn: this.submittedTurn
       })
     else this.heldDrafts.delete(this.draftTarget)
   }
@@ -102,9 +106,11 @@ export class NativeInspectorController {
     this.draftTarget = target
     this.drafts = held.drafts
     this.draftHistory = held.history
-    this.submitted = false
-    this.draftConflict = held.conflict || !hashes.every(Boolean)
+    this.submittedTurn = held.submittedTurn
+    this.submitted = !!held.submittedTurn
+    this.draftConflict = held.conflict || (!held.submittedTurn && !hashes.every(Boolean))
     await this.projectDrafts()
+    if (held.completed !== undefined) await this.settleDraftTurn(held.completed, held.submittedTurn)
   }
   private target() {
     const e = this.element
@@ -155,13 +161,22 @@ export class NativeInspectorController {
     }
     this.publishDraft()
   }
-  async settleDraftTurn(success: boolean) {
-    if (!this.submitted) return
+  async settleDraftTurn(success: boolean, turn?: string) {
+    if (!this.submitted || (turn && this.submittedTurn !== turn)) {
+      for (const held of this.heldDrafts.values()) {
+        if (held.submittedTurn && (!turn || held.submittedTurn === turn)) {
+          held.completed = success
+          return
+        }
+      }
+      return
+    }
     if (success) await this.invalidated()
     if (!this.submitted) return
     // A landed turn is not proof that it edited the requested source. Release
     // the submitted lock if source plus rendered preview did not confirm it.
     this.submitted = false
+    this.submittedTurn = undefined
     this.state.error = success
       ? 'Apply did not confirm source and rendered preview. The draft is still pending.'
       : 'Apply failed. The preview draft is still pending.'
@@ -219,7 +234,7 @@ export class NativeInspectorController {
     readonly invoke: (channel: string, ...args: any[]) => Promise<any>,
     readonly send: (channel: string, ...args: any[]) => Promise<any>,
     readonly render: (state: NativeInspectorState) => void,
-    readonly agent: (root: string, prompt: string, submit?: boolean) => Promise<void>,
+    readonly agent: (root: string, prompt: string, submit?: boolean) => Promise<void | string>,
     readonly setup: () => Promise<void>,
     readonly provider: () => string = () => 'claude',
     readonly setupReason: (root: string) => string = () =>
@@ -280,6 +295,7 @@ export class NativeInspectorController {
     this.draftHistory = []
     this.draftTarget = ''
     this.submitted = false
+    this.submittedTurn = undefined
     this.draftConflict = false
     this.previewAvailable = false
     this.state.draft = undefined
@@ -309,6 +325,7 @@ export class NativeInspectorController {
       this.draftHistory = []
       this.draftTarget = ''
       this.submitted = false
+      this.submittedTurn = undefined
       this.draftConflict = false
       this.state.draft = undefined
       this.previewAvailable = false
@@ -347,6 +364,7 @@ export class NativeInspectorController {
         this.drafts.clear()
         this.draftHistory = []
         this.submitted = false
+        this.submittedTurn = undefined
         this.draftConflict = false
         this.publishDraft()
         return
@@ -414,6 +432,7 @@ export class NativeInspectorController {
       this.drafts.clear()
       this.draftHistory = []
       this.submitted = false
+      this.submittedTurn = undefined
       this.draftConflict = false
       this.state.draft = undefined
     }
@@ -802,6 +821,7 @@ export class NativeInspectorController {
           this.target() !== this.draftTarget
         )
           throw new Error('The selected element changed. Review or revert the preview draft.')
+        const target = this.draftTarget
         this.submitting = true
         this.state.busy = true
         this.publish()
@@ -829,12 +849,22 @@ export class NativeInspectorController {
               : undefined
             return `${draft.file} (SHA-256 ${draft.hash}): set ${draft.field.slice(6)} to ${draft.value}${token ? ` using token ${token}` : ''}`
           })
-          await this.agent(
+          const turn = await this.agent(
             root,
             `Apply this single batch of Styles preview drafts to the actual application source. Target ${this.element?.selector ?? ''} from ${this.element?.source ?? ''} in workspace ${root}. Preserve all other edits. Refuse any changed source hash, stale selection or unsupported target. Edits:\n${edits.join('\n')}`,
             true
           )
-          if (root !== this.state.root || generation !== this.state.generation) return
+          const submittedTurn = turn || `draft-${Date.now()}`
+          if (root !== this.state.root || generation !== this.state.generation) {
+            const held = this.heldDrafts.get(target)
+            if (held) {
+              held.submittedTurn = submittedTurn
+              this.state.edits = (this.state.edits ?? 0) + 1
+              return
+            }
+            if (this.target() !== target || this.draftTarget !== target || !this.drafts.size) return
+          }
+          this.submittedTurn = submittedTurn
           this.submitted = true
           this.state.edits = (this.state.edits ?? 0) + 1
           this.publishDraft()

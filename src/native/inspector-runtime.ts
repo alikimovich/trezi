@@ -25,7 +25,7 @@ export function installNativeInspector(
 ) {
   const send = (channel: string, ...args: any[]) =>
     dispatchIPC('main', { type: 'send', channel, args })
-  let draftChat: string | null = null
+  let draftTurn: { chat: string; turn: string } | null = null
   const controller = new NativeInspectorController(
     workspace.services.invoke,
     send,
@@ -49,7 +49,8 @@ export function installNativeInspector(
         await chat.command({ type: 'submit', chat: key, text: prompt })
         if (!session.turn || session.turn === previousTurn)
           throw new Error('The chat could not start the Apply turn. The draft is still pending.')
-        draftChat = key
+        draftTurn = { chat: key, turn: session.turn }
+        return session.turn
       } else await visualEdit(root, prompt)
     },
     () => chat.action({ chat: chat.active, action: 'setup' }),
@@ -88,9 +89,14 @@ export function installNativeInspector(
   )
   turnBoundaries.add((key, kind, turn) => {
     void navigation.boundary(key, kind, turn).catch(report)
-    if (draftChat === key && (kind === 'landed' || kind === 'failed')) {
-      draftChat = null
-      void controller.settleDraftTurn(kind === 'landed').catch(report)
+    if (
+      draftTurn?.chat === key &&
+      draftTurn.turn === turn &&
+      (kind === 'landed' || kind === 'failed')
+    ) {
+      const submitted = draftTurn
+      draftTurn = null
+      void controller.settleDraftTurn(kind === 'landed', submitted.turn).catch(report)
     }
   })
   const render = workspace.services.render

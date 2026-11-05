@@ -17,6 +17,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: reconcile island Undo display, stage Reset through Apply, unlock unconfirmed Styles batches, and report cleared inspector previews truthfully.
 - [x] Bounded review repair: confirm direct Styles Apply after source/render settle, preserve drafts across selection and workspace changes, and assert the displayed Swift island value after Undo.
 - [x] Superseding Apply contract: submit single and accumulated Styles/island drafts through one regular chat agent turn; restore authored plus draft field display and allow safe Undo/Revert after broken island bindings, with focused fixtures.
+- [x] Review repair: require rendered confirmation before settling literal island drafts, and retain the Styles submitted turn across selection and workspace changes.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
 
 ## LKM-529 — Simplify Trezi update availability and guided update flow

@@ -53,11 +53,13 @@ const request = {
 }
 let changes = 0
 const submittedDrafts = []
+let renderedDraft = false
 const islands = new ChatIslands(() => changes++, undefined, {
   applyDraft: async (_chat, prompt) => {
     submittedDrafts.push(prompt)
     return `draft-turn-${submittedDrafts.length}`
-  }
+  },
+  confirmRendered: async () => renderedDraft
 })
 try {
   // Catalog guidance is available before registration and stays within the wire catalog.
@@ -179,8 +181,9 @@ try {
   await islands.interact(command('apply-draft'))
   assert.equal(submittedDrafts.length, 2)
   await writeFile(join(root, 'shadow.js'), code.replace('LIGHT_X = 0', 'LIGHT_X = 0.2'))
+  renderedDraft = true
   await islands.settle('chat', true, 'draft-turn-2')
-  assert.equal(view().draft, undefined, 'matching source after the turn settles the draft')
+  assert.equal(view().draft, undefined, 'source and rendered result settle the draft')
   await writeFile(join(root, 'shadow.js'), code)
   await islands.refresh('chat')
   await islands.interact(command('draft', { x: 0.6 }))

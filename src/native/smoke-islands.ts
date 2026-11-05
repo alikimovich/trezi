@@ -28,8 +28,14 @@ export async function checkChatIslands(host: NativeBridge, fixture: string, arti
   // the rendered page; no real provider or desktop login is required.
   const agentPort = nativeIslands as unknown as {
     applyDraft: (key: string, prompt: string) => Promise<string>
+    confirmRendered?: (
+      key: string,
+      record: unknown,
+      values: Record<string, number>
+    ) => Promise<boolean>
   }
   const originalApply = agentPort.applyDraft
+  const originalConfirm = agentPort.confirmRendered
   let applyTurn = 0
   let pendingApplyTurn = ''
   agentPort.applyDraft = async (key, prompt) => {
@@ -68,6 +74,18 @@ export async function checkChatIslands(host: NativeBridge, fixture: string, arti
   const indexFile = join(fixture, 'index.html')
   const originalIndex = readFileSync(indexFile, 'utf8')
   const page = (code: string) => host.request('evaluate', { view: 'preview', code })
+  let allowLiteralConfirmation = false
+  let literalProbes = 0
+  let initialShadow = ''
+  agentPort.confirmRendered = async () => {
+    literalProbes++
+    return (
+      allowLiteralConfirmation &&
+      !!(await page("document.querySelector('#island-shadow-demo')")) &&
+      (await page("document.querySelector('#island-shadow-demo')?.style.boxShadow")) !==
+        initialShadow
+    )
+  }
   const code =
     'const LIGHT_X = 0;\nconst LIGHT_Y = -0.5;\nconst SOFTNESS = 20;\nconst EASING = [0.25, 0.1, 0.25, 1];\n' +
     `
@@ -107,9 +125,7 @@ document.body.append(card);
         }
       ]
       await wait(async () => await page("!!document.querySelector('#island-shadow-demo')"))
-      const initialShadow = await page(
-        "document.querySelector('#island-shadow-demo').style.boxShadow"
-      )
+      initialShadow = await page("document.querySelector('#island-shadow-demo').style.boxShadow")
       const result = (await runChatIslandTool(chat.chat, fixture, {
         action: 'define',
         engine: 'agent',
@@ -205,7 +221,14 @@ document.body.append(card);
           (i: any) => i.id === result.id && i.draftSubmitted === true
         )
       )
-      await settleApply()
+      const settling = settleApply()
+      await wait(() => literalProbes > 0)
+      assert.ok(
+        nativeIslands.sessions.get(chat.chat)?.drafts.has(result.id),
+        'source match alone cannot clear a literal draft before rendered confirmation'
+      )
+      allowLiteralConfirmation = true
+      await settling
       await wait(
         () =>
           readFileSync(file, 'utf8').includes('LIGHT_X = 0.75') &&
@@ -245,6 +268,7 @@ document.body.append(card);
       )
   } finally {
     agentPort.applyDraft = originalApply
+    agentPort.confirmRendered = originalConfirm
     writeFileSync(indexFile, originalIndex)
     // Restoring the page reloads the preview; let that finish so the next check (in a
     // filtered run, shell-layout directly) never styles a document about to be replaced.

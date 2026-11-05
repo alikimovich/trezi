@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-539 submitted draft boundary repair
+
+- A literal island draft now needs a source-backed rendered probe before it can settle; otherwise it remains pending and actionable. The native island fixture holds its rendered probe behind the source edit and asserts the draft persists until the page changes. Styles now carries the submitted turn with a held draft when selection or workspace changes, and reconciles a terminal result only against that turn after restoring the target. Focused fixtures cover both lifecycle paths; exact-head CI, independent review and post-merge native acceptance remain manager gates.
+
 ## 2026-11-05 — LKM-539 agent Apply contract correction
 
 - The latest product decision supersedes direct source writes on Apply: every Styles draft, including one field, now submits one regular chat agent operation; island Apply submits its accumulated binding values to the active chat turn. Gesture drafts remain source-free. Inspector fields rebuild from authored values plus the current draft after restore, Undo and Revert. An island can dismiss a broken or stale draft without writing its source. Focused fixtures cover these transitions, a turn that lands without the requested edit, and a single-field agent request. Native fixtures simulate the agent's source edit and assert source-backed rendering; the post-merge native gate is still pending.

@@ -97,6 +97,11 @@ export class ChatIslands {
   /** Shadow gestures shown in the preview, written once (LKM-140); without it every frame writes. */
   readonly overrides?: IslandOverrides
   private readonly applyDraft?: (chat: string, prompt: string) => Promise<string>
+  private readonly confirmRendered?: (
+    chat: string,
+    record: IslandRecord,
+    values: Record<string, IslandValue>
+  ) => Promise<boolean>
   /**
    * Finds a chat's record once its workspace is ready (a new chat's is prepared later);
    * without `wait` it answers at once, with why there is no record yet. Null is "no locator".
@@ -112,12 +117,18 @@ export class ChatIslands {
       overrides?: IslandOverrides
       locate?: LocateIslands
       applyDraft?: (chat: string, prompt: string) => Promise<string>
+      confirmRendered?: (
+        chat: string,
+        record: IslandRecord,
+        values: Record<string, IslandValue>
+      ) => Promise<boolean>
     } = {}
   ) {
     this.given = options.owner
     this.origin = options.origin ?? (() => null)
     this.overrides = options.overrides
     this.applyDraft = options.applyDraft
+    this.confirmRendered = options.confirmRendered
     this.locate = options.locate ?? (async (): Promise<null> => null)
   }
   get owner(): EditingOwner {
@@ -384,6 +395,22 @@ export class ChatIslands {
               break
             }
             await new Promise((resolve) => setTimeout(resolve, timing.poll))
+          }
+          if (!rendered) {
+            draft.submittedTurn = undefined
+            continue
+          }
+        } else {
+          // A matching literal in source does not prove the running page rendered
+          // its effect. Only an actual source-backed preview probe may settle it.
+          let rendered = false
+          const deadline = Date.now() + 8000
+          while (this.confirmRendered && Date.now() < deadline) {
+            if (await this.confirmRendered(chat, record!, source.values).catch(() => false)) {
+              rendered = true
+              break
+            }
+            await new Promise((resolve) => setTimeout(resolve, 50))
           }
           if (!rendered) {
             draft.submittedTurn = undefined
