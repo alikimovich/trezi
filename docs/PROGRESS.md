@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-535 review repair: enabled paint and toolbar alignment evidence
+
+- The existing light/dark foreground fixture now compares New Chat's enabled and disabled PNG pixels at normal and narrow widths, asserting a visible change and recording the measured difference with both capture paths.
+- The same captures now record each native button's height and vertical center, and assert New Chat aligns with More and the sidebar toggle at both widths. Foreground native execution remains the manager's post-merge acceptance gate.
+
 ## 2026-11-04 — LKM-535 review repair: older macOS visibility and VoiceOver
 
 - On macOS 13/14, New Chat now leaves or rejoins the toolbar beside the title when the title hides or returns; macOS 15+ keeps the system item hidden property. The chat resize fixture asserts the button and title share the same visibility rule.

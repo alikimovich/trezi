@@ -63,6 +63,15 @@ function buttonPaintChange(before: State, after: State, frame: string) {
   return paintedButtonDifference(first, second, before.geometry, frame)
 }
 
+function toolbarButtonMeasure(frame: string) {
+  const [x, y, width, height] = (frame.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
+  assert.ok(
+    [x, y, width, height].every(Number.isFinite) && width >= 24 && height >= 24,
+    `toolbar button has measured native frame: ${frame}`
+  )
+  return { height, centerY: y + height / 2 }
+}
+
 /** The foreground fixture and its unit check use the same pixel test. */
 export function paintedButtonDifference(
   first: { width: number; height: number; rgb: (x: number, y: number) => number[] },
@@ -289,6 +298,8 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
         await host.request('shellPerform', { action: 'window-appearance', row: appearance })
         await pause(250)
         let idle: State | undefined
+        let disabled: State | undefined
+        let idleFrame = ''
         for (const enabled of [true, false]) {
           await host.request('chatNewAppearanceTest', { enabled })
           const state = await shell()
@@ -301,11 +312,19 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
           )
           assert.equal(state.chatNewBordered, true, `${name}: AppKit draws the button border`)
           writeFileSync(join(artifacts, `${name}.png`), Buffer.from(image.png, 'base64'))
-          if (enabled) idle = image
+          if (enabled) {
+            idle = image
+            idleFrame = state.chatNewFrame
+          } else disabled = image
           const chat = glassInk(image, state.chatNewFrame)
           const neighbor = glassInk(image, state.chatNewNeighborFrame)
           const more = glassInk(image, state.chatNewMoreFrame)
           const sidebar = glassInk(image, state.chatNewSidebarFrame)
+          const alignment = {
+            new: toolbarButtonMeasure(state.chatNewFrame),
+            more: toolbarButtonMeasure(state.chatNewMoreFrame),
+            sidebar: toolbarButtonMeasure(state.chatNewSidebarFrame)
+          }
           results[name] = {
             capture: join(artifacts, `${name}.png`),
             state,
@@ -313,10 +332,18 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
             chat,
             neighbor,
             more,
-            sidebar
+            sidebar,
+            alignment
           }
           save()
           assert.equal(state.chatNewEnabled, enabled, `${name}: enabled state`)
+          for (const peer of ['more', 'sidebar'] as const) {
+            assert.ok(
+              Math.abs(alignment.new.height - alignment[peer].height) <= 2 &&
+                Math.abs(alignment.new.centerY - alignment[peer].centerY) <= 2,
+              `${name}: New Chat height and vertical center align with ${peer}: ${JSON.stringify(alignment)}`
+            )
+          }
           assert.ok(
             Math.abs(neighbor.lift) >= 5,
             `${name}: neighboring glass is visibly painted: ${JSON.stringify(neighbor)}`
@@ -336,6 +363,15 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
             )
         }
         assert.ok(idle, `${layout} ${appearance}: idle foreground capture exists`)
+        assert.ok(disabled, `${layout} ${appearance}: disabled foreground capture exists`)
+        const enabledDisabledPaint = buttonPaintChange(idle, disabled, idleFrame)
+        const disabledName = `toolbar-actions-chat-new-${layout}-${appearance}-disabled`
+        results[disabledName].enabledDisabledPaint = enabledDisabledPaint
+        save()
+        assert.ok(
+          enabledDisabledPaint.changed >= 8 && enabledDisabledPaint.peak >= 5,
+          `${disabledName}: enabled and disabled New Chat visibly differ: ${JSON.stringify(enabledDisabledPaint)}`
+        )
         await host.request('chatNewAppearanceTest', { enabled: true })
         for (const stage of NEW_CHAT_INTERACTION_STAGES) {
           const probe: State = await host.request('toolbarInteractionProbe', { stage })
