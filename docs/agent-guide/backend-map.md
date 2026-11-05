@@ -119,9 +119,9 @@ src/main/
                   validate + anchor-lex + render literals (pure) and the
                   .trezi/control-panels.json store (rendered here, committed
                   hash-bound by the editing owner) + controls:* IPC.
-                  control-requests.ts: the pure rules that turn an inspector
-                  Custom tab request's trezi-controls answer into a new or
-                  revised panel (controls:save, controls:remove-param)
+                  control-requests.ts: retained pure rules for legacy
+                  trezi-controls answers and panel revisions; the inspector
+                  no longer offers a Custom request pane (LKM-538)
   tokens.ts       design-token detection/scaffold   annotations.ts  comments → PR
   publish.ts      Publication's one Bun step (a checkout on its base branch moves to a
                   work branch) and the PR description helper; the workflow owner
