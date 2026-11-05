@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-548 sidebar project-switching read the grips layer as the hover box
+
+The nightly native run on `54c8d14f` failed `sidebar/project-switching` at "island, chips and page boxes cleared while Opening shows". The smoke read the page hover box as the overlay shadow root's second child. LKM-541 inserted the spacing-grips layer there (`shadow.append(sel, grips, box, …)`), and that layer is never `display:none`, so `hover` stayed true after the switch cleared the real hover box. The smoke now selects `[data-trezi-hover]`, as the hover-probe, island and Layers smokes already do. `smoke-sent-attachments` had the same index lookup in its stale-highlight check and gets the same fix. Product behaviour is unchanged; no changelog line (test only). The same run's `islands+shadow-light/chat-islands` failure is outside this ticket's failing groups and is not addressed here.
+
 ## 2026-11-05 — LKM-541 CI repair: preview-markup hide-list scan
 
 CI unit shard 3/3 failed `preview-markup`: its scan of `src/preview` for `setAttribute('data-trezi-…')` hosts requires each one to be in the Mark up hide list unless it lives in the overlay's shadow root. The spacing grips (`data-trezi-spacing-handle`) and their readout (`data-trezi-spacing-readout`) are appended to the overlay shadow root's grips layer (`shadow.append(sel, grips, …)`), so they never reach the page snapshot and need no hide selector; the test's `inShadow` list now names them. Only test data changed. Independent review, exact-head CI and post-merge native acceptance remain manager gates.
