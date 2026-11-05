@@ -98,6 +98,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     var previewCover: [[String: Double]] = []
     /// LKM-391: the Mark up session over the preview (`PreviewMarkupHost.swift`).
     var markup: PreviewMarkup?
+    var previewNavigationRevision = 0
     let world = WKContentWorld.world(name: "TreziPreview")
     let directory: String
     let ephemeral: Bool
@@ -432,6 +433,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             else { reply(id, PreviewAgent.setViewport(c, layout: nativeLayout, view: views["preview"])) }
         case "previewOverlay": previewOverlay.apply(c)
         case "markupBegin": markup?.begin(c["session"] as? String ?? "")
+        case "markupSuspend": markup?.suspend()
+        case "markupResume": markup?.resume()
         case "markupEnd": markup?.end(c["session"] as? String ?? "")
         case "markupCancel":
             // Always answered, so a toggle never leaves the controller waiting on a host with no overlay.

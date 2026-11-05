@@ -224,7 +224,11 @@ if (process.platform !== 'darwin') {
   assert.equal(
     report.rebuiltLoading.second.resolved,
     report.rebuiltLoading.first.resolved,
-    'rebuild does not reset glyph progress'
+    'rebuild retains glyph progress at the same elapsed instant'
+  )
+  assert.ok(
+    report.rebuiltLoading.second.resolved > report.rebuiltLoading.resetProgress,
+    'retained clock advances beyond a fresh reset'
   )
   assert.equal(report.retiredLoading, true, 'ready or canceled row retires the clock')
   assert.match(report.idle.font, /Mono/i, 'sidebar rows use system monospace')

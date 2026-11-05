@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import CryptoKit
 
 /// LKM-391: what Mark up draws. No view or host here: a mark is stored in the captured
@@ -6,7 +7,7 @@ import CryptoKit
 /// zoom, responsive width and overlay resizes, and one renderer paints the canvas and the
 /// composite, so the two agree by construction.
 enum MarkupTool: String, CaseIterable {
-    case pen, rectangle, circle, arrow
+    case pen, rectangle, circle, arrow, text
     var label: String { rawValue.capitalized }
     /// The plain key that picks it.
     var key: String { String(rawValue.prefix(1)) }
@@ -16,6 +17,20 @@ enum MarkupTool: String, CaseIterable {
         case .rectangle: "rectangle"
         case .circle: "circle"
         case .arrow: "arrow.up.right"
+        case .text: "textformat"
+        }
+    }
+}
+
+enum MarkupInk: String, CaseIterable {
+    case red, blue, green, purple, black
+    var color: CGColor {
+        switch self {
+        case .red: CGColor(srgbRed: 0.71, green: 0.14, blue: 0.09, alpha: 1)
+        case .blue: CGColor(srgbRed: 0.09, green: 0.36, blue: 0.83, alpha: 1)
+        case .green: CGColor(srgbRed: 0.02, green: 0.46, blue: 0.28, alpha: 1)
+        case .purple: CGColor(srgbRed: 0.41, green: 0.25, blue: 0.78, alpha: 1)
+        case .black: CGColor(srgbRed: 0.06, green: 0.09, blue: 0.16, alpha: 1)
         }
     }
 }
@@ -23,6 +38,8 @@ enum MarkupTool: String, CaseIterable {
 struct MarkupMark: Equatable {
     var tool: MarkupTool
     var points: [CGPoint]
+    var ink: MarkupInk = .red
+    var text: String = ""
 }
 
 /// The marks on one snapshot. Clear is one undo step, so ⌘Z brings back what it removed.
@@ -42,8 +59,9 @@ struct MarkupDocument {
     private func clamped(_ point: CGPoint) -> CGPoint {
         CGPoint(x: min(size.width, max(0, point.x)), y: min(size.height, max(0, point.y)))
     }
-    mutating func begin(_ tool: MarkupTool, at point: CGPoint) {
-        stroke = MarkupMark(tool: tool, points: [clamped(point)])
+    mutating func begin(_ tool: MarkupTool, at point: CGPoint, ink: MarkupInk = .red) {
+        guard tool != .text else { return }
+        stroke = MarkupMark(tool: tool, points: [clamped(point)], ink: ink)
     }
     mutating func extend(to point: CGPoint) {
         guard var mark = stroke else { return }
@@ -57,6 +75,19 @@ struct MarkupDocument {
             guard mark.points.count == 2, hypot(mark.points[1].x - mark.points[0].x, mark.points[1].y - mark.points[0].y) >= Self.minimumShape else { return }
         }
         history.append(marks); marks.append(mark)
+    }
+    mutating func putText(_ text: String, at point: CGPoint, ink: MarkupInk, replacing index: Int? = nil) {
+        let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if content.isEmpty {
+            if let index, marks.indices.contains(index), marks[index].tool == .text {
+                history.append(marks); marks.remove(at: index)
+            }
+            return
+        }
+        history.append(marks)
+        let mark = MarkupMark(tool: .text, points: [clamped(point)], ink: ink, text: content)
+        if let index, marks.indices.contains(index), marks[index].tool == .text { marks[index] = mark }
+        else { marks.append(mark) }
     }
     mutating func undo() {
         if stroke != nil { stroke = nil; return }
@@ -87,8 +118,20 @@ struct MarkupMapping {
 }
 
 enum MarkupRenderer {
-    private static let ink = CGColor(srgbRed: 0.87, green: 0.1, blue: 0.1, alpha: 1)
     private static let halo = CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.9)
+    static let textSize: CGFloat = 28
+    private static func textLine(_ mark: MarkupMark) -> CTLine {
+        let font = CTFontCreateWithName(".AppleSystemUIFont" as CFString, textSize, nil)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: mark.ink.color]
+        return CTLineCreateWithAttributedString(NSAttributedString(string: mark.text, attributes: attributes))
+    }
+    /// The same Core Text line used by the composite, in captured top-left pixels.
+    static func textBounds(_ mark: MarkupMark) -> CGRect {
+        guard mark.tool == .text, let point = mark.points.first else { return .null }
+        var ascent: CGFloat = 0, descent: CGFloat = 0
+        let width = CTLineGetTypographicBounds(textLine(mark), &ascent, &descent, nil)
+        return CGRect(x: point.x, y: point.y + textSize - ascent, width: width, height: ascent + descent)
+    }
     /// In captured pixels: heavy enough to survive the send size and the provider's own scaling.
     static func lineWidth(for size: CGSize) -> CGFloat { max(4, max(size.width, size.height) * 0.003) }
 
@@ -97,6 +140,7 @@ enum MarkupRenderer {
         guard let first = points.first, let last = points.last else { return path }
         let box = CGRect(x: min(first.x, last.x), y: min(first.y, last.y), width: abs(last.x - first.x), height: abs(last.y - first.y))
         switch mark.tool {
+        case .text: break
         case .pen:
             path.addLines(between: points.count == 1 ? [first, first] : points)
         case .rectangle:
@@ -119,9 +163,22 @@ enum MarkupRenderer {
         let width = max(lineWidth(for: size), minimumWidth)
         context.saveGState(); defer { context.restoreGState() }
         context.setLineCap(.round); context.setLineJoin(.round)
-        for (color, stroke) in [(halo, width * 1.8), (ink, width)] {
-            context.setStrokeColor(color); context.setLineWidth(stroke)
-            for mark in marks { context.addPath(path(mark, width: width)); context.strokePath() }
+        for mark in marks {
+            if mark.tool == .text {
+                guard let point = mark.points.first else { continue }
+                let line = textLine(mark)
+                context.saveGState()
+                context.translateBy(x: point.x, y: point.y + textSize)
+                context.scaleBy(x: 1, y: -1)
+                context.textPosition = .zero
+                CTLineDraw(line, context)
+                context.restoreGState()
+            } else {
+                for (color, stroke) in [(halo, width * 1.8), (mark.ink.color, width)] {
+                    context.setStrokeColor(color); context.setLineWidth(stroke)
+                    context.addPath(path(mark, width: width)); context.strokePath()
+                }
+            }
         }
     }
     /// The snapshot scaled to at most `maxPixels` with the marks drawn at that scale, not over

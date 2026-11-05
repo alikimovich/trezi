@@ -119,7 +119,7 @@ let delay = SidebarMarqueeTitle.delay, speed = Double(SidebarMarqueeTitle.speed)
 var plan: [(at: Double, name: String, run: () -> Void)] = []
 func take(_ scenario: String, _ phase: String, _ cell: SidebarChatCell, at time: Double) {
     plan.append((time, "\(scenario)/\(phase)", {
-        report[scenario, default: [:]][phase] = sample(cell, at: CACurrentMediaTime() - began)
+        report[scenario, default: [:]][phase] = sample(cell, at: CACurrentMediaTime() - (cell.title?.scrollStart ?? began))
     }))
 }
 func resize(_ cell: SidebarChatCell, to width: CGFloat, at time: Double) {
@@ -138,7 +138,6 @@ func select(_ cell: SidebarChatCell, at time: Double) {
 /// Start, middle and end of a title with this travel; the end is well after the text arrives.
 func phases(_ scenario: String, _ cell: SidebarChatCell) {
     let travel = Double(cell.title!.travel) + 20 + 6 // the hovered title gives up the Archive width
-    take(scenario, "start", cell, at: 0.3)
     take(scenario, "mid", cell, at: delay + travel / speed / 2)
     take(scenario, "end", cell, at: delay + travel / speed + 0.5)
 }
@@ -205,8 +204,14 @@ take("still", "end", still, at: 2.0)
 // Never nil: nil reads the host's Reduce Motion setting (some CI runners have it on), and this
 // run must not depend on it or change it. Only `still` hovers with it on.
 SidebarMarqueeTitle.reduceMotionOverride = false
-for cell in [selected, unselected, bare, narrow, narrowUnselected, narrowedInDelay, narrowedMid, narrowedAtEnd, widenedAtEnd,
-             widenedToFit, selectedMid, selectedAtEnd, overflowsLater, fits, leaving] { cell.setHovered(true) }
+// Capture each start before another row's AppKit paint can delay it past the hover pause.
+for (name, cell) in [("selected", selected), ("unselected", unselected), ("bare", bare),
+                     ("narrow", narrow), ("narrowUnselected", narrowUnselected)] {
+    cell.setHovered(true)
+    report[name, default: [:]]["start"] = sample(cell, at: CACurrentMediaTime() - cell.title!.scrollStart!)
+}
+for cell in [narrowedInDelay, narrowedMid, narrowedAtEnd, widenedAtEnd, widenedToFit, selectedMid,
+             selectedAtEnd, overflowsLater, fits, leaving] { cell.setHovered(true) }
 SidebarMarqueeTitle.reduceMotionOverride = true
 still.setHovered(true)
 SidebarMarqueeTitle.reduceMotionOverride = false

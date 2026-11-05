@@ -1,5 +1,34 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-542 persistent Text selection fixture
+
+- The windowless Mark up fixture now moves focus from the selected Text tool to the color chooser and checks its on state, accent tint and accessible selected value while other tools remain off. This covers persistent tool selection across a real focus change without altering the approved annotation controls.
+
+## 2026-11-05 — LKM-542 sidebar marquee fixture phase timing
+
+- Exact-head CI sampled a row's planned 0.3-second start at 0.804 seconds; its 3-point offset matched the real clock after the 0.7-second delay. The windowless fixture now records each start immediately as that row begins hovering and checks the sample remains inside the delay. Later samples use the row's own clock; pixel, speed, resize, reset and cleanup assertions remain.
+
+## 2026-11-05 — LKM-542 sidebar decipher fixture timing
+
+- The rebuilt sidebar title fixture now samples both cells through the deterministic render seam at the same elapsed instant. A zero-elapsed sample still detects a true reset, while retained start-time and clock retirement assertions remain. This addresses an exact-head CI race from comparing two live-clock samples during cell construction.
+
+## 2026-11-05 — LKM-542 changed-page Mark up recovery
+
+- A retained Mark up snapshot from an earlier page stays hidden after navigation. A native recovery island offers Save to chat through the existing composite/Add path or explicit Discard; attachment failure keeps the island and marks for retry. The windowless fixture advances page identity without resetting it, checks exact composite bytes on Save, explicit Discard, same-page resume and preview input ownership.
+- The toolbar divider fixture now checks the current visible-overlay state and Select handoff. The reported sidebar marquee CI failure was on unchanged base code; its focused fixture passed locally. Current-head CI, independent review and post-merge native acceptance remain with the manager.
+
+## 2026-11-05 — LKM-542 suspended snapshot navigation guard
+
+- Back and Forward now remain disabled through a Mark up session, including while Select uses the live preview. The retained snapshot carries the captured page identity; a changed page cannot display it on resume, and the user gets a preservation notice. The windowless fixture asserts preview hit testing leaves the canvas during suspension and returns on resume, with the marks intact. Exact-head CI, independent review and post-merge native acceptance remain with the manager.
+
+## 2026-11-05 — LKM-542 text hit area and popup fixture repair
+
+- Text editing now tests the Core Text line's rendered bounds rather than a fixed box, so a nearby click can place a second label. The windowless canvas fixture checks two adjacent labels and drives the color popup action before asserting the chosen ink in the encoded attachment. Manager review, exact-head CI and post-merge native acceptance remain pending.
+
+## 2026-11-05 — LKM-542 annotation canvas controls
+
+- Mark up now stores a chosen palette color per drawing or canvas text mark. A text tool edits on the frozen canvas, and the existing native renderer carries both into the image attachment. Tool radio state remains selected after hover or focus changes.
+- Select suspends the overlay while retaining its snapshot and committed edits; returning to Mark up restores it after selection input ends. Focused fixture assertions cover colored composite pixels, encoded attachment pixels, direct canvas editing and tool state. The manager retains independent review, exact-head CI and post-merge native acceptance.
 ## 2026-11-04 — LKM-536 Shell toolbar conflict resolution
 
 - Reconciled the nested 3D Back and contextual Code test actions with current main's standalone AppKit New Chat toolbar action. The Shell keeps both action routes; the toolbar fixture asserts their handlers coexist. This resolves the publication conflict without changing the 3D state relay or Settings/sidebar behavior. Fresh review, current-head CI, and post-merge native acceptance remain manager gates.
