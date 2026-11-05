@@ -66,6 +66,16 @@
 ## 2026-11-04 — LKM-537 native accepted-card capture repair
 
 - The chat UI foreground capture now reveals the accepted component's containing message after each width change. At 320 points, pressing Latest parked that older card outside the lazy stack's realized viewport, so its measured frame was zero before the pair geometry assertions could run. The capture retries the message reveal while layout settles and still requires a visible card and measured answer lines at each width. The wide fixture uses 460 points because the native test window caps chat width at 466. No user-facing layout changed; quick and native verification remain the final worker gates.
+## 2026-11-05 — LKM-543 posted canvas text fixture repair
+
+- The opt-in acceptance now clicks the canvas and types new and revised text through AppKit's posted event route. The host seam only reads the opened editor and focuses the overlay to commit; it no longer invokes the canvas drawing handler directly. This restores the existing markup routing invariant. A source-audit false match in the fixture label was also removed. The focused routing and controller checks pass locally; current-head CI and post-merge native execution remain manager gates.
+
+
+## 2026-11-05 — LKM-543 narrow annotation composite and Send fixture
+
+- Added an opt-in native smoke that captures a disposable page, selects green ink and Text, moves focus to the color chooser, creates and revises canvas text, and checks exclusive Select/Mark up handover with the same marks and frozen capture. The fixture records state and foreground PNGs, compares the native encoded composite with the chat attachment by SHA-256, then uses the existing intercepted normal Send path to check the outbound image hash and prompt. Shipping annotation behavior is unchanged. Independent review, exact-current-head CI and the operator's serialized post-merge native run remain pending.
+
+
 ## 2026-11-05 — LKM-542 persistent Text selection fixture
 
 - The windowless Mark up fixture now moves focus from the selected Text tool to the color chooser and checks its on state, accent tint and accessible selected value while other tools remain off. This covers persistent tool selection across a real focus change without altering the approved annotation controls.

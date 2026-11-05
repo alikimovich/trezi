@@ -47,6 +47,8 @@ export function parseSmokeGroups(argv: readonly string[]): Set<NativeSmokeGroup>
     throw new Error(`${DREAMER_ACCEPTANCE_FLAG} needs the settings group in --only`)
   if (argv.includes(MARKUP_ACCEPTANCE_FLAG) && !names.includes('core'))
     throw new Error(`${MARKUP_ACCEPTANCE_FLAG} needs the core group in --only`)
+  if (argv.includes(ANNOTATION_COMPOSITE_FLAG) && !names.includes('core'))
+    throw new Error(`${ANNOTATION_COMPOSITE_FLAG} needs the core group in --only`)
   if (argv.includes(SOURCE_POPOUT_ACCEPTANCE_FLAG) && !names.includes('core'))
     throw new Error(`${SOURCE_POPOUT_ACCEPTANCE_FLAG} needs the core group in --only`)
   if (argv.includes(CHAT_RECOVERY_ACCEPTANCE_FLAG) && !names.includes('chat'))
@@ -87,6 +89,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'movable-islands': ['core'],
   'preview-overlay': ['core'],
   'preview-markup': ['core'],
+  'annotation-composite-send-native': ['core'],
   'text-edit': ['core', 'selection'],
   'editor-freshness': ['core'],
   'source-editor': ['core'],
@@ -184,6 +187,28 @@ export const DREAMER_ACCEPTANCE_FLAG = '--dreamer-acceptance'
 export const DREAMER_ACCEPTANCE_CHECK = 'dreamer-export-primary'
 export const MARKUP_ACCEPTANCE_FLAG = '--markup-acceptance'
 export const MARKUP_ACCEPTANCE_CHECK = 'markup-toggle-overlay-native'
+export const ANNOTATION_COMPOSITE_FLAG = '--annotation-composite-acceptance'
+export const ANNOTATION_COMPOSITE_CHECK = 'annotation-composite-send-native'
+
+/** LKM-543: only the disposable project prelude and the annotation/Send fixture. */
+export function selectAnnotationComposite<T extends { name: string }>(
+  checks: T[],
+  argv: readonly string[]
+): T[] {
+  if (!argv.includes(ANNOTATION_COMPOSITE_FLAG)) return checks
+  if (
+    argv.includes('--live') ||
+    argv.some((arg) => arg !== ANNOTATION_COMPOSITE_FLAG && /^--[\w-]+-acceptance$/.test(arg))
+  )
+    throw new Error(`${ANNOTATION_COMPOSITE_FLAG} cannot run with --live or another acceptance`)
+  const picked = checks.filter(
+    ({ name }) =>
+      (SMOKE_PRELUDE as readonly string[]).includes(name) || name === ANNOTATION_COMPOSITE_CHECK
+  )
+  if (!picked.some(({ name }) => name === ANNOTATION_COMPOSITE_CHECK))
+    throw new Error(`${ANNOTATION_COMPOSITE_FLAG}: ${ANNOTATION_COMPOSITE_CHECK} was not selected`)
+  return picked
+}
 
 /** With the flag, only the prelude and the Dreamer acceptance run (the flag's check must be
  *  among `checks`); without it the selection is unchanged. */

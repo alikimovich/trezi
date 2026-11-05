@@ -21,6 +21,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Keep the failure-only direct toolbar probe active even when an unrelated source file is already visible; compose the non-GUI source path and record the 950-point toolbar bound.
 - [x] Record bounded live Code delivery counts and refusal reasons at the native producer, preview, IPC, inspector and editor boundaries; expose actual toolbar constraint and container frames.
 - [ ] Manager: confirm the native chat group and independent review on the exact tree.
+## LKM-543 — Native annotation composite and Send acceptance fixture
+
+- [x] Add a narrow opt-in native scenario on a disposable fixture page, with the existing mocked Send interception.
+- [x] Assert a nondefault color, selected Text after color focus, canvas text creation and editing, and exclusive Select/Mark up handover with retained edits.
+- [x] Record the foreground capture and compare native composite, attachment and Send payload hashes.
+- [x] CI repair: post canvas text input instead of calling the canvas handler from the host seam; preserve routing and pinned-note source audits.
+- [ ] Manager: independent review, exact-current-head CI, merge and serialized post-merge native acceptance.
+
 ## LKM-542 — Annotation colors, persistent tools and editable canvas text
 
 - [x] Store chosen colors with drawing and canvas text in the native composite and attachment path.
