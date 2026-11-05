@@ -2,10 +2,10 @@ import ts from 'typescript'
 import { lexLiteral, locateAnchor } from '../main/control-manifest'
 import type { ControlParam } from '../shared/api'
 
-/** Conservative readback family: a top-level numeric const directly sets one
- * top-level created element's opacity, whose literal id is the declared selector.
- * Arbitrary expressions, aliases and JSX have no proven source-to-DOM link. */
-export function linkedOpacityLine(code: string, file: string, param: ControlParam): number | null {
+/** A deliberately small single-writer subset. Every reference to the created
+ * element must be a known top-level write or its final append. This rejects
+ * aliases, callbacks and later style mutations we cannot attribute to the literal. */
+export function linkedOpacityStamp(code: string, file: string, param: ControlParam): string | null {
   if (
     !/\.[cm]?jsx?$/.test(file) ||
     param.apply.strategy !== 'literal' ||
@@ -80,13 +80,69 @@ export function linkedOpacityLine(code: string, file: string, param: ControlPara
       decl.initializer.arguments.length === 1 &&
       ts.isStringLiteral(decl.initializer.arguments[0])
   )
+  const created = new Set(targets.map(({ decl }) => (decl.name as ts.Identifier).text))
+  // Do not claim a single writer in a file that can obtain the element by a
+  // selector, pass it through another API, or hide an assignment in a callback.
+  if (allAssignments.length !== assignments.length) return null
+  const supportedFile = statements.every((statement) => {
+    if (ts.isVariableStatement(statement)) {
+      return statement.declarationList.declarations.every((decl) => {
+        if (!ts.isIdentifier(decl.name) || !decl.initializer) return false
+        const value = decl.initializer
+        return (
+          created.has(decl.name.text) ||
+          ts.isNumericLiteral(value) ||
+          ts.isStringLiteral(value) ||
+          (ts.isArrayLiteralExpression(value) &&
+            value.elements.every(
+              (item) =>
+                ts.isNumericLiteral(item) ||
+                (ts.isPrefixUnaryExpression(item) && ts.isNumericLiteral(item.operand))
+            )) ||
+          (ts.isPrefixUnaryExpression(value) && ts.isNumericLiteral(value.operand))
+        )
+      })
+    }
+    if (!ts.isExpressionStatement(statement)) return false
+    const expression = statement.expression
+    if (
+      ts.isBinaryExpression(expression) &&
+      expression.operatorToken.kind === ts.SyntaxKind.EqualsToken
+    ) {
+      return [...created].some(
+        (name) =>
+          (chain(expression.left, [name, 'id']) && ts.isStringLiteral(expression.right)) ||
+          chain(expression.left, [name, 'textContent']) ||
+          chain(expression.left, [name, 'style', 'boxShadow']) ||
+          (chain(expression.left, [name, 'style', 'cssText']) &&
+            ts.isStringLiteral(expression.right) &&
+            !/opacity/i.test(expression.right.text)) ||
+          chain(expression.left, [name, 'style', 'opacity'])
+      )
+    }
+    if (!ts.isCallExpression(expression)) return false
+    return [...created].some(
+      (name) =>
+        (chain(expression.expression, [name, 'setAttribute']) &&
+          expression.arguments.length === 2 &&
+          ts.isStringLiteral(expression.arguments[0]) &&
+          expression.arguments[0].text === 'data-trezi-source' &&
+          ts.isStringLiteral(expression.arguments[1])) ||
+        ((chain(expression.expression, ['document', 'body', 'append']) ||
+          chain(expression.expression, ['document', 'body', 'appendChild'])) &&
+          expression.arguments.length === 1 &&
+          ts.isIdentifier(expression.arguments[0]) &&
+          expression.arguments[0].text === name)
+    )
+  })
+  if (!supportedFile) return null
   const linked = targets.filter(({ decl }) => {
     const variable = (decl.name as ts.Identifier).text
     const ids = allAssignments.filter((entry) => chain(entry.left, [variable, 'id']))
     const opacities = allAssignments.filter((entry) =>
       chain(entry.left, [variable, 'style', 'opacity'])
     )
-    return (
+    const direct =
       ids.length === 1 &&
       ts.isStringLiteral(ids[0].right) &&
       ids[0].right.text === selectorId &&
@@ -99,8 +155,64 @@ export function linkedOpacityLine(code: string, file: string, param: ControlPara
       allDeclarations.filter((other) => ts.isIdentifier(other.name) && other.name.text === variable)
         .length === 1 &&
       !allAssignments.some((entry) => ts.isIdentifier(entry.left) && entry.left.text === variable)
-    )
+    if (!direct) return false
+    const creation = source.getLineAndCharacterOfPosition(decl.parent.parent.getStart(source))
+    const stamp = `${file}:${creation.line + 1}:${creation.character + 1}`
+    let appendCount = 0
+    let stampCount = 0
+    let safe = true
+    const inspect = (node: ts.Node) => {
+      if (!safe) return
+      if (ts.isIdentifier(node) && node.text === variable && node !== decl.name) {
+        let cursor: ts.Node = node
+        while (cursor.parent && !ts.isSourceFile(cursor.parent)) cursor = cursor.parent
+        if (!ts.isExpressionStatement(cursor)) {
+          safe = false
+          return
+        }
+        const expression = cursor.expression
+        if (
+          ts.isBinaryExpression(expression) &&
+          expression.operatorToken.kind === ts.SyntaxKind.EqualsToken
+        ) {
+          const left = expression.left
+          const safeProperty =
+            expression === ids[0] ||
+            expression === opacities[0] ||
+            chain(left, [variable, 'textContent']) ||
+            chain(left, [variable, 'style', 'boxShadow']) ||
+            (chain(left, [variable, 'style', 'cssText']) &&
+              ts.isStringLiteral(expression.right) &&
+              !/opacity/i.test(expression.right.text))
+          if (!safeProperty) safe = false
+        } else if (ts.isCallExpression(expression)) {
+          if (
+            chain(expression.expression, [variable, 'setAttribute']) &&
+            expression.arguments.length === 2 &&
+            ts.isStringLiteral(expression.arguments[0]) &&
+            expression.arguments[0].text === 'data-trezi-source' &&
+            ts.isStringLiteral(expression.arguments[1]) &&
+            expression.arguments[1].text === stamp
+          )
+            stampCount++
+          else if (
+            (chain(expression.expression, ['document', 'body', 'append']) ||
+              chain(expression.expression, ['document', 'body', 'appendChild'])) &&
+            expression.arguments.length === 1 &&
+            expression.arguments[0] === node
+          )
+            appendCount++
+          else safe = false
+        } else safe = false
+      }
+      ts.forEachChild(node, inspect)
+    }
+    inspect(source)
+    return safe && appendCount === 1 && stampCount === 1
   })
   if (linked.length !== 1) return null
-  return source.getLineAndCharacterOfPosition(linked[0].decl.getStart(source)).line + 1
+  const position = source.getLineAndCharacterOfPosition(
+    linked[0].decl.parent.parent.getStart(source)
+  )
+  return `${position.line + 1}:${position.character + 1}`
 }

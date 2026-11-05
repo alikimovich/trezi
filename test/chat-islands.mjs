@@ -560,7 +560,7 @@ try {
   // The actual chat runtime uses this fixed preview transport. Only a declared
   // computed opacity on the matching source-stamped element can confirm Apply.
   const opacityCode =
-    "const OPACITY = 0.5;\nconst card = document.createElement('div');\ncard.id = 'card';\ncard.style.opacity = OPACITY;\ndocument.body.append(card);\n"
+    "const OPACITY = 0.5;\nconst card = document.createElement('div');\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:2:1');\ncard.style.opacity = OPACITY;\ndocument.body.append(card);\n"
   await writeFile(join(root, 'opacity.js'), opacityCode)
   const opacityDefinition = islandDefinition({
     manifest: {
@@ -622,7 +622,7 @@ try {
     'production callback links the exact source constant to the target opacity in the current preview session'
   )
   const unrelatedCode =
-    "const OPACITY = 0.5;\nconst other = document.createElement('div');\nother.id = 'other';\nother.style.opacity = OPACITY;\nconst card = document.createElement('div');\ncard.id = 'card';\ncard.style.opacity = 0.5;\ndocument.body.append(other, card);\n"
+    "const OPACITY = 0.5;\nconst other = document.createElement('div');\nother.id = 'other';\nother.style.opacity = OPACITY;\nconst card = document.createElement('div');\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:5:1');\ncard.style.opacity = 0.5;\ndocument.body.append(card);\n"
   await writeFile(join(root, 'opacity.js'), unrelatedCode)
   const unrelatedRevision = (await islandSource(root, opacityRecord)).revision
   renderedStamp = 'opacity.js:5:1'
@@ -630,6 +630,33 @@ try {
     await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, unrelatedRevision),
     false,
     'a matching same-file element is not proof that the controlled literal feeds its opacity'
+  )
+  await writeFile(join(root, 'opacity.js'), opacityCode)
+  renderedStamp = 'opacity.js:2:1'
+  for (const override of [
+    "card.style.setProperty('opacity', '0.5');",
+    "card.style.cssText = 'opacity: 0.5';",
+    'const alias = card; alias.style.opacity = OPACITY;'
+  ]) {
+    await writeFile(join(root, 'opacity.js'), `${opacityCode}${override}\n`)
+    const overrideRevision = (await islandSource(root, opacityRecord)).revision
+    assert.equal(
+      await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, overrideRevision),
+      false,
+      `a later or aliased style writer stays unsupported: ${override}`
+    )
+  }
+  const sameLine =
+    "const OPACITY = 0.5;\nconst other = document.createElement('div'); const card = document.createElement('div');\n"
+  const cardColumn = sameLine.split('\n')[1].indexOf('const card') + 1
+  const sameLineCode = `${sameLine}other.id = 'other';\nother.style.opacity = OPACITY;\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:2:${cardColumn}');\ncard.style.opacity = OPACITY;\ndocument.body.append(card);\n`
+  await writeFile(join(root, 'opacity.js'), sameLineCode)
+  const sameLineRevision = (await islandSource(root, opacityRecord)).revision
+  renderedStamp = 'opacity.js:2:1'
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, sameLineRevision),
+    false,
+    'an unrelated same-line creation cannot impersonate the linked target by file and line'
   )
   await writeFile(join(root, 'opacity.js'), opacityCode)
   renderedStamp = 'opacity.js:2:1'

@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-539 single-writer rendered identity repair
+
+The supported opacity readback now rejects later `setProperty`, `cssText`, aliased and other unrecognized uses of the target element. It requires one declared opacity writer, one source-authored stamp, and an exact creation line and column, so two creations on the same line cannot share evidence. Focused production-transport fixtures cover overrides and same-line impersonation alongside the linked positive, stale revision and frame guards. Unsupported source shapes keep Apply pending with Retry/Revert; independent review, exact-head CI and post-merge native acceptance remain manager gates.
+
 ## 2026-11-05 — LKM-539 rendered opacity linkage review repair
 
 The prior source-stamped probe could mistake an unrelated element in the same file for the declared opacity target. The supported readback now requires the parsed literal to be a top-level constant directly assigned to the unique created element with the declared id, and its source stamp must identify that element's creation line. Ambiguous or dynamic source relationships leave Apply pending with Retry/Revert. The production transport fixture covers a linked positive and a same-file unrelated negative. Native acceptance remains pending after merge.
