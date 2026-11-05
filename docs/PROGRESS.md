@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-523 review repair: unresolved title unmount
+
+- The existing offscreen sidebar title fixture now detaches a row while glyphs remain unresolved. It asserts the decipher timer was active before removal, stops on detachment, leaves a readable label, and does not retain the decipher object after the cell is discarded. `sidebar-shimmer` is registered in the unit tier for the manager's CI command. The reported prior-head `contentTintColor` Swift error is absent from this checkout; exact-head CI remains required.
+
 ## 2026-11-04 — LKM-523 review repair: preserve loading glyphs through updates
 
 - The selected header now leaves its attributed decipher frame intact while the same chat loads. Sidebar rebuilds carry a chat-keyed reveal clock, and readiness or cancellation prunes it. The offscreen title fixture asserts visible beginning/middle glyphs, independently resolved columns, fixed-width advances and a rebuilt row that keeps its time; the toolbar control fixture asserts idle, hover, press, focus and disabled bezel states beside a neighboring island glyph.

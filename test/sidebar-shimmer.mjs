@@ -197,6 +197,20 @@ if (process.platform !== 'darwin') {
   assert.equal(report.loadingReduced.text, 'Loading chat')
   assert.equal(report.loadingStopped.decipher.animated, false)
   assert.equal(report.loadingStopped.alpha, 1)
+  assert.deepEqual(
+    report.loadingUnmount.map((item) => item.width),
+    [200, 90]
+  )
+  for (const unmount of report.loadingUnmount) {
+    const width = unmount.width
+    assert.equal(unmount.before.mode, 'decipher', `${width}: row starts unresolved`)
+    assert.equal(unmount.before.animated, true, `${width}: timer runs before removal`)
+    assert.ok(unmount.before.resolved < 'Loading chat'.length, `${width}: glyphs unresolved`)
+    assert.equal(unmount.after.mode, 'off', `${width}: detachment stops the effect`)
+    assert.equal(unmount.after.animated, false, `${width}: detachment invalidates the timer`)
+    assert.equal(unmount.after.text, 'Loading chat', `${width}: no random glyphs remain`)
+    assert.equal(unmount.released, true, `${width}: discarded cell releases the decipher object`)
+  }
   assert.equal(
     report.rebuiltLoading.first.started,
     report.rebuiltLoading.stored,

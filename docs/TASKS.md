@@ -9,6 +9,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Use system monospace in sidebar rows and keep the New Chat action in native glass with pointer and keyboard feedback.
 - [x] Extend the lock-free Swift fixture for staged glyphs, motion fallback and sidebar font; keep toolbar interaction regression coverage.
 - [x] Review repair: preserve header glyphs across toolbar updates, carry sidebar reveal time across rebuilt cells, and assert visible glyph and New Chat interaction states in the standalone fixtures.
+- [x] Review repair: assert unresolved-row detach stops its timer, clears glyph noise and releases its decipher object in the registered sidebar title unit fixture.
 - [ ] Manager: independent review, exact-head CI and post-merge native chat/sidebar/core acceptance with foreground captures.
 ## LKM-519 — Feedback: review logs
 

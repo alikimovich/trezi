@@ -115,6 +115,23 @@ SidebarMarqueeTitle.reduceMotionOverride = false
 loading.decipher?.refresh()
 loading.decipher?.stop()
 report["loadingStopped"] = describe(loading)
+// An unresolved row must release its timer on unmount, and neither the timer nor notifications
+// may keep the decipher object alive after the cell is discarded.
+var unmounts: [[String: Any]] = []
+for width: CGFloat in [200, 90] {
+    weak var discardedDecipher: SidebarTitleDecipher?
+    var before: [String: Any] = [:], after: [String: Any] = [:]
+    autoreleasepool {
+        let transient = make(["loadingTitle": true], title: "••••••••", width: width)
+        transient.decipher?.render(elapsed: 0.025)
+        discardedDecipher = transient.decipher
+        before = transient.decipher?.inspect() ?? [:]
+        transient.removeFromSuperview()
+        after = transient.decipher?.inspect() ?? [:]
+    }
+    unmounts.append(["width":width, "before":before, "after":after, "released":discardedDecipher == nil])
+}
+report["loadingUnmount"] = unmounts
 let loadingRow = ShellRow(["id":"chat:rebuild", "kind":"chat", "project":"p", "title":"••••••••", "loadingTitle":true])
 shell.rows = [ShellRow(["id":"project:p", "kind":"project", "project":"p", "title":"P",
                        "recent":[["id":"chat:rebuild", "kind":"chat", "project":"p", "title":"••••••••", "loadingTitle":true]]])]
