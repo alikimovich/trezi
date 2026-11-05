@@ -15,6 +15,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Skills and nested Settings panes keep existing actions above scrolling content; nested panes also show Back and their context (LKM-525).
 - The Skills list shows enabled installed skills first and hides recommendations Trezi cannot import, while retaining installed records and clear On/Off status (LKM-525).
 - AI Providers puts Add provider in the header and moves selected provider, Claude, and Gemini configuration into labeled rows; provider removal stays behind its detail confirmation (LKM-525).
+## [0.13.25] - 2026-11-04
+
+### Fixed
+
+- Accepted answer cards now show each question directly above its full-width answer (LKM-533).
 
 ## [0.13.24] - 2026-11-04
 

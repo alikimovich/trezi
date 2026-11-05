@@ -18,6 +18,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] CI fixture repair: assert Undo restores the exact captured prior memory in `resolved-lessons`.
 - [x] Security repair: scope provider drafts and Remove return context by stable provider ID, and reject same-label credential crossover in the existing Settings fixtures.
 - [ ] Manager: current-head CI, independent review and post-merge native Settings acceptance.
+## LKM-533 — Stack accepted question and answer pairs
+
+- [x] Render each accepted form question immediately above its answer, leading-aligned across the card width.
+- [x] Capture a synthetic long-answer example in the existing chat UI smoke fixture and retain submitted-value assertions.
+- [x] Review repair: assert the rendered accepted-card pair geometry and wrapping at narrow, ordinary and wide chat widths; save PNG and frame JSON for each.
+- [ ] Manager: independent review, exact-head CI and post-merge native chat acceptance.
 ## LKM-532 — Native preview-markup foreground failure on main
 
 - [x] Bound the posted-event seam's foreground activation wait and retry activation while AppKit settles; retain the no-sheet guard and report focus state on failure.
