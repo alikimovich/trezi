@@ -255,6 +255,7 @@ const host = compile(
     join(root, 'src/native/PreviewSpeed.swift'),
     join(root, 'src/native/PreviewSpeedPlacement.swift'),
     join(root, 'src/native/ThreeDChrome.swift'),
+    join(root, 'src/native/ThreeDStateRelay.swift'),
     join(root, 'src/native/ThreeDScene.swift'),
     join(root, 'src/native/ThreeDCapture.swift'),
     join(root, 'src/native/ChatDivider.swift'),

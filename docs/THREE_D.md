@@ -5,16 +5,17 @@ stacked-layers icon in its selection toolbar). The selected subtree opens in an
 isolated workspace rendered natively over the preview. Drag to orbit, Shift-drag or
 scroll with two fingers to pan, and pinch (or ⌘-scroll / a mouse wheel) to zoom.
 The focused scene also accepts arrow keys and +/−. **Separation** spreads the
-layers apart live; **Front** assembles them face-on and **Reset view** restores the
-initial camera, both animated. Hovering a layer highlights it and shows its label.
+layers apart live. Hovering a layer highlights it and shows its label.
 
 Click a surface or choose a **Component layer** to open the existing inspector.
-Choose **Code** in the workspace header to open that layer's source in the code
-drawer while keeping the exploded view open. It appears for source-backed layers.
+Choose **Code** in the floating native toolbar island to open that layer's source in
+the code drawer while keeping the exploded view open. It is disabled when the
+selected layer has no valid source mapping.
 Props, Styles, and Custom controls still target the original source-backed
 selection. Style previews update the live component and its 3D representation;
-commits and undo use the existing editing engine. **Back to page** or Escape
-closes the workspace without navigating or remounting the application. To operate
+commits and undo use the existing editing engine. The native toolbar's Back chevron
+beside the object's name or Escape closes the workspace without navigating or
+remounting the application. To operate
 buttons, inputs, menus, and other live application behavior, return to the page.
 
 ## Implementation
@@ -37,8 +38,9 @@ are semantic AppKit colors resolved under the effective appearance, so light/dar
 switches need no recapture. The WKWebView stays mounted under the scene for
 identity, selection and the next capture. If capture fails or times out, the scene
 shows a native message instead of an empty stage. `src/native/ThreeDChrome.swift`
-owns the system buttons, slider, picker ("1 layer", "N layers"), title, hint and
-capture status, and places the scene between its bars. The original component
+owns the slider, picker ("1 layer", "N layers"), hint and capture status, and
+places the scene above its footer. The shared native toolbar owns Back, title and
+Code. The original component
 stays mounted in its original document, retaining inherited styles, fonts,
 application state, and layout context. Inspection never reparents or restyles it.
 Selection and editing reuse the existing preview → main → inspector path. The
@@ -82,7 +84,7 @@ restore its camera or promise to preserve application state.
 The native `three-d` smoke check in `src/native/smoke-three-d.ts` belongs to the
 `core` group. It opens a nested fixture card from the real preview toolbar; checks
 that every layer renders as a native plane at backing scale, separation spacing,
-Front/Reset, hover, clicking a layer through the scene's hit test, the plural
+camera assembly/reset through the smoke seam, hover, clicking a layer through the scene's hit test, the plural
 label, Code and inspector paths, stale layer rejection, the capture-failure
 message and recovery, HMR recovery, removed targets, navigation cleanup, Back and
 Escape with native focus, repeated open/close and page input isolation; and

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { PREVIEW_THREE_D_ACTION } from '../shared/preview-channels'
+import { PREVIEW_THREE_D_ACTION, PREVIEW_TOOLBAR_ACTION } from '../shared/preview-channels'
 import type { NativeBridge } from './bridge'
+import { dispatchIPC } from './platform'
 import { preparePreviewInput } from './smoke-input'
 import { waitFor } from './smoke-wait'
 
@@ -25,7 +26,7 @@ const CARD = `(() => {
   const card = document.createElement('section');
   card.id = 'three-d-card';
   card.style.cssText = 'margin:12px;padding:16px;width:320px;background:#f4e3c1;border-radius:12px';
-  card.innerHTML = '<div id="three-d-head" style="padding:8px;background:#2f6fde;color:#fff"><h2 id="three-d-heading" style="margin:0;font:600 18px system-ui">Layered card</h2></div><p id="three-d-copy" style="margin:12px 0 0">Nested copy <b id="three-d-bold">bold</b></p>';
+  card.innerHTML = '<div id="three-d-head" style="padding:8px;background:#2f6fde;color:#fff"><h2 id="three-d-heading" data-trezi-source="about.html:3:1" style="margin:0;font:600 18px system-ui">Layered card</h2></div><p id="three-d-copy" style="margin:12px 0 0">Nested copy <b id="three-d-bold" data-trezi-source="index.html:3:1">bold</b></p>';
   document.body.prepend(sibling, card);
   card.scrollIntoView({ block: 'nearest' });
   return true;
@@ -121,14 +122,25 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   const viewport = await page('({width:innerWidth,height:innerHeight})')
   await page(CARD)
   const opened = await open('#three-d-card')
-  assert.match(opened.headerType, /ThreeDBar/)
+  assert.equal(opened.headerType, 'none')
   assert.match(opened.footerType, /ThreeDBar/)
   assert.match(opened.sceneType, /ThreeDSceneView/)
-  assert.deepEqual([opened.insets.top, opened.insets.bottom], [48, 44])
+  assert.deepEqual([opened.insets.top, opened.insets.bottom], [0, 44])
   assert.equal(opened.footerRect.height, 44, 'the single-row footer reclaims scene height')
+  assert.equal(opened.headerHidden, true, 'retired in-content row is absent')
+  const nestedToolbar = await host.request('shellInspect')
+  assert.equal(nestedToolbar.nestedTitle, opened.title)
+  assert.equal(nestedToolbar.nestedBack, true)
+  assert.equal(nestedToolbar.nestedCodeEnabled, opened.code)
+  assert.equal(nestedToolbar.nestedTitleMonospace, true)
+  const backFrame: Rect = nestedToolbar.nestedBackFrame
+  const titleFrame: Rect = nestedToolbar.nestedTitleFrame
+  assert.ok(backFrame.width > 0 && titleFrame.width > 0, 'native Back and title are rendered')
   assert.ok(
-    Math.abs(opened.headerRect.y - opened.contentTop) < 0.5,
-    `header meets the toolbar content edge (${opened.headerRect.y} vs ${opened.contentTop})`
+    backFrame.x + backFrame.width <= titleFrame.x &&
+      titleFrame.x - backFrame.x - backFrame.width <= 16 &&
+      backFrame.x >= nestedToolbar.viewportTrailing - 1,
+    'Back and its adjacent title follow the viewport controls'
   )
   // N layers render natively, each a Core Animation plane holding its capture.
   assert.deepEqual(opened.layers, [
@@ -195,9 +207,9 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   )
   const sceneRect: Rect = opened.sceneRect
   assert.ok(
-    sceneRect.y >= opened.headerRect.y + opened.headerRect.height - 0.5 &&
+    sceneRect.y >= opened.contentTop - 0.5 &&
       sceneRect.y + sceneRect.height <= opened.footerRect.y + 0.5,
-    'the native scene fills the preview between the bars'
+    'the native scene fills the preview above the footer'
   )
   await waitFor(async () => (await inspect()).focus === 'scene', 'native scene focused on open')
   assert.equal(
@@ -268,15 +280,53 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
     async () => (await host.request('inspectorInspect')).visible,
     'clicking a layer opens the inspector'
   )
+  assert.equal((await inspect()).code, true, 'the selected leaf has an exact source stamp')
+  const leafState = await inspect()
+  const scenePage = await page('location.href')
+  assert.equal(await host.request('shellPerform', { action: 'nested-code' }), true)
+  await waitFor(async () => {
+    const editor = await host.request('sourceInspect')
+    return editor.visible && editor.source === 'index.html' && editor
+  }, 'the selected leaf source opens index.html')
+  await host.request('sourcePerform', { action: { root: fixture, action: 'hide' } })
+  await waitFor(async () => !(await host.request('sourceInspect')).visible, 'first source hidden')
   const heading = opened.layers.indexOf('h2#three-d-heading')
   await perform('layer', heading)
-  await waitFor(async () => (await inspect()).sceneSelected === heading, 'picker selects a layer')
-  if ((await inspect()).code) {
-    await perform('code')
-    await waitFor(
-      async () => (await host.request('sourceInspect')).visible,
-      'Code opens source editor'
-    )
+  const headingState = await waitFor(async () => {
+    const state = await inspect()
+    return state.selected === heading && state.sceneSelected === heading && state
+  }, 'picker selects a new source-backed layer')
+  assert.equal(
+    headingState.revision,
+    leafState.revision,
+    'layer changes do not advance capture revision'
+  )
+  await dispatchIPC('preview', {
+    type: 'send',
+    channel: PREVIEW_TOOLBAR_ACTION,
+    args: [
+      {
+        action: 'three-d-code',
+        source: 'index.html:3:1',
+        page: scenePage,
+        session: leafState.session,
+        revision: leafState.revision,
+        selected: leaf
+      }
+    ]
+  })
+  await page('true', true)
+  assert.equal(
+    (await host.request('sourceInspect')).visible,
+    false,
+    'delayed Code for the prior layer cannot reopen index.html'
+  )
+  assert.equal(await host.request('shellPerform', { action: 'nested-code' }), true)
+  await waitFor(async () => {
+    const editor = await host.request('sourceInspect')
+    return editor.visible && editor.source === 'about.html' && editor
+  }, 'Code after switching layers opens about.html, never the prior index.html')
+  {
     // The drawer is the docked editor: dock it when Code popped it out.
     if ((await host.request('sourceInspect')).popped)
       await host.request('sourcePerform', { action: { root: fixture, action: 'dock' } })
@@ -288,7 +338,10 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
       const state = await inspect()
       return state.active && state.dockedSourceRect.height > 0 && state
     }, 'exploded view stays open with the docked editor')
-    assert.ok(!withDrawer.headerHidden && !withDrawer.footerHidden, 'native bars stay visible')
+    assert.ok(
+      withDrawer.headerHidden && !withDrawer.footerHidden,
+      'only the native footer stays visible'
+    )
     assert.ok(
       withDrawer.footerRect.y + withDrawer.footerRect.height <= withDrawer.dockedSourceRect.y + 0.5,
       `footer ends above the docked editor (${JSON.stringify(withDrawer.footerRect)} vs ${JSON.stringify(withDrawer.dockedSourceRect)})`
@@ -299,13 +352,25 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
     await host.request('sourcePerform', { action: { root: fixture, action: 'hide' } })
     await waitFor(async () => !(await host.request('sourceInspect')).visible, 'editor hidden again')
   }
+  const unmapped = opened.layers.indexOf('p#three-d-copy')
+  await perform('layer', unmapped)
+  await waitFor(async () => {
+    const state = await inspect()
+    return state.selected === unmapped && !state.code && state
+  }, 'connected layer without a source mapping is selected')
+  assert.equal((await host.request('shellInspect')).nestedCodeEnabled, false)
+  assert.equal(await host.request('shellPerform', { action: 'nested-code' }), false)
+  assert.equal(
+    (await host.request('sourceInspect')).visible,
+    false,
+    'unmapped layer cannot reopen the previous file'
+  )
   const withPanels = await inspect()
   for (const [hidden, frame] of [
     [withPanels.inspectorHidden, withPanels.inspectorRect],
     [withPanels.layersHidden, withPanels.layersRect]
   ] as const) {
     if (hidden) continue
-    assert.ok(!intersects(withPanels.headerRect, frame), 'native header clears the panel')
     assert.ok(!intersects(withPanels.footerRect, frame), 'native footer clears the panel')
     assert.ok(withPanels.insets.left > 0 || withPanels.insets.right > 0, 'camera clears the panel')
   }
@@ -362,7 +427,7 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
     await host.request('inspectorIsland', { windowWidth: 850, windowHeight: 650 })
     const narrow = await inspect()
     assert.ok(
-      narrow.active && narrow.compact && !narrow.headerHidden && !narrow.footerHidden,
+      narrow.active && narrow.compact && narrow.headerHidden && !narrow.footerHidden,
       'native controls remain at narrow width'
     )
     const image = await host.request('threeDCapture', { dark: false })
@@ -386,6 +451,11 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
 
   // A single element: one layer, singular label.
   const second = await open('#native-title')
+  const parentUrl = await page('location.href')
+  const parentSelection = await waitFor(async () => {
+    const state = await host.request('inspectorInspect')
+    return state.title === 'h1#native-title' && state.root === fixture && state
+  }, 'parent page selection is the fixture heading')
   assert.notEqual(second.session, opened.session, 'reopening creates a new session')
   assert.equal(second.countLabel, '1 layer')
   assert.match(second.status, /^Depth shows nesting/)
@@ -403,9 +473,15 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
     const s = await inspect()
     return s.selected === second.selected && s.sceneSelected === second.selected
   }, 'stale-revision layer action is rejected and the scene matches the picker')
-  await perform('close')
+  assert.equal(await host.request('shellPerform', { action: 'nested-back' }), true)
   await waitFor(async () => !(await inspect()).active, 'Back closes native chrome')
   assert.equal(await page(`document.querySelectorAll('[data-trezi-three-d]').length`, true), 0)
+  assert.equal((await host.request('shellInspect')).nestedBack, false)
+  assert.deepEqual(await page('({width:innerWidth,height:innerHeight})'), viewport)
+  assert.equal(await page('location.href'), parentUrl, 'Back retains the page URL')
+  const restoredSelection = await host.request('inspectorInspect')
+  assert.equal(restoredSelection.root, parentSelection.root, 'Back retains the project')
+  assert.equal(restoredSelection.title, parentSelection.title, 'Back retains the selected object')
 
   const samePage = await open('#native-title')
   assert.notEqual(samePage.session, second.session, 'reopening creates a new session')
@@ -418,6 +494,26 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
     async () =>
       (await page(`document.querySelectorAll('[data-trezi-three-d]').length`, true)) === 0,
     'same-document URL change closes the modal scene'
+  )
+  await dispatchIPC('preview', {
+    type: 'send',
+    channel: PREVIEW_TOOLBAR_ACTION,
+    args: [
+      {
+        action: 'three-d-code',
+        source: 'index.html:3:1',
+        page: parentUrl,
+        session: samePage.session,
+        revision: samePage.revision,
+        selected: samePage.selected
+      }
+    ]
+  })
+  await page('true', true)
+  assert.equal(
+    (await host.request('sourceInspect')).visible,
+    false,
+    'stale Code after route navigation cannot open the old file'
   )
 
   const third = await open('#native-title')
@@ -454,10 +550,31 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   })
   await page('true', true)
   assert.equal((await inspect()).selected, -1, 'old layer cannot select a removed node')
+  assert.equal((await host.request('shellInspect')).nestedCodeEnabled, false)
   await host.request('reload', { view: 'preview' })
   await waitFor(async () => !(await inspect()).active, 'navigation clears native chrome')
   const cleared = await inspect()
   assert.ok(cleared.headerHidden && cleared.footerHidden && cleared.sceneHidden)
   await waitFor(() => page(`!!document.querySelector('#native-title')`), 'fixture after navigation')
+  await dispatchIPC('preview', {
+    type: 'send',
+    channel: PREVIEW_TOOLBAR_ACTION,
+    args: [
+      {
+        action: 'three-d-code',
+        source: 'about.html:3:1',
+        page: parentUrl,
+        session: third.session,
+        revision: third.revision,
+        selected: third.selected
+      }
+    ]
+  })
+  await page('true', true)
+  assert.equal(
+    (await host.request('sourceInspect')).visible,
+    false,
+    'stale Code after navigation cannot reopen the prior file'
+  )
   assert.deepEqual(await page('({width:innerWidth,height:innerHeight})'), viewport)
 }

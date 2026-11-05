@@ -10,6 +10,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Changed
+
+- Nested 3D inspection uses the native toolbar for Back and the selected object's Code action, without the in-preview navigation row or visible camera reset controls (LKM-536).
 ## [0.13.29] - 2026-11-05
 
 ### Changed

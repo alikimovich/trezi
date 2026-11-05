@@ -44,6 +44,7 @@ import {
   PREVIEW_SET_STATUS,
   PREVIEW_STYLES_UPDATED,
   PREVIEW_TEXT_EDIT,
+  PREVIEW_THREE_D_STATE,
   PREVIEW_TOGGLE_SELECT,
   PREVIEW_TOOLBAR_ACTION,
   STYLES_CLEAR_PREVIEW,
@@ -152,6 +153,12 @@ function requestReply<T>(opts: {
 
 export function registerPreviewIpc(host: PreviewIpcHost): void {
   const { state, sendToMain } = host
+  let activeThreeD: {
+    session: string
+    revision: number
+    selected: number | null
+    hasSource: boolean
+  } | null = null
   const previewWc = (): NativeWebContents | undefined => host.getPreviewView()?.webContents
   /** Push to the preview's preload (no-op when there's no preview yet). */
   const toPreview = (channel: string, ...args: unknown[]): void => {
@@ -159,6 +166,33 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
   }
   /** Did this really come from the previewed page, and not some other view? */
   const fromPreview = (e: NativeIpcEvent): boolean => e.sender === previewWc()
+  ipcMain.on(PREVIEW_THREE_D_STATE, (e, value: unknown) => {
+    if (!fromPreview(e)) return
+    const scene = value as {
+      session?: unknown
+      revision?: unknown
+      selected?: unknown
+      hasSource?: unknown
+      layers?: unknown
+    } | null
+    activeThreeD =
+      scene &&
+      typeof scene.session === 'string' &&
+      Number.isInteger(scene.revision) &&
+      (scene.selected === null ||
+        (Number.isInteger(scene.selected) &&
+          Array.isArray(scene.layers) &&
+          (scene.selected as number) >= 0 &&
+          (scene.selected as number) < scene.layers.length)) &&
+      typeof scene.hasSource === 'boolean'
+        ? {
+            session: scene.session,
+            revision: scene.revision as number,
+            selected: scene.selected as number | null,
+            hasSource: scene.hasSource
+          }
+        : null
+  })
 
   // Let the in-process agent tools (backends/claude.ts) observe the user's live
   // preview without importing this module (would be a cycle). getUrl reports the
@@ -235,6 +269,7 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
       const view = host.ensurePreviewView()
       if (options?.keepPath) url = keepRoute(view.webContents.getURL(), url)
       state.url = url
+      activeThreeD = null
       state.retries = 0
       view.setVisible(true)
       view.webContents.loadURL(url, { hard: options?.hard, agent: options?.agent })
@@ -248,6 +283,7 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
 
   ipcMain.handle('preview:reset', () => {
     state.url = null
+    activeThreeD = null
     state.retries = 0
     // No app to select in on the placeholder — keep main's flags honest so none
     // of them silently re-arm the overlay/frame/pins on a later load (the
@@ -286,9 +322,32 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
 
   // Selection-toolbar actions that need the renderer (code drawer / delete turn);
   // comment/annotate are handled entirely inside the preview's composer.
-  ipcMain.on(PREVIEW_TOOLBAR_ACTION, (e, kind: string) => {
+  ipcMain.on(PREVIEW_TOOLBAR_ACTION, (e, kind: unknown) => {
     if (!fromPreview(e)) return
-    if (!['code', 'delete', 'props'].includes(kind)) return
+    if (typeof kind === 'object' && kind !== null) {
+      const action = kind as Record<string, unknown>
+      if (
+        action.action !== 'three-d-code' ||
+        typeof action.source !== 'string' ||
+        !action.source ||
+        action.source.length > 256 ||
+        typeof action.page !== 'string' ||
+        !host.isLocalPreviewUrl(action.page) ||
+        !activeThreeD ||
+        action.session !== activeThreeD.session ||
+        action.revision !== activeThreeD.revision ||
+        action.selected !== activeThreeD.selected ||
+        !activeThreeD.hasSource
+      )
+        return
+      sendToMain('preview:toolbar-action', {
+        action: 'three-d-code',
+        source: action.source,
+        page: action.page
+      })
+      return
+    }
+    if (typeof kind !== 'string' || !['code', 'delete', 'props'].includes(kind)) return
     sendToMain('preview:toolbar-action', kind)
   })
   // Renderer dropped the selection (pill ×, message sent) → hide the toolbar.
@@ -417,6 +476,7 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
     PREVIEW_READINESS,
     (e, info: { stamps: number; url?: string; documentStartedAt?: number }) => {
       if (!fromPreview(e)) return
+      activeThreeD = null
       observePreview({ ...info, url: e.sender.getURL() })
       sendToMain('preview:readiness', info)
     }
