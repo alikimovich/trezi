@@ -13,6 +13,18 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Changed
 
 - Update availability now offers a concise guided update with guarded progress and a source artifact check before restart (LKM-529).
+## [0.13.26] - 2026-11-04
+
+### Changed
+
+- Skills and nested Settings panes keep existing actions above scrolling content; nested panes also show Back and their context (LKM-525).
+- The Skills list shows enabled installed skills first and hides recommendations Trezi cannot import, while retaining installed records and clear On/Off status (LKM-525).
+- AI Providers puts Add provider in the header and moves selected provider, Claude, and Gemini configuration into labeled rows; provider removal stays behind its detail confirmation (LKM-525).
+
+### Fixed
+
+- Removed Claude and Gemini credentials no longer reappear as unsaved Settings drafts; validation and service messages stay visible beside pinned Settings actions (LKM-525).
+
 ## [0.13.25] - 2026-11-04
 
 ### Fixed

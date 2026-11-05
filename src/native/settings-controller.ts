@@ -95,6 +95,8 @@ const defaultChoices = (choices: ModelChoice[]) => [
 /** The AI Providers pane: its fields are drafts, submitted only by the pane's own actions. */
 interface Pane {
   detail: string
+  navigationTitle?: string
+  draftContext: string
   fields: Omit<NativeSheetField, 'section' | 'draft'>[]
   actions: NativeSheetState['actions']
 }
@@ -130,6 +132,8 @@ export class NativeSettingsController {
     const all = sections(),
       saved = this.preferences.get(SETTINGS_SECTION_KEY)
     const providers = this.list()
+    const providerSection = all.find((section) => section.id === 'providers')
+    if (providerSection) providerSection.draftContext = providers.draftContext
     this.sheets.present(
       {
         title: 'Settings',
@@ -304,14 +308,25 @@ export class NativeSettingsController {
             : 'Nothing to clean up.'
       return
     }
-    if (action.action === 'back') return this.reload(action.id)
+    if (action.action === 'back') {
+      // Remove confirmation is a child of the selected provider editor. Returning
+      // to that editor also lets the native sheet restore its unsaved field draft.
+      if (this.target && this.sheets.current?.state.actions.some((item) => item.id === 'remove')) {
+        this.show(action.id, this.editor(this.target))
+        return
+      }
+      return this.reload(action.id)
+    }
     if (action.action === 'add') {
       this.target = undefined
       this.show(action.id, this.editor())
       return
     }
     if (action.action === 'edit' || action.action === 'delete') {
-      const connection = this.connections.find((c) => c.id === action.values.connection)
+      const connection =
+        action.action === 'delete'
+          ? this.target
+          : this.connections.find((c) => c.id === action.values.connection)
       if (!connection) throw new Error('Choose a provider first.')
       this.target = connection
       this.show(
@@ -403,7 +418,11 @@ export class NativeSettingsController {
       ...pane.actions
     ]
     const section = sheet.state.sections?.find((s) => s.id === 'providers')
-    if (section) section.detail = pane.detail
+    if (section) {
+      section.detail = pane.detail
+      section.navigationTitle = pane.navigationTitle
+      section.draftContext = pane.draftContext
+    }
     sheet.state.message = undefined
     this.sheets.refresh()
   }
@@ -436,6 +455,7 @@ export class NativeSettingsController {
     const connections = this.connections
     return {
       detail: PROVIDERS,
+      draftContext: 'overview',
       fields: connections.length
         ? [
             {
@@ -447,23 +467,29 @@ export class NativeSettingsController {
                 value: c.id,
                 label: `${c.label} · ${c.models.length} models · ${c.hasKey ? 'API key saved' : 'No API key'}`
               }))
+            },
+            {
+              id: 'connection-detail',
+              label: 'Selected provider',
+              help: 'Edit its configuration or review its removal.',
+              kind: 'readonly',
+              value: '',
+              action: 'edit',
+              actionLabel: 'Details…'
             }
           ]
         : [{ id: 'connections', label: 'Added providers', kind: 'readonly', value: 'None' }],
       actions: [
-        { id: 'add', label: 'Add provider…', section: 'providers' },
-        ...(connections.length
-          ? [
-              { id: 'edit', label: 'Edit…', section: 'providers' },
-              { id: 'delete', label: 'Remove…', section: 'providers' }
-            ]
-          : [])
+        { id: 'add', label: 'Add provider…', primary: true, section: 'providers' },
+        ...(connections.length ? [{ id: 'edit', label: 'Edit…', section: 'providers' }] : [])
       ]
     }
   }
   private removal(connection: ProviderConnection): Pane {
     return {
       detail: PROVIDERS,
+      navigationTitle: `Remove ${connection.label}`,
+      draftContext: `provider:${connection.id}`,
       fields: [
         {
           id: 'remove-confirm',
@@ -487,6 +513,8 @@ export class NativeSettingsController {
   }
   private editor(connection?: ProviderConnection): Pane {
     return {
+      navigationTitle: connection ? `Edit ${connection.label}` : 'Add a provider',
+      draftContext: connection ? `provider:${connection.id}` : 'create',
       detail: `${connection ? `Edit ${connection.label}` : 'Add a provider'}: enter its API base URL and key, then load its models or enter model IDs below. The provider must support the Responses API.`,
       fields: [
         {
@@ -523,6 +551,7 @@ export class NativeSettingsController {
       actions: [
         { id: 'back', label: 'Back', section: 'providers' },
         { id: 'connect', label: 'Load models', section: 'providers' },
+        ...(connection ? [{ id: 'delete', label: 'Remove…', section: 'providers' }] : []),
         {
           id: 'save-provider',
           label: connection ? 'Update provider' : 'Add provider',
