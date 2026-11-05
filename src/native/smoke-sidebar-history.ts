@@ -118,7 +118,7 @@ export async function checkSidebarHistory(
     // Default: no History row, and "…" matches New chat at rest, hovered and focused.
     await expectHistory('default', full, 0, [])
     await restoreSidebarFocus(host, 'History default')
-    assert.equal(assertActionsMatch(await verify(), full, 'idle').more.alpha, 1)
+    assert.equal(assertActionsMatch(await verify(), full, 'idle').more.alpha, 0)
     await capture('default')
     await capture('header-idle')
     const hovered = assertActionsMatch(await verify({ hover: `project:${other}` }), other, 'hover')
@@ -169,7 +169,17 @@ export async function checkSidebarHistory(
     await restoreSidebarFocus(host, 'History menu')
 
     // Show History reveals this project's closed chats and the count, and only here.
+    // Show History calls reloadNested rather than reloadData. The pipe keeps the window pointer
+    // fixed on this title while that row is replaced, then checks the replacement before exit.
+    await verify({ hover: `project:${full}`, stationaryProjectHover: true })
     await menu(full, { pick: 'Show History' })
+    const reloadedTitle = assertActionsMatch(await verify(), full, 'nested reload')
+    assert.equal(reloadedTitle.more.alpha, 1, 'stationary title hover survives nested reload')
+    assert.ok(
+      Math.abs(reloadedTitle.titleRightInset - 56) < 1,
+      'replacement keeps action exclusion'
+    )
+    await verify({ hover: '', stationaryProjectHover: false })
     const revealed = await expectHistory('revealed', full, 3, [full])
     const [header] = rows(revealed, 'history-toggle')
     assert.equal(header.label, 'History, 4 closed chats, expanded', 'the header keeps the count')
@@ -192,6 +202,31 @@ export async function checkSidebarHistory(
     await capture('projects')
     await select(full)
     await expectHistory('back on the first project', full, 3, [full])
+    const beforeOtherMenu = await shell()
+    const visibleChats = (state: Shell) =>
+      rows(state, 'chat').map((item) => ({
+        id: item.id,
+        project: item.project,
+        selected: item.selected
+      }))
+    const otherMenu = await menu(other)
+    assert.ok(otherMenu.opened && otherMenu.closed, 'the other project menu opened and closed')
+    const afterOtherMenu = await shell()
+    assert.equal(
+      nativeWorkspace.active?.key,
+      full,
+      'opening another project menu keeps the active project'
+    )
+    assert.equal(
+      afterOtherMenu.selected,
+      beforeOtherMenu.selected,
+      'the menu does not select another row'
+    )
+    assert.deepEqual(
+      visibleChats(afterOtherMenu),
+      visibleChats(beforeOtherMenu),
+      'the visible chats do not change'
+    )
     await menu(other, { pick: 'Show History' })
     await waitFor(() => nativeWorkspace.active?.key === other, 'Show History selected its project')
     const both = await expectHistory('other revealed', other, 1, [full, other])
@@ -229,6 +264,7 @@ export async function checkSidebarHistory(
     await restoreSidebarFocus(host, 'empty History')
     await capture('empty')
   } finally {
+    await verify({ stationaryProjectHover: false }).catch(() => {})
     for (const key of (await shell()).historyOpen ?? [])
       await menu(key, { pick: 'Hide History' }).catch(() => {})
     nativeWorkspace.services.invoke = original
