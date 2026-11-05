@@ -13,6 +13,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Changed
 
 - Update availability now offers a concise guided update with guarded progress and a source artifact check before restart (LKM-529).
+## [0.13.25] - 2026-11-04
+
+### Fixed
+
+- Accepted answer cards now show each question directly above its full-width answer (LKM-533).
 
 ## [0.13.24] - 2026-11-04
 

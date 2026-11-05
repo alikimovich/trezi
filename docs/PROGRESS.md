@@ -18,6 +18,13 @@
 
 - The build badge now opens a short availability sheet with Update and Not Now; technical details remain in its existing tooltip, About credits and Copy Commit menu. A known behind state enters the owner update directly, while the general Updates menu shows a checking state first. The owner still refuses dirty trees and non-fast-forward pulls and runs its journaled install/build workflow.
 - Update and check actions share an in-flight guard. Update progress remains in the sheet, errors retain the useful owner output, and restart waits for active work to clear. The running app must resolve to the source build, and its built host/service Info.plists and executables must match the updated source version and commit before restart. Focused unit fixtures and the native badge dialog fixture cover the affected states; exact-head CI, independent review and post-merge native acceptance remain.
+## 2026-11-04 — LKM-533 review repair: accepted-card geometry evidence
+
+- The existing chat UI native smoke now records SwiftUI question and answer line frames for synthetic accepted forms at 320, 400 and 520 point chat widths. It asserts pair order, leading alignment, card-width use, bounds, and long-answer wrapping, and writes a PNG plus geometry JSON for each width. The manager's post-merge native chat run remains the visual acceptance gate.
+
+## 2026-11-04 — LKM-533 accepted answer layout
+
+- Accepted form cards now stack each question and answer in field order, with leading alignment and available-width wrapping. The existing header, status and pending controls remain on their prior paths. The chat UI smoke uses a synthetic long answer in its accepted-card foreground capture and checks that the submitted note reaches the turn. Native visual acceptance remains with the post-merge run.
 ## 2026-11-04 — LKM-532 Mark up foreground activation in native smoke
 
 - The `preview-markup` posted-event seam now waits up to five seconds for the host window to become key in the active app, re-requesting activation every half second. The prior single 90 ms wait could fail before AppKit completed activation after another native smoke. Events still require a foreground window without a sheet; failure now reports active, key, sheet and frontmost state. This changes only the disposable-profile smoke seam, so there is no user-visible changelog entry.
