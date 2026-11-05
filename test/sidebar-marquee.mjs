@@ -145,7 +145,8 @@ if (process.platform !== 'darwin') {
 
   // 0.7 s, then 30 pt/s. The samples carry their own clock, so a slow host stays accurate.
   const { before, early, late } = report.timing
-  assert.equal(before.offset, 0, 'still inside the 0.7 s delay')
+  if (before.at < 0.7) assert.equal(before.offset, 0, 'still inside the 0.7 s delay')
+  else near(before.offset, (before.at - 0.7) * 30, 6, 'delayed before sample follows its clock')
   near(early.offset, (early.at - 0.7) * 30, 6, 'early in the scroll')
   near(late.offset, (late.at - 0.7) * 30, 6, 'later in the scroll')
   near((late.offset - early.offset) / (late.at - early.at), 30, 6, 'pt/s')

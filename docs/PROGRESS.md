@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-538 CI marquee fixture timing repair
+
+- The unrelated sidebar marquee unit fixture now uses its sample's measured clock if a loaded macOS runner takes the scheduled-before sample after the 0.7-second delay. It still requires an exact zero offset when sampled during the delay and checks 30 points per second afterward. No sidebar product behavior changed; current-head CI must rerun the shard.
+
 ## 2026-11-04 — LKM-538 retirement census CI repair
 
 - The revised native inspector smoke checks the two-tab UI without writing a fixture file. Its old test-effect row is removed from the executable retirement census; the Bun-owned retirement gate remains open. Current-head CI must rerun the census and unit shards.
