@@ -15,6 +15,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Chat tuning islands now use prepared source-bound controls immediately by default; Jev selection runs only when requested explicitly (LKM-539).
 - Styles, chat-island and internal editor source edits made during a chat turn are now attributed to Trezi without hiding genuine external changes (LKM-539).
 - Eligible Styles and chat island adjustments can remain preview drafts with Undo and Revert; Apply writes the accumulated source change and confirms the rendered result (LKM-539).
+## [0.13.30] - 2026-11-05
+
+### Changed
+
+- Nested 3D inspection uses the native toolbar for Back and the selected object's Code action, without the in-preview navigation row or visible camera reset controls (LKM-536).
 
 ## [0.13.29] - 2026-11-05
 

@@ -19,6 +19,32 @@
 ## 2026-11-05 — LKM-539 faster photo tuning controls
 
 - Traced the reported About-photo island: six source-bound values already write code directly during interaction and use project HMR for preview updates, without a new agent turn. Creation alone could wait on Jev for up to 25 seconds and fail without registering a panel. The default auto engine now keeps the agent's prepared blocks immediately; Jev remains an explicit option. Provider guidance favors binding existing literals without a planned edit, and the focused fixture checks all six photo controls avoid Jev. Exact-head CI, independent review and post-merge native acceptance remain with the manager.
+## 2026-11-04 — LKM-536 Shell toolbar conflict resolution
+
+- Reconciled the nested 3D Back and contextual Code test actions with current main's standalone AppKit New Chat toolbar action. The Shell keeps both action routes; the toolbar fixture asserts their handlers coexist. This resolves the publication conflict without changing the 3D state relay or Settings/sidebar behavior. Fresh review, current-head CI, and post-merge native acceptance remain manager gates.
+
+## 2026-11-04 — LKM-536 native 3D state forwarding repair
+
+- The host now forwards only accepted 3D state and matching-document close messages with its own preview view identity, after updating native chrome. This keeps the Bun Code guard synchronized with the current layer while rejected or stale states cannot replace its target. A non-GUI Swift relay fixture feeds the real Bun preview IPC and checks valid B Code, delayed A rejection, and close invalidation. Native UI acceptance and exact-head CI remain manager gates.
+
+## 2026-11-04 — LKM-536 delayed Code after layer selection
+
+- A 3D Code action now carries the scene's selected layer index. The preview IPC accepts it only when that index matches the latest published selection in the same session and revision, so a delayed A action cannot open A after B is selected without a recapture. The existing native fixture sends that delayed A action after selecting B and checks that B's real Code action still opens B. Native execution and exact-head CI remain manager gates.
+
+
+## 2026-11-04 — LKM-536 review repair: preview IPC and stale Code
+
+- The preview IPC now accepts the bounded structured 3D Code action only from the preview, for its current published 3D session and source-backed selection. It clears that context on close, load and readiness, then forwards the exact source and page to the existing inspector route. The 3D fixture now uses an unstamped connected layer between two distinct stamped layers, checks that Code cannot reopen a prior file there, and injects an old-session Code action after route navigation and reload. Native execution remains a post-merge gate.
+
+
+## 2026-11-04 — LKM-536 review repair: selected 3D source
+
+- The 3D Code event now carries the resolved layer's own source and page. The inspector runtime checks the active page before opening that exact source, so an asynchronous selection update cannot reuse the previous layer's file. The existing native 3D fixture gives the root and heading distinct valid fixture files, checks both Code targets in sequence, measures the rendered monospace title and adjacent Back control, and checks URL, project and selection after Back. Native execution remains for the post-merge run.
+
+
+## 2026-11-04 — LKM-536 nested 3D navigation
+
+- The 3D inspector now puts its Back chevron and object name in the native preview title location. The floating Code island routes through the inspected layer's guarded source action; unavailable source disables it. The in-content header and visible Front/Reset controls are removed while camera gestures, separation and layer picker remain. The existing native 3D fixture covers the rendered toolbar context, island Code route, and Back restoration; post-merge native acceptance remains required.
 
 ## 2026-11-04 — LKM-529 artifact verifier census classification
 
