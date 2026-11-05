@@ -38,7 +38,6 @@ import {
 import { smokeFocusHooks } from './smoke-focus'
 import { checkGitUpdates } from './smoke-git-updates'
 import {
-  ANNOTATION_COMPOSITE_CHECK,
   ANNOTATION_COMPOSITE_FLAG,
   CHAT_RECOVERY_ACCEPTANCE_CHECK,
   CHAT_RECOVERY_ACCEPTANCE_FLAG,
@@ -1342,6 +1341,27 @@ export async function runNativeCoreSmoke(
       cleanup: () => restorePreviewMarkup(host, page)
     },
     {
+      name: 'annotation-composite-send-native',
+      dependsOn: ['chat-ready'],
+      run: async () => {
+        if (
+          process.env.TREZI_NATIVE_BACKGROUND_TEST === '1' &&
+          !process.argv.includes(ANNOTATION_COMPOSITE_FLAG)
+        ) {
+          console.log('SKIP annotation composite/Send foreground capture: background test')
+          return
+        }
+        await checkAnnotationCompositeSend(host, page, artifacts)
+        await restorePreviewMarkup(host, page)
+        await wait(
+          () => page('!document.querySelector("#markup-smoke")'),
+          'annotation fixture page removed'
+        )
+        assert.equal((await host.request('previewMarkupInspect')).open, false)
+      },
+      cleanup: () => restorePreviewMarkup(host, page)
+    },
+    {
       name: 'text-edit',
       dependsOn: ['open-project'],
       run: async () => {
@@ -1863,13 +1883,6 @@ export async function runNativeCoreSmoke(
       run: async () => {
         await checkChatRecoveryAcceptance(host, artifacts)
       }
-    })
-  if (process.argv.includes(ANNOTATION_COMPOSITE_FLAG))
-    checks.push({
-      name: ANNOTATION_COMPOSITE_CHECK,
-      dependsOn: ['chat-ready'],
-      run: () => checkAnnotationCompositeSend(host, page, artifacts),
-      cleanup: () => restorePreviewMarkup(host, page)
     })
   let hostClosed = false
   void host.closed.then(() => {

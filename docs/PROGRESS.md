@@ -1,5 +1,17 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-544 background smoke compatibility
+
+- Independent review found that ordinary reduced-coverage background runs would reach the foreground-only composite/Send scenario and fail. Ordinary background selection now skips that check with an explicit log; the narrow opt-in still requires foreground capture. The pure fixture checks the guard before execution. Manager review, exact-head CI and post-merge foreground native acceptance remain pending.
+
+## 2026-11-05 — LKM-544 successful smoke handoff repair
+
+- Independent review found that the smoke runner calls a check's cleanup hook only after failure. The composite/Send check now restores its synthetic preview after success, waits for the fixture page to disappear and checks the overlay is closed before text editing starts. Its failure cleanup hook remains. The pure selection fixture checks this ordering and bounded handoff; manager review, exact-head CI and post-merge native acceptance remain pending.
+
+## 2026-11-05 — LKM-544 normal annotation composite and Send selection
+
+- Registered the existing synthetic annotation composite/Send scenario in the ordinary core check list, immediately after preview Mark up and before text editing. The narrow opt-in still filters to this check and the disposable-project prelude. Pure selection assertions cover default and core runs, the narrow route, incompatible opt-ins, and the existing cleanup hook; the scenario still intercepts outbound Send and restores the preview before later checks. Independent review, exact-head CI, and post-merge serialized native acceptance remain manager gates.
+
 ## 2026-11-05 — LKM-543 posted canvas text fixture repair
 
 - The opt-in acceptance now clicks the canvas and types new and revised text through AppKit's posted event route. The host seam only reads the opened editor and focuses the overlay to commit; it no longer invokes the canvas drawing handler directly. This restores the existing markup routing invariant. A source-audit false match in the fixture label was also removed. The focused routing and controller checks pass locally; current-head CI and post-merge native execution remain manager gates.
