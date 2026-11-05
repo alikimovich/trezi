@@ -13,6 +13,11 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Fixed
 
 - New Chat stays at the chat column edge when the preview address needs to compress in a narrow toolbar (LKM-537).
+## [0.13.27] - 2026-11-04
+
+### Changed
+
+- Chat title, preview address, branch, status and Publish trigger text in the top bar use system monospace (LKM-530).
 
 ## [0.13.26] - 2026-11-04
 
