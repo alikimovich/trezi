@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-05
+
 ### Added
 
 - In Selection mode, a selected element shows draggable padding and gap handles that preview instantly and stage Styles drafts for one explicit Apply (LKM-541).
