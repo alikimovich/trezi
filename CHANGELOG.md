@@ -10,6 +10,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+## [0.13.25] - 2026-11-04
+
 ### Fixed
 
 - Accepted answer cards now show each question directly above its full-width answer (LKM-533).
