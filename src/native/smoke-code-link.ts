@@ -78,10 +78,17 @@ export async function checkCodeLinkClick(host: NativeBridge, fixture: string, ar
   const reveal = async (href: string, file: RegExp, start: number, end: number) => {
     const before = (await navigation()).reveal
     const clicked = await click(href)
-    const state = await waitFor(async () => {
-      const s = { ...(await editor()), ...(await navigation()) }
-      return revealedAt(file, start, end, before)(s) && s
-    }, `${href} revealed lines ${start}-${end}`)
+    let last: unknown
+    const state = await waitFor(
+      async () => {
+        const s = { ...(await editor()), ...(await navigation()) }
+        last = s
+        return revealedAt(file, start, end, before)(s) && s
+      },
+      `${href} revealed lines ${start}-${end}`,
+      10000,
+      () => last
+    )
     return { clicked, state }
   }
 

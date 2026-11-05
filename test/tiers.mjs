@@ -13,6 +13,7 @@ export const UNIT = [
   'skills-registry-boundaries',
   'skills-registry-safety',
   'skills-github',
+  'skills-github-fixture',
   'skills-github-import',
   'settings-skills',
   'skills-projection',

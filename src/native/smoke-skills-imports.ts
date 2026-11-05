@@ -194,11 +194,15 @@ export async function checkSkillsImports(
     normal
   )
   await host.request('sheetPerform', { action: 'skill-install' })
-  await until(
+  const installedImpeccable = await until(
     'Impeccable installed',
-    (s) => !s.busy && s.message.startsWith('Added impeccable from'),
+    (s) =>
+      !s.busy &&
+      (s.message.startsWith('Added impeccable from') ||
+        s.message.startsWith('Nothing was installed:')),
     60_000
   )
+  assert.match(installedImpeccable.message, /^Added impeccable from/, installedImpeccable.message)
   await nativeSkills.importing
   const impeccable = await named(SKILLS_FIXTURE_IMPECCABLE.id)
   assert.equal(impeccable.source.kind, 'github')
@@ -238,7 +242,7 @@ export async function checkSkillsImports(
   await shoot('14-library-imported', {
     view: 'overview',
     installed: library,
-    recommended: [entry]
+    recommended: [entry, SKILLS_FIXTURE_IMPECCABLE.id]
   })
   report.push({ action: 'refuse-unimportable', id: UNIMPORTABLE.id })
   return report

@@ -155,7 +155,29 @@ function header(name: string, type: string, size: number) {
   const block = Buffer.alloc(512)
   const put = (offset: number, length: number, text: string) =>
     block.write(text, offset, Math.min(length, Buffer.byteLength(text)), 'utf8')
-  put(0, 100, name)
+  // USTAR stores long paths in a 155-byte prefix and a 100-byte name. Truncating
+  // the name silently drops playbooks from the native Impeccable archive.
+  let prefix = ''
+  let basename = name
+  if (Buffer.byteLength(name) > 100) {
+    let separator = name.indexOf('/')
+    while (separator >= 0) {
+      const candidate = name.slice(separator + 1)
+      if (
+        candidate &&
+        Buffer.byteLength(name.slice(0, separator)) <= 155 &&
+        Buffer.byteLength(candidate) <= 100
+      ) {
+        prefix = name.slice(0, separator)
+        basename = candidate
+        break
+      }
+      separator = name.indexOf('/', separator + 1)
+    }
+    if (!prefix) throw new Error(`Fixture path cannot fit USTAR: ${name}`)
+  }
+  put(0, 100, basename)
+  if (prefix) put(345, 155, prefix)
   put(100, 8, octal(type === '5' ? 0o755 : 0o644, 7))
   put(108, 8, octal(0, 7))
   put(116, 8, octal(0, 7))
