@@ -999,6 +999,18 @@ try {
     assert.equal(updated.head, true)
     assert.deepEqual(updated.pm, ['bun install --frozen-lockfile', 'bun run build:native'])
 
+    for (const signing of ['adhoc', 'missing']) {
+      const refused = await owned(`update-signing-${signing}`, async (owner, w) => {
+        git(w.local, 'checkout', '-q', 'main')
+        writeFileSync(w.pmState, JSON.stringify({ signing }))
+        return { result: await owner.update(w.local), pm: w.pm().calls }
+      })
+      assert.equal(refused.result.ok, false, `${signing} build cannot authorize restart`)
+      assert.match(refused.result.error, /without a verified signing identity/)
+      if (signing === 'adhoc') assert.match(refused.result.error, /warning: signing Trezi ad hoc/)
+      assert.deepEqual(refused.pm, ['bun install --frozen-lockfile', 'bun run build:native'])
+    }
+
     const diagnosed = await owned('diagnostics', async (owner, w) => {
       const error = "Cannot find module '@ai-sdk/xai' imported from /Users/x/chat.ts"
       const signature = signatureFor(error)

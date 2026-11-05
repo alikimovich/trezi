@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { appInfoPlist, serviceInfoPlist } from '../scripts/service-info.mjs'
 import { NativeSheetController } from '../src/native/sheets-runtime.ts'
-import { NativeUpdateController } from '../src/native/update-controller.ts'
+import { NativeUpdateController, verifyUpdatedArtifact } from '../src/native/update-controller.ts'
 import { updatePhaseStatus } from '../src/native/workflow-service.ts'
 
 const verbose =
@@ -197,4 +202,79 @@ assert.match(sheets.current.state.detail, /Network unavailable/)
 assert.equal(restarts, 2)
 await action('retry')
 assert.equal(sheets.current.state.title, 'Trezi updates', 'check retry returns to the check action')
+
+// Real artifact proof in an isolated source checkout; no installed app or signing is touched.
+const source = mkdtempSync(join(tmpdir(), 'trezi-update-proof-'))
+try {
+  const git = (...args) => {
+    const result = spawnSync(
+      'git',
+      ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args],
+      {
+        cwd: source,
+        encoding: 'utf8',
+        env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' }
+      }
+    )
+    assert.equal(result.status, 0, result.stderr)
+    return result.stdout.trim()
+  }
+  git('init', '-q')
+  git(
+    '-c',
+    'user.name=Trezi Test',
+    '-c',
+    'user.email=test@trezi.invalid',
+    'commit',
+    '-q',
+    '--allow-empty',
+    '-m',
+    'fixture'
+  )
+  const info = {
+    version: '0.13.24',
+    build: git('rev-list', '--count', 'HEAD'),
+    commit: git('rev-parse', '--short=7', 'HEAD')
+  }
+  writeFileSync(join(source, 'package.json'), JSON.stringify({ version: info.version }))
+  const contents = join(source, 'out/native/Trezi.app/Contents')
+  const service = join(contents, 'XPCServices/dev.trezi.service.xpc/Contents')
+  mkdirSync(join(contents, 'MacOS'), { recursive: true })
+  mkdirSync(join(service, 'MacOS'), { recursive: true })
+  const hostPlist = join(contents, 'Info.plist')
+  const servicePlist = join(service, 'Info.plist')
+  const hostExe = join(contents, 'MacOS/TreziHost')
+  const serviceExe = join(service, 'MacOS/TreziService')
+  writeFileSync(hostPlist, appInfoPlist(info))
+  writeFileSync(servicePlist, serviceInfoPlist(info))
+  writeFileSync(hostExe, 'fixture')
+  writeFileSync(serviceExe, 'fixture')
+  assert.equal(verifyUpdatedArtifact(source), null, 'matching source and both app bundles pass')
+  let artifactRestarts = 0
+  const proofSheets = new NativeSheetController({ send() {} }, {}, {}, async () => {})
+  const proofUpdate = new NativeUpdateController(
+    proofSheets,
+    source,
+    () => {
+      artifactRestarts++
+    },
+    { updateCheck: owner.updateCheck, update: async () => ({ ok: true }) },
+    () => null
+  )
+  await proofUpdate.apply()
+  assert.equal(artifactRestarts, 1, 'matching artifact reaches restart callback')
+  writeFileSync(servicePlist, readFileSync(servicePlist, 'utf8').replace(info.version, '0.0.0'))
+  assert.match(verifyUpdatedArtifact(source), /does not match/)
+  await proofUpdate.apply()
+  assert.equal(artifactRestarts, 1, 'mismatched service stamp blocks restart')
+  assert.match(proofSheets.current.state.detail, /does not match/)
+  writeFileSync(servicePlist, serviceInfoPlist(info))
+  rmSync(serviceExe)
+  assert.match(verifyUpdatedArtifact(source), /incomplete/)
+  await proofUpdate.apply()
+  assert.equal(artifactRestarts, 1, 'missing service executable blocks restart')
+  assert.match(proofSheets.current.state.detail, /incomplete/)
+} finally {
+  rmSync(source, { recursive: true, force: true })
+}
 console.log('Native updates: owner-run update, draft guards, failure recovery and restart passed')

@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-529 signing and artifact proof repair
+
+- The guided updater now requires the build script's final identity signer line. An ad hoc fallback or missing signer proof fails the owner workflow before restart, with an actionable signing and Keychain access message; the existing build warning and failure journal remain available. The fake package manager supplies the signer line, and the focused Swift workflow-owner fixture covers a valid identity, ad hoc downgrade and absent proof without touching a real keychain.
+- The update-controller fixture now calls the real artifact verifier on a disposable Git source and app bundle. Matching version, build, commit and host/service executables pass; a mismatched service stamp and a missing executable each block the restart callback. PR CI, independent review and post-merge native acceptance remain pending.
+
 ## 2026-11-04 — LKM-529 review repair: read the updater's journaled step
 
 - The prior phase mapping read `workflow.step`, but the update owner only records `pull`, `install` and `build` as journaled `intent` steps. Routine progress now derives its short label from the latest running journal step; raw command output remains confined to the existing error path. The focused fixture uses owner-shaped summaries with completed earlier steps and a verbose current command output. Post-merge native acceptance remains pending.

@@ -11,6 +11,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Extend focused build-status, update-controller and native sheet fixture assertions without running a production updater smoke.
 - [x] Review repair: display journaled update phases instead of raw command output, and drive the disposable native progress fixture through the badge's Update action.
 - [x] Review repair: derive each routine progress label from the update owner's running journal step, and test owner-shaped summaries across pull, install and build.
+- [x] Targeted safety repair: reject ad hoc signing downgrade or missing signer proof before restart, and exercise the real artifact verifier against disposable valid and invalid bundles.
 - [ ] Manager: independent review, exact-head CI and post-merge native acceptance.
 ## LKM-532 — Native preview-markup foreground failure on main
 
