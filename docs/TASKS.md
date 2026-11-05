@@ -3,6 +3,17 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-521 — Native chat and Settings suite failure
+
+- [x] Reveal the first rendered Skills overview row before checking its viewport geometry after returning from a long detail editor.
+- [x] Record editor/navigation state on a code-link reveal timeout so the native failure identifies the unmet condition.
+- [x] Include the last Settings state when an import wait times out; the next native run can identify the Impeccable failure rather than reporting only `false`.
+- [x] Make the Impeccable smoke report a visible import rejection immediately, retaining the success assertion.
+- [x] Repair USTAR long paths in the native GitHub fixture and add an archive regression for the full Impeccable playbook path.
+- [x] Include both installed recommendations in the final Settings overview expectation and cover their rendered installed values.
+- [x] Repair the tall offscreen recovery-card fixture's post-switch latest request exposed by PR CI, retaining its geometry and click assertions.
+- [ ] Manager: confirm the native chat and Settings groups and required gates on this tree.
+
 ## LKM-516 — Curate Settings Skills recommendations for design craft
 
 - [x] Replace generic framework defaults with grouped Frontend Design, Emil Kowalski and Jakub Krehel recommendations, using reviewed paths, names, authors, licenses and pinned commits.

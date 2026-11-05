@@ -78,6 +78,18 @@ reject(overview, expectOverview, (e) => (e.fields = ['skill:a1']))
 reject(overview, expectOverview, (e) => (e.actions = ['skill-add']))
 reject(overview, expectOverview, (e) => (e.disabledActions = ['skill-github']))
 reject(overview, expectOverview, (e) => (e.values['recommendation:frontend-design'] = 'Installed'))
+const installedRecommendations = structuredClone(overview)
+installedRecommendations.values['recommendation:frontend-design'] = 'Installed'
+installedRecommendations.values['recommendation:impeccable'] = 'Installed'
+assertSkillsEvidence(installedRecommendations, 680, {
+  ...expectOverview,
+  recommended: ['frontend-design', 'impeccable']
+})
+reject(
+  installedRecommendations,
+  { ...expectOverview, recommended: ['frontend-design', 'impeccable'] },
+  (e) => (e.values['recommendation:impeccable'] = 'Not installed')
+)
 reject(overview, expectOverview, (e) => (e.sidebarSelected = 1))
 reject(overview, expectOverview, (e) => (e.foreground = false))
 reject(overview, expectOverview, (e) => (e.busy = true))
