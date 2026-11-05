@@ -18,6 +18,9 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 ### Fixed
 
 - Accepted answer cards now show each question directly above its full-width answer (LKM-533).
+### Fixed
+
+- Project names use the full sidebar row until their actions appear on title hover (LKM-531).
 
 ## [0.13.24] - 2026-11-04
 

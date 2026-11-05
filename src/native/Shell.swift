@@ -614,8 +614,10 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
 
         if rowsChanged || projectChanged {
             let hover = sidebarHover()
+            let projectHover = sidebarProjectHover()
             outline.reloadData(); expandNested()
             restoreSidebarHover(hover)
+            restoreSidebarProjectHover(projectHover)
         }
         // A state older than the latest pick keeps the picked row highlighted (LKM-204).
         if selection.answers(state) {
@@ -643,8 +645,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         // A project's decoded favicon leads its row (LKM-372); without one it shares Open Project's folder.
         let artwork = row.icon ?? NSImage(systemSymbolName: symbol, accessibilityDescription: nil)!
         cell.installActions(title: row.title, project: row.project, target: self, newChatAction: #selector(sidebarNewChat(_:)), moreAction: #selector(sidebarMore(_:)))
-        let text = cell.install(title: row.title + (row.running ? " · Working" : ""), image: artwork)
-        text.trailingAnchor.constraint(equalTo: cell.more.leadingAnchor, constant: -4).isActive = true
+        cell.installTitle(row.title + (row.running ? " · Working" : ""), image: artwork)
         cell.toolTip = row.title
         return cell
     }
