@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-05 — LKM-542 sidebar decipher fixture timing
+
+- The rebuilt sidebar title fixture now samples both cells through the deterministic render seam at the same elapsed instant. A zero-elapsed sample still detects a true reset, while retained start-time and clock retirement assertions remain. This addresses an exact-head CI race from comparing two live-clock samples during cell construction.
+
 ## 2026-11-05 — LKM-542 changed-page Mark up recovery
 
 - A retained Mark up snapshot from an earlier page stays hidden after navigation. A native recovery island offers Save to chat through the existing composite/Add path or explicit Discard; attachment failure keeps the island and marks for retry. The windowless fixture advances page identity without resetting it, checks exact composite bytes on Save, explicit Discard, same-page resume and preview input ownership.

@@ -13,6 +13,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review repair: retain the snapshot across Select, guard history and stale-page resume, and assert input routing in the windowless fixture.
 - [x] Bounded review repair: changed-page recovery offers Save to chat or explicit Discard; fixture advances page identity and checks the exact retained composite.
 - [x] CI repair: update the toolbar divider fixture's obsolete Mark up wiring assertions.
+- [x] CI repair: sample rebuilt sidebar decipher cells at one elapsed instant and detect a true reset.
 - [ ] Manager: independent review, exact-head CI, merge and post-merge native acceptance.
 
 ## LKM-529 — Simplify Trezi update availability and guided update flow
