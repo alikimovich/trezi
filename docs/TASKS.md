@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-533 — Stack accepted question and answer pairs
+
+- [x] Render each accepted form question immediately above its answer, leading-aligned across the card width.
+- [x] Capture a synthetic long-answer example in the existing chat UI smoke fixture and retain submitted-value assertions.
+- [ ] Manager: independent review, exact-head CI and post-merge native chat acceptance.
+
 ## LKM-527 — Native suite failure on main a8687a1b6a94
 
 - [x] Wait for the manual chat collapse to reach its final native layout before asserting status placement, so the smoke restores its window and sidebar state.

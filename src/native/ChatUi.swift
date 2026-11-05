@@ -196,13 +196,17 @@ struct ChatUiFormView: View {
         VStack(alignment: .leading, spacing: 12) {
             ChatUiHeader(component: record.component)
             if let answer = record.answer {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 8) {
                     ForEach(fields, id: \.id) { field in
-                        HStack(alignment: .firstTextBaseline) {
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(field.label).font(.system(size: 12)).foregroundStyle(.secondary)
-                            Spacer(minLength: 12)
-                            Text(ChatUiFormat.value(answer.values?[field.id], unit: field.unit)).font(.system(size: 12, weight: .medium)).multilineTextAlignment(.trailing)
-                        }.accessibilityElement(children: .combine)
+                            Text(ChatUiFormat.value(answer.values?[field.id], unit: field.unit))
+                                .font(.system(size: 12, weight: .medium))
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityElement(children: .combine)
                     }
                     Label("Answer accepted", systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(.secondary).padding(.top, 4)
                 }

@@ -168,7 +168,14 @@ export async function checkChatUi(host: NativeBridge, artifacts: string) {
       action: 'chat-ui',
       card: form.id,
       value: JSON.stringify({
-        values: { density: 'airy', radius: 12, gap: 16, accent: '--brand-teal', shadow: true }
+        values: {
+          density: 'airy',
+          radius: 12,
+          gap: 16,
+          accent: '--brand-teal',
+          shadow: true,
+          note: 'Keep the card calm and easy to scan. Let each answer sit directly beneath its question, and let this longer note wrap across the available card width at an ordinary chat size.'
+        }
       })
     })
     await waitFor(() => sent.length === 3, 'the submit reached the provider stub')
@@ -177,7 +184,10 @@ export async function checkChatUi(host: NativeBridge, artifacts: string) {
       /"Card details" \(chat_ui form [\w-]+\): the user submitted \{"density":"airy"/
     )
     assert.match(sent[2], /- Corner radius: 12 px/)
+    assert.match(sent[2], /- Anything else: Keep the card calm and easy to scan\./)
     await inspectUntil(request, 'chatInspect', (s) => component(s, form.id)?.answered === true)
+    // Synthetic long answer: the foreground PNG is the accepted-card layout fixture.
+    // Its question/answer order and leading alignment are reviewed after merge.
     await capture('form-answered', form.id)
     emit({ type: 'done' })
     await inspectUntil(request, 'chatInspect', (s) => !s.activity)

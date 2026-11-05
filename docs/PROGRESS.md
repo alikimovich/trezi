@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-533 accepted answer layout
+
+- Accepted form cards now stack each question and answer in field order, with leading alignment and available-width wrapping. The existing header, status and pending controls remain on their prior paths. The chat UI smoke uses a synthetic long answer in its accepted-card foreground capture and checks that the submitted note reaches the turn. Native visual acceptance remains with the post-merge run.
+
 ## 2026-11-04 — LKM-527 native suite timing and glass evidence repair
 
 - The chat-gate smoke now waits for the native collapse animation to finish before checking the preview status frame. The earlier assertion ran while the chat column was already hidden but the layout fraction was still moving, aborting the check before its window and sidebar restoration and cascading into Settings, core and chat failures.
