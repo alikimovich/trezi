@@ -122,7 +122,7 @@ extension NativeSheets {
         }
         let headerActions: [[String: Any]] = headerButtons(in: content).map { button in
             ["action": String((button.identifier?.rawValue ?? "").dropFirst("sheet-action:".count)), "title": button.title,
-             "label": button.accessibilityLabel() ?? "", "enabled": button.isEnabled].merging(placement(button, in: content)) { _, new in new }
+             "label": button.accessibilityLabel() ?? "", "enabled": button.isEnabled, "keyEquivalent": button.keyEquivalent].merging(placement(button, in: content)) { _, new in new }
         }
         let statuses: [[String: Any]] = rendered(NSTextField.self, in: content)
             .filter { $0.identifier?.rawValue.hasPrefix("sheet-status:") == true && !$0.isHiddenOrHasHiddenAncestor }

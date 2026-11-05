@@ -19,6 +19,8 @@ import {
 
 export interface SkillsEvidence extends SettingsEvidence {
   minimumHeight: number
+  /** The outer Settings form's vertical scroll offset, separate from SKILL.md's editor. */
+  formScrollY: number
   sidebarFocused: boolean
   /** Rendered navigation-row buttons of the shown pane. */
   rows: {

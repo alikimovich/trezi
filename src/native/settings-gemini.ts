@@ -110,12 +110,15 @@ async function geminiAction(
     ...next.actions
   ]
   const section = sheet.state.sections?.find((s) => s.id === 'providers')
-  if (section) section.detail = next.detail
+  if (section) {
+    section.detail = next.detail
+    section.navigationTitle = 'Gemini'
+  }
   sheet.state.message = message
   sheets.refresh()
 }
 
-/** The row and the entry on the provider list (the pane with "Add provider…"), once each. */
+/** Keep the Gemini On/Off picker separate from its configuration row. */
 function offer(sheet: Sheet) {
   const actions = sheet.state.actions,
     add = actions.findIndex((a) => a.id === 'add')
@@ -126,10 +129,18 @@ function offer(sheet: Sheet) {
     sheet.state.actions = [...actions.slice(0, at), ENTRY, ...actions.slice(at)]
   }
   const fields = sheet.state.fields
-  if (fields.some((f) => f.id === 'geminiEnabled')) return
-  // Right after the added providers, before the fallback row.
-  const at = fields.findIndex((f) => f.id === 'connection' || f.id === 'connections')
-  fields.splice(at < 0 ? fields.length : at + 1, 0, geminiField())
+  if (add < 0 || fields.some((field) => field.id === 'geminiEnabled')) return
+  const after = fields.findIndex((field) => field.id === 'claude-settings')
+  fields.splice(after < 0 ? fields.length : after + 1, 0, geminiField(), {
+    id: 'gemini-settings',
+    section: 'providers',
+    label: 'Gemini configuration',
+    help: 'Configure Gemini CLI login or an API key; this does not change On/Off.',
+    kind: 'readonly',
+    value: '',
+    action: ENTRY.id,
+    actionLabel: 'Configure…'
+  })
 }
 
 /** New default-model choices; a Gemini default that is gone falls back to the last selected model. */

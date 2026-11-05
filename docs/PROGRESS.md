@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-525 provider hierarchy and review repair
+
+- AI Providers now has one pinned overview action, Add provider. The selected custom provider, Claude, and Gemini use labeled configuration rows, with Gemini On/Off still a separate choice. Remove moves to the selected provider editor and keeps its existing confirmation and service handler; credentials, default-model choices, and autosave paths are unchanged. The pinned native button again excludes destructive actions from Return. The long Skills detail fixture now scrolls the outer form before checking Back and Save Revision geometry, and the Settings viewport fixture checks the provider overview hierarchy. Focused unit and windowless fixtures cover the paths; manager-owned native acceptance and current-head CI remain pending.
+
 ## 2026-11-04 — LKM-525 review repair: nested headings and scroll evidence
 
 - Nested Skills forms now omit a group heading when it repeats the pinned navigation title, retaining distinct field groups and help. The windowless Settings fixture scrolls a long provider form before checking Back and the primary action remain visible and hittable. The Skills rendered-state fixture inspects the first enabled installed row's native On label within the ordinary viewport. Post-merge native visual acceptance remains with the manager.

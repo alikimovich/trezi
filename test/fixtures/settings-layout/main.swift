@@ -31,8 +31,8 @@ func settingsState(_ providers: [[String: Any]], _ actions: [[String: Any]], nes
                               "fields":generalFields + providers, "actions":actions]
     return try JSONDecoder().decode(SheetState.self, from: JSONSerialization.data(withJSONObject: raw))
 }
-let list: [[String: Any]] = [["id":"connection", "section":"providers", "draft":true, "label":"Provider", "kind":"choice", "value":"gw", "choices":[["value":"gw", "label":"AI Gateway · 2 models · API key saved"]]]]
-let listActions: [[String: Any]] = [["id":"add", "label":"Add provider…", "section":"providers"], ["id":"edit", "label":"Edit…", "section":"providers"], ["id":"delete", "label":"Remove…", "section":"providers"]]
+let list: [[String: Any]] = [["id":"connection", "section":"providers", "draft":true, "label":"Provider", "kind":"choice", "value":"gw", "choices":[["value":"gw", "label":"AI Gateway · 2 models · API key saved"]]], ["id":"connection-detail", "section":"providers", "draft":true, "label":"Selected provider", "kind":"readonly", "value":"", "action":"edit", "actionLabel":"Details…"]]
+let listActions: [[String: Any]] = [["id":"add", "label":"Add provider…", "primary":true, "section":"providers"], ["id":"edit", "label":"Edit…", "section":"providers"]]
 let state = try settingsState(list, listActions)
 let skillDetail = try JSONDecoder().decode(SheetSection.self, from: JSONSerialization.data(withJSONObject: ["id":"skills", "label":"Skills", "symbol":"book.closed", "navigationTitle":"emil-design-eng"]))
 require(!SectionedSheetContent.showsGroupHeading("emil-design-eng", in: skillDetail), "Nested skill context appears only in the pinned header")
@@ -103,6 +103,9 @@ snapshot("general-780")
 try select("providers")
 require(emitted.last?["action"] as? String == "section" && emitted.last?["section"] as? String == "providers", "Selection tells Bun the section")
 require(try ids() == ["connection"], "AI Providers renders its provider picker inline")
+let providerList = try report()
+require((providerList["headerActions"] as! [[String: Any]]).map { $0["action"] as! String } == ["add"], "Only Add provider appears in the overview header")
+require((providerList["rows"] as! [[String: Any]]).contains { $0["action"] as? String == "edit" && $0["contained"] as? Bool == true && $0["hitTarget"] as? Bool == true }, "Selected provider details are reachable from its row")
 snapshot("providers-780")
 sheets.model.setValue("connection", "gw")
 require(emitted.last?["action"] as? String == "section", "Draft fields never autosave")
@@ -123,6 +126,7 @@ require(sheets.model.section == "providers", "An in-place update keeps the selec
 let header = try report()["headerActions"] as! [[String: Any]]
 require(Set(header.compactMap { $0["action"] as? String }) == Set(["back", "connect", "save-provider"]), "Nested provider actions move to the pinned header")
 require(header.allSatisfy { $0["contained"] as? Bool == true && $0["hitTarget"] as? Bool == true && $0["enabled"] as? Bool == true }, "Nested provider actions are visible and hittable")
+require(header.first { $0["action"] as? String == "save-provider" }?["keyEquivalent"] as? String == "\r", "Safe primary action keeps Return")
 _ = try report(["scrollFormToEnd":true]); settle()
 let scrolled = try report()
 require((scrolled["formScrollY"] as? CGFloat ?? 0) > 0, "The nested provider form actually scrolled")
@@ -131,6 +135,11 @@ for action in ["back", "save-provider"] {
     guard let button = pinned.first(where: { $0["action"] as? String == action }) else { fatalError("Missing pinned \(action)") }
     require(button["contained"] as? Bool == true && button["hitTarget"] as? Bool == true && button["enabled"] as? Bool == true, "Pinned \(action) remains visible and hittable after scrolling")
 }
+let removalState = try settingsState(editorFields, [["id":"back", "label":"Back", "section":"providers"], ["id":"remove", "label":"Remove provider", "primary":true, "destructive":true, "section":"providers"]], nested: true)
+sheets.model.update(removalState); settle()
+let remove = try report()["headerActions"] as! [[String: Any]]
+require(remove.first { $0["action"] as? String == "remove" }?["keyEquivalent"] as? String == "", "Destructive Remove must not become the Return action")
+sheets.model.update(editorState); settle()
 sheets.model.setValue("label", "Draft provider")
 try select("general"); try select("providers")
 require(sheets.model.values["label"] == "Draft provider", "Sidebar reentry preserves the unsaved provider draft")

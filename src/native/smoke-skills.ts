@@ -138,6 +138,26 @@ export async function checkSkillsSettings(host: NativeBridge, artifacts: string)
       )
       assert.ok(image.width >= width && image.height >= evidence.height, 'Nonempty Skills pixels')
       assertSkillsEvidence(evidence, width, expect)
+      if (expect.view === 'detail' && expect.github) {
+        await host.request('settingsVerification', { scrollFormToEnd: true })
+        const scrolled: SkillsEvidence = await until(
+          `long Skills detail scrolled at ${width}`,
+          (s) => s.formScrollY > 0
+        )
+        for (const action of ['skill-back', 'skill-save']) {
+          const button = scrolled.headerActions.find((entry) => entry.action === action)
+          assert.ok(
+            button?.contained && button.enabled && button.hitTarget,
+            `${action} stays visible and hittable after scrolling the long Skills detail`
+          )
+        }
+        if (width === SETTINGS_DEFAULT_SIZE.width) {
+          const afterScroll = await host.request('captureVisibleSheet')
+          const scrolledStem = join(artifacts, `skills-${step}-scrolled-${width}`)
+          writeFileSync(`${scrolledStem}.png`, Buffer.from(afterScroll.png, 'base64'))
+          writeFileSync(`${scrolledStem}.json`, JSON.stringify(scrolled, null, 2))
+        }
+      }
       report.push({ capture: `${stem}.png`, view: expect.view, width, message: evidence.message })
       save()
     }

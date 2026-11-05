@@ -30,14 +30,15 @@ struct SectionedSheetContent: View {
     }
     func pane(_ section: SheetSection) -> some View {
         let fields = state.fields.filter { $0.section == section.id && visible($0) }
-        let actions = state.actions.filter { $0.section == section.id }
+        let rowActions = Set(fields.compactMap(\.action))
+        let actions = state.actions.filter { $0.section == section.id && !rowActions.contains($0.id) }
         // Ungrouped rows first, then each titled group in order (Skills); the section's
         // title heads the first group and its actions follow the last.
         var named: [String] = []
         for case let group? in fields.map(\.group) where !named.contains(group) { named.append(group) }
         let groups: [String?] = (named.isEmpty || fields.contains { $0.group == nil } ? [nil] : []) + named
         let nested = section.navigationTitle != nil
-        let pinned = nested || section.id == "skills"
+        let pinned = nested || section.id == "skills" || section.id == "providers"
         return VStack(spacing: 0) {
         if pinned {
             VStack(spacing: 6) {
@@ -204,7 +205,7 @@ struct SheetHeaderButton: NSViewRepresentable {
         button.identifier = NSUserInterfaceItemIdentifier("sheet-action:\(action.id)")
         button.setAccessibilityLabel(action.label)
         button.isEnabled = !busy && action.disabled != true
-        button.keyEquivalent = action.primary == true && action.disabled != true ? "\r" : ""
+        button.keyEquivalent = action.primary == true && action.destructive != true && action.disabled != true ? "\r" : ""
     }
 }
 

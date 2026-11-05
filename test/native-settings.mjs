@@ -397,8 +397,18 @@ assert.equal(connections.length, 1)
 assert.deepEqual(connections[0].models, ['a', 'b'])
 assert.equal(sheets.current.state.id, inPlace)
 assert.equal(field('connection').value, 'connection-1')
+assert.equal(field('connection-detail').action, 'edit', 'selected provider opens its details')
+assert.deepEqual(
+  sheets.current.state.actions.filter((a) => a.primary).map((a) => a.id),
+  ['add'],
+  'only Add is a section-wide provider action'
+)
 await action('edit', { connection: 'connection-1' })
 assert.equal(field('key').help, 'Leave blank to keep the current key.')
+assert.ok(
+  sheets.current.state.actions.some((a) => a.id === 'delete'),
+  'Remove is in provider detail'
+)
 await action('save-provider', { ...draft, url: 'https://different.example/v1', key: '' })
 assert.match(sheets.current.state.message, /API key/)
 await action('save-provider', { ...draft, key: '' })
@@ -406,6 +416,7 @@ assert.ok(
   !('apiKey' in calls.filter((c) => c[0] === 'providers:save').at(-1)[1]),
   'blank key preserves same-origin credentials'
 )
+await action('edit', { connection: 'connection-1' })
 await action('delete', { connection: 'connection-1' })
 assert.equal(connections.length, 1, 'deletion requires confirmation screen')
 assert.match(field('remove-confirm').label, /Remove Test\?/)

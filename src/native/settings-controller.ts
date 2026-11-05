@@ -451,17 +451,21 @@ export class NativeSettingsController {
                 value: c.id,
                 label: `${c.label} · ${c.models.length} models · ${c.hasKey ? 'API key saved' : 'No API key'}`
               }))
+            },
+            {
+              id: 'connection-detail',
+              label: 'Selected provider',
+              help: 'Edit its configuration or review its removal.',
+              kind: 'readonly',
+              value: '',
+              action: 'edit',
+              actionLabel: 'Details…'
             }
           ]
         : [{ id: 'connections', label: 'Added providers', kind: 'readonly', value: 'None' }],
       actions: [
-        { id: 'add', label: 'Add provider…', section: 'providers' },
-        ...(connections.length
-          ? [
-              { id: 'edit', label: 'Edit…', section: 'providers' },
-              { id: 'delete', label: 'Remove…', section: 'providers' }
-            ]
-          : [])
+        { id: 'add', label: 'Add provider…', primary: true, section: 'providers' },
+        ...(connections.length ? [{ id: 'edit', label: 'Edit…', section: 'providers' }] : [])
       ]
     }
   }
@@ -529,6 +533,7 @@ export class NativeSettingsController {
       actions: [
         { id: 'back', label: 'Back', section: 'providers' },
         { id: 'connect', label: 'Load models', section: 'providers' },
+        ...(connection ? [{ id: 'delete', label: 'Remove…', section: 'providers' }] : []),
         {
           id: 'save-provider',
           label: connection ? 'Update provider' : 'Add provider',

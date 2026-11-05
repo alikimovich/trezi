@@ -63,6 +63,20 @@ const field = (id) => sheets.current.state.fields.find((f) => f.id === id)
 await settings.open()
 const id = sheets.current.state.id
 const providerFields = () => sheets.current.state.fields.filter((f) => f.section === 'providers')
+assert.deepEqual(
+  providerFields().map((f) => f.id),
+  ['connections', 'claude-settings']
+)
+assert.equal(
+  field('claude-settings').action,
+  'claude',
+  'Claude configuration is reached from its row'
+)
+assert.deepEqual(
+  sheets.current.state.actions.filter((a) => a.primary).map((a) => a.id),
+  ['add'],
+  'Claude is not a section-wide action'
+)
 await action('claude')
 assert.equal(sheets.current.state.id, id, 'the Claude pane is the same window')
 assert.deepEqual(
@@ -123,7 +137,7 @@ assert.equal(sheets.current.state.message, 'Token removed.')
 await action('back')
 assert.deepEqual(
   providerFields().map((f) => f.id),
-  ['connections']
+  ['connections', 'claude-settings']
 )
 assert.deepEqual(
   sheets.current.state.actions.map((a) => a.id),

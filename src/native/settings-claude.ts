@@ -78,16 +78,34 @@ async function claudeAction(
     ...next.actions
   ]
   const section = sheet.state.sections?.find((s) => s.id === 'providers')
-  if (section) section.detail = next.detail
+  if (section) {
+    section.detail = next.detail
+    section.navigationTitle = 'Claude'
+  }
   sheet.state.message = message
   sheets.refresh()
 }
-/** Add the Claude entry to the provider list, wherever the list is shown. */
+/** Add Claude configuration beside the provider rows, with no global action button. */
 const offer = (sheet: Sheet) => {
   const actions = sheet.state.actions,
     add = actions.findIndex((a) => a.id === 'add')
   if (add >= 0 && !actions.some((a) => a.id === ENTRY.id))
     sheet.state.actions = [...actions.slice(0, add + 1), ENTRY, ...actions.slice(add + 1)]
+  if (add < 0 || sheet.state.fields.some((field) => field.id === 'claude-settings')) return
+  const fields = sheet.state.fields
+  const after = fields.findIndex(
+    (field) => field.id === 'connection-detail' || field.id === 'connections'
+  )
+  fields.splice(after < 0 ? fields.length : after + 1, 0, {
+    id: 'claude-settings',
+    section: 'providers',
+    label: 'Claude',
+    help: 'Configure Claude Code sign-in or a subscription token.',
+    kind: 'readonly',
+    value: '',
+    action: ENTRY.id,
+    actionLabel: 'Configure…'
+  })
 }
 /**
  * AI Providers → Claude… on top of the Settings window, without touching its controller:
