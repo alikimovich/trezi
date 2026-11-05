@@ -9,6 +9,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Fall back from legacy Custom selection to Styles without losing project or element selection; ignore stale Custom actions.
 - [x] Retain persisted control panels and unrelated editing capabilities; cover the new inspector surface in controller and native fixtures.
 - [x] Review repair: keep the removal entry under Unreleased after the 0.13.27 sync and update active provider guidance.
+- [x] Review repair: remove the obsolete inspector request exception from provider rules and bump their version.
 - [ ] Manager: current-head CI, independent review, merge and post-merge native acceptance.
 ## LKM-530 — System monospace in top bar
 

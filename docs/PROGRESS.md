@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-538 provider rule review repair
+
+- Provider rules no longer tell an agent to answer a retired Inspector Custom request with a `trezi-controls` block. The control-capable providers continue to use the existing `chat_island` guidance; rules version 49 and the rules fixture cover the changed prompt. Current-head CI and post-merge native acceptance remain manager gates.
+
 ## 2026-11-04 — LKM-538 documentation review repair
 
 - After the 0.13.27 sync, the Custom removal entry is separated from the dated release heading under Unreleased. The provider guide now describes the retired inspector request route while retaining historical control parsing and saved panels. Current-head CI and post-merge native acceptance remain manager gates.
