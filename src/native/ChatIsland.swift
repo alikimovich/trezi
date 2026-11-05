@@ -9,11 +9,22 @@ struct IslandField: Decodable, Identifiable {
     let disabled: String?
 }
 struct IslandBlock: Decodable, Identifiable { let id: String; let title: String; let kind: String; let params: [String] }
+struct IslandDraftState: Decodable {
+    let count: Int; let preview: Bool; let conflict: Bool; let submitted: Bool?
+    /// If/else rather than a nested ternary: four chained string ternaries are slow to type-check.
+    var draftLabel: String {
+        if submitted == true { return "Applying draft with agent…" }
+        if conflict { return "Preview draft pending · source changed" }
+        if preview { return "Preview draft pending · shown in preview" }
+        return "Draft pending · live preview unavailable for these bindings"
+    }
+}
 /// `status`: waiting, ready, partially-disabled, disabled (`disabledBy` code or user) or hidden.
 struct IslandView: Decodable, Identifiable {
     let id: String; let revision: Int; let title: String; let blocks: [IslandBlock]; let fields: [IslandField]
     let sourceRevision: String; let status: String; let detail: String; let engine: String; let replay: Bool
     let notice: String?
+    let draft: IslandDraftState?
     let name: String?; let reason: String?; let disabledBy: String?
     /// Controls write only while the code supports some of their bindings and the user has not disabled them.
     var live: Bool { status == "ready" || status == "partially-disabled" }
@@ -24,15 +35,16 @@ struct NativeChatIsland: View {
     @State private var drafts: [String: IslandValue] = [:]
     @State private var dragging = false
     @State private var writes = IslandLiveWrites()
-    /// The one path every control writes through: live while editing, one Undo group per gesture.
+    /// Controls stage frontend values; Apply sends the accumulated source change once.
     private func live(_ values: [String: IslandValue], ended: Bool = false) {
         model.controlInteraction += 1
         dragging = !ended
         drafts.merge(values) { _, next in next }
         guard let batch = writes.change(values, ended: ended) else { return }
-        model.islandAction(island, action: "commit", values: batch.values.mapValues(\.object), gesture: batch.gesture, ended: batch.ended)
+        model.islandAction(island, action: "draft", values: batch.values.mapValues(\.object), gesture: batch.gesture, ended: batch.ended)
     }
     private func value(_ field: IslandField) -> IslandValue { drafts[field.id] ?? field.value ?? .text("") }
+    private func discardLocalDraft() { drafts = [:]; dragging = false; writes = IslandLiveWrites() }
     private func action(_ name: String, values: [String: IslandValue] = [:]) {
         model.islandAction(island, action: name, values: values.mapValues(\.object))
     }
@@ -118,6 +130,11 @@ struct NativeChatIsland: View {
             Label(notice, systemImage: "arrow.triangle.2.circlepath").font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true).accessibilityLabel(notice)
         }
+        if let draft = island.draft {
+            Text(draft.draftLabel)
+                .font(.caption).foregroundStyle(draft.conflict ? Color.orange : Color.secondary)
+                .accessibilityLabel("\(draft.count) pending control values")
+        }
         ForEach(island.blocks) { block in
             let fields = block.params.compactMap { id in island.fields.first { $0.id == id } }
             // A compound block edits its bindings together: one that broke disables it.
@@ -142,13 +159,18 @@ struct NativeChatIsland: View {
                         } else { fieldView(field) }
                     }.disabled(field.disabled != nil).help(field.disabled ?? "")
                 }
-            }.disabled(!island.live || broken != nil).help(broken ?? "")
+            }.disabled(!island.live || broken != nil || island.draft?.submitted == true).help(broken ?? "")
                 .opacity(island.live ? 1 : 0.6)
         }
         HStack {
-            Button("Reload") { drafts = [:]; action("reload") }
-            Button("Reset") { drafts = [:]; action("reset") }.disabled(!island.live)
-            Button("Undo") { drafts = [:]; action("undo") }.disabled(!island.live)
+            Button("Apply") { action("apply-draft") }.disabled(!island.live || island.draft == nil || island.draft?.conflict == true || island.draft?.submitted == true)
+            Button("Undo draft") { discardLocalDraft(); action("undo-draft") }.disabled(island.draft == nil || island.draft?.submitted == true)
+            Button("Revert draft") { discardLocalDraft(); action("revert-draft") }.disabled(island.draft == nil || island.draft?.submitted == true)
+            Button("Reset") { discardLocalDraft(); action("draft-reset") }.disabled(!island.live || island.draft?.submitted == true)
+        }.controlSize(.small)
+        HStack {
+            Button("Reload") { discardLocalDraft(); action("reload") }
+            Button("Undo source") { action("undo") }.disabled(!island.live || island.draft != nil)
             if island.replay { Button("Replay") { action("replay") }.disabled(!island.live) }
         }.controlSize(.small)
     }
@@ -197,6 +219,7 @@ struct IslandInput: View {
                 .foregroundStyle(entry.parse(draft) == nil ? Color.red : Color.primary)
                 .focused($focused).onSubmit(apply)
                 .accessibilityLabel(label)
+                .accessibilityIdentifier("island-field-" + label)
         }.onAppear { draft = value }.onChange(of: value) { next in entry.sourceChanged(); if !focused { draft = next } }
             .onChange(of: focused) { next in if !next { apply() } }
     }

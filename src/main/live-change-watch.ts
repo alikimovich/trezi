@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process'
+import { lstat, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
+import { isAbsolute, join, relative } from 'node:path'
 import { agentFileAccess, currentAgentFileAccess, realPath } from './agent-file-access'
 import {
   type LiveTreeSnapshot,
@@ -7,6 +9,9 @@ import {
   liveTreeSnapshot
 } from './backends/live-tree-watch'
 import { repositoryOwner } from './repository-owner'
+import { contentHash } from './source-owner'
+
+export type EffectPath = { path: string; hash: string } | { path: string; absent: true }
 
 /**
  * LKM-163, LKM-215: in Full access, Codex runs without a sandbox, so it can write the
@@ -166,6 +171,9 @@ function openWatches(root: string): Watch[] {
   return [...watches.values()].filter((w) => w.live === live)
 }
 
+/** Source writes only need the repository effect wrapper while a live turn is watched. */
+export const hasLiveWatch = (root: string): boolean => openWatches(root).length > 0
+
 async function commitsBetween(root: string, from: string | null, to: string): Promise<string[]> {
   const range = from ? [`${from}..${to}`] : [to]
   const out = await git(root, ['rev-list', `--max-count=${MAX_COMMITS}`, ...range, '--'])
@@ -176,21 +184,49 @@ async function commitsBetween(root: string, from: string | null, to: string): Pr
  * Runs one of Trezi's own effects on the live checkout `root`. While a watch is open for
  * it, what the effect changed is recorded as Trezi's and never reported as outside.
  */
-export async function treziLiveEffect<T>(root: string, operation: () => Promise<T>): Promise<T> {
+export async function treziLiveEffect<T>(
+  root: string,
+  operation: () => Promise<T>,
+  /** When supplied, only these successful source paths are Trezi's own effect. */
+  affected?: (result: T) => EffectPath[]
+): Promise<T> {
   if (!openWatches(root).length) return operation()
   const live = realPath(root)
   const before = await liveTreeSnapshot(live)
+  let result: T | undefined
+  let succeeded = false
   try {
-    return await operation()
+    result = await operation()
+    succeeded = true
+    return result
   } finally {
     const after = await liveTreeSnapshot(live)
     if (before && after) {
-      const paths = liveTreeChanges(before, after)
+      const allowed = new Set<string>()
+      if (affected && succeeded)
+        for (const item of affected(result as T)) {
+          const path = isAbsolute(item.path) ? relative(live, item.path) : item.path
+          if (!path || path === '..' || path.startsWith('../')) continue
+          if ('absent' in item) {
+            if (
+              await lstat(join(live, path)).then(
+                () => true,
+                () => false
+              )
+            )
+              continue
+          } else {
+            const content = await readFile(join(live, path)).catch(() => null)
+            if (!content || contentHash(content) !== item.hash) continue
+          }
+          allowed.add(path)
+        }
+      const paths = liveTreeChanges(before, after).filter((path) => !affected || allowed?.has(path))
       const moved = before.head !== after.head ? after.head : null
-      const commits = moved ? await commitsBetween(live, before.head, moved) : []
+      const commits = moved && !affected ? await commitsBetween(live, before.head, moved) : []
       for (const w of openWatches(live)) {
         for (const path of paths) w.marks.set(path, after.files.get(path) ?? CLEAN)
-        if (moved) w.heads.add(moved)
+        if (moved && !affected) w.heads.add(moved)
         for (const sha of commits) w.commits.add(sha)
       }
     }

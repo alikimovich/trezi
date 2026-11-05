@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict'
-import { NativeInspectorController } from '../src/native/inspector-controller.ts'
+import { setSourceOwner } from '../src/main/source-owner.ts'
+import {
+  InspectorDraftTurns,
+  NativeInspectorController
+} from '../src/native/inspector-controller.ts'
 
 const calls = [],
   sent = [],
@@ -110,6 +114,7 @@ assert.deepEqual(calls.filter((c) => c[0] === 'styles:apply').at(-1)[2].token, {
   name: '--blue',
   group: 'colors'
 })
+assert.equal(agents.length, 0, 'eligible Styles edits never start an agent turn')
 await action('tab', { value: 'props' })
 assert.equal(controller.state.tab, 'props')
 assert.ok(controller.state.fields.some((f) => f.id === 'prop:count'))
@@ -459,6 +464,190 @@ assert.deepEqual(
   ['right', 'left', 'top', 'bottom']
 )
 assert.deepEqual(spacingSnapshot('margin'), collapsedMargin)
+
+// Styles gestures stay frontend-only until one Apply submits their accumulated intent.
+let authoredHash = 'base'
+let authoredOpacity = '1'
+let authoredWidth = '10px'
+const draftCalls = []
+const draftAgent = []
+setSourceOwner({
+  read: async () => ({ path: 'a.tsx', hash: authoredHash, binary: false, size: 10 })
+})
+const drafts = new NativeInspectorController(
+  async (channel) => {
+    draftCalls.push(channel)
+    if (channel === 'styles:read')
+      return {
+        values: { opacity: authoredOpacity, width: authoredWidth, display: 'block' },
+        specified: { opacity: authoredOpacity, width: authoredWidth }
+      }
+    if (channel === 'props:inspect') return null
+    if (channel === 'controls:list' || channel === 'controls:get') return []
+    if (channel === 'styles:resolve-class') return null
+    if (channel === 'styles:apply') return { applied: true }
+    return null
+  },
+  async (...args) => draftCalls.push(args),
+  () => {},
+  async (...args) => {
+    draftAgent.push(args)
+    return `draft-turn-${draftAgent.length}`
+  },
+  async () => {}
+)
+await drafts.activate('/a')
+await drafts.select(element)
+const draftAction = (action, extra = {}) =>
+  drafts.action({
+    root: '/a',
+    generation: drafts.state.generation,
+    action,
+    ...extra
+  })
+const beforeDraft = draftCalls.filter((call) => call === 'styles:apply').length
+await draftAction('apply', { field: 'style:opacity', value: '0.6' })
+await draftAction('apply', { field: 'style:width', value: '12px' })
+assert.equal(drafts.state.draft.count, 2)
+await drafts.select({ ...element, source: 'b.tsx' })
+assert.equal(drafts.state.draft, undefined, 'another selected element cannot inherit the draft')
+await drafts.select(element)
+assert.equal(drafts.state.draft.count, 2, 'returning to the target restores its draft')
+assert.equal(
+  drafts.state.fields.find((f) => f.id === 'style:opacity').value,
+  '0.6',
+  'held draft restores the displayed value'
+)
+await drafts.activate('/b')
+await drafts.select(element)
+assert.equal(drafts.state.draft, undefined, 'another workspace cannot inherit the draft')
+await drafts.activate('/a')
+await drafts.select(element)
+assert.equal(drafts.state.draft.count, 2, 'returning to the workspace restores its draft')
+await drafts.select({ ...element, source: 'b.tsx' })
+authoredHash = 'changed-away'
+await drafts.select(element)
+assert.equal(drafts.state.draft.conflict, true, 'source drift while away blocks stale Apply')
+await draftAction('revert-draft')
+authoredHash = 'base'
+await draftAction('apply', { field: 'style:opacity', value: '0.6' })
+await draftAction('apply', { field: 'style:width', value: '12px' })
+await draftAction('close')
+assert.equal(drafts.state.draft.preview, false, 'closed inspector cannot claim a cleared preview')
+assert.equal(drafts.state.draft.count, 2, 'closing retains pending edits')
+await drafts.select(element)
+assert.equal(drafts.state.draft.preview, true, 'reselecting projects the pending preview again')
+assert.equal(draftCalls.filter((call) => call === 'styles:apply').length, beforeDraft)
+assert.equal(draftAgent.length, 0, 'no model turn per small Styles adjustment')
+await draftAction('undo-draft')
+assert.equal(drafts.state.draft.count, 1)
+assert.equal(
+  drafts.state.fields.find((f) => f.id === 'style:width').value,
+  authoredWidth,
+  'Undo restores the authored field value'
+)
+await draftAction('apply', { field: 'style:width', value: '12px' })
+authoredHash = 'external'
+await draftAction('apply-drafts')
+assert.equal(draftAgent.length, 0, 'stale source is refused before agent submission')
+assert.equal(drafts.state.draft.count, 2, 'failed Apply retains draft')
+authoredHash = 'base'
+await draftAction('revert-draft')
+await draftAction('apply', { field: 'style:opacity', value: '0.6' })
+await draftAction('apply', { field: 'style:width', value: '12px' })
+await draftAction('apply-drafts')
+assert.equal(draftAgent.length, 1, 'one agent operation submits all values')
+assert.equal(drafts.state.draft.submitted, true)
+await drafts.settleDraftTurn(true, 'draft-turn-1')
+assert.equal(
+  drafts.state.draft.submitted,
+  false,
+  'a landed turn without source edits unlocks the draft'
+)
+assert.equal(drafts.state.draft.count, 2, 'unconfirmed edits stay pending')
+await draftAction('undo-draft')
+assert.equal(drafts.state.draft.count, 1, 'unconfirmed draft remains actionable')
+await draftAction('apply', { field: 'style:width', value: '12px' })
+await draftAction('apply-drafts')
+assert.equal(draftAgent.length, 2, 'pending draft can be submitted again')
+await drafts.select({ ...element, source: 'b.tsx' })
+assert.equal(drafts.state.draft, undefined, 'another selection cannot display the submitted draft')
+await drafts.select(element)
+assert.equal(
+  drafts.state.draft.submitted,
+  true,
+  'returning during the same Apply retains its turn lock'
+)
+await drafts.settleDraftTurn(true, 'unrelated-turn')
+assert.equal(drafts.state.draft.submitted, true, 'another turn cannot complete this draft')
+authoredHash = 'applied'
+authoredOpacity = '0.6'
+authoredWidth = '12px'
+await drafts.settleDraftTurn(true, 'draft-turn-2')
+assert.equal(drafts.state.draft, undefined, 'source and rendered values confirm Apply')
+await draftAction('apply', { field: 'style:opacity', value: '0.4' })
+await draftAction('revert-draft')
+assert.equal(drafts.state.draft, undefined)
+assert.equal(
+  drafts.state.fields.find((f) => f.id === 'style:opacity').value,
+  authoredOpacity,
+  'Revert restores the authored field value'
+)
+const sourceWrites = draftCalls.filter((call) => call === 'styles:apply').length
+await draftAction('apply', { field: 'style:opacity', value: '0.3' })
+assert.equal(draftCalls.filter((call) => call === 'styles:apply').length, sourceWrites)
+await draftAction('apply-drafts')
+assert.equal(
+  draftCalls.filter((call) => call === 'styles:apply').length,
+  sourceWrites,
+  'single-field Apply never writes source directly'
+)
+assert.equal(draftAgent.length, 3, 'single-field Apply submits one regular agent operation')
+assert.equal(drafts.state.draft.submitted, true, 'Apply waits for rendered confirmation')
+await drafts.activate('/b')
+await drafts.select(element)
+assert.equal(drafts.state.draft, undefined, 'another workspace cannot display the submitted draft')
+authoredHash = 'direct-applied'
+authoredOpacity = '0.3'
+await drafts.settleDraftTurn(true, 'draft-turn-3')
+await drafts.activate('/a')
+await drafts.select(element)
+assert.equal(
+  drafts.state.draft,
+  undefined,
+  'a terminal while another workspace is active confirms only after source-backed restoration'
+)
+const submitted = new InspectorDraftTurns()
+await draftAction('apply', { field: 'style:opacity', value: '0.8' })
+await draftAction('apply-drafts')
+submitted.add('chat-a', 'draft-turn-4')
+await drafts.activate('/b')
+await drafts.select(element)
+const actionB = (action, extra = {}) =>
+  drafts.action({ root: '/b', generation: drafts.state.generation, action, ...extra })
+await actionB('apply', { field: 'style:opacity', value: '0.9' })
+await actionB('apply-drafts')
+submitted.add('chat-b', 'draft-turn-5')
+assert.deepEqual(
+  submitted.take('chat-a', 'other-turn'),
+  [],
+  'an unrelated terminal matches neither Apply'
+)
+for (const turn of submitted.take('chat-b', 'draft-turn-5'))
+  await drafts.settleDraftTurn(false, turn)
+assert.equal(drafts.state.draft.submitted, false, 'B failure unlocks only the B draft')
+authoredHash = 'applied-a'
+authoredOpacity = '0.8'
+for (const turn of submitted.take('chat-a', 'draft-turn-4'))
+  await drafts.settleDraftTurn(true, turn)
+await drafts.activate('/a')
+await drafts.select(element)
+assert.equal(drafts.state.draft, undefined, 'A source and render settle after B completes first')
+await drafts.activate('/b')
+await drafts.select(element)
+assert.equal(drafts.state.draft.count, 1, 'B failed draft remains pending after A settles')
+await actionB('revert-draft')
+setSourceOwner(null)
 assert.deepEqual(spacingSnapshot('padding'), {
   'style:padding-right': '18px',
   'style:padding-left': 'var(--space)',

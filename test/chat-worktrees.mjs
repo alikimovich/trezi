@@ -41,6 +41,7 @@ import {
   stageResolve,
   syncFromLive
 } from '../src/main/chat-worktrees.ts'
+import { contentHash, sourceOwner } from '../src/main/source-owner.ts'
 import { provisionDependencies } from '../src/main/worktree-dependencies.ts'
 import { candidateOf } from './helpers/gate-checks.mjs'
 
@@ -212,7 +213,14 @@ try {
   // (mid-turn drift) — the owner holds the landing (LOCAL-WEBKIT-3: live moved since the
   // fork point), leaving the user's edit intact.
   writeFileSync(join(wt2.path, 'README.md'), 'from chat\n')
-  writeFileSync(join(repo2, 'README.md'), 'user typed this\n')
+  const internalEdit = await sourceOwner().commit(repo2, [
+    {
+      path: 'README.md',
+      expectedHash: contentHash('base\n'),
+      content: 'user typed this\n'
+    }
+  ])
+  ok(internalEdit.ok, 'internal editor write commits against the current source revision')
   const p1 = await completeTurn(repo2, wt2, 'parked turn 1')
   ok(heldBy(p1, 'README.md'), `mid-turn drift on a touched file holds: ${JSON.stringify(p1)}`)
   ok(

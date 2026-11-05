@@ -1094,10 +1094,67 @@ export async function runNativeCoreSmoke(
             value: '12px'
           }
         })
+        assert.ok(!moduleSource().includes('row-gap: 12px'), 'Styles draft does not write source')
+        const pending = await host.request('inspectorInspect')
+        assert.equal(pending.draft?.count, 1, 'Styles preview is visibly pending')
+        const originalCommand = nativeChat.command.bind(nativeChat)
+        const applyChat = nativeChat.get(nativeChat.active)
+        const priorApplyTurn = applyChat.turn
+        let applyCommands = 0
+        nativeChat.command = async (command) => {
+          assert.equal(command.type, 'submit', 'Apply uses the regular chat agent operation')
+          assert.match(command.text ?? '', /row-gap to 12px/)
+          applyCommands++
+          const binding = inspector.bindings.get('style:row-gap')
+          assert.ok(binding, 'mock agent has the same source-bound Styles target')
+          const result = await binding.apply('12px')
+          assert.equal(result.applied, true, 'mock agent persisted the requested source edit')
+          applyChat.turn = `smoke-style-apply-${applyCommands}`
+        }
+        try {
+          await host.request('inspectorPerform', {
+            action: {
+              root: fixture,
+              generation: moduleState.generation,
+              action: 'apply-drafts'
+            }
+          })
+        } finally {
+          nativeChat.command = originalCommand
+        }
+        assert.equal(applyCommands, 1, 'one Apply submits one agent operation')
         await wait(async () => {
           const state = await host.request('inspectorInspect')
           return state.edits > moduleEdits && moduleSource().includes('row-gap: 12px')
         }, 'CSS Module source edit persisted')
+        await wait(
+          () =>
+            page(
+              `getComputedStyle(document.querySelector('#native-module-card')).rowGap === '12px'`
+            ),
+          'CSS Module applied value is visible in the rendered preview'
+        )
+        await invoke('styles:clear-preview', {})
+        await settleLiveReload()
+        const authoredRule = moduleSource().replace('.layoutCard', '._layoutCard_abcde_1')
+        await page(`(() => {
+          const sheet = document.querySelector('#native-module-css');
+          if (sheet) sheet.textContent = ${JSON.stringify(authoredRule)};
+          return true;
+        })()`)
+        assert.ok(
+          await page(
+            `getComputedStyle(document.querySelector('#native-module-card')).rowGap === '12px'`
+          ),
+          'CSS Module authored source reaches rendered preview after clearing draft'
+        )
+        await inspector.settleDraftTurn(true)
+        assert.equal(
+          inspector.state.draft,
+          undefined,
+          'source-backed rendered value confirms the agent Apply'
+        )
+        applyChat.turn = priorApplyTurn
         assert.ok((await invoke('edit:undo', fixture)).ok, 'CSS Module edit has Undo')
         await wait(() => moduleSource().includes('row-gap: 8px'), 'CSS Module Undo restores source')
         await settleLiveReload()

@@ -29,7 +29,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { canRevertGroup, recordEdit, redo, revertGroup, undo } from '../src/main/edit-history.ts'
+import { canRevertGroup, recordEdit, redo, undo } from '../src/main/edit-history.ts'
 import { createProjectFile, deleteProjectFile, renameProjectFile } from '../src/main/file-ops.ts'
 import { applyMoveNode } from '../src/main/move-node.ts'
 import { applyPropEdit, applyTextEdit, readSourceView } from '../src/main/props.ts'
@@ -481,10 +481,18 @@ try {
     ])
       assert.equal((await proposeEdit(base, at('a.ts'), from, to, 'k')).applied, true)
     assert.equal((await proposeEdit(other, join(other, 'x.ts'), 'X1', 'X2', 'k')).applied, true)
-    assert.deepEqual(await undo(base), { ok: true, file: at('a.ts') })
+    assert.deepEqual((await owned.frame('undo', { root: base })).payload, {
+      ok: true,
+      file: at('a.ts'),
+      effects: [{ path: at('a.ts'), hash: hash('A1') }]
+    })
     assert.equal(read(at('a.ts')), 'A1')
     assert.equal(read(join(other, 'x.ts')), 'X2', 'history is per project')
-    assert.deepEqual(await redo(base), { ok: true, file: at('a.ts') })
+    assert.deepEqual((await owned.frame('redo', { root: base })).payload, {
+      ok: true,
+      file: at('a.ts'),
+      effects: [{ path: at('a.ts'), hash: hash('A3') }]
+    })
     // A landed chat turn recorded after the fact is revertable as a group, addressably.
     writeFileSync(at('b.ts'), 'B2')
     writeFileSync(at('c.ts'), 'C2')
@@ -492,7 +500,17 @@ try {
     recordEdit(base, at('c.ts'), 'C1', 'C2', undefined, 'chat:wt:1')
     assert.equal((await proposeEdit(base, at('a.ts'), 'A3', 'A4', 'later')).applied, true)
     assert.equal(await canRevertGroup(base, 'chat:wt:1'), true)
-    assert.deepEqual(await revertGroup(base, 'chat:wt:1'), { ok: true, file: at('c.ts') })
+    assert.deepEqual(
+      (await owned.frame('revert', { root: base, group: 'chat:wt:1', intent: 'revert' })).payload,
+      {
+        ok: true,
+        file: at('c.ts'),
+        effects: [
+          { path: at('c.ts'), hash: hash('C1') },
+          { path: at('b.ts'), hash: hash('B1') }
+        ]
+      }
+    )
     assert.deepEqual([read(at('b.ts')), read(at('c.ts')), read(at('a.ts'))], ['B1', 'C1', 'A4'])
     // Drift refuses the whole group without writing.
     writeFileSync(at('b.ts'), 'B5')
@@ -545,6 +563,32 @@ try {
       ok: false,
       error: 'That file no longer exists.'
     })
+    assert.deepEqual(
+      (await owned.frame('createFile', { root: base, path: 'evidence.txt' })).payload,
+      {
+        ok: true,
+        path: 'evidence.txt',
+        effects: [{ path: 'evidence.txt', hash: hash('') }]
+      }
+    )
+    writeFileSync(join(base, 'evidence.txt'), 'bytes\n')
+    assert.deepEqual(
+      (await owned.frame('renameFile', { root: base, path: 'evidence.txt', to: 'renamed.txt' }))
+        .payload,
+      {
+        ok: true,
+        path: 'renamed.txt',
+        effects: [
+          { path: 'evidence.txt', absent: true },
+          { path: 'renamed.txt', hash: hash('bytes\n') }
+        ]
+      }
+    )
+    assert.deepEqual(
+      (await owned.frame('deleteFile', { root: base, path: 'renamed.txt', intent: 'trash' }))
+        .payload,
+      { ok: true, path: 'renamed.txt', effects: [{ path: 'renamed.txt', absent: true }] }
+    )
     reset()
     await stop(owned)
   })

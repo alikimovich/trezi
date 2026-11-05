@@ -1,5 +1,15 @@
 import AppKit
 
+private func islandAccessibilityElement(_ root: NSAccessibilityProtocol, identifier: String, depth: Int = 0) -> NSAccessibilityProtocol? {
+    guard depth < 40 else { return nil }
+    if root.accessibilityIdentifier() == identifier { return root }
+    for child in root.accessibilityChildren() ?? [] {
+        if let element = child as? NSAccessibilityProtocol,
+           let found = islandAccessibilityElement(element, identifier: identifier, depth: depth + 1) { return found }
+    }
+    return nil
+}
+
 /// The test broker's inspect, perform, verification and capture commands (LKM-160 split
 /// from Host.swift). `command` falls through to here; false means the method is unknown.
 extension Host {
@@ -272,6 +282,10 @@ extension Host {
             if let island = chat.model.snapshot?.messages.flatMap({ $0.segments.compactMap { $0.island } }).first(where: { $0.id == c["island"] as? String }) {
                 chat.model.islandAction(island, action: c["action"] as? String ?? "", values: c["values"] as? [String: Any] ?? [:], gesture: c["gesture"] as? String, ended: c["ended"] as? Bool ?? false); reply(id)
             } else { reply(id, error: "Island not found") }
+        case "islandControlInspect":
+            guard ephemeral, let label = c["label"] as? String else { reply(id, error: "Test control unavailable"); return true }
+            let field = islandAccessibilityElement(chat, identifier: "island-field-" + label)
+            reply(id, ["value":field?.accessibilityValue() as? String ?? "", "visible":field != nil])
         case "revealChatIsland":
             guard ephemeral, let target = c["island"] as? String,
                   let message = chat.model.snapshot?.messages.first(where: { $0.segments.contains { $0.island?.id == target } }) else {

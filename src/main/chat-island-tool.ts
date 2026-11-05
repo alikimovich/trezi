@@ -38,7 +38,7 @@ export async function islandTool(
         controlPurposes: chatIslandControlPurposes,
         guidance: chatIslandGuidance,
         bindingRules:
-          'Literal bindings in one file, up to 12 fields. define {planned:true} reserves a pending island before the literals exist: the definition is validated at once and its bindings are planned; it activates after this turn lands and every binding resolves, otherwise it shows why with Recreate. Without planned, every binding must already resolve. Jev selects/orders whole prepared blocks; keep coupled bindings together. No arbitrary code executes in islands. Read before updating with id/revision. Default auto engine uses Jev if configured. A binding that is no longer a literal of its kind disables its field; show {id} resurfaces an island, clone {id, rebind?} makes a new one from it.'
+          'Literal bindings in one file, up to 12 fields. define {planned:true} reserves a pending island before the literals exist: the definition is validated at once and its bindings are planned; it activates after this turn lands and every binding resolves, otherwise it shows why with Recreate. Without planned, every binding must already resolve. The default auto engine uses prepared blocks directly; Jev is only called with engine:jev. Keep coupled bindings together. No arbitrary code executes in islands. Read before updating with id/revision. A binding that is no longer a literal of its kind disables its field; show {id} resurfaces an island, clone {id, rebind?} makes a new one from it.'
       }
     // The definition is checked before anything waits, reserves or edits (LKM-201).
     if (raw?.action === 'define') {

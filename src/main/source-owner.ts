@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { FileOpResult } from '../shared/api'
+import type { FileOpResult, SourceEffectState } from '../shared/api'
 
 /**
  * The source owner seam (S08/S09). Under the Swift launch the service's source
@@ -31,6 +31,7 @@ export interface UndoResult {
   ok: boolean
   /** The file reverted/re-applied (relative or absolute as recorded). */
   file?: string
+  effects?: SourceEffectState[]
   /** The stack was empty. */
   empty?: boolean
   /** The file changed on disk since the edit — refused to clobber. */

@@ -283,6 +283,14 @@ final class SourceOwner: @unchecked Sendable {
         if r.empty { fields.append(("empty", .bool(true))) }
         if r.conflict { fields.append(("conflict", .bool(true))) }
         if let file = r.file { fields.append(("file", .string(JSText(file)))) }
+        if r.ok { fields.append(("effects", .array(r.effects.map(effectValue)))) }
+        return RepositoryOwner.object(fields)
+    }
+
+    static func effectValue(_ effect: SourceStore.Effect) -> JSValue {
+        var fields: [(String, JSValue)] = [("path", .string(JSText(effect.path)))]
+        if let hash = effect.hash { fields.append(("hash", .string(JSText(hash)))) }
+        if effect.absent { fields.append(("absent", .bool(true))) }
         return RepositoryOwner.object(fields)
     }
 
@@ -290,6 +298,7 @@ final class SourceOwner: @unchecked Sendable {
         var fields: [(String, JSValue)] = [("ok", .bool(r.ok))]
         if let path = r.path { fields.append(("path", .string(JSText(path)))) }
         if let error = r.error { fields.append(("error", .string(JSText(error)))) }
+        if r.ok { fields.append(("effects", .array(r.effects.map(effectValue)))) }
         return RepositoryOwner.object(fields)
     }
 

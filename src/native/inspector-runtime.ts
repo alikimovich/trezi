@@ -10,7 +10,7 @@ import type { NativeBridge } from './bridge'
 import type { NativeChatController } from './chat-controller'
 import { turnBoundaries } from './chat-runtime'
 import type { NativeContextController } from './context-controller'
-import { NativeInspectorController } from './inspector-controller'
+import { InspectorDraftTurns, NativeInspectorController } from './inspector-controller'
 import { NavigationController } from './navigation-controller'
 import { dispatchIPC, serviceEvents } from './platform'
 import { recordThreeDRoute } from './three-d-route-trace'
@@ -26,15 +26,33 @@ export function installNativeInspector(
 ) {
   const send = (channel: string, ...args: any[]) =>
     dispatchIPC('main', { type: 'send', channel, args })
+  const draftTurns = new InspectorDraftTurns()
   const controller = new NativeInspectorController(
     workspace.services.invoke,
     send,
     (state) => host.send('inspectorState', { state }),
     async (root, prompt, submit) => {
       const entry = workspace.state.projects.find((p) => p.root === root)
-      if (!entry) return
-      if (submit) await chat.command({ type: 'submit', chat: entry.activeSessionKey, text: prompt })
-      else await visualEdit(root, prompt)
+      if (!entry) throw new Error('The project is no longer open. The draft is still pending.')
+      if (submit) {
+        const key = entry.activeSessionKey
+        const session = chat.chats.get(key)
+        if (
+          !session ||
+          chat.active !== key ||
+          !session.ready ||
+          session.root !== root ||
+          session.isRunning ||
+          session.queue.length
+        )
+          throw new Error('Finish the current chat turn before applying this draft.')
+        const previousTurn = session.turn
+        await chat.command({ type: 'submit', chat: key, text: prompt })
+        if (!session.turn || session.turn === previousTurn)
+          throw new Error('The chat could not start the Apply turn. The draft is still pending.')
+        draftTurns.add(key, session.turn)
+        return session.turn
+      } else await visualEdit(root, prompt)
     },
     () => chat.action({ chat: chat.active, action: 'setup' }),
     () => chat.chats.get(chat.active)?.settings.provider ?? 'claude',
@@ -72,6 +90,9 @@ export function installNativeInspector(
   )
   turnBoundaries.add((key, kind, turn) => {
     void navigation.boundary(key, kind, turn).catch(report)
+    if ((kind === 'landed' && turn) || kind === 'failed')
+      for (const submitted of draftTurns.take(key, turn))
+        void controller.settleDraftTurn(kind === 'landed', submitted).catch(report)
   })
   const render = workspace.services.render
   workspace.services.render = (state) => {

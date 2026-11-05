@@ -5,13 +5,20 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chatIslandShape } from '../bin/chat-island-schema.mjs'
 import { islandDefinition } from '../src/main/chat-island-schema.ts'
+import { islandSource, sourceHash } from '../src/main/chat-island-source.ts'
 import { ChatIslands, ISLAND_CONFLICT_NOTICE } from '../src/main/chat-islands.ts'
+import { selectControlCandidates } from '../src/main/control-selection.ts'
 import { chooseControlsWithJev } from '../src/main/controls-jev.ts'
+import { previewServers } from '../src/main/preview-evidence.ts'
+import { PAGE_PROBE } from '../src/main/preview-page.ts'
+import { registerPreviewSource } from '../src/main/preview-state.ts'
 import { enqueueRepoWrite } from '../src/main/repo-write-queue.ts'
+import { confirmIslandRendered } from '../src/native/island-rendered.ts'
 import {
   chatIslandControlPurposes,
   chatIslandGuidance
 } from '../src/shared/chat-island-guidance.ts'
+import { projectKey } from '../src/shared/projectKey.ts'
 
 const root = await mkdtemp(join(tmpdir(), 'trezi-islands-'))
 const storage = await mkdtemp(join(tmpdir(), 'trezi-island-store-'))
@@ -24,7 +31,10 @@ const number = (id, anchor, min = -1, max = 1) => ({
   min,
   max,
   step: 0.01,
-  apply: { strategy: 'literal', anchor }
+  apply: { strategy: 'literal', anchor },
+  ...(id === 'x'
+    ? { rendered: { kind: 'computed-style', selector: '#shadow-card', property: 'opacity' } }
+    : {})
 })
 const request = {
   action: 'define',
@@ -51,7 +61,15 @@ const request = {
   ]
 }
 let changes = 0
-const islands = new ChatIslands(() => changes++)
+const submittedDrafts = []
+let renderedDraft = false
+const islands = new ChatIslands(() => changes++, undefined, {
+  applyDraft: async (_chat, prompt) => {
+    submittedDrafts.push(prompt)
+    return `draft-turn-${submittedDrafts.length}`
+  },
+  confirmRendered: async () => renderedDraft
+})
 try {
   // Catalog guidance is available before registration and stays within the wire catalog.
   const catalog = await islands.tool('not-registered', root, { action: 'catalog' })
@@ -67,6 +85,25 @@ try {
     blockKinds,
     'Catalog must not advertise unrenderable block types'
   )
+  // The six About-photo controls do not wait for a second model on the default path.
+  const photoBlocks = [
+    { id: 'pixel-area', params: ['radius', 'block-size'] },
+    { id: 'trail', params: ['fringe', 'retention'] },
+    { id: 'response', params: ['follow', 'expansion'] }
+  ]
+  for (const engine of [undefined, 'auto', 'agent']) {
+    const selected = await selectControlCandidates(
+      'photo',
+      photoBlocks,
+      { engine, prompt: 'Surface the photo hover controls' },
+      async () => {
+        throw new Error('The default path must not call Jev')
+      }
+    )
+    assert.equal(selected.engine, 'agent')
+    assert.deepEqual(selected.controls, photoBlocks)
+    assert.equal(selected.controls.flatMap((block) => block.params).length, 6)
+  }
   await writeFile(join(root, 'shadow.js'), code)
   // Publish a disabled draft before a slow Jev response; do not persist drafts.
   let releaseSelection
@@ -130,6 +167,87 @@ try {
   await assert.rejects(islands.interact(command('commit', { x: 0.5 })), /not landed/)
   await islands.settle('chat', true)
   const source = () => readFile(join(root, 'shadow.js'), 'utf8')
+  await islands.interact(command('draft', { x: 0.2 }))
+  await islands.interact(command('draft', { y: 0.4 }))
+  assert.equal(await source(), code, 'small control changes stay frontend drafts')
+  assert.equal(view().draft.count, 2)
+  assert.equal(view().draft.preview, false, 'unprojectable literals report no live preview')
+  await islands.interact(command('undo-draft'))
+  assert.equal(view().draft.count, 1)
+  assert.equal(view().fields.find((field) => field.id === 'y').value, -0.5)
+  await islands.interact(command('draft-reset'))
+  assert.equal(await source(), code, 'Reset stays a draft until Apply')
+  assert.equal(view().fields.find((field) => field.id === 'x').value, 0)
+  await islands.interact(command('undo-draft'))
+  assert.equal(view().fields.find((field) => field.id === 'x').value, 0.2)
+  await islands.interact(command('apply-draft'))
+  assert.equal(await source(), code, 'Apply only starts an agent turn; it does not write source')
+  assert.equal(submittedDrafts.length, 1, 'one Apply submits one accumulated agent operation')
+  assert.equal(view().draft.submitted, true, 'draft remains pending during the agent turn')
+  await islands.settle('chat', true, 'draft-turn-1')
+  assert.equal(view().draft.count, 1, 'a landed agent turn with no matching source keeps the draft')
+  assert.equal(view().draft.submitted, false, 'unconfirmed draft becomes actionable again')
+  await islands.interact(command('apply-draft'))
+  assert.equal(submittedDrafts.length, 2)
+  await writeFile(join(root, 'shadow.js'), code.replace('LIGHT_X = 0', 'LIGHT_X = 0.2'))
+  renderedDraft = true
+  await islands.settle('chat', true, 'draft-turn-2')
+  assert.equal(view().draft, undefined, 'source and rendered result settle the draft')
+  await writeFile(join(root, 'shadow.js'), code)
+  await islands.refresh('chat')
+  await islands.interact(command('draft', { y: 0.1 }))
+  await islands.interact(command('apply-draft'))
+  await writeFile(join(root, 'shadow.js'), code.replace('LIGHT_Y = -0.5', 'LIGHT_Y = 0.1'))
+  await islands.settle('chat', true, 'draft-turn-3')
+  assert.equal(
+    view().draft?.submitted,
+    false,
+    'unmapped literal does not remain endlessly submitted'
+  )
+  assert.equal(
+    view().draft?.conflict,
+    false,
+    'matching applied source keeps Retry and Revert available'
+  )
+  assert.match(view().notice, /no rendered-value check/)
+  await islands.interact(command('apply-draft'))
+  assert.equal(submittedDrafts.length, 4, 'retry is one explicit agent operation')
+  await islands.settle('chat', false, 'draft-turn-4')
+  assert.equal(view().draft?.submitted, false, 'failed retry keeps the pending draft')
+  await islands.interact(command('revert-draft'))
+  await writeFile(join(root, 'shadow.js'), code)
+  await islands.refresh('chat')
+  await islands.interact(command('draft', { x: 0.6 }))
+  await islands.interact(command('draft-reset'))
+  assert.equal(await source(), code, 'Reset does not bypass draft Apply')
+  assert.equal(view().fields.find((field) => field.id === 'x').value, 0)
+  await islands.interact(command('revert-draft'))
+  assert.equal(view().draft, undefined)
+  assert.equal(await source(), code, 'Revert draft does not write source')
+  await islands.interact(command('draft', { x: 0.8 }))
+  await writeFile(join(root, 'shadow.js'), code.replace('LIGHT_X = 0', 'LIGHT_X = 0.1'))
+  await islands.refresh('chat')
+  assert.equal(view().draft.conflict, true)
+  await assert.rejects(islands.interact(command('apply-draft')), /Source changed/)
+  assert.equal(view().draft.count, 1, 'failed Apply retains the unsatisfied draft')
+  await islands.interact(command('revert-draft'))
+  await writeFile(join(root, 'shadow.js'), code)
+  await islands.refresh('chat')
+  await islands.interact(command('draft', { x: 0.8 }))
+  await writeFile(join(root, 'shadow.js'), 'const unrelated = 1;\n')
+  await islands.refresh('chat')
+  assert.equal(view().status, 'disabled', 'removed bindings disable the island')
+  await islands.interact(command('undo-draft'))
+  assert.equal(view().draft, undefined, 'Undo can dismiss a draft with broken bindings')
+  await writeFile(join(root, 'shadow.js'), code)
+  await islands.refresh('chat')
+  await islands.interact(command('draft', { x: 0.8 }))
+  await writeFile(join(root, 'shadow.js'), 'const unrelated = 1;\n')
+  await islands.refresh('chat')
+  await islands.interact(command('revert-draft'))
+  assert.equal(view().draft, undefined, 'Revert can dismiss a draft with broken bindings')
+  await writeFile(join(root, 'shadow.js'), code)
+  await islands.refresh('chat')
   const oldCommand = command('commit', { x: 0.3, y: 0.8 })
   await islands.interact(oldCommand)
   assert.match(await source(), /LIGHT_X = 0.3;\nconst LIGHT_Y = 0.8/)
@@ -439,6 +557,239 @@ try {
     assert.deepEqual(result.flatMap((b) => b.params).sort(), groups.flat().sort())
   }
   assert.equal(evaluations, 2)
+  // The actual chat runtime uses this fixed preview transport. Only a declared
+  // computed opacity on the matching source-stamped element can confirm Apply.
+  const revisionStamp = (code) => {
+    const normalized = code.includes('data-trezi-revision')
+      ? code.replace(
+          /data-trezi-revision', '[a-f0-9]{64}/,
+          `data-trezi-revision', '${'0'.repeat(64)}`
+        )
+      : code.replace(
+          /(card\.setAttribute\('data-trezi-source', '[^\n]+\n)/,
+          `$1card.setAttribute('data-trezi-revision', '${'0'.repeat(64)}');\n`
+        )
+    return normalized.replace('0'.repeat(64), sourceHash(normalized))
+  }
+  const opacityCode = revisionStamp(
+    "const OPACITY = 0.5;\nconst card = document.createElement('div');\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:2:1');\ncard.style.opacity = OPACITY;\ndocument.body.append(card);\n"
+  )
+  await writeFile(join(root, 'opacity.js'), opacityCode)
+  const opacityDefinition = islandDefinition({
+    manifest: {
+      file: 'opacity.js',
+      component: 'Card',
+      title: 'Card',
+      params: [
+        {
+          id: 'opacity',
+          label: 'Opacity',
+          kind: 'number',
+          min: 0,
+          max: 1,
+          apply: { strategy: 'literal', anchor: 'const OPACITY = ' },
+          rendered: { kind: 'computed-style', selector: '#card', property: 'opacity' }
+        }
+      ]
+    },
+    blocks: [{ id: 'surface', title: 'Surface', kind: 'group', params: ['opacity'] }]
+  })
+  const opacityRecord = {
+    ...opacityDefinition,
+    version: 1,
+    id: 'opacity',
+    revision: 1,
+    turn: 1,
+    engine: 'agent',
+    status: 'ready',
+    initial: { opacity: 1 }
+  }
+  const opacityRevision = (await islandSource(root, opacityRecord)).revision
+  let pageHref = 'http://127.0.0.1:7777/'
+  let renderedStamp = 'opacity.js:2:1'
+  let renderedRevision = opacityCode.match(/data-trezi-revision', '([a-f0-9]{64})/)[1]
+  let renderedValue = '0.5'
+  let startedAt = 1770000000000
+  let navigateDuringRead = false
+  previewServers.set(projectKey(root), { url: 'http://127.0.0.1:7777/', pid: 1 })
+  registerPreviewSource({
+    getUrl: () => pageHref,
+    capture: async () => null,
+    agent: {
+      evaluate: async (script, world) => {
+        assert.equal(world, 'preview')
+        if (script === PAGE_PROBE) return { href: pageHref, startedAt, ready: 'complete' }
+        assert.match(script, /querySelectorAll/)
+        const observedStart = startedAt
+        if (navigateDuringRead) startedAt += 1000
+        return {
+          href: pageHref,
+          startedAt: observedStart,
+          values: [{ stamp: renderedStamp, revision: renderedRevision, value: renderedValue }]
+        }
+      }
+    }
+  })
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, opacityRevision),
+    true,
+    'production callback links the exact source constant to the target opacity in the current preview session'
+  )
+  const unstampedEdit = `${opacityCode}const NOTE = 'new source';\n`
+  await writeFile(join(root, 'opacity.js'), unstampedEdit)
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, sourceHash(unstampedEdit)),
+    false,
+    'an edited source whose revision stamp was not updated remains unconfirmed'
+  )
+  const samePositionEdit = revisionStamp(unstampedEdit)
+  await writeFile(join(root, 'opacity.js'), samePositionEdit)
+  const samePositionRevision = (await islandSource(root, opacityRecord)).revision
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, samePositionRevision),
+    false,
+    'an old frame with the requested opacity and creation position cannot prove the edited source loaded'
+  )
+  renderedRevision = samePositionEdit.match(/data-trezi-revision', '([a-f0-9]{64})/)[1]
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, samePositionRevision),
+    true,
+    'Apply settles only after the rendered frame carries the matching source revision'
+  )
+  renderedRevision = opacityCode.match(/data-trezi-revision', '([a-f0-9]{64})/)[1]
+  await writeFile(join(root, 'opacity.js'), opacityCode)
+  for (const invalid of [
+    `${opacityCode}const junk = 'unterminated`,
+    `${opacityCode}const other = ;`,
+    `${opacityCode}const OPACITY = 0.5;`
+  ]) {
+    await writeFile(join(root, 'opacity.js'), invalid)
+    await assert.rejects(
+      islandSource(root, opacityRecord),
+      /doesn't parse right now/,
+      'malformed or duplicate bindings are not admitted as editable source'
+    )
+    assert.equal(
+      await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, sourceHash(invalid)),
+      false,
+      'an old preview with the same stamp and value cannot settle malformed source'
+    )
+  }
+  await writeFile(join(root, 'opacity.js'), opacityCode)
+  const shadowedDocumentCode = `${opacityCode}const document = 1;\n`
+  await writeFile(join(root, 'opacity.js'), shadowedDocumentCode)
+  assert.equal(
+    await confirmIslandRendered(
+      root,
+      opacityRecord,
+      { opacity: 0.5 },
+      sourceHash(shadowedDocumentCode)
+    ),
+    false,
+    'a local document binding cannot make an old rendered node prove a failed creation call'
+  )
+  await writeFile(join(root, 'opacity.js'), opacityCode)
+  const unrelatedCode =
+    "const OPACITY = 0.5;\nconst other = document.createElement('div');\nother.id = 'other';\nother.style.opacity = OPACITY;\nconst card = document.createElement('div');\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:5:1');\ncard.style.opacity = 0.5;\ndocument.body.append(card);\n"
+  await writeFile(join(root, 'opacity.js'), revisionStamp(unrelatedCode))
+  const unrelatedRevision = (await islandSource(root, opacityRecord)).revision
+  renderedStamp = 'opacity.js:5:1'
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, unrelatedRevision),
+    false,
+    'a matching same-file element is not proof that the controlled literal feeds its opacity'
+  )
+  await writeFile(join(root, 'opacity.js'), opacityCode)
+  renderedStamp = 'opacity.js:2:1'
+  for (const override of [
+    "card.style.setProperty('opacity', '0.5');",
+    "card.style.cssText = 'opacity: 0.5';",
+    'const alias = card; alias.style.opacity = OPACITY;'
+  ]) {
+    await writeFile(join(root, 'opacity.js'), revisionStamp(`${opacityCode}${override}\n`))
+    const overrideRevision = (await islandSource(root, opacityRecord)).revision
+    assert.equal(
+      await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, overrideRevision),
+      false,
+      `a later or aliased style writer stays unsupported: ${override}`
+    )
+  }
+  const defaultResetCode =
+    "const OPACITY = 1;\nconst card = document.createElement('div');\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:2:1');\ncard.style.opacity = OPACITY;\ncard.style.cssText = 'color: red';\ndocument.body.append(card);\n"
+  await writeFile(join(root, 'opacity.js'), revisionStamp(defaultResetCode))
+  const defaultResetRevision = (await islandSource(root, opacityRecord)).revision
+  renderedValue = '1'
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 1 }, defaultResetRevision),
+    false,
+    'cssText that clears inline opacity cannot confirm the coincidentally matching default 1'
+  )
+  const scriptResetCode =
+    "const OPACITY = 1;\nconst card = document.createElement('div');\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:2:1');\ncard.style.opacity = OPACITY;\ndocument.body.append(card);\nconst script = document.createElement('script');\nscript.textContent = \"document.querySelector('#card').style.opacity = '0'\";\ndocument.body.append(script);\n"
+  await writeFile(join(root, 'opacity.js'), revisionStamp(scriptResetCode))
+  const scriptResetRevision = (await islandSource(root, opacityRecord)).revision
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 1 }, scriptResetRevision),
+    false,
+    'an executable element cannot reset opacity and confirm a coincidentally matching default'
+  )
+  renderedValue = '0.5'
+  const multiDeclarationCode =
+    "const OPACITY = 0.5;\nconst other = document.createElement('div'), card = document.createElement('div');\nother.id = 'other';\nother.style.opacity = OPACITY;\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:2:1');\ncard.style.opacity = OPACITY;\ndocument.body.append(card);\n"
+  await writeFile(join(root, 'opacity.js'), revisionStamp(multiDeclarationCode))
+  const multiDeclarationRevision = (await islandSource(root, opacityRecord)).revision
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, multiDeclarationRevision),
+    false,
+    'two creations in one declaration cannot share a source-node stamp'
+  )
+  const sameLine =
+    "const OPACITY = 0.5;\nconst other = document.createElement('div'); const card = document.createElement('div');\n"
+  const cardColumn = sameLine.split('\n')[1].indexOf('const card') + 1
+  const sameLineCode = `${sameLine}other.id = 'other';\nother.style.opacity = OPACITY;\ncard.id = 'card';\ncard.setAttribute('data-trezi-source', 'opacity.js:2:${cardColumn}');\ncard.style.opacity = OPACITY;\ndocument.body.append(card);\n`
+  await writeFile(join(root, 'opacity.js'), revisionStamp(sameLineCode))
+  const sameLineRevision = (await islandSource(root, opacityRecord)).revision
+  renderedStamp = 'opacity.js:2:1'
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, sameLineRevision),
+    false,
+    'an unrelated same-line creation cannot impersonate the linked target by file and line'
+  )
+  await writeFile(join(root, 'opacity.js'), opacityCode)
+  renderedStamp = 'opacity.js:2:1'
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, 'stale-revision'),
+    false,
+    'the same rendered frame cannot settle a stale source revision'
+  )
+  renderedStamp = 'another-file.js:1:1'
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, opacityRevision),
+    false,
+    'a matching rendered value from another source cannot settle Apply'
+  )
+  renderedStamp = 'opacity.js:2:1'
+  renderedValue = '1'
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, opacityRevision),
+    false,
+    'source-only success cannot substitute for the rendered value'
+  )
+  renderedValue = '0.5'
+  navigateDuringRead = true
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, opacityRevision),
+    false,
+    'a frame that navigates during readback cannot settle Apply'
+  )
+  navigateDuringRead = false
+  pageHref = 'http://127.0.0.1:7778/'
+  assert.equal(
+    await confirmIslandRendered(root, opacityRecord, { opacity: 0.5 }, opacityRevision),
+    false,
+    'another project preview is rejected even with the expected value and stamp'
+  )
+  previewServers.delete(projectKey(root))
   assert.deepEqual(
     chosen.map((b) => b.id),
     ['layers', 'light']

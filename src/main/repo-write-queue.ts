@@ -1,4 +1,4 @@
-import { treziLiveEffect } from './live-change-watch'
+import { type EffectPath, treziLiveEffect } from './live-change-watch'
 import { repositoryOwner } from './repository-owner'
 
 /**
@@ -14,6 +14,10 @@ import { repositoryOwner } from './repository-owner'
  * What an operation changes in the live checkout is Trezi's own effect, never reported
  * as an outside change by a running turn's watch (`live-change-watch.ts`, LKM-215).
  */
-export function enqueueRepoWrite<T>(repoRoot: string, operation: () => Promise<T>): Promise<T> {
-  return repositoryOwner().withLease(repoRoot, () => treziLiveEffect(repoRoot, operation))
+export function enqueueRepoWrite<T>(
+  repoRoot: string,
+  operation: () => Promise<T>,
+  affected?: (result: T) => EffectPath[]
+): Promise<T> {
+  return repositoryOwner().withLease(repoRoot, () => treziLiveEffect(repoRoot, operation, affected))
 }
