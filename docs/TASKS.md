@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-530 — System monospace in top bar
+
+- [x] Use system monospace at existing sizes and weights for chat title, preview address and branch/status text.
+- [x] Extend the toolbar inspection fixture with font, size, glass and fit assertions; add a focused Publish control fixture for idle, busy and disabled states.
+- [x] Render Publish in monospace with the authorized custom AppKit glass control while keeping its menu, spinner, action and enablement semantics.
+- [ ] Manager: exact-head CI, independent review and post-merge native inspection.
+
 ## LKM-527 — Native suite failure on main a8687a1b6a94
 
 - [x] Wait for the manual chat collapse to reach its final native layout before asserting status placement, so the smoke restores its window and sidebar state.

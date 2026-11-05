@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-04 — LKM-530 top bar typography
+
+- The chat title, preview address and branch/status label now use native system monospace at their existing sizes and weights. The loading title remains fixed width; address truncation and branch spacing use their actual font. Publish remains a standard native `NSMenuToolbarItem`, whose public API has no font property; the trigger's typography needs a product choice if its glass and action behavior must remain native.
+- Follow-up authorization resolves Publish with a custom glass-backed AppKit segmented control. Its primary segment uses system monospace and still dispatches the toolbar Publish action; the chevron opens the existing menu, and an active publish routes the primary segment to that menu. The original spinner frames, menu entries and enablement remain. The toolbar fixture now checks the Publish font, size, glass and label fit; post-merge rendered inspection remains required.
+
 ## 2026-11-04 — LKM-527 native suite timing and glass evidence repair
 
 - The chat-gate smoke now waits for the native collapse animation to finish before checking the preview status frame. The earlier assertion ran while the chat column was already hidden but the layout fraction was still moving, aborting the check before its window and sidebar restoration and cascading into Settings, core and chat failures.
