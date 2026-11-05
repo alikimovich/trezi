@@ -10,6 +10,14 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Added
+
+- In Selection mode, a selected element shows draggable padding and gap handles that preview instantly and stage Styles drafts for one explicit Apply (LKM-541).
+
+### Changed
+
+- Closing Layers with Selection mode off now clears the selection picked from Layers; with Selection mode on it only hides the panel (LKM-541).
+
 ## [0.14.3] - 2026-11-05
 
 ### Changed

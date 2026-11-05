@@ -41,6 +41,7 @@ import {
   LAYERS_HOVER,
   LAYERS_READ,
   LAYERS_READ_REPLY,
+  PREVIEW_LAYERS_RELEASED as LAYERS_RELEASED,
   LAYERS_SELECT,
   LAYERS_SET_WATCH,
   PREVIEW_PICKED as PICKED,
@@ -61,6 +62,7 @@ import {
   PREVIEW_SET_PINS as SET_PINS,
   PREVIEW_SET_SPEED as SET_SPEED,
   PREVIEW_SET_STATUS as SET_STATUS,
+  PREVIEW_SPACING_DRAFT as SPACING_DRAFT,
   STYLES_CLEAR_PREVIEW,
   STYLES_PREVIEW,
   STYLES_READ,
@@ -85,6 +87,7 @@ import {
 import { formatDistance, type MeasureLine, type MeasureRect, measureRects } from './measure'
 import { createNativeCover } from './native-cover'
 import { createOverlayGuides } from './overlay-guides'
+import { createSpacingHandles } from './spacing-handles'
 import { sendPageSpeed } from './speed-control'
 import { activeDeclarations, varRefName } from './style-provenance'
 import { watchStyles } from './style-watch'
@@ -265,6 +268,9 @@ function ensureOverlay(): void {
   // Persistent selection outlines (behind the hover box + composer).
   const sel = document.createElement('div')
   sel.style.cssText = 'position:fixed;inset:0;pointer-events:none;'
+  // Selection-mode spacing grips (LKM-541); only the grips take the pointer.
+  const grips = document.createElement('div')
+  grips.style.cssText = 'position:fixed;inset:0;pointer-events:none;'
 
   // Alt/Option spacing measurements (rebuilt per hover — see drawMeasure).
   const meas = document.createElement('div')
@@ -414,13 +420,14 @@ function ensureOverlay(): void {
   // discoverable form of the double-click-to-edit gesture.
   toolbar.append(commentBtn, inputWrap, editBtn, propsBtn, threeDBtn, codeBtn, separator, deleteBtn)
 
-  shadow.append(sel, box, guideMeas, meas, label, pins, hint, toolbar, style)
+  shadow.append(sel, grips, box, guideMeas, meas, label, pins, hint, toolbar, style)
   document.documentElement.appendChild(host)
   overlayHost = host
   overlayBox = box
   overlayLabel = label
   pinsLayer = pins
   selLayer = sel
+  spacingLayer = grips
   measureLayer = meas
   guideLayer = guideMeas
   hintEl = hint
@@ -502,12 +509,36 @@ function setEditAction(): void {
  */
 let pickedElements: Element[] = []
 
+// LKM-541: the grips of the one selected element while Selection mode is on. A drag
+// previews through the Styles stash; release sends one draft for the inspector Apply.
+let spacingLayer: HTMLDivElement | null = null
+// Props whose stash entry the current gesture created, so a cancel can drop it again.
+const gestureFresh = new Set<string>()
+const spacing = createSpacingHandles({
+  layer: () => spacingLayer,
+  enabled: () => active && !editing && !commenting && !threeD.active(),
+  preview: (el, prop, value) => {
+    if (!(styleStashEl === el && styleOriginals.has(prop))) gestureFresh.add(prop)
+    stashOriginal(el, prop)
+    el.style.setProperty(prop, value)
+  },
+  restore: (el, prop, before) => {
+    if (gestureFresh.delete(prop)) restoreOriginal(prop)
+    else if (el.isConnected) el.style.setProperty(prop, before)
+  },
+  commit: (prop, value) => {
+    gestureFresh.delete(prop)
+    ipcRenderer.send(SPACING_DRAFT, { prop, value })
+  }
+})
+
 function setSelectionHighlight(el: Element | null, group?: Element[]): void {
   pickedElements = group ?? (el ? [el] : [])
   ensureOverlay()
   if (!selLayer) return
   selLayer.textContent = ''
   selEls = []
+  if (!el) spacing.target(null)
   // The native rulers show the selection's extent; reported on the next frame.
   overlayGuides.report()
   if (!el) return
@@ -525,6 +556,7 @@ function setSelectionHighlight(el: Element | null, group?: Element[]): void {
     }
   }
   selEls = els
+  spacing.target(group && group.length > 1 ? null : el, els.length)
   for (let i = 0; i < els.length; i++) {
     const b = document.createElement('div')
     b.setAttribute('data-trezi-selbox', '')
@@ -583,6 +615,7 @@ function positionSelection(): void {
       badge.style.display = 'none'
     }
   }
+  spacing.position()
   overlayGuides.report()
 }
 
@@ -1041,8 +1074,10 @@ function isValidFingerprint(fp: unknown): fp is LayerFingerprint {
  * Ignored while an inline edit/comment composer is open, same guard `onMove`
  * uses for HMR self-healing, so a Layers pick can't step on it.
  */
-function layersSelect(path: number[], fingerprint: LayerFingerprint): void {
+function layersSelect(path: number[], fingerprint: LayerFingerprint, fromRow = false): void {
   if (editing || commenting) return
+  // LKM-541: a row pick that arrives after Layers closed with Select off is stale.
+  if (fromRow && !active && !layersOpen) return
   threeD.close()
   const el = resolveLayerElement(path, fingerprint)
   if (!el) return
@@ -1050,6 +1085,7 @@ function layersSelect(path: number[], fingerprint: LayerFingerprint): void {
   resetInput()
   showToolbar(el)
   setSelectionHighlight(el)
+  layersTransient = fromRow && !active
 }
 
 /** A Layers row hover — the transient hover box, not the persistent selection. */
@@ -1063,6 +1099,9 @@ function layersHover(path: number[] | null, fingerprint: LayerFingerprint | null
   else hideOverlay()
 }
 
+// Layers is open, and the selection came from one of its rows while Select was off.
+let layersOpen = false
+let layersTransient = false
 let layersObserver: MutationObserver | null = null
 let layersDebounceTimer: ReturnType<typeof setTimeout> | null = null
 let layersFirstMutationAt = 0
@@ -1100,6 +1139,18 @@ function onLayersMutation(): void {
  * mutation-callback volume on a busy page for nothing structural.
  */
 function setLayersWatch(on: boolean): void {
+  layersOpen = on
+  // LKM-541: closing Layers with Select off drops the row's transient selection; with
+  // Select on it stays. Sent after any pick of ours, so main clears in order.
+  if (!on && layersTransient && !active) {
+    selectedEl = null
+    threeD.close()
+    hideToolbar()
+    setSelectionHighlight(null)
+    clearMeasure()
+    ipcRenderer.send(LAYERS_RELEASED)
+  }
+  if (!on) layersTransient = false
   if (on) {
     if (layersObserver || !document.body) return
     layersObserver = new MutationObserver(onLayersMutation)
@@ -1473,6 +1524,7 @@ function startTextEdit(el: HTMLElement): void {
   sel?.addRange(range)
   el.addEventListener('blur', commitEdit, { once: true })
   el.addEventListener('keydown', onEditKey, true)
+  spacing.position()
 }
 
 function endEdit(): HTMLElement | null {
@@ -1486,6 +1538,7 @@ function endEdit(): HTMLElement | null {
   el.style.outline = editOutline
   window.getSelection()?.removeAllRanges()
   el.blur()
+  spacing.position()
   return el
 }
 
@@ -1746,6 +1799,14 @@ function onKey(e: KeyboardEvent): void {
     threeD.key(e)
     return
   }
+  // Escape mid-drag cancels only the spacing drag (inline value restored): this runs
+  // before blockPageInput and the Escape branch below, which would exit Selection mode.
+  if (e.key === 'Escape' && e.isTrusted && spacing.dragging()) {
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    spacing.cancel()
+    return
+  }
   // Stop page shortcuts at window capture, but retain the browser's editing
   // defaults (caret movement, selection, typing, clipboard and IME).
   if (blockPageInput(e)) {
@@ -1827,6 +1888,9 @@ function setActive(next: boolean): void {
   if (active) {
     ensureOverlay()
     document.documentElement.style.cursor = 'crosshair'
+    // A Layers pick made while Select was off now belongs to Selection mode (LKM-541).
+    layersTransient = false
+    spacing.position()
   } else {
     hover.clear()
     lastHovered = null
@@ -1838,6 +1902,7 @@ function setActive(next: boolean): void {
     clearMeasure()
     selectedEl = null
     document.documentElement.style.cursor = ''
+    layersTransient = false
   }
 }
 
@@ -2192,6 +2257,7 @@ if (!IS_SIM_BRIDGE) {
   // element-scoped toolbar + persistent outlines with it.
   ipcRenderer.on(CLEAR_SELECTED, () => {
     selectedEl = null
+    layersTransient = false
     threeD.close()
     hideToolbar()
     setSelectionHighlight(null)
@@ -2226,10 +2292,13 @@ if (!IS_SIM_BRIDGE) {
     if (typeof p?.id !== 'number') return
     ipcRenderer.send(LAYERS_READ_REPLY, { id: p.id, snapshot: buildLayersSnapshot() })
   })
-  ipcRenderer.on(LAYERS_SELECT, (_e, p: { path?: unknown; fingerprint?: unknown }) => {
-    if (!Array.isArray(p?.path) || !isValidFingerprint(p?.fingerprint)) return
-    layersSelect(p.path as number[], p.fingerprint)
-  })
+  ipcRenderer.on(
+    LAYERS_SELECT,
+    (_e, p: { path?: unknown; fingerprint?: unknown; from?: unknown }) => {
+      if (!Array.isArray(p?.path) || !isValidFingerprint(p?.fingerprint)) return
+      layersSelect(p.path as number[], p.fingerprint, p.from === 'layers')
+    }
+  )
   ipcRenderer.on(LAYERS_HOVER, (_e, p: { path?: unknown; fingerprint?: unknown } | null) => {
     if (!p || !Array.isArray(p.path) || !isValidFingerprint(p.fingerprint)) {
       layersHover(null, null)

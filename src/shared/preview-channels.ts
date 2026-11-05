@@ -25,6 +25,8 @@ export const PREVIEW_TOOLBAR_ACTION = 'trezi:preview:toolbar-action' // → main
 export const PREVIEW_CLEAR_SELECTED = 'trezi:preview:clear-selected' // → preload (pill ×, send)
 export const PREVIEW_READINESS = 'trezi:preview:readiness' // → main ({stamps})
 export const PREVIEW_TEXT_EDIT = 'trezi:preview:text-edit' // → main ({source, text})
+export const PREVIEW_SPACING_DRAFT = 'trezi:preview:spacing-draft' // → main ({prop, value}) handle released
+export const PREVIEW_LAYERS_RELEASED = 'trezi:preview:layers-released' // → main (Layers closed, Select off)
 export const PREVIEW_THREE_D_STATE = 'trezi:preview:three-d-state' // → host (bounded scene state)
 export const PREVIEW_THREE_D_ACTION = 'trezi:preview:three-d-action' // → preload (session/revision action)
 
