@@ -21,6 +21,8 @@ export interface NativeChatMessage {
     url?: string
   }[]
   selection?: { tag: string; ident: string; source: string | null }
+  /** LKM-555: the quoted excerpts and comments a user message replied with (`chat-quotes.ts`). */
+  quotes?: import('./chat-quotes').SentQuote[]
   revertGroup?: string
   /** A comment agent's result (LKM-178): shown collapsed as "<title>: <line>", where
    *  `line` names the comment; `detail` (partial-changes note and summary) on expand. */
@@ -153,6 +155,8 @@ export interface NativeChatState {
     suggestions: { title: string; description: string; active: boolean }[]
     /** LKM-181: island references (`#island-shadow-2`) added by Copy reference. */
     references: string[]
+    /** LKM-555: quote cards; `source` is false once the quoted message left the transcript. */
+    quotes: { id: string; message: string; excerpt: string; comment: string; source: boolean }[]
     choices: {
       label: string
       value: string

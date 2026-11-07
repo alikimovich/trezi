@@ -14,7 +14,7 @@ import { agentCard } from './chat-agent-card'
 import { menuItems } from './chat-island-refs'
 import { loginCard, startLoginCard } from './chat-login'
 import { decisionCard, peerCard } from './chat-peer-card'
-import { queueNote, sendBlock } from './chat-queue'
+import { queuedText, queueNote, sendBlock } from './chat-queue'
 import { recoveryCards } from './chat-recovery'
 import type { StartFlow } from './chat-start'
 import type { Chat } from './chat-state'
@@ -294,7 +294,8 @@ export function snapshot(
   for (const spawn of context?.spawns ?? []) cards.push(agentCard(spawn))
   const currentActivity = activity(chat)
   const thinking = atWork(currentActivity)
-  const stop = chat.isRunning && !chat.text.trim() && !chat.attachments.length
+  const stop =
+    chat.isRunning && !chat.text.trim() && !chat.attachments.length && !chat.quotes?.length
   const shown = collapse(chat, cards, currentActivity)
   return {
     ready,
@@ -310,7 +311,7 @@ export function snapshot(
       ...(home ? { home } : {}),
       queue: chat.queue.map((q) => ({
         id: `queued-${q.id}`,
-        text: q.text,
+        text: queuedText(q),
         attachments: q.attachments.length,
         ...(q.chatUiId ? { chatUiId: q.chatUiId } : {})
       })),
@@ -331,7 +332,9 @@ export function snapshot(
       enabled:
         ready &&
         (!(start?.centered || start?.planning) || start.ready) &&
-        (stop || (!chat.switching && (!!chat.text.trim() || !!chat.attachments.length))),
+        (stop ||
+          (!chat.switching &&
+            (!!chat.text.trim() || !!chat.attachments.length || !!chat.quotes?.length))),
       sendLabel: stop ? 'Stop' : sendBlock(chat) ? 'Queue message' : 'Send message',
       context: (context?.selection ?? chat.draftSelection)?.label ?? '',
       attachments: chat.attachments.map((a) => ({
@@ -346,6 +349,15 @@ export function snapshot(
         active: index === chat.menuIndex
       })),
       references: chat.references ?? [],
+      // LKM-555: the quote cards, each with its source message and exact excerpt.
+      quotes: (chat.quotes ?? []).map((quote) => ({
+        id: quote.id,
+        message: quote.message,
+        excerpt: quote.excerpt,
+        comment: quote.comment,
+        // The source left the transcript (a reload): the card still sends its excerpt.
+        source: chat.messages.some((m) => m.id === quote.message)
+      })),
       choices: [
         {
           label: 'Provider',

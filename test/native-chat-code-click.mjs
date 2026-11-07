@@ -8,7 +8,8 @@ if (process.platform !== 'darwin') {
   const binary = swiftBuild('chat-code-click', [
     'test/fixtures/chat-code-click/main.swift',
     'src/native/ChatRichText.swift',
-    'src/native/ChatTextView.swift'
+    'src/native/ChatTextView.swift',
+    'src/native/ChatTextReply.swift'
   ])
   console.log(runFixture(binary).trim())
 }

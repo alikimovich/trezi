@@ -56,6 +56,9 @@ final class NativeComposer: NSView, NSTextViewDelegate {
     var references: [NSButton] = []
     let attachments = ComposerAttachments()
     var attachmentsHeight: NSLayoutConstraint!
+    /// LKM-555: quote cards from Reply on chat text (ComposerQuotes.swift).
+    let quotes = ComposerQuotes()
+    var quotesHeight: NSLayoutConstraint!
     let skillList = NSScrollView()
     let skillRows = NSView()
     var skillEntries: [[String: Any]] = []
@@ -161,15 +164,18 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         skillList.wantsLayer = true; skillList.layer?.cornerRadius = 12
         skillList.layer?.borderWidth = 1; skillList.layer?.borderColor = NSColor.separatorColor.cgColor
         skillList.setAccessibilityLabel("Skills and commands"); skillList.isHidden = true
-        for view in [chips, attachments, scroll, controls] { view.translatesAutoresizingMaskIntoConstraints = false; content.addSubview(view) }
+        configureQuotes()
+        for view in [chips, quotes, attachments, scroll, controls] { view.translatesAutoresizingMaskIntoConstraints = false; content.addSubview(view) }
         chipsHeight = chips.heightAnchor.constraint(equalToConstant: 0)
+        quotesHeight = quotes.heightAnchor.constraint(equalToConstant: 0)
         attachmentsHeight = attachments.heightAnchor.constraint(equalToConstant: 0)
         formTop = backdrop.topAnchor.constraint(equalTo: topAnchor)
         NSLayoutConstraint.activate([
             queuedMessages.topAnchor.constraint(equalTo: topAnchor), queuedMessages.leadingAnchor.constraint(equalTo: leadingAnchor, constant: ComposerQueue.inset), queuedMessages.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -ComposerQueue.inset), queuedMessages.bottomAnchor.constraint(equalTo: backdrop.topAnchor, constant: ComposerQueue.overlap),
             formTop, backdrop.leadingAnchor.constraint(equalTo: leadingAnchor), backdrop.trailingAnchor.constraint(equalTo: trailingAnchor), backdrop.bottomAnchor.constraint(equalTo: bottomAnchor),
             chips.topAnchor.constraint(equalTo: content.topAnchor, constant: 10), chips.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12), chips.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -12), chipsHeight,
-            attachments.topAnchor.constraint(equalTo: chips.bottomAnchor), attachments.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12), attachments.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12), attachmentsHeight,
+            quotes.topAnchor.constraint(equalTo: chips.bottomAnchor), quotes.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12), quotes.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12), quotesHeight,
+            attachments.topAnchor.constraint(equalTo: quotes.bottomAnchor), attachments.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12), attachments.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12), attachmentsHeight,
             scroll.topAnchor.constraint(equalTo: attachments.bottomAnchor, constant: 4), scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12), scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -12), scroll.bottomAnchor.constraint(equalTo: controls.topAnchor, constant: -5),
             controls.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 10), controls.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -10), controls.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -8), controls.heightAnchor.constraint(equalToConstant: 30)
         ])
@@ -178,7 +184,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         isHidden = true
     }
     /// Measure using the same TextKit wrapping, padding and font as the editor.
-    func preferredHeight(for value: String, width: CGFloat, availableHeight: CGFloat, hasContext: Bool, hasAttachments: Bool = false, queueHeight: CGFloat = 0) -> CGFloat {
+    func preferredHeight(for value: String, width: CGFloat, availableHeight: CGFloat, hasContext: Bool, hasAttachments: Bool = false, hasQuotes: Bool = false, queueHeight: CGFloat = 0) -> CGFloat {
         let storage = NSTextStorage(string: value, attributes: [.font: text.font ?? NSFont.systemFont(ofSize: 14)])
         let manager = NSLayoutManager()
         // A legacy scroller can retain its gutter after a capped draft. Measure
@@ -197,7 +203,8 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         // 8 bottom inset + 30 controls (including Send) + 14 top + 5 text/row gap.
         let desired = max(128, textHeight + 57 + (hasContext ? 22 : 0)) + (hasAttachments ? ComposerAttachments.rowHeight : 0)
         let limit = min(368, max(128, availableHeight * 0.5))
-        return min(availableHeight, min(desired, limit) + queueHeight)
+        // The quote strip is added past the cap, so cards never squeeze the message field.
+        return min(availableHeight, min(desired, limit) + (hasQuotes ? ComposerQuotes.rowHeight : 0) + queueHeight)
     }
     override func layout() {
         super.layout()
@@ -291,6 +298,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         text.isEditable = look == nil
         for view in [scroll, attachments] as [NSView] { view.alphaValue = CGFloat(look?.contentAlpha ?? 1) }
         attachments.locked = look != nil
+        quotes.locked = look != nil
         plus.isEnabled = look == nil
         let label = look?.label ?? state["sendLabel"] as? String ?? "Send"
         sendButton.isEnabled = state["ready"] as? Bool == true && (look.map(\.stop) ?? (state["enabled"] as? Bool ?? false))
@@ -438,6 +446,8 @@ final class NativeComposer: NSView, NSTextViewDelegate {
         updateReferences(next["references"] as? [String] ?? [])
         attachments.update(next["attachments"] as? [[String: Any]] ?? [])
         attachmentsHeight.constant = attachments.count > 0 ? ComposerAttachments.rowHeight : 0
+        quotes.update(next["quotes"] as? [[String: Any]] ?? [])
+        quotesHeight.constant = quotes.count > 0 ? ComposerQuotes.rowHeight : 0
         let empty = context.isHidden && references.isEmpty
         chips.isHidden = empty; chipsHeight.constant = empty ? 0 : 22
         skillEntries = next["suggestions"] as? [[String: Any]] ?? []
@@ -488,7 +498,7 @@ final class NativeComposer: NSView, NSTextViewDelegate {
             item.target = self; item.representedObject = payload; popup.menu?.addItem(item)
         }
     }
-    func inspect() -> [String: Any] { layoutSubtreeIfNeeded(); return ["attachmentPreviews":attachments.inspect(), "queueCount":queuedMessages.count, "queue":state["queue"] ?? [], "queuePaused":state["queuePaused"] ?? false, "queueHeight":formTop.constant, "queueInset":queuedMessages.frame.minX, "queueOverlap":content.convert(content.bounds, to: self).maxY - queuedMessages.frame.minY, "buttonBeam":buttonBeam.active, "sending":["pending":sending.pending ?? 0, "shown":sending.shown, "cancellable":sending.cancellable, "editable":text.isEditable, "contentAlpha":scroll.alphaValue, "attachmentsLocked":attachments.locked, "sendLabel":sendButton.accessibilityLabel() ?? ""], "readyBeam":readyBeam.active, "welcomedChat":welcomedChats.contains(chat), "pickerWidths":pickers.mapValues { $0.bounds.width }, "pickersPlain":pickers.values.allSatisfy { !$0.isBordered }, "attachIsPlus":plus.image != nil && !plus.isBordered && !(plus is NSPopUpButton), "controlsBelowForm":controls.frame.maxY < content.convert(content.bounds, to: self).minY, "sendInsideForm":sendButton.superview === content, "skillListVisible":!skillList.isHidden, "skillCount":skillEntries.count, "inputTopInset":content.bounds.maxY - scroll.frame.maxY, "sendRightInset":content.bounds.maxX - sendButton.convert(sendButton.bounds, to: content).maxX, "autohidesScrollers":scroll.autohidesScrollers, "contentWidth":content.bounds.width, "inputHeight":scroll.bounds.height, "documentHeight":text.bounds.height, "sendWidth":sendButton.bounds.width, "visible":!isHidden, "glass":glass, "text":text.string, "chat":chat, "enabled":sendButton.isEnabled, "revision":revision, "choices":state["choices"] ?? [], "attachments":state["attachments"] ?? [], "windowKey":window?.isKeyWindow ?? false, "appActive":NSApp.isActive, "inputIsFirstResponder":window?.firstResponder === text, "bounds":["x":frame.minX,"y":frame.minY,"width":frame.width,"height":frame.height]] }
+    func inspect() -> [String: Any] { layoutSubtreeIfNeeded(); return ["quotes":quotes.inspect(), "attachmentPreviews":attachments.inspect(), "queueCount":queuedMessages.count, "queue":state["queue"] ?? [], "queuePaused":state["queuePaused"] ?? false, "queueHeight":formTop.constant, "queueInset":queuedMessages.frame.minX, "queueOverlap":content.convert(content.bounds, to: self).maxY - queuedMessages.frame.minY, "buttonBeam":buttonBeam.active, "sending":["pending":sending.pending ?? 0, "shown":sending.shown, "cancellable":sending.cancellable, "editable":text.isEditable, "contentAlpha":scroll.alphaValue, "attachmentsLocked":attachments.locked, "sendLabel":sendButton.accessibilityLabel() ?? ""], "readyBeam":readyBeam.active, "welcomedChat":welcomedChats.contains(chat), "pickerWidths":pickers.mapValues { $0.bounds.width }, "pickersPlain":pickers.values.allSatisfy { !$0.isBordered }, "attachIsPlus":plus.image != nil && !plus.isBordered && !(plus is NSPopUpButton), "controlsBelowForm":controls.frame.maxY < content.convert(content.bounds, to: self).minY, "sendInsideForm":sendButton.superview === content, "skillListVisible":!skillList.isHidden, "skillCount":skillEntries.count, "inputTopInset":content.bounds.maxY - scroll.frame.maxY, "sendRightInset":content.bounds.maxX - sendButton.convert(sendButton.bounds, to: content).maxX, "autohidesScrollers":scroll.autohidesScrollers, "contentWidth":content.bounds.width, "inputHeight":scroll.bounds.height, "documentHeight":text.bounds.height, "sendWidth":sendButton.bounds.width, "visible":!isHidden, "glass":glass, "text":text.string, "chat":chat, "enabled":sendButton.isEnabled, "revision":revision, "choices":state["choices"] ?? [], "attachments":state["attachments"] ?? [], "windowKey":window?.isKeyWindow ?? false, "appActive":NSApp.isActive, "inputIsFirstResponder":window?.firstResponder === text, "bounds":["x":frame.minX,"y":frame.minY,"width":frame.width,"height":frame.height]] }
     func perform(_ c: [String: Any]) {
         // Ordered steps in one main-thread turn: no snapshot can arrive between them.
         (c["steps"] as? [[String: Any]])?.forEach(perform)
@@ -500,5 +510,6 @@ final class NativeComposer: NSView, NSTextViewDelegate {
            let item = picker.itemArray.first(where: { $0.representedObject as? String == value }) { picker.select(item); pick(picker) }
         if let paths = c["files"] as? [String] { attach(paths.map { URL(fileURLWithPath: $0) }) }
         if let index = c["remove"] as? Int { attachments.removeAt(index) }
+        performQuote(c)
     }
 }

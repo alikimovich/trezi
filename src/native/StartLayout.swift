@@ -169,8 +169,9 @@ extension WorkspaceLayout {
         let input = chatState["composer"] as? [String: Any] ?? [:]
         let value = input["text"] as? String ?? ""
         let hasContext = !(input["context"] as? String ?? "").isEmpty, hasAttachments = !(input["attachments"] as? [Any] ?? []).isEmpty
+        let hasQuotes = !(input["quotes"] as? [Any] ?? []).isEmpty
         let queue = ComposerQueueHost.height(count: (input["queue"] as? [Any] ?? []).count, paused: input["queuePaused"] as? Bool ?? false, note: input["queueNote"] as? String ?? "")
-        func height(_ width: CGFloat, _ room: CGFloat) -> CGFloat { host.composer.preferredHeight(for: value, width: width, availableHeight: room, hasContext: hasContext, hasAttachments: hasAttachments, queueHeight: queue) }
+        func height(_ width: CGFloat, _ room: CGFloat) -> CGFloat { host.composer.preferredHeight(for: value, width: width, availableHeight: room, hasContext: hasContext, hasAttachments: hasAttachments, hasQuotes: hasQuotes, queueHeight: queue) }
         let docked = ChatLayout.composerFrame(in: NSRect(x: 0, y: 0, width: column, height: bounds.height), height: height(max(0, column - 2 * inset), max(0, bounds.height - inset)))
         let width = min(860, max(min(560, bounds.width - 48), bounds.width * 0.46))
         let centered = centeredComposerFrame(in: bounds, height: height(width, max(0, bounds.height * 0.6)))

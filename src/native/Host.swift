@@ -170,6 +170,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         chatColumn.wantsLayer = true; chatColumn.layer?.masksToBounds = true; canvas.addSubview(chatColumn)
         chat = NativeChat(); chatColumn.addSubview(chat)
         composer = NativeComposer(frame: .zero); chatColumn.addSubview(composer)
+        ChatTextView.reply = { [weak composer] message, segment, excerpt in composer?.reply(message: message, segment: segment, excerpt: excerpt) ?? false }
         chatDivider = NativeChatDivider(); chatDivider.isHidden = true; canvas.addSubview(chatDivider)
         chatDivider.changed = { [weak self] width in self?.nativeLayout.resized(width) }
         welcome = NativeWelcome(); welcome.frame = canvas.bounds; canvas.addSubview(welcome)

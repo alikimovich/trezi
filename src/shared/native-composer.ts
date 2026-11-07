@@ -13,6 +13,11 @@ export type NativeComposerAction = { chat: string } & (
   | { action: 'context' }
   | { action: 'choice'; label: string; value: string }
   | { action: 'suggestion' | 'remove' | 'unreference'; index: number }
+  /** LKM-555: Reply on selected text of `message` (its text `segment`): a quote card. */
+  | { action: 'quote'; message: string; segment?: number; excerpt: string }
+  /** LKM-555: a quote card's comment, as typed, or its removal. */
+  | { action: 'quote-comment'; id: string; comment: string }
+  | { action: 'unquote'; id: string }
   | {
       action: 'files'
       files: { name: string; path: string; type: string; data: string; preview?: string }[]

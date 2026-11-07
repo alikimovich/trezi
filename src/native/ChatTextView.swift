@@ -38,6 +38,8 @@ final class ChatTextView: NSTextView {
     private var pointerArea: NSTrackingArea?
     private var measured: (width: CGFloat, size: CGSize)?
     private var observer: NSObjectProtocol?
+    /// LKM-555: Reply over a settled selection (ChatTextReply.swift); nil until one is made.
+    var replyButton: NSButton?
 
     static func make() -> ChatTextView {
         let storage = NSTextStorage(), manager = NSLayoutManager()
@@ -66,13 +68,16 @@ final class ChatTextView: NSTextView {
     func show(_ next: String, streaming: Bool) {
         guard next != source, let storage = textStorage else { return }
         let previous = storage.string, appended = next.hasPrefix(source) && !source.isEmpty
+        let selection = selectedRanges.map(\.rangeValue)
+        // LKM-555: what the selection holds now, so a reparse cannot make it hold other text.
+        let selected = selection.contains(where: { $0.length > 0 }) ? selectionText : nil
         source = next
         rich = ChatRichText(markdown: next)
-        let selection = selectedRanges.map(\.rangeValue)
         storage.setAttributedString(rich.string)
         let length = storage.length
         if selection.contains(where: { $0.length > 0 }) {
             setSelectedRanges(selection.filter { $0.upperBound <= length }.map { NSValue(range: $0) }.ifEmpty([NSValue(range: NSRange(location: 0, length: 0))]), affinity: .downstream, stillSelecting: false)
+            if selectionText != selected { setSelectedRange(NSRange(location: 0, length: 0)) }
         }
         measured = nil
         // Markdown can reparse an unfinished delimiter: never replay old words.
@@ -170,6 +175,7 @@ final class ChatTextView: NSTextView {
     override func layout() {
         super.layout()
         placeCopyButtons()
+        placeReplyButton()
     }
     private func placeCopyButtons() {
         let codes = blockFrames().filter { $0.block.kind == .code }
@@ -265,6 +271,7 @@ final class ChatTextView: NSTextView {
         clickTimer?.invalidate(); clickTimer = nil
         hovered = nil
         ChatCopiedToast.dismiss(from: self)
+        replyButton?.isHidden = true
     }
 
     // MARK: Pointer (LKM-442)
@@ -332,6 +339,7 @@ final class ChatTextView: NSTextView {
     override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
         if ranges.contains(where: { $0.rangeValue.length > 0 }) { NotificationCenter.default.post(name: Self.selected, object: self) }
+        selectionSettled(stillSelecting: stillSelecting)
     }
 
     // MARK: Streaming reveal

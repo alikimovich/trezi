@@ -12,6 +12,8 @@ struct ChatMessage: Decodable, Identifiable {
     let at: Double?; let workedMs: Double?
     let attachments: [ChatAttachment]?; let selection: ChatSelection?; let revertGroup: String?
     let comment: ChatComment?; let landingCheck: ChatLandingCheck?; let liveChange: ChatLiveChange?; let incident: ChatIncident?
+    /// LKM-555: the excerpts and comments a user message replied with (ChatQuotes.swift).
+    let quotes: [ChatSentQuote]?
 }
 struct ChatAction: Decodable { let label: String; let action: String; let value: String?; let disabled: Bool? }
 struct ChatCard: Decodable, Identifiable { let id: String; let title: String; let detail: String?; let fullDetail: String?; let actions: [ChatAction]; let agent: ChatAgentInfo?; let busy: Bool? }
@@ -231,7 +233,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
         let hasContext = !(input["context"] as? String ?? "").isEmpty
         let queueHeight = ComposerQueueHost.height(count: (input["queue"] as? [Any] ?? []).count, paused: input["queuePaused"] as? Bool ?? false, note: input["queueNote"] as? String ?? "")
         let inset = ChatLayout.composerInset
-        let composerHeight = Double(composer.preferredHeight(for: value, width: max(0, width - 2 * inset), availableHeight: max(0, height - inset), hasContext: hasContext, hasAttachments: !(input["attachments"] as? [Any] ?? []).isEmpty, queueHeight: queueHeight))
+        let composerHeight = Double(composer.preferredHeight(for: value, width: max(0, width - 2 * inset), availableHeight: max(0, height - inset), hasContext: hasContext, hasAttachments: !(input["attachments"] as? [Any] ?? []).isEmpty, hasQuotes: !(input["quotes"] as? [Any] ?? []).isEmpty, queueHeight: queueHeight))
         frame = NSRect(x: x, y: y, width: width, height: max(0, height))
         if model.composerHeight != composerHeight { model.composerHeight = composerHeight }
         layoutLatestButton()
@@ -576,6 +578,7 @@ private struct NativeMessageRow: View {
                 }
                 if let selection = message.selection { Text(selection.tag + selection.ident).font(.caption.monospaced()).foregroundStyle(.secondary) }
                 if let attachments = message.attachments, !attachments.isEmpty { SentAttachments(attachments: attachments, model: model) }
+                if let quotes = message.quotes, !quotes.isEmpty { ChatSentQuotes(quotes: quotes) }
                 ForEach(Array(message.segments.enumerated()), id: \.offset) { index, segment in
                     if let island = segment.island { NativeChatIsland(island: island, model: model) }
                     else if let ui = segment.ui { NativeChatUi(payload: ui, running: running, model: model).id(ui.record?.id ?? "ui-\(index)") }
