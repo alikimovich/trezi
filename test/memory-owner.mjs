@@ -816,9 +816,23 @@ try {
     assert.equal(failed.saved, false)
     assert.match(failed.message, /Do not tell the user it was saved/)
     assert.deepEqual(bytes(dir, alpha), stored, 'a failed write changes nothing')
-    // No answer: unknown, never saved, and Bun writes nothing itself.
+    // No answer to the read: nothing was sent, so it is definitely not saved.
     pipe.hold()
-    const silent = await remember(serviceProjectMemory(pipe, 500), 'Name branches after tickets.')
+    const unread = await remember(serviceProjectMemory(pipe, 500), 'Name branches after tickets.')
+    assert.deepEqual([unread.saved, unread.uncertain], [false, undefined])
+    pipe.flush()
+    // No answer to the write: unknown, never saved, and Bun writes nothing itself.
+    const writeHeld = {
+      on: (event, listener) => pipe.on(event, listener),
+      sendService(frame) {
+        if (frame.request?.method === 'propose') pipe.hold()
+        pipe.sendService(frame)
+      }
+    }
+    const silent = await remember(
+      serviceProjectMemory(writeHeld, 500),
+      'Name branches after tickets.'
+    )
     assert.deepEqual([silent.saved, silent.uncertain], [false, true])
     pipe.flush()
     await pipe.close()

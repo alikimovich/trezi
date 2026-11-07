@@ -1,3 +1,4 @@
+import { splitLessons, withLessons } from './project-lessons'
 import type { ProjectMemoryUpdateOutcome } from './project-memory'
 import { refineProjectMemory } from './project-memory-evaluation'
 import {
@@ -66,7 +67,7 @@ export function parseRememberRule(args: unknown): RememberRuleArgs | { error: st
   if (!rule) return { error: 'rule is empty.' }
   if (rule.length > MAX_RULE_CHARS)
     return { error: `Keep one rule under ${MAX_RULE_CHARS} characters; split longer guidance.` }
-  if (FORGED.test(rule) || /^#/.test(rule))
+  if (FORGED.test(rule) || /^#{1,6}\s/.test(rule))
     return { error: 'rule cannot contain HTML comments, headings or memory markers.' }
   const named = input.section === undefined ? 'Preferences' : input.section
   const section = MEMORY_HEADINGS.find(
@@ -84,9 +85,11 @@ export function parseRememberRule(args: unknown): RememberRuleArgs | { error: st
   }
 }
 
-/** How two rules compare (a memory line or bare rule text): its key without punctuation. */
-const ruleKey = (text: string) =>
-  itemKey(`- ${text.replace(ITEM, '')}`)
+/** Equal rules (a memory line or bare rule text): case, spacing, tag and a final `.` aside. */
+const ruleKey = (text: string) => itemKey(`- ${text.replace(ITEM, '')}`)
+/** Near-equal comparison only: the key without punctuation. */
+const looseKey = (text: string) =>
+  ruleKey(text)
     .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -98,7 +101,7 @@ const STOP = new Set(
 )
 const words = (text: string) =>
   new Set(
-    ruleKey(text)
+    looseKey(text)
       .split(' ')
       .filter((w) => !STOP.has(w))
   )
@@ -106,7 +109,7 @@ const NEGATION = /\b(not|never|no|don t|dont|avoid|without|stop)\b/
 
 /** Near-equal wording that does not flip between a rule and its negation. */
 function similar(a: string, b: string): boolean {
-  if (NEGATION.test(ruleKey(a)) !== NEGATION.test(ruleKey(b))) return false
+  if (NEGATION.test(looseKey(a)) !== NEGATION.test(looseKey(b))) return false
   const x = words(a),
     y = words(b)
   if (x.size < 3 || y.size < 3) return false
@@ -147,24 +150,60 @@ export function withRule(content: string, args: RememberRuleArgs): string {
   return lines.join('\n')
 }
 
+/** The heading above the rule `key` in `content`, if any. */
+function sectionOf(content: string, key: string): string | null {
+  let heading: string | null = null
+  for (const line of content.split('\n')) {
+    const match = HEADING.exec(line)
+    if (match) heading = match[1]
+    else if (isMemoryItem(line) && ruleKey(line) === key) return heading
+  }
+  return null
+}
+
+const BUSY = `Not saved: project memory was busy with other updates, so nothing was written. ${NOT_SAVED} Call remember_rule again.`
+
 /**
  * Save one rule to `root`'s project memory through `update` (the per-project queue
  * over the memory owner). `roots` are searched for a design token the rule names, as
- * for every new rule (memory never stands in for the change itself).
+ * for every new rule (memory never stands in for the change itself). With `deadlineMs`
+ * the answer comes before the tool call itself would time out: a job still waiting
+ * in the queue is cancelled (not saved); one already running is `uncertain`.
  */
 export async function rememberProjectRule(
   root: string,
   args: RememberRuleArgs,
   update: MemoryUpdateRunner,
-  opts: { roots: string[]; date?: string; exists?: (token: string) => Promise<boolean> }
+  opts: {
+    roots: string[]
+    date?: string
+    exists?: (token: string) => Promise<boolean>
+    deadlineMs?: number
+  }
 ): Promise<RememberRuleResult> {
   const key = ruleKey(args.rule)
+  const replacing = args.replaces ? ruleKey(args.replaces) : null
   let refusal = null as RememberRuleResult | null
-  const outcome = await update(root, async (current) => {
+  let started = false,
+    cancelled = false,
+    proposing = false
+  const job = update(root, async (current) => {
     refusal = null
-    const rules = ruleLines(current)
+    proposing = false
+    if (cancelled) return null
+    started = true
+    const { rules: body, lessons } = splitLessons(current)
+    const rules = ruleLines(body)
+    if (replacing && !rules.some((line) => ruleKey(line) === replacing)) {
+      refusal = {
+        saved: false,
+        message: `No saved rule matches replaces. ${NOT_SAVED} Call again with the exact text of the rule to update, or without replaces.`
+      }
+      return null
+    }
     const same = rules.find((line) => ruleKey(line) === key)
-    if (same) {
+    let draft: string
+    if (same && (!replacing || replacing === key)) {
       refusal = {
         saved: true,
         unchanged: true,
@@ -172,31 +211,36 @@ export async function rememberProjectRule(
         message: 'Project memory already has this rule; nothing changed.'
       }
       return null
-    }
-    if (args.replaces && !rules.some((line) => ruleKey(line) === ruleKey(args.replaces ?? ''))) {
-      refusal = {
-        saved: false,
-        message: `No saved rule matches replaces. ${NOT_SAVED} Call again with the exact text of the rule to update, or without replaces.`
+    } else if (same) {
+      // The new wording is already saved: the rule it replaces goes.
+      const lines = body.split('\n')
+      const at = lines.findIndex(
+        (line) => isMemoryItem(line) && !LESSON.test(line) && ruleKey(line) === replacing
+      )
+      lines.splice(at, 1)
+      draft = lines.join('\n')
+    } else {
+      const near = replacing || args.distinct ? [] : rules.filter((l) => similar(l, args.rule))
+      if (near.length) {
+        refusal = {
+          saved: false,
+          similar: near.map((line) => one(line.replace(ITEM, '').replace(/<!--.*?-->/g, ''))),
+          message: `Project memory has a similar rule, so nothing was written. ${NOT_SAVED} If it says the same thing, tell the user it is already saved. If the user's rule updates it, call again with replaces set to that rule's text; if it is a different rule, call again with distinct: true.`
+        }
+        return null
       }
-      return null
+      draft = withRule(body, args)
     }
-    const near = args.replaces || args.distinct ? [] : rules.filter((l) => similar(l, args.rule))
-    if (near.length) {
-      refusal = {
-        saved: false,
-        similar: near.map((line) => one(line.replace(ITEM, '').replace(/<!--.*?-->/g, ''))),
-        message: `Project memory has a similar rule, so nothing was written. ${NOT_SAVED} If it says the same thing, tell the user it is already saved. If the user's rule updates it, call again with replaces set to that rule's text; if it is a different rule, call again with distinct: true.`
-      }
-      return null
-    }
-    const next = await refineProjectMemory(current, withRule(current, args), opts)
-    if (next === null || !ruleLines(next).some((line) => ruleKey(line) === key)) {
+    const refined = await refineProjectMemory(body, draft, opts)
+    if (refined === null || !ruleLines(refined).some((line) => ruleKey(line) === key)) {
       refusal = {
         saved: false,
         message: `Not saved: the rule names a design token this project's code does not have yet. Make the change first; memory never stands in for it. ${NOT_SAVED}`
       }
       return null
     }
+    // Lessons are what gives way to a rule, as in every automatic update.
+    const next = withLessons(refined, lessons)
     if (next.trim().length > MAX_PROJECT_MEMORY_CHARS) {
       refusal = {
         saved: false,
@@ -204,16 +248,40 @@ export async function rememberProjectRule(
       }
       return null
     }
+    proposing = true
     return next
   })
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const outcome = opts.deadlineMs
+    ? await Promise.race([
+        job,
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), opts.deadlineMs)
+        })
+      ])
+    : await job
+  clearTimeout(timer)
+  if (outcome === null) {
+    if (!started) {
+      cancelled = true
+      return { saved: false, message: BUSY }
+    }
+    return {
+      saved: false,
+      uncertain: true,
+      message: `The save is still running, so it is unknown whether the rule was saved. ${NOT_SAVED} Ask the user to check Project memory.`
+    }
+  }
   if (outcome.kind === 'committed') {
-    const kept = ruleLines(outcome.after.content).some((line) => ruleKey(line) === key)
-    return kept
+    const section = sectionOf(outcome.after.content, key)
+    return ruleLines(outcome.after.content).some((line) => ruleKey(line) === key)
       ? {
           saved: true,
           rule: args.rule,
-          section: args.section,
-          message: `Saved to this project's memory under ${args.section}. New chats in this project will follow it, and the user can see, edit or undo it in Project memory.`
+          ...(section && MEMORY_HEADINGS.includes(section as MemorySection)
+            ? { section: section as MemorySection }
+            : {}),
+          message: `Saved to this project's memory${section ? ` under ${section}` : ''}. New chats in this project will follow it, and the user can see, edit or undo it in Project memory.`
         }
       : {
           saved: false,
@@ -222,20 +290,12 @@ export async function rememberProjectRule(
         }
   }
   if (outcome.kind === 'unchanged')
-    return (
-      refusal ?? {
-        saved: false,
-        message: `Project memory did not change. ${NOT_SAVED}`
-      }
-    )
-  if (outcome.kind === 'stale')
-    return {
-      saved: false,
-      message: `Not saved: project memory kept changing while Trezi wrote (another save won twice). ${NOT_SAVED} Call remember_rule again.`
-    }
+    return refusal ?? { saved: false, message: `Project memory did not change. ${NOT_SAVED}` }
+  if (outcome.kind === 'stale') return { saved: false, message: BUSY }
   const reason = outcome.error instanceof Error ? outcome.error.message : String(outcome.error)
   const code = (outcome.error as { code?: unknown } | null)?.code
-  return code === 'deadlineExceeded'
+  // Only a write that was sent can have committed without an answer.
+  return proposing && code === 'deadlineExceeded'
     ? {
         saved: false,
         uncertain: true,
@@ -243,6 +303,9 @@ export async function rememberProjectRule(
       }
     : { saved: false, message: `Not saved: ${reason} ${NOT_SAVED}` }
 }
+
+/** Answer within this, behind peer chats' queued evaluations. */
+export const REMEMBER_DEADLINE_MS = 90_000
 
 /** The per-project update queue over the memory owner, set by the agent module. */
 let runner: MemoryUpdateRunner | null = null
@@ -269,6 +332,8 @@ export async function rememberRuleTool(
   if (!runner)
     return { saved: false, error: `Project memory is unavailable in this session. ${NOT_SAVED}` }
   return rememberProjectRule(scope.liveRoot, parsed, runner, {
-    roots: [scope.root, scope.liveRoot]
+    roots: [scope.root, scope.liveRoot],
+    // Below the owner's 120 s tool limit, so the agent never reads a bare timeout.
+    deadlineMs: REMEMBER_DEADLINE_MS
   })
 }

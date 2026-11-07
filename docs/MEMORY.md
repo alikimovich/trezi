@@ -133,14 +133,17 @@ agent cannot name another root.
   line, including the user's untagged wording and lessons, is kept as it was. The rule
   gets the usual `<!-- added … -->` tag and the design-token check.
 - Text that would forge a source tag, a lesson or the `<project-memory>` block is refused.
-- An equal rule (case, spacing and punctuation aside) is not added again and is answered
-  as already saved. A near-equal one (most of its words, same polarity) writes nothing and
+- An equal rule (case, spacing and a final period aside; symbols such as `C++` or `===`
+  count) is not added again and is answered as already saved. A near-equal one (most of its words, same polarity) writes nothing and
   comes back as `similar`: the agent then updates it with `replaces` or confirms it is
   different with `distinct`.
 - The answer says `saved: true` only when the owner's committed record holds the rule.
   A refused, stale (lost twice) or failed write is `saved: false`; no answer from the
-  service is `uncertain`. A memory that would exceed 16,000 characters is refused rather
-  than truncated. The agent rules tell the agent to confirm only on `saved: true` and that
+  service after the write was sent is `uncertain` (an unanswered read is plainly not
+  saved). The tool answers within 90 s, below the owner's 120 s tool limit: a save still
+  queued behind peer chats' evaluations is cancelled (not saved), one already running is
+  `uncertain`. As in every update, old lessons give way first; a memory whose rules would
+  exceed 16,000 characters is refused rather than truncated. The agent rules tell the agent to confirm only on `saved: true` and that
   saving is never a substitute for the work asked for. Sessions without the tool (Gemini,
   background agents) are told to say it was not saved.
 

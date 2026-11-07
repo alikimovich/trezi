@@ -199,7 +199,7 @@ assert.equal(
     })
   const stale = await rememberProjectRule(root, args('Name branches after tickets.'), busy, opts)
   assert.equal(stale.saved, false)
-  assert.match(stale.message, /another save won twice/)
+  assert.match(stale.message, /busy with other updates/)
   assert.ok(!(await store.get(root)).content.includes('Name branches'), 'stale writes nothing')
 }
 
@@ -264,6 +264,104 @@ assert.equal(
   )
   assert.equal(unbuilt.saved, false)
   assert.match(unbuilt.message, /design token/)
+}
+
+{
+  // Review repairs: symbols matter, replaces, lessons give way, deadlines, read timeouts.
+  const store = memoryStore()
+  const queue = createProjectMemoryUpdateQueue(store)
+  const run = (r, e) => queue.enqueue(r, e)
+  const root = '/tmp/lkm556-review'
+  await store.save(root, '## Preferences\n- Use C++ for native code.\n- Prefer === over ==.')
+  for (const rule of ['Use C for native code.', 'Prefer == over ===.']) {
+    const result = await rememberProjectRule(root, args(rule, { distinct: true }), run, opts)
+    assert.deepEqual([result.saved, result.unchanged], [true, undefined], `${rule} is new`)
+  }
+  assert.equal(
+    parseRememberRule({ rule: '#fff is the page background.' }).rule,
+    '#fff is the page background.'
+  )
+
+  // replaces reports the section the rule really is in.
+  await store.save(root, '## Design rules\n- Old wording here.')
+  const moved = await rememberProjectRule(
+    root,
+    args('New wording here.', { replaces: 'Old wording here' }),
+    run,
+    opts
+  )
+  assert.equal(moved.section, 'Design rules')
+  // replaces naming a rule while the new wording already exists: the old one goes.
+  await store.save(root, '- Keep A.\n- Old B.')
+  const merged = await rememberProjectRule(root, args('Keep A.', { replaces: 'Old B.' }), run, opts)
+  assert.equal(merged.saved, true, merged.message)
+  assert.equal((await store.get(root)).content, '- Keep A.')
+
+  // A memory full of lessons: the oldest lesson gives way, never the rule.
+  const lesson = (n) =>
+    `- <!-- lesson task=t${n} commit=c${n} files=a --> Lesson ${n} ${'z'.repeat(200)}. <!-- added 2026-10-01 -->`
+  const filler = `- ${'w'.repeat(MAX_PROJECT_MEMORY_CHARS - 2 * lesson(1).length - 60)}`
+  await store.save(root, `${filler}\n\n## Pitfalls\n${lesson(1)}\n${lesson(2)}`)
+  const roomy = await rememberProjectRule(root, args(REUSE), run, opts)
+  assert.equal(roomy.saved, true, roomy.message)
+  const crowded = (await store.get(root)).content
+  assert.ok(crowded.includes(REUSE) && crowded.includes(filler), 'the rule and user text stay')
+  assert.ok(!crowded.includes('task=t1') && crowded.includes('task=t2'), 'the oldest lesson went')
+
+  // Deadline: still queued → cancelled, nothing written; already running → uncertain.
+  await store.save(root, '- Base')
+  let release
+  const gate = new Promise((resolve) => {
+    release = resolve
+  })
+  const blocker = queue.enqueue(root, async () => {
+    await gate
+    return null
+  })
+  const queued = await rememberProjectRule(root, args('Queued rule.'), run, {
+    ...opts,
+    deadlineMs: 20
+  })
+  assert.deepEqual([queued.saved, queued.uncertain], [false, undefined])
+  assert.match(queued.message, /nothing was written/)
+  release()
+  await blocker
+  await queue.enqueue(root, async () => null)
+  assert.ok(!(await store.get(root)).content.includes('Queued rule'), 'a cancelled job never runs')
+  let finish
+  const slow = new Promise((resolve) => {
+    finish = resolve
+  })
+  const running = await rememberProjectRule(
+    root,
+    args('Gaps use --gap-sm.', { section: 'Design rules' }),
+    run,
+    {
+      ...opts,
+      deadlineMs: 20,
+      exists: async () => {
+        await slow
+        return true
+      }
+    }
+  )
+  assert.deepEqual([running.saved, running.uncertain], [false, true])
+  finish()
+
+  // A read timeout before anything was proposed is a definite "not saved".
+  const unread = createProjectMemoryUpdateQueue({
+    ...memoryStore(),
+    get: async () => {
+      throw Object.assign(new Error('no answer'), { code: 'deadlineExceeded' })
+    }
+  })
+  const neverSent = await rememberProjectRule(
+    root,
+    args(REUSE),
+    (r, e) => unread.enqueue(r, e),
+    opts
+  )
+  assert.deepEqual([neverSent.saved, neverSent.uncertain], [false, undefined])
 }
 
 {
