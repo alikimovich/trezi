@@ -20,7 +20,7 @@ const assert = (cond, msg) => {
 const r = treziRules()
 assert(typeof r === 'string' && r.length > 0, 'rules render to a non-empty string')
 assert(typeof TREZI_RULES_VERSION === 'number', 'version is a number')
-assert(TREZI_RULES_VERSION === 50, 'version bumped to 50')
+assert(TREZI_RULES_VERSION === 51, 'version bumped to 51')
 // LKM-281: a merge waits for the user's card; no model-supplied flag approves it.
 assert(!/confirmed: true/.test(r), 'no model-supplied merge confirmation')
 assert(/publish_merge first shows the user a card/.test(r), 'merge waits for the host card')
@@ -201,6 +201,19 @@ assert(
   'memory: forbids reporting a change as saved in memory'
 )
 assert(/never applies a\s+change/.test(r), 'memory: saving to memory applies nothing')
+// LKM-556: a session with Trezi's tools saves an explicit rule; one without says it cannot.
+for (const tools of [{ previewTools: true }, { controlTools: true }]) {
+  const text = treziRules(tools)
+  assert(/save it with remember_rule/.test(text), 'memory: tool sessions save with remember_rule')
+  assert(/only when the\s+tool answers saved: true/.test(text), 'memory: confirm only on saved')
+  assert(!/you cannot save to it/i.test(text), 'memory: the old refusal wording is gone')
+  assert(
+    !/remember_rule/.test(treziRules({ ...tools, background: true })),
+    'memory: background agents are not told to save'
+  )
+}
+assert(!/remember_rule/.test(r), 'memory: a provider without the tool is not told to call it')
+assert(/This session cannot save to it/.test(r), 'memory: … and says it cannot save')
 assert(
   !treziRules({ projectMemory: '- Answer briefly. <!-- added 2026-10-06 -->' }).includes(
     'added 2026-10-06'

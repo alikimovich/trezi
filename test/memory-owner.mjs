@@ -22,6 +22,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { createProjectMemoryUpdateQueue } from '../src/main/project-memory.ts'
+import { parseRememberRule, rememberProjectRule } from '../src/main/project-memory-rule.ts'
 import { serviceProjectMemory } from '../src/native/project-memory-service.ts'
 import { NativeSheetController } from '../src/native/sheets-runtime.ts'
 import { projectKey } from '../src/shared/projectKey.ts'
@@ -765,6 +766,78 @@ try {
     await pipe.close()
     console.log(
       'MEMORY-OWNER Bun client: serialized requests, stale proposal re-evaluated, manual intent retried, timeout without fallback, failed autosave keeps and retries the draft, damaged file refused PASS'
+    )
+  }
+
+  // --- LKM-556: the agent's remember_rule through the real owner ---
+  {
+    const user = '## Preferences\n- Answer briefly.\n\n## Design rules\n- Typed by the user'
+    const dir = profile({ [alpha]: record(user), [beta]: record('- Beta only') })
+    const betaBytes = bytes(dir, beta)
+    const reuse =
+      'Check whether an existing component already solves the task and reuse it instead of inventing a new pattern.'
+    const remember = (store, rule, extra = {}) =>
+      rememberProjectRule(
+        alpha,
+        parseRememberRule({ rule, section: 'Design rules', ...extra }),
+        (root, evaluate) => createProjectMemoryUpdateQueue(store).enqueue(root, evaluate),
+        { roots: [scratch], date: '2026-11-07', exists: async () => true }
+      )
+    let pipe = link(dir)
+    await pipe.started
+    const saved = await remember(serviceProjectMemory(pipe, 2_000), reuse)
+    assert.equal(saved.saved, true, saved.message)
+    await pipe.close()
+
+    // Reopened: a new service and client read it back, the user's lines intact, beta untouched.
+    pipe = link(dir)
+    await pipe.started
+    const reopened = serviceProjectMemory(pipe, 2_000)
+    assert.equal(
+      (await reopened.get(alpha)).content,
+      `${user}\n- ${reuse} <!-- added 2026-11-07 -->`,
+      'persisted after a restart, merged under its heading'
+    )
+    assert.equal((await reopened.get(beta)).content, '- Beta only')
+    assert.deepEqual(bytes(dir, beta), betaBytes, 'another project is never written')
+    const twice = await remember(reopened, `${reuse}  `)
+    assert.deepEqual(
+      [twice.saved, twice.unchanged],
+      [true, true],
+      'the same rule is not added twice'
+    )
+    const stored = bytes(dir, alpha)
+    await pipe.close()
+
+    // A failed write is reported as not saved, and the file is unchanged.
+    pipe = link(dir, { MEMORY_FAIL: 'rename' })
+    await pipe.started
+    const failed = await remember(serviceProjectMemory(pipe, 2_000), 'Name branches after tickets.')
+    assert.equal(failed.saved, false)
+    assert.match(failed.message, /Do not tell the user it was saved/)
+    assert.deepEqual(bytes(dir, alpha), stored, 'a failed write changes nothing')
+    // No answer to the read: nothing was sent, so it is definitely not saved.
+    pipe.hold()
+    const unread = await remember(serviceProjectMemory(pipe, 500), 'Name branches after tickets.')
+    assert.deepEqual([unread.saved, unread.uncertain], [false, undefined])
+    pipe.flush()
+    // No answer to the write: unknown, never saved, and Bun writes nothing itself.
+    const writeHeld = {
+      on: (event, listener) => pipe.on(event, listener),
+      sendService(frame) {
+        if (frame.request?.method === 'propose') pipe.hold()
+        pipe.sendService(frame)
+      }
+    }
+    const silent = await remember(
+      serviceProjectMemory(writeHeld, 500),
+      'Name branches after tickets.'
+    )
+    assert.deepEqual([silent.saved, silent.uncertain], [false, true])
+    pipe.flush()
+    await pipe.close()
+    console.log(
+      'MEMORY-OWNER remember_rule: saved through the owner, read back after restart, user lines kept, other project untouched, duplicate skipped, failed and unanswered writes not reported saved PASS'
     )
   }
 } finally {

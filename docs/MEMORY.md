@@ -117,6 +117,36 @@ rules only, its answer is stripped of anything shaped like a lesson, and `LESSON
 are removed from its transcript, so it can neither launder one into a rule nor forge one.
 A user who wants a lesson as a rule deletes its `lesson` tag in the editor.
 
+## Explicit "remember this" (LKM-556)
+
+When the user explicitly asks a chat to remember a rule or guide, the agent saves it
+with the `remember_rule` tool (Claude and Codex; foreground chats only) instead of only
+acknowledging it. Trezi, not the agent, writes it: the rule goes through the same
+per-project update queue as every automatic update (`src/main/project-memory-rule.ts`),
+so it is a proposal on the revision it read, a manual save made meanwhile wins and the
+rule is re-applied on top of it once, and the "Project memory updated" note with View
+and Undo appears. The memory is the chat's own project, keyed by its live checkout; the
+agent cannot name another root.
+
+- One line, at most 400 characters, under one fixed heading (default `## Preferences`),
+  appended after that section's last item; a missing heading is appended. Every other
+  line, including the user's untagged wording and lessons, is kept as it was. The rule
+  gets the usual `<!-- added … -->` tag and the design-token check.
+- Text that would forge a source tag, a lesson or the `<project-memory>` block is refused.
+- An equal rule (case, spacing and a final period aside; symbols such as `C++` or `===`
+  count) is not added again and is answered as already saved. A near-equal one (most of its words, same polarity) writes nothing and
+  comes back as `similar`: the agent then updates it with `replaces` or confirms it is
+  different with `distinct`.
+- The answer says `saved: true` only when the owner's committed record holds the rule.
+  A refused, stale (lost twice) or failed write is `saved: false`; no answer from the
+  service after the write was sent is `uncertain` (an unanswered read is plainly not
+  saved). The tool answers within 90 s, below the owner's 120 s tool limit: a save still
+  queued behind peer chats' evaluations is cancelled (not saved), one already running is
+  `uncertain`. As in every update, old lessons give way first; a memory whose rules would
+  exceed 16,000 characters is refused rather than truncated. The agent rules tell the agent to confirm only on `saved: true` and that
+  saving is never a substitute for the work asked for. Sessions without the tool (Gemini,
+  background agents) are told to say it was not saved.
+
 ## Editor and ownership
 
 The memory editor remains the user's direct view and final override. Automatic updates
@@ -137,9 +167,11 @@ There is no Bun writer since LKM-111 (the Bun rollback owner was removed). See
 Implementation: `src/main/project-memory.ts`, `src/native/project-memory-service.ts`,
 `src/service/MemoryOwner.swift`, `src/service/MemoryFile.swift`, `src/main/agent.ts`,
 `src/main/backends/memory.ts`, `src/main/project-memory-evaluation.ts`,
-`src/main/project-memory-format.ts`, `src/main/project-lessons.ts`, `src/main/rules.ts`,
+`src/main/project-memory-format.ts`, `src/main/project-lessons.ts`,
+`src/main/project-memory-rule.ts`, `src/main/rules.ts`,
 `src/native/memory-note.ts`, `src/native/Toast.swift`, `src/native/Sheets.swift` and
 `src/native/sheets-runtime.ts`.
 Regression coverage (the native note: the settings smoke group, `src/native/smoke-alerts.ts`):
 `test/project-memory.mjs`, `test/memory-owner.mjs`, `test/project-memory-evaluation.mjs`,
-`test/resolved-lessons.mjs`, `test/native-sheets.mjs`, `test/rules.mjs`.
+`test/resolved-lessons.mjs`, `test/project-memory-rule.mjs`, `test/native-sheets.mjs`,
+`test/rules.mjs`.

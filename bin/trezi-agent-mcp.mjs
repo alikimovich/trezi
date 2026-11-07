@@ -10,6 +10,7 @@ import { z } from 'zod'
 import { chatIslandDescription, chatIslandShape } from './chat-island-schema.mjs'
 import { chatUiDescription, chatUiShape } from './chat-ui-schema.mjs'
 import { openCodeDescription, openCodeShape } from './code-tool-schema.mjs'
+import { rememberRuleDescription, rememberRuleShape } from './memory-tool-schema.mjs'
 import {
   previewToolShapes,
   previewToolText,
@@ -190,6 +191,16 @@ server.registerTool(
   'chat_ui',
   { description: chatUiDescription, inputSchema: chatUiShape },
   async (args) => result(await invoke('chat_ui', args))
+)
+// LKM-556: save an explicit rule to this project's memory through Trezi's owner.
+server.registerTool(
+  'remember_rule',
+  {
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    description: rememberRuleDescription,
+    inputSchema: rememberRuleShape
+  },
+  async (args) => result(await invoke('remember_rule', args))
 )
 server.registerTool(
   'open_code',

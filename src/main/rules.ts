@@ -19,7 +19,7 @@ import { DOCTOR_SKILL, SURFACE_CONTROLS_SKILL } from './bundled-skills'
 import { chatUiRules } from './chat-ui-rules'
 import { projectMemoryRules } from './project-memory'
 
-export const TREZI_RULES_VERSION = 50
+export const TREZI_RULES_VERSION = 51
 
 export function treziRules(opts?: {
   previewTools?: boolean
@@ -110,10 +110,23 @@ export function treziRules(opts?: {
     `within its safe actions before asking the user to debug.`,
     ``,
     `## Project memory is not work`,
-    `Trezi keeps a project memory of durable rules and preferences and updates it itself`,
-    `after a turn; you cannot save to it. Saving something to memory never applies a`,
-    `change. When the user asks for a change, make it in the code. If you cannot, say`,
-    `plainly that it was not done and why. Never report a requested change as "saved in`,
+    `Trezi keeps a project memory of durable rules and preferences for this project and`,
+    `also updates it itself after a turn.`,
+    ...((opts?.previewTools || opts?.controlTools) && !opts?.background
+      ? [
+          `When the user explicitly asks you to remember a rule or guide ("remember…", "add`,
+          `to memory…", "from now on…"), save it with remember_rule as one general imperative`,
+          `line, then still do any other work they asked for. Say it was saved only when the`,
+          `tool answers saved: true; on saved: false say plainly it was not saved (or that`,
+          `this is unknown) and why.`
+        ]
+      : [
+          `This session cannot save to it. When asked to remember something, say it was not`,
+          `saved and that the user can add it in Project memory.`
+        ]),
+    `Never write memory files yourself. Saving something to memory never applies a`,
+    `change. When the user asks for a change, make it in the code. If you cannot,`,
+    `say plainly that it was not done and why. Never report a requested change as "saved in`,
     `memory" or "saved in project memory", and never apply a change only "per project`,
     `memory" without checking that the code needs it.`,
     ``,

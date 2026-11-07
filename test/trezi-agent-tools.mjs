@@ -148,6 +148,7 @@ try {
     'publish_merge',
     'publish_update',
     'reload_preview',
+    'remember_rule',
     'restart_dev_server',
     'run_checks',
     'workspace_state'
