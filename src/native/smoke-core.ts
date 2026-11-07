@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { contentHash, sourceOwner } from '../main/source-owner'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
 import type { NativeContextController } from './context-controller'
@@ -870,48 +871,88 @@ export async function runNativeCoreSmoke(
           Buffer.from(await host.request('captureShell'), 'base64')
         )
         const styleSource = () => readFileSync(join(fixture, 'native-style.tsx'), 'utf8')
-        // `busy` alone cannot say an edit finished: a selection refresh resets it while
-        // the write is still in flight. The controller counts finished edits (`edits`,
-        // never reset), so wait for that count to move past the one seen before the
-        // request, then for the expected source text.
-        const performEdit = async (
-          field: string,
-          value: string,
-          landed: (s: string) => boolean
-        ) => {
-          const seen = (await host.request('inspectorInspect')).edits
+        const sourceBeforeDraft = styleSource()
+        // A staged preview can re-select the element and bump the generation; an
+        // action naming a stale one is dropped silently, so name the current one.
+        const liveGeneration = async () => (await host.request('inspectorInspect')).generation
+        const stageStyle = async (field: string, value: string) => {
           await host.request('inspectorPerform', {
             action: {
               root: fixture,
-              generation: inspectorState.generation,
+              generation: await liveGeneration(),
               action: 'apply',
               field,
               value
             }
           })
-          try {
-            await wait(async () => {
-              const state = await host.request('inspectorInspect')
-              return state.edits > seen && !state.busy && landed(styleSource())
-            }, `${field} edit settled`)
-          } catch (error) {
-            console.error('Native inspector failure', {
-              field,
-              seen,
-              expected: inspectorState,
-              actual: await host.request('inspectorInspect'),
-              source: styleSource()
-            })
-            throw error
-          }
+          assert.equal(styleSource(), sourceBeforeDraft, `${field} stages without a source write`)
         }
-        await performEdit('style:opacity', '0.8', (s) => s.includes('0.8'))
-        const beforePair = styleSource()
-        await performEdit(
-          'style:padding-vertical',
-          '12',
-          (s) => s.includes('paddingTop: "12px"') && s.includes('paddingBottom: "12px"')
+        await stageStyle('style:opacity', '0.8')
+        await stageStyle('style:padding-vertical', '12')
+        try {
+          await wait(
+            () => inspector.state.draft?.count === 2,
+            'both Styles preview drafts are pending'
+          )
+        } catch (error) {
+          console.error('Native inspector draft failure', {
+            expected: inspectorState,
+            draft: inspector.state.draft,
+            actual: await host.request('inspectorInspect'),
+            source: styleSource()
+          })
+          throw error
+        }
+        await wait(
+          () =>
+            page(`(() => {
+              const style = getComputedStyle(document.querySelector('#native-title'));
+              return style.opacity === '0.8' && style.paddingTop === '12px' && style.paddingBottom === '12px';
+            })()`),
+          'both Styles drafts render in the preview'
         )
+        const appliedSource = sourceBeforeDraft
+          .replace('opacity: 1', 'opacity: 0.8')
+          .replace(
+            'paddingTop: "6px", paddingBottom: "6px"',
+            'paddingTop: "12px", paddingBottom: "12px"'
+          )
+        assert.notEqual(appliedSource, sourceBeforeDraft, 'the requested source batch changes')
+        const batchOriginalCommand = nativeChat.command.bind(nativeChat)
+        const batchChat = nativeChat.get(nativeChat.active)
+        const batchPriorTurn = batchChat.turn
+        let batchCommands = 0
+        nativeChat.command = async (command) => {
+          assert.equal(command.type, 'submit', 'Apply uses one regular chat agent operation')
+          assert.match(command.text ?? '', /opacity to 0.8/)
+          assert.match(command.text ?? '', /padding-vertical to 12px/)
+          batchCommands++
+          const saved = await sourceOwner().commit(fixture, [
+            {
+              path: 'native-style.tsx',
+              expectedHash: contentHash(sourceBeforeDraft),
+              content: appliedSource
+            }
+          ])
+          assert.equal(saved.ok, true, 'mock agent persisted one source transaction')
+          batchChat.turn = `smoke-style-batch-${batchCommands}`
+        }
+        try {
+          await host.request('inspectorPerform', {
+            action: {
+              root: fixture,
+              generation: await liveGeneration(),
+              action: 'apply-drafts'
+            }
+          })
+          // inspectorPerform only queues the action; keep the mock until the Apply used it.
+          await wait(() => batchCommands > 0, 'Apply reached the chat agent')
+          await wait(() => inspector.state.draft?.submitted === true, 'Apply marked submitted')
+        } finally {
+          nativeChat.command = batchOriginalCommand
+        }
+        assert.equal(batchCommands, 1, 'two drafts submit one Apply operation')
+        await wait(() => styleSource() === appliedSource, 'Styles batch persisted')
         const paired = styleSource()
         for (const untouched of [
           'paddingLeft: "var(--space-a)"',
@@ -922,13 +963,25 @@ export async function runNativeCoreSmoke(
           'marginBottom: "3px"'
         ])
           assert.ok(paired.includes(untouched), `pair kept ${untouched}`)
+        // This fixture's heading is a manually stamped preview node, not an import of
+        // native-style.tsx. Release its submitted lock without claiming rendered
+        // confirmation; the source-backed CSS Module check below exercises that proof.
+        await inspector.settleDraftTurn(false)
+        await host.request('inspectorPerform', {
+          action: { root: fixture, generation: await liveGeneration(), action: 'revert-draft' }
+        })
+        await wait(() => inspector.state.draft === undefined, 'Styles batch draft reverted')
+        batchChat.turn = batchPriorTurn
         const undone = await invoke('edit:undo', fixture)
-        assert.ok(undone.ok, 'one ledger Undo reverts the pair')
+        assert.ok(undone.ok, 'one ledger Undo reverts the batch')
         try {
-          await wait(() => styleSource() === beforePair, 'one Undo restores both vertical sides')
+          await wait(
+            () => styleSource() === sourceBeforeDraft,
+            'one Undo restores the Styles batch'
+          )
         } catch (error) {
           console.error('Native inspector Undo mismatch', {
-            beforePair,
+            sourceBeforeDraft,
             paired,
             after: styleSource(),
             undone,
@@ -1095,8 +1148,7 @@ export async function runNativeCoreSmoke(
           }
         })
         assert.ok(!moduleSource().includes('row-gap: 12px'), 'Styles draft does not write source')
-        const pending = await host.request('inspectorInspect')
-        assert.equal(pending.draft?.count, 1, 'Styles preview is visibly pending')
+        await wait(() => inspector.state.draft?.count === 1, 'Styles preview is visibly pending')
         const originalCommand = nativeChat.command.bind(nativeChat)
         const applyChat = nativeChat.get(nativeChat.active)
         const priorApplyTurn = applyChat.turn
@@ -1119,6 +1171,9 @@ export async function runNativeCoreSmoke(
               action: 'apply-drafts'
             }
           })
+          // inspectorPerform only queues the action; keep the mock until the Apply used it.
+          await wait(() => applyCommands > 0, 'Apply reached the chat agent')
+          await wait(() => inspector.state.draft?.submitted === true, 'Apply marked submitted')
         } finally {
           nativeChat.command = originalCommand
         }

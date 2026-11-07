@@ -103,13 +103,29 @@ document.body.append(card);
   )
   writeFileSync(file, code)
   writeFileSync(indexFile, originalIndex + '<script src="/island-light.js"></script>')
-  const wait = async (check: () => Promise<boolean> | boolean) => {
+  const wait = async (check: () => Promise<boolean> | boolean, label = 'unlabelled') => {
     for (let i = 0; i < 100; i++) {
       if (await check()) return
       await new Promise((r) => setTimeout(r, 50))
     }
+    const islands = await host
+      .request('chatInspect')
+      .then((s: { islands?: unknown }) => JSON.stringify(s.islands))
+      .catch((error: unknown) => `unavailable: ${String(error)}`)
+    // Short facts first: the failure report truncates a long message.
+    const controls = await Promise.all(
+      ['Light X', 'Light Y'].map((name) =>
+        host
+          .request('islandControlInspect', { label: name })
+          .then(
+            (c: { value?: string; visible?: boolean; scanned?: number }) =>
+              `${name}=${c.value}/${c.visible}/scanned:${c.scanned}`
+          )
+          .catch((error: unknown) => `${name}=unavailable: ${String(error)}`)
+      )
+    )
     throw new Error(
-      `Native chat island did not update; preview=${JSON.stringify(await page("({url:location.href, ready:document.readyState, scripts:Array.from(document.scripts,s=>s.src), demo:!!document.querySelector('#island-shadow-demo')})"))}`
+      `Native chat island did not update at [${label}]; controls ${controls.join(' ')}; preview=${JSON.stringify(await page("({ready:document.readyState, demo:!!document.querySelector('#island-shadow-demo')})"))}; islands=${islands}; page=${JSON.stringify(await page("({url:location.href, ready:document.readyState, scripts:Array.from(document.scripts,s=>s.src), demo:!!document.querySelector('#island-shadow-demo')})"))}`
     )
   }
   try {
@@ -130,7 +146,10 @@ document.body.append(card);
           segments: [{ kind: 'text', text: 'Move the light or adjust the shadow softness.' }]
         }
       ]
-      await wait(async () => await page("!!document.querySelector('#island-shadow-demo')"))
+      await wait(
+        async () => await page("!!document.querySelector('#island-shadow-demo')"),
+        'preview shows the island demo'
+      )
       initialShadow = await page("document.querySelector('#island-shadow-demo').style.boxShadow")
       const result = (await runChatIslandTool(chat.chat, fixture, {
         action: 'define',
@@ -173,20 +192,24 @@ document.body.append(card);
         ]
       })) as any
       assert.ok(result.id, JSON.stringify(result))
-      await wait(async () =>
-        (await host.request('chatInspect')).islands.some(
-          (i: any) => i.id === result.id && i.status === 'waiting'
-        )
+      await wait(
+        async () =>
+          (await host.request('chatInspect')).islands.some(
+            (i: any) => i.id === result.id && i.status === 'waiting'
+          ),
+        'island waiting for the turn to land'
       )
       serviceEvents.emit('event', 'agent:event', {
         projectKey: chat.chat,
         type: 'done',
         landingPending: false
       })
-      await wait(async () =>
-        (await host.request('chatInspect')).islands.some(
-          (i: any) => i.id === result.id && i.status === 'ready'
-        )
+      await wait(
+        async () =>
+          (await host.request('chatInspect')).islands.some(
+            (i: any) => i.id === result.id && i.status === 'ready'
+          ),
+        'island ready after the turn lands'
       )
       await host.request('revealChatIsland', { island: result.id })
       await host.request('islandPerform', {
@@ -195,26 +218,31 @@ document.body.append(card);
         values: { x: 0.75, y: -0.25 }
       })
       assert.equal(readFileSync(file, 'utf8'), code, 'island draft does not write source')
-      await wait(async () =>
-        (await host.request('chatInspect')).islands.some(
-          (i: any) => i.id === result.id && i.draftCount === 2 && i.draftPreview === false
-        )
+      await wait(
+        async () =>
+          (await host.request('chatInspect')).islands.some(
+            (i: any) => i.id === result.id && i.draftCount === 2 && i.draftPreview === false
+          ),
+        'island draft of two values staged'
       )
       await wait(
         async () =>
-          (await host.request('islandControlInspect', { label: 'Light X' })).value === '0.75'
+          (await host.request('islandControlInspect', { label: 'Light X' })).value === '0.75',
+        'Light X control shows the drafted 0.75'
       )
       await host.request('islandPerform', { island: result.id, action: 'undo-draft' })
       await wait(
         async () =>
           !(await host.request('chatInspect')).islands.some(
             (i: any) => i.id === result.id && i.draftCount !== 0
-          )
+          ),
+        'island draft cleared by undo-draft'
       )
       await wait(
         async () =>
           (await host.request('islandControlInspect', { label: 'Light X' })).value === '0' &&
-          (await host.request('islandControlInspect', { label: 'Light Y' })).value === '-0.5'
+          (await host.request('islandControlInspect', { label: 'Light Y' })).value === '-0.5',
+        'Light X/Y controls restored to source values after undo-draft'
       )
       await host.request('islandPerform', {
         island: result.id,
@@ -222,10 +250,12 @@ document.body.append(card);
         values: { x: 0.75, y: -0.25 }
       })
       await host.request('islandPerform', { island: result.id, action: 'apply-draft' })
-      await wait(async () =>
-        (await host.request('chatInspect')).islands.some(
-          (i: any) => i.id === result.id && i.draftSubmitted === true
-        )
+      await wait(
+        async () =>
+          (await host.request('chatInspect')).islands.some(
+            (i: any) => i.id === result.id && i.draftSubmitted === true
+          ),
+        'island draft submitted by Apply'
       )
       await settleApply()
       assert.ok(
@@ -244,7 +274,8 @@ document.body.append(card);
       await wait(
         () =>
           readFileSync(file, 'utf8').includes('LIGHT_X = 0.75') &&
-          readFileSync(file, 'utf8').includes('LIGHT_Y = -0.25')
+          readFileSync(file, 'utf8').includes('LIGHT_Y = -0.25'),
+        'island Apply wrote the drafted light values to source'
       )
       await wait(async () => {
         try {
@@ -255,7 +286,7 @@ document.body.append(card);
         } catch {
           return false
         }
-      })
+      }, 'preview shadow changed after the island Apply')
       await host.request('islandPerform', { island: result.id, action: 'revert-draft' })
       assert.equal(
         nativeIslands.sessions.get(chat.chat)?.views.get(result.id)?.draft,
@@ -264,7 +295,10 @@ document.body.append(card);
       )
       await new Promise((r) => setTimeout(r, 150))
       await host.request('islandPerform', { island: result.id, action: 'undo' })
-      await wait(() => readFileSync(file, 'utf8') === code)
+      await wait(
+        () => readFileSync(file, 'utf8') === code,
+        'island Undo restored the original source'
+      )
       writeFileSync(
         join(artifacts, 'chat-island.png'),
         Buffer.from(await host.request('captureShell'), 'base64')
@@ -310,7 +344,7 @@ document.body.append(card);
           loaded?.opacity === '0.5' &&
           loaded.revision === updatedCode.match(/data-trezi-revision', '([a-f0-9]{64})/)?.[1]
         )
-      })
+      }, 'preview reloads the source-stamped opacity 0.5 revision')
       const newRevision = (await islandSource(fixture, opacityRecord)).revision
       assert.equal(
         await productionConfirm(chat.chat, opacityRecord, { opacity: 0.5 }, oldRevision),
@@ -346,7 +380,7 @@ document.body.append(card);
         } catch {
           return false
         }
-      })
+      }, 'preview restored without the island demo')
     } catch {}
     chat.context = context
     chat.messages = messages

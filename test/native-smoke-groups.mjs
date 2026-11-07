@@ -191,6 +191,11 @@ for (const group of ['islands', 'shadow-light'])
       (c) => c.name === 'chat-islands'
     )
   )
+const repairGroups = parseSmokeGroups(['--only=core,chat,islands,shadow-light'])
+const repairChecks = selectSmokeChecks(names, repairGroups).map((c) => c.name)
+for (const check of ['inspector', 'code-link-click', 'chat-islands'])
+  assert.ok(repairChecks.includes(check), `LKM-549 admission includes ${check}`)
+assert.deepEqual([...repairGroups], ['core', 'chat', 'islands', 'shadow-light'])
 assert.throws(
   () => selectSmokeChecks([{ name: 'brand-new' }], parseSmokeGroups([])),
   /brand-new has no group/

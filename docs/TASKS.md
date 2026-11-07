@@ -3,6 +3,18 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-549 — Native suite failures on main 957516a6
+
+- [x] Repair the inspector smoke for source-free Styles staging and one explicit batch Apply.
+- [x] Map the chat code link's disk line to the retained editor draft with the LKM-444 prepended line.
+- [x] Label every `chat-islands` wait (and the island-status predicates) and report the island list in its timeout, so the failing step is named.
+- [x] Diagnose `inspector` "both Styles preview drafts are pending" (the smoke read a `draft` key `inspectorInspect` never returns) and repair it by reading `inspector.state.draft`.
+- [x] Diagnose `chat-islands` "Light X control shows the drafted 0.75" (`islandControlInspect` missed the AppKit subviews) and widen the lookup to `NSView.subviews` plus accessibility children.
+- [x] `inspector` "two drafts submit one Apply operation": `inspectorPerform` is asynchronous, so the smoke now keeps its chat-command mock until the Apply called it (same in the CSS Module block).
+- [ ] Classify `chat-islands` "Light X control shows the drafted 0.75" from the `scanned` count now in its timeout dump (fields already carry `island-field-<label>`); then repair it without reading Bun-side island state.
+- [ ] Native-verify: run `core,chat,islands,shadow-light` once more (`preview-overlay` is expected to clear with `inspector`).
+- [ ] Manager: admit `--only=core,chat,islands,shadow-light`, run the locked native suite, independent review and required CI.
+
 ## LKM-548 — Native suite failure on main 54c8d14f14b3
 
 - [x] `project-switching` (sidebar): read the page hover box by `[data-trezi-hover]`, not overlay child index 1, which LKM-541 made the always-shown spacing-grips layer; same fix in `smoke-sent-attachments`.
