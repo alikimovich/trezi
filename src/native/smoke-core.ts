@@ -1116,7 +1116,7 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: moduleState.generation,
+            generation: await liveGeneration(),
             action: 'preview',
             field: 'style:row-gap',
             value: '12px'
@@ -1132,7 +1132,7 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: moduleState.generation,
+            generation: await liveGeneration(),
             action: 'cancel-preview',
             field: 'style:row-gap'
           }
@@ -1141,7 +1141,7 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: moduleState.generation,
+            generation: await liveGeneration(),
             action: 'apply',
             field: 'style:row-gap',
             value: '12px'
@@ -1167,7 +1167,7 @@ export async function runNativeCoreSmoke(
           await host.request('inspectorPerform', {
             action: {
               root: fixture,
-              generation: moduleState.generation,
+              generation: await liveGeneration(),
               action: 'apply-drafts'
             }
           })

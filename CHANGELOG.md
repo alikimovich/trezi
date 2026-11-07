@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+
+- Styles preview drafts preserve their authored CSS Module source, and tuning-island inputs expose real native text-field values without requiring an accessibility client (LKM-549).
+
 ## [0.15.0] - 2026-11-05
 
 ### Added

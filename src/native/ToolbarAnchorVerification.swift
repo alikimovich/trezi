@@ -34,13 +34,32 @@ extension NativeShell {
             return ["error":"Native toolbar buttons missing", "found":found.map(\.0)]
         }
         let buttons = Dictionary(uniqueKeysWithValues: found)
+        var trackingDeliveries = 0
         func hover(_ button: NSButton, enter: Bool) {
-            guard let event = NSEvent.enterExitEvent(with: enter ? .mouseEntered : .mouseExited,
-                  location: button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil),
+            guard let window = button.window else { return }
+            let point = button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
+            if enter, let moved = NSEvent.mouseEvent(with: .mouseMoved, location: point,
                   modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                  windowNumber: button.window?.windowNumber ?? 0, context: nil, eventNumber: 0,
-                  trackingNumber: 0, userData: nil) else { return }
-            if enter { button.mouseEntered(with: event) } else { button.mouseExited(with: event) }
+                  windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                  clickCount: 0, pressure: 0) { window.sendEvent(moved) }
+            var view: NSView? = button
+            var seen = Set<ObjectIdentifier>()
+            while let current = view {
+                current.updateTrackingAreas()
+                let local = current.convert(point, from: nil)
+                for area in current.trackingAreas where area.options.contains(.mouseEnteredAndExited) {
+                    let rect = area.options.contains(.inVisibleRect) ? current.visibleRect : area.rect
+                    guard rect.contains(local), let owner = area.owner as? NSResponder,
+                          seen.insert(ObjectIdentifier(owner)).inserted,
+                          let event = NSEvent.enterExitEvent(with: enter ? .mouseEntered : .mouseExited,
+                          location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                          windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                          trackingNumber: 0, userData: nil) else { continue }
+                    if enter { owner.mouseEntered(with: event) } else { owner.mouseExited(with: event) }
+                    trackingDeliveries += 1
+                }
+                view = current.superview
+            }
         }
         // Leave the preceding state before entering another one. Focus uses the actual
         // window responder chain; pressed uses NSButton's native highlight painting.
@@ -53,8 +72,8 @@ extension NativeShell {
                 let button = buttons[id] {
             guard host.makeFirstResponder(button) else { return ["error":"Toolbar button refused focus", "stage":stage] }
         } else { return ["error":"Unknown toolbar interaction stage", "stage":stage] }
-        host.contentView?.displayIfNeeded()
-        return ["stage":stage, "buttons":found.map { ["id":$0.0, "class":NSStringFromClass(type(of: $0.1)),
+        host.contentView?.superview?.displayIfNeeded()
+        return ["stage":stage, "trackingDeliveries":trackingDeliveries, "buttons":found.map { ["id":$0.0, "class":NSStringFromClass(type(of: $0.1)),
                    "focused":host.firstResponder === $0.1, "highlighted":$0.1.cell?.isHighlighted ?? false] }]
     }
 }

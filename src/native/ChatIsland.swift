@@ -215,15 +215,57 @@ struct IslandInput: View {
     var body: some View {
         HStack {
             Text(label).font(.callout); Spacer(minLength: 8)
-            TextField(label, text: $draft).labelsHidden().textFieldStyle(.roundedBorder).frame(maxWidth: wide ? 200 : 90)
-                .foregroundStyle(entry.parse(draft) == nil ? Color.red : Color.primary)
-                .focused($focused).onSubmit(apply)
-                .accessibilityLabel(label)
-                .accessibilityIdentifier("island-field-" + label)
+            IslandNativeInput(label: label, text: $draft,
+                              focused: Binding(get: { focused }, set: { focused = $0 }),
+                              invalid: entry.parse(draft) == nil, submit: apply)
+                .frame(maxWidth: wide ? 200 : 90).frame(height: 22)
         }.onAppear { draft = value }.onChange(of: value) { next in entry.sourceChanged(); if !focused { draft = next } }
             .onChange(of: focused) { next in if !next { apply() } }
     }
 }
+/// A real native field keeps control values available to AppKit and assistive
+/// clients even before SwiftUI materializes its optional semantic AX tree.
+/// Entry validation and Return/blur deduplication remain owned by IslandEntry.
+struct IslandNativeInput: NSViewRepresentable {
+    let label: String
+    @Binding var text: String
+    @Binding var focused: Bool
+    let invalid: Bool
+    let submit: () -> Void
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: IslandNativeInput
+        init(_ parent: IslandNativeInput) { self.parent = parent }
+        func controlTextDidBeginEditing(_ notification: Notification) { parent.focused = true }
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            parent.text = field.stringValue
+        }
+        func controlTextDidEndEditing(_ notification: Notification) { parent.focused = false }
+        func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            guard selector == #selector(NSResponder.insertNewline(_:)) else { return false }
+            parent.submit(); return true
+        }
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField(string: text)
+        field.isEditable = true; field.isSelectable = true
+        field.isBezeled = true; field.bezelStyle = .roundedBezel; field.drawsBackground = true
+        field.font = .systemFont(ofSize: NSFont.systemFontSize)
+        field.delegate = context.coordinator
+        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return field
+    }
+    func updateNSView(_ field: NSTextField, context: Context) {
+        context.coordinator.parent = self
+        field.setAccessibilityLabel(label)
+        field.setAccessibilityIdentifier("island-field-" + label)
+        field.isEnabled = context.environment.isEnabled
+        field.textColor = invalid ? .systemRed : .labelColor
+        if field.stringValue != text { field.stringValue = text }
+    }
+}
+
 struct IslandPoint: View {
     let x: Double; let y: Double; let xRange: ClosedRange<Double>; let yRange: ClosedRange<Double>
     let label: String; let change: (Double, Double, Bool) -> Void

@@ -28,31 +28,6 @@ private func islandAccessibilityElement(_ root: AnyObject, identifier: String, v
     return nil
 }
 
-/// SwiftUI may expose semantic controls to hit testing without mirroring them in
-/// AppKit subviews. This is a bounded read-only AX search, not pointer injection.
-private func islandHitAccessibilityElement(_ view: NSView, identifier: String) -> AnyObject? {
-    guard let window = view.window else { return nil }
-    let frame = window.convertToScreen(view.convert(view.visibleRect, to: nil))
-    guard frame.width > 0, frame.height > 0 else { return nil }
-    let deadline = ProcessInfo.processInfo.systemUptime + 0.15
-    for y in stride(from: frame.maxY - 6, through: frame.minY + 6, by: -12) {
-        for x in stride(from: frame.maxX - 12, through: frame.minX + 6, by: -24) {
-            if ProcessInfo.processInfo.systemUptime > deadline { return nil }
-            var current = view.accessibilityHitTest(NSPoint(x: x, y: y)).map { $0 as AnyObject }
-            var retained: [AnyObject] = []
-            for _ in 0..<8 {
-                guard let element = current, !retained.contains(where: { $0 === element }) else { break }
-                retained.append(element)
-                let actual = (element as? NSAccessibilityElementProtocol)?.accessibilityIdentifier?() ?? (element as? NSAccessibilityProtocol)?.accessibilityIdentifier()
-                if actual == identifier { return element }
-                let parent = (element as? NSAccessibilityElementProtocol)?.accessibilityParent() ?? (element as? NSAccessibilityProtocol)?.accessibilityParent()
-                current = parent.map { $0 as AnyObject }
-            }
-        }
-    }
-    return nil
-}
-
 /// The test broker's inspect, perform, verification and capture commands (LKM-160 split
 /// from Host.swift). `command` falls through to here; false means the method is unknown.
 extension Host {
@@ -331,7 +306,6 @@ extension Host {
             var visited: [ObjectIdentifier: AnyObject] = [:]
             var trace: [String] = []
             let field = islandAccessibilityElement(chat, identifier: "island-field-" + label, visited: &visited, trace: &trace)
-                ?? islandHitAccessibilityElement(chat, identifier: "island-field-" + label)
             let value = (field as? NSAccessibilityProtocol)?.accessibilityValue() as? String ?? (field as? NSAccessibilityStaticText)?.accessibilityValue() ?? ""
             reply(id, ["value":value, "visible":field != nil, "scanned":visited.count, "trace":trace])
         case "revealChatIsland":

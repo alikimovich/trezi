@@ -149,3 +149,27 @@ assert.equal(result.origins.gap.conditional, true)
 assert.equal(result.origins.gap.layer, 'utilities')
 
 console.log('style-provenance: ok')
+
+// An inspector preview changes computed CSS, never the authored source owner.
+sheets = [[new CSSStyleRule('.card', { 'row-gap': '8px' })]]
+const previewed = new HTMLElement(['card'], { 'row-gap': '12px', opacity: '0.5' })
+const originalInline = new Map([['row-gap', { value: '', priority: '' }]])
+result = activeDeclarations(previewed, ['row-gap', 'opacity'], originalInline)
+assert.equal(result.specified['row-gap'], '8px')
+assert.equal(
+  result.origins['row-gap'].kind,
+  'rule',
+  'preview cannot rebind CSS Module draft to inline'
+)
+assert.equal(result.specified.opacity, '0.5', 'unstashed authored inline properties remain visible')
+assert.equal(result.origins.opacity.kind, 'inline')
+originalInline.set('row-gap', { value: 'var(--gap)', priority: 'important' })
+result = activeDeclarations(previewed, ['row-gap'], originalInline)
+assert.equal(result.specified['row-gap'], 'var(--gap)', 'preview preserves authored token identity')
+assert.equal(result.origins['row-gap'].kind, 'inline')
+assert.equal(result.origins['row-gap'].important, true, 'preview preserves authored priority')
+assert.equal(
+  previewed.style.getPropertyValue('row-gap'),
+  '12px',
+  'provenance read never mutates live preview'
+)

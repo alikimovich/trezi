@@ -1,5 +1,11 @@
 # PROGRESS LOG
 
+## 2026-11-07 — LKM-549 native repair after independent diagnosis
+
+The bb1af066 core diagnostic was 45 passed, 2 failed and no skips (47 selected checks), not acceptance. Independent read-only review d9864dbe confirmed that the CSS Module Apply fails before the mock is called, the island SwiftUI AX tree is absent in an unassisted run, and synthetic toolbar enter callbacks do not drive the native tracking owner.
+
+Styles provenance now reads the original stashed inline declarations while retaining the computed draft value, so an injected inline preview cannot rebind a CSS Module draft to a source-less element. Original inline priorities are restored too. A focused cascade regression covers stylesheet ownership, authored token/important identity, mixed untouched properties and no DOM mutation. Module actions use the current generation. Island input now wraps an actual NSTextField with existing IslandEntry validation and Return/blur semantics, native labels/identifiers and enabled-state propagation; a delegate fixture checks real edits, focus and Return routing. The unsuccessful AX hit grid was removed. Toolbar probes send window movement and call the real tracking-area owners without global event posting or pointer/settings changes. Pixel thresholds, source/hash refusal and real source/render/Undo assertions remain unchanged. Fresh native checks and final independent review are still required; no merge or Done is claimed.
+
 ## 2026-11-07 — LKM-549 retained repair: exact-head diagnostic and remaining fixture failures
 
 The retained repair was preserved separately from the retired manager at local head `bf3f0eb8`. Its fixed group-selection check and feedback passed. The foreground `core,chat,islands,shadow-light` diagnostic completed with 62 passed, 3 failed and no skips: code-link now passes; inspector Apply, island control lookup and toolbar hover remain red. Native fixture scratch was outside the source Git tree, and the toolbar-address branch-fit failure seen with nested scratch did not recur. This is diagnostic evidence, not full native acceptance or merge approval.
