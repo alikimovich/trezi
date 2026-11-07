@@ -15,7 +15,7 @@ final class PublishToolbarControl: NSView {
     weak var item: NSMenuToolbarItem?
     private(set) var title = "Publish"
     private(set) var busy = false
-    let textFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+    let textFont = NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .regular)
     private var primaryWidth: CGFloat {
         let text = busy ? "   " + title : title
         return ceil((text as NSString).size(withAttributes: [.font:textFont]).width) + 20

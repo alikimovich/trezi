@@ -20,7 +20,7 @@ item.autovalidates = false
 item.view = shell.publishControl
 shell.publishControl.item = item
 shell.updatePublish(item, state: ["publishLabel":"Publish", "publishMode":"pr"], ready: true)
-precondition(shell.publishControl.textFont.fontName.contains("Mono"), "Publish uses system monospace")
+precondition(!shell.publishControl.textFont.fontName.contains("Mono"), "Publish uses the system sans-serif UI font")
 precondition(shell.publishControl.textFont.pointSize == NSFont.systemFontSize, "Publish keeps the system point size")
 precondition(shell.publishControl.titleFits && shell.publishControl.isNativeGlass, "Publish label fits in native glass")
 precondition(shell.publishControl.segments.usesGlassHover, "Publish uses the native glass hover treatment")

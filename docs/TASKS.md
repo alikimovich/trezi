@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-554 — Restore system sans-serif UI font in sidebar and top bar
+
+- [x] Sidebar rows, history detail, shimmer fallback, chat title, address, branch menu, nested title and Publish use `NSFont.systemFont` at the same sizes and weights; code/editor fonts untouched.
+- [x] Font assertions in `smoke-toolbar`, `smoke-three-d`, `test/sidebar-shimmer.mjs` and the publish-toolbar fixture now expect the non-monospace system font.
+- [ ] Manager: native toolbar/sidebar verification, independent review, exact-head CI and merge.
+
 ## LKM-548 — Native suite failure on main 54c8d14f14b3
 
 - [x] `project-switching` (sidebar): read the page hover box by `[data-trezi-hover]`, not overlay child index 1, which LKM-541 made the always-shown spacing-grips layer; same fix in `smoke-sent-attachments`.

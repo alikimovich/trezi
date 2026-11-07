@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Fixed
+
+- The sidebar and top bar use the system sans-serif UI font again instead of monospace; code and editor fonts are unchanged.
+
 ## [0.15.0] - 2026-11-05
 
 ### Added
