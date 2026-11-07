@@ -3,11 +3,18 @@ import AppKit
 /// Walks the view hierarchy and the accessibility children together: the conversation hosts its rows
 /// through AppKit views that do not report their subviews as accessibility children, and a node reached
 /// both ways is visited once. `scanned` counts the nodes seen, for the caller's failure report.
-private func islandAccessibilityElement(_ root: NSObject, identifier: String, visited: inout Set<ObjectIdentifier>, trace: inout [String], depth: Int = 0) -> NSAccessibilityProtocol? {
-    guard depth < 80, visited.insert(ObjectIdentifier(root)).inserted else { return nil }
+private func islandAccessibilityElement(_ root: NSObject, identifier: String, visited: inout [ObjectIdentifier: NSObject], trace: inout [String], depth: Int = 0) -> NSAccessibilityProtocol? {
+    let identity = ObjectIdentifier(root)
+    guard depth < 80, visited.count < 1024, visited[identity] == nil else { return nil }
+    // Retain synthesized AX objects: an identity-only set can reject a later node
+    // after an earlier proxy is released and its address is reused.
+    visited[identity] = root
     let node = String(describing: type(of: root)) + ":" + ((root as? NSAccessibilityProtocol)?.accessibilityIdentifier() ?? "")
     if trace.count == 16 { trace.remove(at: 8) }; trace.append(node)
     if let element = root as? NSAccessibilityProtocol, element.accessibilityIdentifier() == identifier { return element }
+    // Scrollbar AX parts are synthetic leaves and may vend fresh child proxies.
+    // Island text fields cannot be descendants of an AppKit scrollbar.
+    if root is NSScroller { return nil }
     var children: [Any] = []
     if let view = root as? NSView { children.append(contentsOf: view.subviews) }
     if let element = root as? NSAccessibilityProtocol { children.append(contentsOf: element.accessibilityChildren() ?? []) }
@@ -292,7 +299,7 @@ extension Host {
             } else { reply(id, error: "Island not found") }
         case "islandControlInspect":
             guard ephemeral, let label = c["label"] as? String else { reply(id, error: "Test control unavailable"); return true }
-            var visited = Set<ObjectIdentifier>()
+            var visited: [ObjectIdentifier: NSObject] = [:]
             var trace: [String] = []
             let field = islandAccessibilityElement(chat, identifier: "island-field-" + label, visited: &visited, trace: &trace)
             reply(id, ["value":field?.accessibilityValue() as? String ?? "", "visible":field != nil, "scanned":visited.count, "trace":trace])
