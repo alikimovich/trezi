@@ -3,14 +3,16 @@ import AppKit
 /// Walks the view hierarchy and the accessibility children together: the conversation hosts its rows
 /// through AppKit views that do not report their subviews as accessibility children, and a node reached
 /// both ways is visited once. `scanned` counts the nodes seen, for the caller's failure report.
-private func islandAccessibilityElement(_ root: NSObject, identifier: String, visited: inout Set<ObjectIdentifier>, depth: Int = 0) -> NSAccessibilityProtocol? {
+private func islandAccessibilityElement(_ root: NSObject, identifier: String, visited: inout Set<ObjectIdentifier>, trace: inout [String], depth: Int = 0) -> NSAccessibilityProtocol? {
     guard depth < 80, visited.insert(ObjectIdentifier(root)).inserted else { return nil }
+    let node = String(describing: type(of: root)) + ":" + ((root as? NSAccessibilityProtocol)?.accessibilityIdentifier() ?? "")
+    if trace.count == 16 { trace.remove(at: 8) }; trace.append(node)
     if let element = root as? NSAccessibilityProtocol, element.accessibilityIdentifier() == identifier { return element }
     var children: [Any] = []
     if let view = root as? NSView { children.append(contentsOf: view.subviews) }
     if let element = root as? NSAccessibilityProtocol { children.append(contentsOf: element.accessibilityChildren() ?? []) }
     for case let child as NSObject in children {
-        if let found = islandAccessibilityElement(child, identifier: identifier, visited: &visited, depth: depth + 1) { return found }
+        if let found = islandAccessibilityElement(child, identifier: identifier, visited: &visited, trace: &trace, depth: depth + 1) { return found }
     }
     return nil
 }
@@ -291,8 +293,9 @@ extension Host {
         case "islandControlInspect":
             guard ephemeral, let label = c["label"] as? String else { reply(id, error: "Test control unavailable"); return true }
             var visited = Set<ObjectIdentifier>()
-            let field = islandAccessibilityElement(chat, identifier: "island-field-" + label, visited: &visited)
-            reply(id, ["value":field?.accessibilityValue() as? String ?? "", "visible":field != nil, "scanned":visited.count])
+            var trace: [String] = []
+            let field = islandAccessibilityElement(chat, identifier: "island-field-" + label, visited: &visited, trace: &trace)
+            reply(id, ["value":field?.accessibilityValue() as? String ?? "", "visible":field != nil, "scanned":visited.count, "trace":trace])
         case "revealChatIsland":
             guard ephemeral, let target = c["island"] as? String,
                   let message = chat.model.snapshot?.messages.first(where: { $0.segments.contains { $0.island?.id == target } }) else {

@@ -1,5 +1,11 @@
 # PROGRESS LOG
 
+## 2026-11-07 — LKM-549 retained repair: exact-head diagnostic and remaining fixture failures
+
+The retained repair was preserved separately from the retired manager at local head `bf3f0eb8`. Its fixed group-selection check and feedback passed. The foreground `core,chat,islands,shadow-light` diagnostic completed with 62 passed, 3 failed and no skips: code-link now passes; inspector Apply, island control lookup and toolbar hover remain red. Native fixture scratch was outside the source Git tree, and the toolbar-address branch-fit failure seen with nested scratch did not recur. This is diagnostic evidence, not full native acceptance or merge approval.
+
+The inspector failure capture shows the mock rejecting `set padding-vertical to 12` because it expected `12px` in the agent prompt. The protocol assertion now checks the exact unitless prompt value; independent rendered padding and persisted-source `12px` checks remain unchanged. The island lookup reaches its 80-node limit without finding Light X, so the test-only inspector now retains a bounded class/identifier trace and the island failure path writes complete control state plus a foreground capture before fixture restoration. No timeout or assertion threshold is relaxed. Those diagnostics still require a fresh native run. No provider, CI, merge or Done result is claimed.
+
 ## 2026-11-05 — LKM-549 native suite failures: inspector and code-link fixtures, island wait labels
 
 The run 84 inspector smoke waited for an edit count and source write immediately after a Styles field adjustment, but LKM-539 intentionally stages source-free preview drafts. The fixture now checks two rendered draft values and unchanged source, then submits one Apply through its existing mock chat seam; the mock commits both source values in one source-owner transaction and one Undo restores the baseline. The code-link fixture expected disk line 3 at editor line 3 even though the preceding pop-out check retained an unsaved first line. It now locates the unique disk line's code in the actual dirty draft and asserts that exact selected text. (Both fixture repairs were first drafted by an external Codex run and imported here unchanged in substance.)

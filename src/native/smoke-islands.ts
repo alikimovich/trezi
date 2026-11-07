@@ -124,6 +124,23 @@ document.body.append(card);
           .catch((error: unknown) => `${name}=unavailable: ${String(error)}`)
       )
     )
+    const controlState = await Promise.all(
+      ['Light X', 'Light Y'].map(async (name) => ({
+        name,
+        ...(await host.request('islandControlInspect', { label: name }))
+      }))
+    )
+    writeFileSync(
+      join(artifacts, 'chat-island-control-failure.json'),
+      JSON.stringify({ label, controls: controlState, islands }, null, 2)
+    )
+    try {
+      const visible = await host.request('captureVisibleWindow')
+      writeFileSync(
+        join(artifacts, 'chat-island-control-failure.png'),
+        Buffer.from(visible.png, 'base64')
+      )
+    } catch {}
     throw new Error(
       `Native chat island did not update at [${label}]; controls ${controls.join(' ')}; preview=${JSON.stringify(await page("({ready:document.readyState, demo:!!document.querySelector('#island-shadow-demo')})"))}; islands=${islands}; page=${JSON.stringify(await page("({url:location.href, ready:document.readyState, scripts:Array.from(document.scripts,s=>s.src), demo:!!document.querySelector('#island-shadow-demo')})"))}`
     )

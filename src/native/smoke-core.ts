@@ -925,7 +925,7 @@ export async function runNativeCoreSmoke(
         nativeChat.command = async (command) => {
           assert.equal(command.type, 'submit', 'Apply uses one regular chat agent operation')
           assert.match(command.text ?? '', /opacity to 0.8/)
-          assert.match(command.text ?? '', /padding-vertical to 12px/)
+          assert.match(command.text ?? '', /set padding-vertical to 12(?:\n|$)/)
           batchCommands++
           const saved = await sourceOwner().commit(fixture, [
             {
