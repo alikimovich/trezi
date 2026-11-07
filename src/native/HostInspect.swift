@@ -3,20 +3,24 @@ import AppKit
 /// Walks the view hierarchy and the accessibility children together: the conversation hosts its rows
 /// through AppKit views that do not report their subviews as accessibility children, and a node reached
 /// both ways is visited once. `scanned` counts the nodes seen, for the caller's failure report.
-private func islandAccessibilityElement(_ root: NSObject, identifier: String, visited: inout [ObjectIdentifier: NSObject], trace: inout [String], depth: Int = 0) -> NSAccessibilityProtocol? {
+private func islandAccessibilityElement(_ root: NSObject, identifier: String, visited: inout [ObjectIdentifier: NSObject], trace: inout [String], depth: Int = 0) -> NSObject? {
     let identity = ObjectIdentifier(root)
     guard depth < 80, visited.count < 1024, visited[identity] == nil else { return nil }
     // Retain synthesized AX objects: an identity-only set can reject a later node
     // after an earlier proxy is released and its address is reused.
     visited[identity] = root
-    let node = String(describing: type(of: root)) + ":" + ((root as? NSAccessibilityProtocol)?.accessibilityIdentifier() ?? "")
+    let actualIdentifier = (root as? NSAccessibilityElementProtocol)?.accessibilityIdentifier?() ?? (root as? NSAccessibilityProtocol)?.accessibilityIdentifier()
+    let node = String(describing: type(of: root)) + ":" + (actualIdentifier ?? "")
     if trace.count == 16 { trace.remove(at: 8) }; trace.append(node)
-    if let element = root as? NSAccessibilityProtocol, element.accessibilityIdentifier() == identifier { return element }
+    if actualIdentifier == identifier { return root }
     // Scrollbar AX parts are synthetic leaves and may vend fresh child proxies.
     // Island text fields cannot be descendants of an AppKit scrollbar.
     if root is NSScroller { return nil }
     var children: [Any] = []
-    if let view = root as? NSView { children.append(contentsOf: view.subviews) }
+    if let view = root as? NSView {
+        children.append(contentsOf: view.subviews)
+        children.append(contentsOf: view.accessibilityChildrenInNavigationOrder() ?? [])
+    }
     if let element = root as? NSAccessibilityProtocol { children.append(contentsOf: element.accessibilityChildren() ?? []) }
     for case let child as NSObject in children {
         if let found = islandAccessibilityElement(child, identifier: identifier, visited: &visited, trace: &trace, depth: depth + 1) { return found }
@@ -302,7 +306,8 @@ extension Host {
             var visited: [ObjectIdentifier: NSObject] = [:]
             var trace: [String] = []
             let field = islandAccessibilityElement(chat, identifier: "island-field-" + label, visited: &visited, trace: &trace)
-            reply(id, ["value":field?.accessibilityValue() as? String ?? "", "visible":field != nil, "scanned":visited.count, "trace":trace])
+            let value = (field as? NSAccessibilityProtocol)?.accessibilityValue() as? String ?? (field as? NSAccessibilityStaticText)?.accessibilityValue() ?? ""
+            reply(id, ["value":value, "visible":field != nil, "scanned":visited.count, "trace":trace])
         case "revealChatIsland":
             guard ephemeral, let target = c["island"] as? String,
                   let message = chat.model.snapshot?.messages.first(where: { $0.segments.contains { $0.island?.id == target } }) else {
