@@ -883,7 +883,12 @@ export async function runNativeCoreSmoke(
           let commands = 0
           nativeChat.command = async (command) => {
             assert.equal(command.type, 'submit')
-            assert.ok(command.text?.includes(`set ${field.slice(6)} to ${value}`))
+            assert.ok(
+              command.text
+                ?.split('\n')
+                .some((line) => line.endsWith(`: set ${field.slice(6)} to ${value}`)),
+              'Apply names exactly the staged field/value, not a numeric prefix'
+            )
             const binding = inspector.bindings.get(field)
             assert.ok(binding)
             assert.equal((await binding.apply(value)).applied, true)
@@ -896,7 +901,15 @@ export async function runNativeCoreSmoke(
             })
             await wait(
               () => commands === 1 && inspector.state.draft?.submitted === true,
-              'one Styles Apply reached mock agent'
+              'one Styles Apply reached mock agent',
+              10000,
+              async () => ({
+                commands,
+                draft: inspector.state.draft,
+                error: inspector.state.error,
+                localGeneration: inspector.state.generation,
+                published: await host.request('inspectorInspect')
+              })
             )
           } finally {
             nativeChat.command = original

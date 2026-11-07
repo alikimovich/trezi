@@ -177,7 +177,14 @@ async function checkPointer(
   evidence.pointerEdit = edit
   assert.ok(edit.focused, `pointer: a click focuses padding-top ${JSON.stringify(edit)}`)
   assert.equal(page.source(), sourceBefore, 'typing stages a preview without writing source')
-  await page.applyDraft('style:padding-top', '12')
+  await waitFor(
+    async () =>
+      ((await host.request('inspectorInspect')) as { values: Record<string, string> }).values[
+        'style:padding-vertical'
+      ] === '12',
+    'the real Vertical padding field stages exactly 12'
+  )
+  await page.applyDraft('style:padding-vertical', '12')
   await waitFor(
     () => /padding(Top|-top)["']?\s*:\s*["']?12/.test(page.source()),
     'padding-top 12 in the source',
