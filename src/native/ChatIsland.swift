@@ -205,7 +205,7 @@ struct IslandInput: View {
     let label: String; let value: String; let commit: (IslandValue) -> Void
     @State private var entry: IslandEntry
     @State private var draft = ""
-    @FocusState private var focused: Bool
+    @State private var focused = false
     init(label: String, value: String, kind: IslandEntry.Kind, commit: @escaping (IslandValue) -> Void) {
         self.label = label; self.value = value; self.commit = commit
         _entry = State(initialValue: IslandEntry(kind))
@@ -261,7 +261,7 @@ struct IslandNativeInput: NSViewRepresentable {
         field.setAccessibilityLabel(label)
         field.setAccessibilityIdentifier("island-field-" + label)
         field.isEnabled = context.environment.isEnabled
-        field.textColor = invalid ? .systemRed : .labelColor
+        field.textColor = context.environment.isEnabled ? (invalid ? .systemRed : .labelColor) : .disabledControlTextColor
         if field.stringValue != text { field.stringValue = text }
     }
 }

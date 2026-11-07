@@ -1,5 +1,11 @@
 # PROGRESS LOG
 
+## 2026-11-07 — LKM-549 hosted focus and reload-safe native fixtures
+
+The324ec1b4foreground core check ended45passed/2failed/0skipped: source-free Styles Apply now passes, but the CSS Module DOM was removed by the source edit’s full reload, and native toolbar hover still painted no change. Independent review e6acc33e identified the unbound FocusState in the new NSTextField bridge; it is now ordinary State owned by the actual delegate. A hosted NSHostingView/IslandInput fixture passes source-refresh preservation during typing, blur exactly once, Return-plus-blur deduplication and disabled appearance without activating or ordering a window.
+
+The managed static fixture now optionally rebuilds its CSS Module card from the authored stylesheet on each load, analogous to its existing TSX padding HMR stand-in. The test no longer injects the requested applied CSS after the fact; computed-value confirmation reads the reloaded source. Remaining utility/plain Styles cases use explicit batch Apply with the existing mock agent/source-owner binding and preserve their original source/Undo assertions. The island mock asserts requested values from actual source before settlement, records canonical draft/notice/source/record/epoch facts, and requires the unsupported-rendered-value notice canonically before waiting for its asynchronous view publication. Original fixture source is restored in finally. Native tracking callbacks are limited to the actual button/item owners; the check now requires enter/exit delivery and unchanged pixel thresholds. No global pointer or settings change is introduced. Fresh native evidence and final review remain outstanding.
+
 ## 2026-11-07 — LKM-549 native repair after independent diagnosis
 
 The bb1af066 core diagnostic was 45 passed, 2 failed and no skips (47 selected checks), not acceptance. Independent read-only review d9864dbe confirmed that the CSS Module Apply fails before the mock is called, the island SwiftUI AX tree is absent in an unassisted run, and synthetic toolbar enter callbacks do not drive the native tracking owner.

@@ -38,14 +38,8 @@ extension NativeShell {
         func hover(_ button: NSButton, enter: Bool) {
             guard let window = button.window else { return }
             let point = button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
-            if enter, let moved = NSEvent.mouseEvent(with: .mouseMoved, location: point,
-                  modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                  windowNumber: window.windowNumber, context: nil, eventNumber: 0,
-                  clickCount: 0, pressure: 0) { window.sendEvent(moved) }
-            var view: NSView? = button
             var seen = Set<ObjectIdentifier>()
-            while let current = view {
-                current.updateTrackingAreas()
+            for current in [button, button.superview].compactMap({ $0 }) {
                 let local = current.convert(point, from: nil)
                 for area in current.trackingAreas where area.options.contains(.mouseEnteredAndExited) {
                     let rect = area.options.contains(.inVisibleRect) ? current.visibleRect : area.rect
@@ -58,7 +52,6 @@ extension NativeShell {
                     if enter { owner.mouseEntered(with: event) } else { owner.mouseExited(with: event) }
                     trackingDeliveries += 1
                 }
-                view = current.superview
             }
         }
         // Leave the preceding state before entering another one. Focus uses the actual

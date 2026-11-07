@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { islandSource, sourceHash } from '../main/chat-island-source'
 import { runChatIslandTool } from '../main/chat-islands'
@@ -49,6 +49,7 @@ export async function checkChatIslands(host: NativeBridge, fixture: string, arti
     const view = active?.views.get(id)
     assert.ok(view)
     assert.ok(prompt.includes(view.sourceRevision), 'agent request carries exact source revision')
+    const writesBefore = active!.writes
     await nativeIslands.interact({
       chat: key,
       id,
@@ -58,6 +59,28 @@ export async function checkChatIslands(host: NativeBridge, fixture: string, arti
       operation: randomUUID(),
       values: draft.values
     })
+    const persisted = await islandSource(active!.root, active!.records.find((r) => r.id === id)!)
+    writeFileSync(
+      join(artifacts, 'island-mock-source-outcome.json'),
+      JSON.stringify(
+        {
+          writesBefore,
+          writesAfter: active!.writes,
+          sourceRevision: persisted.revision,
+          values: persisted.values,
+          requested: draft.values,
+          notice: active!.notices.get(id) ?? ''
+        },
+        null,
+        2
+      )
+    )
+    for (const [field, value] of Object.entries(draft.values))
+      assert.deepEqual(
+        persisted.values[field],
+        value,
+        'mock agent persisted every requested island value'
+      )
     pendingApplyTurn = `smoke-island-apply-${++applyTurn}`
     return pendingApplyTurn
   }
@@ -76,6 +99,7 @@ export async function checkChatIslands(host: NativeBridge, fixture: string, arti
   const file = join(fixture, 'island-light.js')
   const indexFile = join(fixture, 'index.html')
   const originalIndex = readFileSync(indexFile, 'utf8')
+  const originalIslandSource = existsSync(file) ? readFileSync(file, 'utf8') : null
   const page = (code: string) => host.request('evaluate', { view: 'preview', code })
   let initialShadow = ''
   const revisionStamp = (text: string) => {
@@ -274,14 +298,56 @@ document.body.append(card);
           ),
         'island draft submitted by Apply'
       )
+      const epochBeforeSettle = nativeIslands.sessions.get(chat.chat)!.epoch
       await settleApply()
+      const liveSession = nativeIslands.sessions.get(chat.chat)!
+      const currentRecord = liveSession.records.find((r) => r.id === result.id)
+      const appliedSource = currentRecord
+        ? await islandSource(liveSession.root, currentRecord)
+        : null
+      writeFileSync(
+        join(artifacts, 'island-settle-outcome.json'),
+        JSON.stringify(
+          {
+            epochBeforeSettle,
+            epochAfterSettle: liveSession.epoch,
+            notice: liveSession.notices.get(result.id) ?? '',
+            draft: liveSession.drafts.get(result.id),
+            view: liveSession.views.get(result.id),
+            records: liveSession.records.map((r) => ({
+              id: r.id,
+              revision: r.revision,
+              status: r.status
+            })),
+            source: appliedSource && {
+              revision: appliedSource.revision,
+              values: appliedSource.values
+            },
+            rendered: currentRecord?.manifest.params.map((p) => ({
+              id: p.id,
+              rendered: p.rendered
+            }))
+          },
+          null,
+          2
+        )
+      )
       assert.ok(
         nativeIslands.sessions.get(chat.chat)?.drafts.has(result.id),
         'unmapped literal source cannot clear a draft without rendered confirmation'
       )
-      assert.match(
-        nativeIslands.sessions.get(chat.chat)?.views.get(result.id)?.notice ?? '',
-        /no rendered-value check/
+      // Confirm the canonical outcome before waiting for its asynchronously
+      // published view. A superseding layers:changed refresh can delay that view.
+      assert.match(liveSession.notices.get(result.id) ?? '', /no rendered-value check/)
+      const appliedDraft = liveSession.drafts.get(result.id)!
+      assert.equal(appliedDraft.sourceApplied, true)
+      assert.equal(appliedDraft.sourceRevision, appliedSource?.revision)
+      await wait(
+        () =>
+          /no rendered-value check/.test(
+            nativeIslands.sessions.get(chat.chat)?.views.get(result.id)?.notice ?? ''
+          ),
+        'unsupported rendered-value notice is published'
       )
       assert.equal(
         nativeIslands.sessions.get(chat.chat)?.views.get(result.id)?.draft?.conflict,
@@ -384,6 +450,9 @@ document.body.append(card);
   } finally {
     agentPort.applyDraft = originalApply
     writeFileSync(indexFile, originalIndex)
+    if (originalIslandSource === null) {
+      if (existsSync(file)) unlinkSync(file)
+    } else writeFileSync(file, originalIslandSource)
     // Restoring the page reloads the preview; let that finish so the next check (in a
     // filtered run, shell-layout directly) never styles a document about to be replaced.
     try {
