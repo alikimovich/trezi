@@ -43,7 +43,8 @@ const all = [
   'composer',
   'agent-browser',
   'selection',
-  'changes'
+  'changes',
+  'inspector'
 ]
 assert.deepEqual([...NATIVE_SMOKE_GROUPS], all)
 assert.deepEqual([...parseSmokeGroups([])], all, 'No flag runs every group')
@@ -445,3 +446,18 @@ for (const [, expression] of moduleStorageExpressions)
     () => new Function(`return (async () => JSON.stringify((await (${expression})) ?? null))()`),
     'native fixture setup is a valid expression'
   )
+
+// The focused inspector path retains setup and the complete real inspector check.
+assert.deepEqual(
+  selectSmokeChecks(
+    [
+      ...SMOKE_PRELUDE.map((name) => ({ name })),
+      { name: 'inspector' },
+      { name: 'toolbar-actions' }
+    ],
+    parseSmokeGroups(['--only=inspector']),
+    () => {}
+  ).map((x) => x.name),
+  [...SMOKE_PRELUDE, 'inspector']
+)
+assert.ok(SMOKE_CHECK_GROUPS.inspector.includes('core'), 'normal core coverage remains unchanged')

@@ -1392,6 +1392,7 @@ export async function runNativeCoreSmoke(
           {
             evaluate: page,
             source: () => readFileSync(join(fixture, 'native-style.tsx'), 'utf8'),
+            applyDraft: submitFixtureDraft,
             styles: (prop) => invoke('styles:read', [prop]),
             select: async () => {
               // Source edits live-reload the page, which drops the stamp set above.
