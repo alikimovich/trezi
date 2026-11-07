@@ -374,7 +374,10 @@ document.body.append(card);
       await wait(() => {
         const live = nativeIslands.sessions.get(chat.chat)
         return (
-          !!live && !live.drafts.has(result.id) && live.views.get(result.id)?.draft === undefined
+          !!live &&
+          live.views.has(result.id) &&
+          !live.drafts.has(result.id) &&
+          live.views.get(result.id)?.draft === undefined
         )
       }, 'unsupported source edit leaves a draft the user can explicitly dismiss')
       await host.request('islandPerform', { island: result.id, action: 'undo' })

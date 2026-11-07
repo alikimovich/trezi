@@ -422,3 +422,26 @@ if (process.platform === 'darwin') {
   )
   console.log('dev-native: bad --only selections fail before building; --help lists the groups.')
 } else console.log('dev-native launcher checks SKIP — macOS only.')
+
+// Native Host.evaluate wraps the supplied code in (await (EXPRESSION)); a
+// statement list passes TypeScript but throws immediately inside real WebKit.
+const nativeCoreSource = readFileSync(
+  new URL('../src/native/smoke-core.ts', import.meta.url),
+  'utf8'
+)
+const moduleStorageExpressions = [
+  ...nativeCoreSource.matchAll(/page\(\s*`([^`]*sessionStorage\.(?:set|remove)Item[^`]*?)`\s*\)/g)
+]
+assert.ok(
+  moduleStorageExpressions.some(([, code]) => code.includes('sessionStorage.setItem')),
+  'module setup is covered'
+)
+assert.ok(
+  moduleStorageExpressions.some(([, code]) => code.includes('sessionStorage.removeItem')),
+  'module cleanup is covered'
+)
+for (const [, expression] of moduleStorageExpressions)
+  assert.doesNotThrow(
+    () => new Function(`return (async () => JSON.stringify((await (${expression})) ?? null))()`),
+    'native fixture setup is a valid expression'
+  )

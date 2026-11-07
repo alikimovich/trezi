@@ -1120,7 +1120,7 @@ export async function runNativeCoreSmoke(
           join(artifacts, 'inspector-layout.png'),
           Buffer.from(await host.request('captureShell'), 'base64')
         )
-        await page(`sessionStorage.setItem('trezi-native-module-fixture','1'); true`)
+        await page(`(sessionStorage.setItem('trezi-native-module-fixture','1'), true)`)
         host.emit('menu', { action: 'reload' })
         await wait(
           () =>
@@ -1224,10 +1224,11 @@ export async function runNativeCoreSmoke(
         )
         await invoke('styles:clear-preview', {})
         await settleLiveReload()
-        assert.ok(
-          await page(
-            `getComputedStyle(document.querySelector('#native-module-card')).rowGap === '12px'`
-          ),
+        await wait(
+          () =>
+            page(
+              `document.querySelector('#native-module-card') && getComputedStyle(document.querySelector('#native-module-card')).rowGap === '12px'`
+            ),
           'CSS Module authored source reaches rendered preview after clearing draft'
         )
         await inspector.settleDraftTurn(true)
@@ -1271,7 +1272,7 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: utilityState.generation,
+            generation: await liveGeneration(),
             action: 'preview',
             field: 'style:gap',
             value: '24px'
@@ -1285,7 +1286,7 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: utilityState.generation,
+            generation: await liveGeneration(),
             action: 'cancel-preview',
             field: 'style:gap'
           }
@@ -1295,7 +1296,7 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: utilityState.generation,
+            generation: await liveGeneration(),
             action: 'apply',
             field: 'style:gap',
             value: '24px'
@@ -1338,7 +1339,7 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: plainState.generation,
+            generation: await liveGeneration(),
             action: 'preview',
             field: 'style:gap',
             value: '12px'
@@ -1352,7 +1353,7 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: plainState.generation,
+            generation: await liveGeneration(),
             action: 'cancel-preview',
             field: 'style:gap'
           }
@@ -1362,7 +1363,7 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: plainState.generation,
+            generation: await liveGeneration(),
             action: 'apply',
             field: 'style:gap',
             value: '12px'
@@ -1376,7 +1377,7 @@ export async function runNativeCoreSmoke(
         assert.ok((await invoke('edit:undo', fixture)).ok, 'plain CSS edit has Undo')
         await wait(() => plainSource().includes('gap:8px'), 'plain CSS Undo restores source')
         await host.request('inspectorPerform', {
-          action: { root: fixture, generation: plainState.generation, action: 'close' }
+          action: { root: fixture, generation: await liveGeneration(), action: 'close' }
         })
         await inspect('inspectorInspect', (s) => !s.visible)
         await page(`(() => {
@@ -1414,7 +1415,9 @@ export async function runNativeCoreSmoke(
         )
       },
       cleanup: async () => {
-        await page(`sessionStorage.removeItem('trezi-native-module-fixture'); true`).catch(() => {})
+        await page(`(sessionStorage.removeItem('trezi-native-module-fixture'), true)`).catch(
+          () => {}
+        )
         const state = await host.request('inspectorInspect')
         if (state.visible)
           await host.request('inspectorPerform', {

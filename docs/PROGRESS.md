@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-07 — LKM-549 combined native64/65; evaluator fixture correction
+
+The021bc47d required core/chat/islands/shadow-light foreground run completed64passed,1failed,0skipped at20:29:52. All hover appearances/widths, source/Undo islands, shadow controls and code-link checks passed. The sole inspector failure was a new fixture setup mistake: Host.evaluate wraps its argument as one expression, but the session-storage setup used a semicolon-separated statement list. Setup and cleanup now use comma expressions; the native smoke selection test compiles those exact expressions with the host’s await/JSON wrapper, catching the original SyntaxError before a native launch. Independent review’s later generation and asynchronous authored-card waits are applied, and Revert additionally requires its view to exist. Pixel thresholds, source/render requirements and production guards remain unchanged. The failed run and its captures are retained. Full final native/CI/review remain pending.
+
 ## 2026-11-07 — LKM-549 focused native islands green; hover ownership evidence
 
 The integrated-main0d416dc8 foreground islands check passed6of6 with zero failures/skips, including native fields, source Apply, canonical unsupported-rendered notice, Revert/Undo and production rendered-opacity transport. This is focused evidence, not full acceptance. The SDK’s public NSButtonCell mouseEntered/mouseExited callbacks are now supported when the installed tracking-area owner is a cell, alongside NSResponder owners. Each button must report actual enter/exit deliveries before the unchanged hover pixel check; bounded owner-class diagnostics name the real route. No forced hover highlight, global event, cursor move or settings change is added. The next required combined native admission will verify CSS Module reload and toolbar behavior.
