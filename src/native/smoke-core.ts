@@ -1222,7 +1222,7 @@ export async function runNativeCoreSmoke(
             ),
           'CSS Module applied value is visible in the rendered preview'
         )
-        await invoke('styles:clear-preview', {})
+        await send('styles:clear-preview', {})
         await settleLiveReload()
         await wait(
           () =>
