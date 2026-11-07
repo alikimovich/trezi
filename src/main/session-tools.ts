@@ -36,6 +36,7 @@ import { reloadAgentPreview, restartAgentDevServer } from './preview-refresh-too
 import { parseSpeed } from './preview-speed'
 import { openAgentPreview } from './preview-tools'
 import { runPreviewVerify } from './preview-verify'
+import { rememberRuleTool } from './project-memory-rule'
 import { runProjectUiTool } from './project-ui'
 import { ProviderError, providerOwner } from './provider-owner'
 import { askUser } from './question-tool'
@@ -94,6 +95,7 @@ export const SESSION_TOOLS: readonly SessionTool[] = [
   'compose_project_ui',
   'ask_user',
   'chat_ui',
+  'remember_rule',
   'install_skills'
 ]
 
@@ -366,6 +368,7 @@ async function runTool(action: SessionTool, args: unknown, s: ToolScope): Promis
   if (action === 'install_skills') return installSkills()
   if (action === 'ask_user') return askUser(args, s)
   if (action === 'chat_ui') return chatUiTool(args, s)
+  if (action === 'remember_rule') return rememberRuleTool(args, s)
   // A background agent may inspect only peers, never its parent chat's park or gate.
   if (action === 'workspace_state' && s.background)
     return { peerWork: await peerView(s.liveRoot, s.peerId ?? '') }

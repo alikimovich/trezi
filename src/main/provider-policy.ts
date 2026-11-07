@@ -78,7 +78,8 @@ export const TREZI_TOOLS = [
   'publish_merge',
   'land_now',
   'ask_user',
-  'chat_ui'
+  'chat_ui',
+  'remember_rule'
 ] as const
 
 /** Tools a background (comment) session is not granted, and what it is told instead. */
@@ -89,7 +90,9 @@ export const FOREGROUND_ONLY: Readonly<Record<string, string>> = {
   ask_user:
     'Background agents cannot ask with ask_user. Make the reasonable default choice and name it in your final message.',
   chat_ui:
-    'Background agents cannot show answer components. Make the reasonable default choice and name it in your final message.'
+    'Background agents cannot show answer components. Make the reasonable default choice and name it in your final message.',
+  remember_rule:
+    'Background agents cannot save project memory. Name the rule in your final message so the user can save it.'
 }
 
 /**

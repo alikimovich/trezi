@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { chatIslandDescription, chatIslandShape } from '../../../bin/chat-island-schema.mjs'
 import { chatUiDescription, chatUiShape } from '../../../bin/chat-ui-schema.mjs'
 import { openCodeDescription, openCodeShape } from '../../../bin/code-tool-schema.mjs'
+import { rememberRuleDescription, rememberRuleShape } from '../../../bin/memory-tool-schema.mjs'
 import {
   previewToolText as PREVIEW_TOOL_TEXT,
   previewToolShapes as previewShapes,
@@ -128,6 +129,8 @@ const TREZI_TOOL_NAMES = new Set([
   'mcp__trezi__peer_wait',
   'mcp__trezi__chat_island',
   'mcp__trezi__chat_ui',
+  // LKM-556: validated by its own owner (compare-and-swap, readback), like chat islands.
+  'mcp__trezi__remember_rule',
   'mcp__trezi__open_code',
   'mcp__trezi__open_preview',
   'mcp__trezi__reload_preview',
@@ -803,6 +806,10 @@ async function startSession(
       // LKM-208: native answer components (options, form) in this message.
       tool('chat_ui', chatUiDescription, chatUiShape, async (args) =>
         asText(treziTool('chat_ui', args))
+      ),
+      // LKM-556: an explicit "remember this" saved to this project's memory.
+      tool('remember_rule', rememberRuleDescription, rememberRuleShape, async (args) =>
+        asText(treziTool('remember_rule', args))
       ),
       // Pure spring→CSS calculator. LLMs can't reliably integrate a spring in
       // their head, so this computes the EXACT `linear()` easing + duration the

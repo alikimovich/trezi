@@ -10,6 +10,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ## [Unreleased]
 
+### Added
+
+- When you ask the agent to remember a rule or guide, it now saves it to the project's memory (shown in Project memory, with Undo) and only says so once the save succeeded.
+
 ### Fixed
 
 - The sidebar and top bar use the system sans-serif UI font again instead of monospace; code and editor fonts are unchanged.

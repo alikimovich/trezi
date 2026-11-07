@@ -1084,6 +1084,7 @@ Codex checks its bridge (`workspace_state`) while its helper is still opening.
 | `open_preview`, `open_code` | routed | routed | the window that navigates the preview or reveals code |
 | `reload_preview`, `restart_dev_server` | routed | routed | the window that reloads the preview or restarts its dev server |
 | `project_ui_catalog`, `compose_project_ui` | routed | routed | the chat's Experimental Gen UI state |
+| `remember_rule` | routed | routed | the project-memory update queue over the Swift memory owner, keyed by the live checkout (`src/main/project-memory-rule.ts`); background sessions are refused |
 | `workspace_state` | routed | routed | chat-isolation state (worktree, parked batch) and the peer feed |
 | `peer_lookup` | routed | routed | the peer feed and that peer's worktree, read-only (`src/main/peer-lookup.ts`) |
 | `peer_wait` | routed | routed | the owner's wait edge and the feed; a bounded wait on one named peer (`src/main/peer-wait.ts`) |

@@ -41,7 +41,8 @@
      "publish_merge",
      "land_now",
      "ask_user",
-     "chat_ui"
+     "chat_ui",
+     "remember_rule"
     ]
    }
   }
@@ -729,7 +730,8 @@
      "publish_merge",
      "land_now",
      "ask_user",
-     "chat_ui"
+     "chat_ui",
+     "remember_rule"
     ],
     "resume": "thread-1",
     "session": "fg-N"

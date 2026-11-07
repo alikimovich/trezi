@@ -66,6 +66,7 @@
     "test:sessionstore": "bun test/sessions-store.mjs",
     "test:preferred-model": "bun test/preferred-model.mjs",
     "test:project-memory": "bun test/project-memory.mjs",
+    "test:project-memory-rule": "bun test/project-memory-rule.mjs",
     "test:resolved-lessons": "bun test/resolved-lessons.mjs",
     "test:memory-owner": "bun test/memory-owner.mjs",
     "test:skills-registry": "bun test/skills-registry.mjs",

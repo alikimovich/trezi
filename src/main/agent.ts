@@ -119,6 +119,7 @@ import {
 } from './project-memory'
 import { refineProjectMemory } from './project-memory-evaluation'
 import { memoryDate } from './project-memory-format'
+import { setProjectMemoryRuleRunner } from './project-memory-rule'
 import { PLANNING_PROJECT, type PlanningAttachment, ProjectPlanning } from './project-planning'
 import { cancelProjectUi, projectUiInstructions, setProjectUiEnabled } from './project-ui'
 import { providerOwner } from './provider-owner'
@@ -209,6 +210,8 @@ const memoryUpdateQueue = (): ProjectMemoryUpdateQueue =>
     for (const listener of memoryUpdateListeners) listener(update)
   }))
 const memoryUpdateListeners = new Set<(update: ProjectMemoryUpdate) => void>()
+// LKM-556: the agent's remember_rule goes through the same queue as every update.
+setProjectMemoryRuleRunner((root, evaluate) => memoryUpdateQueue().enqueue(root, evaluate))
 let planningSmoke: {
   complete: (prompt: string, options: AgentOptions, signal: AbortSignal) => Promise<string | null>
   create: (

@@ -93,6 +93,7 @@ const CALLS = {
   open_code: { file: 'shadow.js', startLine: 1, endLine: 2 },
   chat_island: island,
   chat_ui: { action: 'catalog' },
+  remember_rule: { rule: 'Reuse existing components before inventing new ones.' },
   workspace_state: {},
   peer_lookup: { peer: 'no-such-peer' },
   peer_wait: { peer: 'no-such-peer' },
@@ -583,15 +584,21 @@ try {
   const claudeRefusal = JSON.parse(claudeWait.results.peer_wait.content[0].text)
   assert.equal(claudeRefusal.waited, false)
   assert.equal(claudeRefusal.refused, 'unknown')
-  const refused = await background.turn('only chat_island,open_code,open_preview')
+  const refused = await background.turn('only chat_island,open_code,open_preview,remember_rule')
   assert.match(textOf(refused.results.chat_island), /Background edits cannot create chat islands/)
   assert.equal(refused.results.chat_island.isError, true)
   assert.match(
     textOf(refused.results.open_code),
     /Background edits cannot navigate the user editor/
   )
+  assert.match(
+    textOf(refused.results.remember_rule),
+    /Background agents cannot save project memory/
+  )
   assert.ok(
-    !refused.routed.includes('chat_island') && !refused.routed.includes('open_code'),
+    !refused.routed.includes('chat_island') &&
+      !refused.routed.includes('open_code') &&
+      !refused.routed.includes('remember_rule'),
     `the owner refused before main: ${refused.routed}`
   )
   // Granted to a background session, and main applies its scope: no navigation.

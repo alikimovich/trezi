@@ -38,11 +38,22 @@ export interface ProjectMemoryUpdate {
   after: ProjectMemory
 }
 
+/**
+ * What one queued update did. `committed`: the owner wrote `after`. `unchanged`: the
+ * evaluation proposed nothing new. `stale`: other saves won both attempts. `failed`:
+ * the evaluation or the owner threw (a timeout may have committed or not).
+ */
+export type ProjectMemoryUpdateOutcome =
+  | { kind: 'committed'; before: ProjectMemory; after: ProjectMemory }
+  | { kind: 'unchanged'; memory: ProjectMemory }
+  | { kind: 'stale' }
+  | { kind: 'failed'; error: unknown }
+
 export interface ProjectMemoryUpdateQueue {
   enqueue: (
     root: string,
     evaluate: (currentMemory: string) => Promise<string | null>
-  ) => Promise<void>
+  ) => Promise<ProjectMemoryUpdateOutcome>
 }
 
 export class ProjectMemoryError extends Error {
@@ -70,23 +81,24 @@ export function createProjectMemoryUpdateQueue(
   store: ProjectMemoryStore,
   updated?: (update: ProjectMemoryUpdate) => void
 ): ProjectMemoryUpdateQueue {
-  const chains = new Map<string, Promise<void>>()
+  const chains = new Map<string, Promise<unknown>>()
 
   const enqueue = (
     root: string,
     evaluate: (currentMemory: string) => Promise<string | null>
-  ): Promise<void> => {
+  ): Promise<ProjectMemoryUpdateOutcome> => {
     const key = projectKey(root)
     const prior = chains.get(key) ?? Promise.resolve()
     const run = prior
       .catch(() => {})
-      .then(async () => {
+      .then(async (): Promise<ProjectMemoryUpdateOutcome> => {
         // One retry is enough to preserve a concurrent manual edit without
         // allowing a busy editor to trigger an unbounded series of model calls.
         for (let attempt = 0; attempt < 2; attempt += 1) {
           const before = await store.get(root)
           const next = await evaluate(before.content)
-          if (next === null || next.trim() === before.content.trim()) return
+          if (next === null || next.trim() === before.content.trim())
+            return { kind: 'unchanged', memory: before }
           const after = await store.propose(root, before, next)
           if (!after) continue
           if (after.content.trim() !== before.content.trim()) {
@@ -96,12 +108,14 @@ export function createProjectMemoryUpdateQueue(
               /* a note is never worth failing the update for */
             }
           }
-          return
+          return { kind: 'committed', before, after }
         }
+        return { kind: 'stale' }
       })
-      .catch(() => {
-        /* best-effort: chat completion must never fail because memory did */
-      })
+      .catch(
+        // Best-effort: chat completion must never fail because memory did.
+        (error: unknown): ProjectMemoryUpdateOutcome => ({ kind: 'failed', error })
+      )
 
     chains.set(key, run)
     void run.finally(() => {

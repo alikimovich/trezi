@@ -241,6 +241,7 @@ export const UNIT = [
   'sessions-store',
   'preferred-model',
   'project-memory',
+  'project-memory-rule',
   'annotation-store',
   'setup-next',
   'shadow-controls',

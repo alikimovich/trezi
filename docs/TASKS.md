@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-556 — Agents save rules and guides to project memory
+
+- [x] `remember_rule` agent tool (Claude and Codex, foreground only) saves one rule through the project-memory update queue over the Swift owner; merge under its heading, user lines kept, duplicates skipped, near-duplicates reported (`replaces`/`distinct`), stale/failed/unanswered writes never reported as saved.
+- [x] Agent rules name the tool and confirm only on `saved: true`; sessions without it (Gemini, background) say it was not saved.
+- [x] Unit (`test/project-memory-rule.mjs`) and real-owner (`test/memory-owner.mjs`) coverage; policy lists and golden updated.
+- [ ] Manager: independent review, exact-head CI, native acceptance and merge.
+
 ## LKM-554 — Restore system sans-serif UI font in sidebar and top bar
 
 - [x] Sidebar rows, history detail, shimmer fallback, chat title, address, branch menu, nested title and Publish use `NSFont.systemFont` at the same sizes and weights; code/editor fonts untouched.
