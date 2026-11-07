@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-07 — LKM-549 focused native islands green; hover ownership evidence
+
+The integrated-main0d416dc8 foreground islands check passed6of6 with zero failures/skips, including native fields, source Apply, canonical unsupported-rendered notice, Revert/Undo and production rendered-opacity transport. This is focused evidence, not full acceptance. The SDK’s public NSButtonCell mouseEntered/mouseExited callbacks are now supported when the installed tracking-area owner is a cell, alongside NSResponder owners. Each button must report actual enter/exit deliveries before the unchanged hover pixel check; bounded owner-class diagnostics name the real route. No forced hover highlight, global event, cursor move or settings change is added. The next required combined native admission will verify CSS Module reload and toolbar behavior.
+
 ## 2026-11-07 — LKM-549 hosted focus and reload-safe native fixtures
 
 The integrated-main fdab1139 island check passed native values, source persistence and canonical notice publication, then failed on an immediate view read after Revert. Revert now waits for both canonical draft removal and its published view with the existing bounded wait; the unobservable150ms pause was removed. The failed3/1/2receipt is preserved.

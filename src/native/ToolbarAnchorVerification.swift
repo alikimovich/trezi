@@ -35,6 +35,8 @@ extension NativeShell {
         }
         let buttons = Dictionary(uniqueKeysWithValues: found)
         var trackingDeliveries = 0
+        var entered: [ObjectIdentifier: Int] = [:], exited: [ObjectIdentifier: Int] = [:]
+        var owners: [[String: String]] = []
         func hover(_ button: NSButton, enter: Bool) {
             guard let window = button.window else { return }
             let point = button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
@@ -43,13 +45,20 @@ extension NativeShell {
                 let local = current.convert(point, from: nil)
                 for area in current.trackingAreas where area.options.contains(.mouseEnteredAndExited) {
                     let rect = area.options.contains(.inVisibleRect) ? current.visibleRect : area.rect
-                    guard rect.contains(local), let owner = area.owner as? NSResponder,
+                    guard rect.contains(local), let owner = area.owner as? NSObject,
                           seen.insert(ObjectIdentifier(owner)).inserted,
                           let event = NSEvent.enterExitEvent(with: enter ? .mouseEntered : .mouseExited,
                           location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
                           windowNumber: window.windowNumber, context: nil, eventNumber: 0,
                           trackingNumber: 0, userData: nil) else { continue }
-                    if enter { owner.mouseEntered(with: event) } else { owner.mouseExited(with: event) }
+                    let target = ObjectIdentifier(button)
+                    if let responder = owner as? NSResponder {
+                        if enter { responder.mouseEntered(with: event) } else { responder.mouseExited(with: event) }
+                    } else if let cell = owner as? NSButtonCell {
+                        if enter { cell.mouseEntered(with: event) } else { cell.mouseExited(with: event) }
+                    } else { continue }
+                    if enter { entered[target, default:0] += 1 } else { exited[target, default:0] += 1 }
+                    if owners.count < 24 { owners.append(["button":NSStringFromClass(type(of:button)), "owner":NSStringFromClass(type(of:owner)), "view":NSStringFromClass(type(of:current))]) }
                     trackingDeliveries += 1
                 }
             }
@@ -66,8 +75,9 @@ extension NativeShell {
             guard host.makeFirstResponder(button) else { return ["error":"Toolbar button refused focus", "stage":stage] }
         } else { return ["error":"Unknown toolbar interaction stage", "stage":stage] }
         host.contentView?.superview?.displayIfNeeded()
-        return ["stage":stage, "trackingDeliveries":trackingDeliveries, "buttons":found.map { ["id":$0.0, "class":NSStringFromClass(type(of: $0.1)),
-                   "focused":host.firstResponder === $0.1, "highlighted":$0.1.cell?.isHighlighted ?? false] }]
+        return ["stage":stage, "trackingDeliveries":trackingDeliveries, "trackingOwners":owners, "buttons":found.map { ["id":$0.0, "class":NSStringFromClass(type(of: $0.1)),
+                   "focused":host.firstResponder === $0.1, "highlighted":$0.1.cell?.isHighlighted ?? false,
+                   "enterDeliveries":entered[ObjectIdentifier($0.1)] ?? 0, "exitDeliveries":exited[ObjectIdentifier($0.1)] ?? 0] }]
     }
 }
 

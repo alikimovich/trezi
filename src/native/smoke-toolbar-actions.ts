@@ -432,8 +432,8 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
           )
           if (stage === 'hover')
             assert.ok(
-              probe.trackingDeliveries > 0,
-              'hover reaches an installed native tracking owner'
+              probe.buttons.every((button: State) => button.enterDeliveries > 0),
+              `hover reaches each installed native tracking owner: ${JSON.stringify(probe)}`
             )
           await pause(120)
           const state = await shell()
@@ -479,7 +479,10 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
           const reset: State = await host.request('toolbarInteractionProbe', { stage: 'reset' })
           assert.equal(reset.error, undefined, `${name}: interaction reset`)
           if (stage === 'hover')
-            assert.ok(reset.trackingDeliveries > 0, 'hover exit reaches its native tracking owner')
+            assert.ok(
+              reset.buttons.every((button: State) => button.exitDeliveries > 0),
+              `hover exit reaches each native tracking owner: ${JSON.stringify(reset)}`
+            )
         }
       } finally {
         await host.request('toolbarInteractionProbe', { stage: 'reset' })
