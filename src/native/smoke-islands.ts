@@ -371,12 +371,12 @@ document.body.append(card);
         }
       }, 'preview shadow changed after the island Apply')
       await host.request('islandPerform', { island: result.id, action: 'revert-draft' })
-      assert.equal(
-        nativeIslands.sessions.get(chat.chat)?.views.get(result.id)?.draft,
-        undefined,
-        'unsupported source edit leaves a draft the user can explicitly dismiss'
-      )
-      await new Promise((r) => setTimeout(r, 150))
+      await wait(() => {
+        const live = nativeIslands.sessions.get(chat.chat)
+        return (
+          !!live && !live.drafts.has(result.id) && live.views.get(result.id)?.draft === undefined
+        )
+      }, 'unsupported source edit leaves a draft the user can explicitly dismiss')
       await host.request('islandPerform', { island: result.id, action: 'undo' })
       await wait(
         () => readFileSync(file, 'utf8') === code,
