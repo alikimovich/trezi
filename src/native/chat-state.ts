@@ -8,6 +8,7 @@ import type {
   SessionTranscriptEntry,
   SlashCommandItem
 } from '../shared/api'
+import { type DraftQuote, parseQuotedPrompt } from '../shared/chat-quotes'
 import { type ChatAgentSettings, defaultChatAgentSettings } from '../shared/chat-settings'
 import { migrateChatTitle } from '../shared/chat-title'
 import { type ChatUiRecord, chatUiAnswerText } from '../shared/chat-ui'
@@ -34,6 +35,8 @@ export interface Submission {
   /** The answer component that created this user turn, when applicable. */
   chatUiId?: string
   attachments: Attachment[]
+  /** LKM-555: the quote cards sent with `text`; Edit puts them back as cards. */
+  quotes?: DraftQuote[]
   selection: NativeChatContext['selection']
   turn: NativeChatContext['turn']
 }
@@ -78,6 +81,8 @@ export interface Chat extends NativeChatMirror {
   draftSelection?: NativeChatContext['selection']
   /** LKM-181: islands added by Copy reference (`#island-shadow-2`), shown as chips. */
   references?: string[]
+  /** LKM-555: quote cards (Reply on selected chat text), sent with the draft. */
+  quotes?: DraftQuote[]
   /** The turn this chat last sent (the owner's turn id); terminal events of any other are late. */
   turn?: string
   /** The message that turn sent, for the login card's Retry. */
@@ -252,13 +257,17 @@ export function hydrate(chat: Chat, transcript: SessionTranscriptEntry[]) {
     if (entry.role === 'user') {
       turn = entry
       chat.streamingId = null
+      // LKM-555: a reply with quotes shows them as quotes again, its message as the text.
+      const quoted = parseQuotedPrompt(entry.text)
+      const text = quoted ? quoted.text : entry.text
       chat.messages.push({
         id: crypto.randomUUID(),
         role: 'user',
         at: entry.at,
-        text: entry.text,
+        text,
         statuses: [],
-        segments: [{ kind: 'text', text: entry.text, at: entry.at }],
+        segments: text ? [{ kind: 'text', text, at: entry.at }] : [],
+        ...(quoted ? { quotes: quoted.quotes } : {}),
         attachments: entry.planningAttachments?.map((a) => ({
           id: crypto.randomUUID(),
           kind: a.type.startsWith('image/') ? 'image' : 'file',

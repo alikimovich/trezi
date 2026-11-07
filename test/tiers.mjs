@@ -113,6 +113,7 @@ export const UNIT = [
   'composer-queue-panel',
   'composer-attach',
   'composer-sent-draft',
+  'chat-quotes',
   'composer-sending',
   'chat-auto-resolve',
   'live-write-guard',

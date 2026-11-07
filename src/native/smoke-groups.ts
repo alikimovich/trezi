@@ -146,6 +146,7 @@ export const SMOKE_CHECK_GROUPS: Readonly<Record<string, readonly NativeSmokeGro
   'landing-check': ['chat'],
   'agent-question': ['chat'],
   'chat-text': ['chat'],
+  'chat-reply': ['chat', 'composer'],
   'chat-ui': ['chat'],
   'code-link-click': ['chat'],
   'parallel-stream': ['chat', 'sidebar'],

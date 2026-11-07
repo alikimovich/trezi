@@ -21,6 +21,7 @@ import { checkChangesPanel, restoreChangesPanel } from './smoke-changes-panel'
 import { checkNativeChat } from './smoke-chat'
 import { captureChatGate, checkChatGate, restoreChatGate } from './smoke-chat-gate'
 import { checkChatRecoveryAcceptance } from './smoke-chat-recovery-acceptance'
+import { checkChatReply } from './smoke-chat-reply'
 import { checkChatText } from './smoke-chat-text'
 import { checkChatUi } from './smoke-chat-ui'
 import { checkCodeLinkClick, restoreCodeLinkClick } from './smoke-code-link'
@@ -1635,6 +1636,12 @@ export async function runNativeCoreSmoke(
       run: async () => {
         await checkChatText(host, artifacts)
       }
+    },
+    {
+      name: 'chat-reply',
+      dependsOn: ['chat-ready'],
+      run: () => checkChatReply(host, artifacts),
+      cleanup: clearComposer
     },
     {
       name: 'chat-ui',

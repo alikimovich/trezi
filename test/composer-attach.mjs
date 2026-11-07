@@ -19,6 +19,7 @@ if (process.platform !== 'darwin') {
       'ComposerProject',
       'ComposerVerification',
       'ComposerAttachments',
+      'ComposerQuotes',
       'AttachmentThumbnail',
       'ComposerQueue',
       'ComposerBeam',

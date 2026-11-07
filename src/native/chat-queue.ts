@@ -1,4 +1,4 @@
-import type { Chat } from './chat-state'
+import type { Chat, Submission } from './chat-state'
 
 /**
  * LKM-169: what keeps a message from sending now. A message sent meanwhile goes to the
@@ -77,7 +77,7 @@ export function queueNote(chat: Chat): { queueNote: string; queueCanSend: boolea
 }
 
 /** "Edit": the queued message goes back into the composer (ahead of any draft) with its
- *  attachments and selection, and leaves the queue. Sending it queues it again. */
+ *  attachments, quote cards and selection, and leaves the queue. Sending it queues it again. */
 export function editQueued(chat: Chat, id?: string): boolean {
   const index = chat.queue.findIndex((q) => `queued-${q.id}` === id)
   if (index < 0) return false
@@ -86,7 +86,17 @@ export function editQueued(chat: Chat, id?: string): boolean {
   chat.text = draft ? `${submission.text}\n\n${draft}` : submission.text
   chat.caret = submission.text.length
   chat.attachments = [...submission.attachments, ...chat.attachments]
+  // LKM-555: its quote cards come back as cards, ahead of any in the draft.
+  if (submission.quotes?.length) chat.quotes = [...submission.quotes, ...(chat.quotes ?? [])]
   if (submission.selection && !chat.context?.selection) chat.draftSelection = submission.selection
   chat.dismissed = true
   return true
+}
+
+/** A queued message as its row shows it: a reply with quote cards says how many it carries. */
+export function queuedText(submission: Submission): string {
+  const count = submission.quotes?.length ?? 0
+  if (!count) return submission.text
+  const replies = count === 1 ? '1 quoted reply' : `${count} quoted replies`
+  return submission.text ? `${replies} · ${submission.text}` : replies
 }

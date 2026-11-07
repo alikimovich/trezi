@@ -2,6 +2,13 @@ import { productLog } from '../main/product-log'
 import type { AgentEvent, ModelChoice, WorkspaceSnapshot } from '../shared/api'
 import { isChatBusy, isResolveNeeded } from '../shared/chat-busy'
 import {
+  newQuote,
+  PLANNING_TEXT_LIMIT,
+  parseQuotedPrompt,
+  quoteComment,
+  quotedPrompt
+} from '../shared/chat-quotes'
+import {
   agentOptionsFor,
   type ChatAgentSettings,
   chatAgentSettingsFromOptions
@@ -220,10 +227,24 @@ export class NativeChatController {
     // LKM-304: only the composer's own draft is cleared. A queued message sent later
     // (`raw` from `planningQueued`) leaves what the user has typed since.
     const fromDraft = raw === chat.text
+    // LKM-555: the draft's quote cards go with it, as one prompt (`quotedPrompt`).
+    const quotes = fromDraft ? (chat.quotes ?? []) : []
+    if (quotes.length) raw = quotedPrompt(quotes, raw.trim())
+    // A planning request is refused past its limit: keep the cards rather than lose them.
+    if (quotes.length && raw.length > PLANNING_TEXT_LIMIT) {
+      chat.error = `Shorten the quotes or comments: a project request holds up to ${PLANNING_TEXT_LIMIT.toLocaleString('en-US')} characters.`
+      this.changed(chat)
+      return
+    }
+    const clearDraft = () => {
+      if (!fromDraft) return
+      clearSentDraft(chat)
+      chat.quotes = []
+    }
     if (chat.sending || chat.isRunning) {
       if (raw.trim()) {
         this.planningQueued.set(chat.chat, [...(this.planningQueued.get(chat.chat) ?? []), raw])
-        if (fromDraft) clearSentDraft(chat)
+        clearDraft()
         this.changed(chat)
       }
       return
@@ -231,18 +252,21 @@ export class NativeChatController {
     if (!raw.trim() && !chat.attachments.length) return
     const turn = crypto.randomUUID()
     const attachments = chat.attachments
-    if (fromDraft) clearSentDraft(chat)
+    clearDraft()
     chat.attachments = []
     chat.sending = true
     chat.isRunning = true
     const cancellation = chat.cancellation
+    const shown = parseQuotedPrompt(raw)
+    const text = shown ? shown.text : raw
     chat.messages.push({
       id: turn,
       role: 'user',
       at: Date.now(),
-      text: raw,
+      text,
       statuses: [],
-      segments: [{ kind: 'text', text: raw }],
+      segments: text ? [{ kind: 'text', text }] : [],
+      ...(shown ? { quotes: shown.quotes } : {}),
       attachments: attachments.map((a) => ({
         id: a.id,
         kind: a.type.startsWith('image/') ? 'image' : 'file',
@@ -700,7 +724,8 @@ export class NativeChatController {
             action.stop !== false &&
             chat.isRunning &&
             !chat.text.trim() &&
-            !chat.attachments.length
+            !chat.attachments.length &&
+            !chat.quotes?.length
           )
             await this.stop(chat)
           else await this.submit(chat)
@@ -727,6 +752,25 @@ export class NativeChatController {
           break
         case 'unreference':
           chat.references = chat.references?.filter((_, index) => index !== action.index)
+          break
+        case 'quote': {
+          const quote = newQuote(
+            chat.quotes ?? [],
+            action,
+            (id) => chat.messages.some((m) => m.id === id && m.role === 'assistant'),
+            crypto.randomUUID()
+          )
+          if (typeof quote === 'string') chat.error = quote
+          else chat.quotes = [...(chat.quotes ?? []), quote]
+          break
+        }
+        case 'quote-comment':
+          chat.quotes = chat.quotes?.map((quote) =>
+            quote.id === action.id ? { ...quote, comment: quoteComment(action.comment) } : quote
+          )
+          break
+        case 'unquote':
+          chat.quotes = chat.quotes?.filter((quote) => quote.id !== action.id)
           break
         case 'context':
           this.clearSelection(chat)
@@ -761,16 +805,24 @@ export class NativeChatController {
     // The draft's revision when it was sent: inputs during `initialize` came after it.
     const revision = chat.revision
     if (!chat.ready && !(await this.holdDraft(chat, this.initialize(chat)))) return
-    if (!chat.ready || chat.switching || (!raw.trim() && !chat.attachments.length)) return
+    const quotes = chat.quotes ?? []
+    if (
+      !chat.ready ||
+      chat.switching ||
+      (!raw.trim() && !chat.attachments.length && !quotes.length)
+    )
+      return
     const submission: Submission = {
       id: crypto.randomUUID(),
       text: withReferences(chat, raw.trim()),
       attachments: chat.attachments,
+      ...(quotes.length ? { quotes } : {}),
       selection: chat.context?.selection ?? chat.draftSelection ?? null,
       turn: chat.context?.turn ?? {}
     }
     clearSentDraft(chat, revision)
     chat.attachments = []
+    chat.quotes = []
     chat.dismissed = true
     this.clearSelection(chat)
     // Anything that blocks sending queues the message with its reason (LKM-169).
@@ -813,6 +865,7 @@ export class NativeChatController {
     chat.previewError = undefined
     const cancellation = chat.cancellation
     const { text, attachments, selection, turn } = submission
+    const quotes = (submission.quotes ?? []).map(({ excerpt, comment }) => ({ excerpt, comment }))
     const userMessage = crypto.randomUUID()
     chat.messages.push({
       id: userMessage,
@@ -821,6 +874,7 @@ export class NativeChatController {
       text,
       statuses: [],
       segments: text ? [{ kind: 'text', text }] : [],
+      ...(quotes.length ? { quotes } : {}),
       selection: selection?.bubble,
       attachments: attachments.map((a) => ({
         id: a.id,
@@ -856,7 +910,7 @@ export class NativeChatController {
         append(chat, plan.notice, true)
         this.changed(chat)
       }
-      const prompt = plan.header + (selection?.prompt ?? '') + text
+      const prompt = plan.header + (selection?.prompt ?? '') + quotedPrompt(quotes, text)
       await this.services.invoke(
         'agent:send',
         prompt,

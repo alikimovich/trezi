@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-555 — Reply to selected chat text with multiple quote/comment cards
+
+- [x] `ChatTextView` Reply: a button over a settled selection and a Reply item atop the text view's own context menu; selection, Copy, links and code snippets unchanged (`src/native/ChatTextReply.swift`).
+- [x] Composer quote cards (`src/native/ComposerQuotes.swift`): exact excerpt, source message id/segment, editable comment, remove; captured text, so streaming/reparse cannot retarget; a reparse that changes the selected text clears the selection.
+- [x] One send pairs every excerpt with its comment plus the optional message (`quotedPrompt`, fenced, numbered; `parseQuotedPrompt` restores the bubble after reload); cards clear with the draft on an accepted send and stay on a refused/cancelled send, queue Edit and planning over-limit.
+- [x] Unit `test/chat-quotes.mjs`; native `chat-reply` smoke (two selections, comments, menu Reply, remove, streaming, chat switch, one stubbed native send).
+- [ ] Manager: foreground native `chat`/`composer` acceptance with captures, independent review, exact-head CI and merge.
+
 ## LKM-556 — Agents save rules and guides to project memory
 
 - [x] `remember_rule` agent tool (Claude and Codex, foreground only) saves one rule through the project-memory update queue over the Swift owner; merge under its heading, user lines kept, duplicates skipped, near-duplicates reported (`replaces`/`distinct`), stale/failed/unanswered writes never reported as saved.

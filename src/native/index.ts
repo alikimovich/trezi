@@ -1003,7 +1003,8 @@ async function main() {
       !sourceAppIsRunning()
         ? 'This Trezi app is running from a different installation. Update its source installation and reopen that app.'
         : [...chatController.chats.values()].some(
-              (chat) => chat.isRunning || chat.text || chat.attachments.length
+              (chat) =>
+                chat.isRunning || chat.text || chat.attachments.length || chat.quotes?.length
             )
           ? 'Finish running chats and send or clear your drafts before restarting.'
           : [...editorController.sessions.values()].some((session) =>

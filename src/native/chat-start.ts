@@ -125,7 +125,7 @@ export class StartFlow {
   }
 
   hasDraft(chat: Chat | undefined) {
-    return !!chat && (!!chat.text.trim() || chat.attachments.length > 0)
+    return !!chat && (!!chat.text.trim() || chat.attachments.length > 0 || !!chat.quotes?.length)
   }
 
   state(chat: Chat, choices: ModelChoice[], readiness: ProviderReadinessMap): NativeChatStart {
