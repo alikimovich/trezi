@@ -1,7 +1,7 @@
 import AppKit
 
 /// Glass-backed Publish trigger. Its two native segments keep the primary action separate
-/// from the menu arrow; only the text segment uses a monospace font.
+/// from the menu arrow; only the text segment uses the system UI font.
 final class PublishToolbarControl: NSView {
     private let glass: NSView = {
         if #available(macOS 26.0, *) { return NSGlassEffectView() }
@@ -15,7 +15,7 @@ final class PublishToolbarControl: NSView {
     weak var item: NSMenuToolbarItem?
     private(set) var title = "Publish"
     private(set) var busy = false
-    let textFont = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+    let textFont = NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .regular)
     private var primaryWidth: CGFloat {
         let text = busy ? "   " + title : title
         return ceil((text as NSString).size(withAttributes: [.font:textFont]).width) + 20

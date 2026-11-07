@@ -155,7 +155,7 @@ final class SidebarTitleDecipher: NSObject {
             let glyph = letter == " " ? letter : done ? letter : Self.alphabet[Int(Self.hash(Double(column * 37) + step) * Double(Self.alphabet.count))]
             let opacity: CGFloat = done ? 1 : decoding ? 0.88 : 0.72
             output.append(NSAttributedString(string: String(glyph), attributes: [
-                .font: label.font ?? NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
+                .font: label.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .regular),
                 .foregroundColor: (label.textColor ?? .labelColor).withAlphaComponent(opacity)
             ]))
         }

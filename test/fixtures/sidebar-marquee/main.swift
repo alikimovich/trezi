@@ -131,7 +131,7 @@ func resize(_ cell: SidebarChatCell, to width: CGFloat, at time: Double) {
 /// Selection: the row's title gets wider with no change to the title's own frame.
 func select(_ cell: SidebarChatCell, at time: Double) {
     plan.append((time, "select", {
-        cell.title!.label.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        cell.title!.label.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
         cell.backgroundStyle = .emphasized
     }))
 }

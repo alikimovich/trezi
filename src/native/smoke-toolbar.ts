@@ -142,10 +142,10 @@ function assertTitles(state: Toolbar, stage: string) {
 export function assertToolbar(state: Toolbar, stage: string) {
   const detail = JSON.stringify(pick(state))
   for (const key of ['chatTitle', 'address', 'branch', 'branchTitle', 'publish']) {
-    assert.match(
+    assert.doesNotMatch(
       state[`${key}Font`],
       /Mono/i,
-      `Toolbar ${stage}: ${key} uses system monospace: ${detail}`
+      `Toolbar ${stage}: ${key} uses the system sans-serif UI font: ${detail}`
     )
     assert.equal(
       state[`${key}FontSize`],
@@ -158,7 +158,7 @@ export function assertToolbar(state: Toolbar, stage: string) {
       state.publishGlassHover &&
       state.publishTitleFits &&
       state.publishControlWidth + 0.5 >= state.publishIntrinsicWidth,
-    `Toolbar ${stage}: Publish keeps native glass and its full monospace label: ${detail}`
+    `Toolbar ${stage}: Publish keeps native glass and its full label: ${detail}`
   )
   if (state.chatHeaderContentVisible !== undefined && state.toolbar.includes('chat'))
     assert.equal(

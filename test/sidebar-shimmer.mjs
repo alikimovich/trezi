@@ -183,12 +183,16 @@ if (process.platform !== 'darwin') {
     early: report.loadingEarly,
     middle: report.loadingMiddle
   })) {
-    assert.equal(
+    assert.notEqual(
       stage.fontWidths[0],
       stage.fontWidths[1],
-      `${name}: rendered monospace glyph advance`
+      `${name}: rendered proportional glyph advance`
     )
-    assert.match(stage.font, /Mono/i, `${name}: rendered glyphs use system monospace`)
+    assert.doesNotMatch(
+      stage.font,
+      /Mono/i,
+      `${name}: rendered glyphs use the system sans-serif UI font`
+    )
   }
   assert.equal(report.loadingResolved.text, 'Loading chat')
   assert.equal(report.loadingResolved.decipher.animated, false)
@@ -231,7 +235,7 @@ if (process.platform !== 'darwin') {
     'retained clock advances beyond a fresh reset'
   )
   assert.equal(report.retiredLoading, true, 'ready or canceled row retires the clock')
-  assert.match(report.idle.font, /Mono/i, 'sidebar rows use system monospace')
+  assert.doesNotMatch(report.idle.font, /Mono/i, 'sidebar rows use the system sans-serif UI font')
 
   // State: only `thinking` shimmers; a waiting row stays Running without it.
   assert.equal(thinking.mode, 'sweep')

@@ -56,7 +56,7 @@ final class SidebarChatCell: SourceListCell {
             toolTip = row.loadingTitle ? "Loading conversation" : row.title
             if row.kind == "history" {
                 let detail = NSTextField(labelWithString: row.detail)
-                detail.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular); detail.textColor = .tertiaryLabelColor
+                detail.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular); detail.textColor = .tertiaryLabelColor
                 detail.setContentHuggingPriority(.required, for: .horizontal)
                 detail.setContentCompressionResistancePriority(.required, for: .horizontal)
                 self.detail = detail; views.append(detail)
