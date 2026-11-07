@@ -133,7 +133,7 @@ export async function checkThreeD(host: NativeBridge, artifacts: string, fixture
   assert.equal(nestedToolbar.nestedTitle, opened.title)
   assert.equal(nestedToolbar.nestedBack, true)
   assert.equal(nestedToolbar.nestedCodeEnabled, opened.code)
-  assert.equal(nestedToolbar.nestedTitleMonospace, true)
+  assert.equal(nestedToolbar.nestedTitleMonospace, false)
   const backFrame: Rect = nestedToolbar.nestedBackFrame
   const titleFrame: Rect = nestedToolbar.nestedTitleFrame
   assert.ok(backFrame.width > 0 && titleFrame.width > 0, 'native Back and title are rendered')

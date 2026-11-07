@@ -258,7 +258,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     private func branchTitle(_ title: String) -> NSAttributedString {
         let style = NSMutableParagraphStyle(); style.lineBreakMode = .byTruncatingTail
         // The CI dot is drawn by `BranchStatusDot`, not a glyph in this title.
-        return NSAttributedString(string: title, attributes: [.foregroundColor:previewTextColor, .font:NSFont.monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular), .paragraphStyle:style])
+        return NSAttributedString(string: title, attributes: [.foregroundColor:previewTextColor, .font:NSFont.systemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular), .paragraphStyle:style])
     }
     func setChatGeometry(_ width: CGFloat) { previewState["chatWidth"] = Double(width); alignChatHeader() }
     var previewLeading: CGFloat { CGFloat(previewState["chatWidth"] as? Double ?? 440) }
@@ -341,7 +341,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         if key == "chat" {
             chatHeader.translatesAutoresizingMaskIntoConstraints = false
             chatHeaderWidth = chatHeader.widthAnchor.constraint(equalToConstant: 400)
-            chatTitle.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .bold)
+            chatTitle.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .bold)
             chatTitle.lineBreakMode = .byTruncatingTail
             chatTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             chatTitle.translatesAutoresizingMaskIntoConstraints = false; chatHeader.addSubview(chatTitle)
@@ -353,10 +353,10 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             item.view = chatHeader; item.isBordered = false; item.visibilityPriority = .high
         } else if key == "address" {
             address.placeholderString = "Preview"; address.setAccessibilityLabel("Preview address")
-            address.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .bold); address.lineBreakMode = .byTruncatingTail
+            address.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .bold); address.lineBreakMode = .byTruncatingTail
             address.isBordered = false; address.drawsBackground = false
             address.delegate = self; address.target = self; address.action = #selector(navigateAddress(_:))
-            branchMenu.isBordered = false; branchMenu.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+            branchMenu.isBordered = false; branchMenu.font = .systemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
             branchMenu.setAccessibilityLabel("Branch"); branchMenu.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             // The URL's resting text keeps its authority; a branch name keeps its start.
             branchMenu.cell?.lineBreakMode = .byTruncatingTail
@@ -365,7 +365,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             nestedBack.imagePosition = .imageOnly; nestedBack.bezelStyle = .texturedRounded
             nestedBack.setAccessibilityLabel("Back to page"); nestedBack.toolTip = "Back to page"
             nestedBack.target = self; nestedBack.action = #selector(backFromNested(_:))
-            nestedTitle.font = .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+            nestedTitle.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
             nestedTitle.lineBreakMode = .byTruncatingTail
             nestedTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             nestedHeader.orientation = .horizontal; nestedHeader.alignment = .centerY; nestedHeader.spacing = 6
@@ -506,8 +506,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             chatTitleDecipher?.stop(); chatTitleDecipher = nil; chatTitleDecipherID = nil
         }
         let titleFont: NSFont = selected?.loadingTitle == true
-            ? .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-            : .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .bold)
+            ? .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+            : .systemFont(ofSize: NSFont.systemFontSize, weight: .bold)
         if chatTitle.font != titleFont { chatTitle.font = titleFont }
         if selected?.loadingTitle == true {
             if chatTitleDecipher == nil {

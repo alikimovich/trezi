@@ -14,6 +14,11 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Classify the absent in-process SwiftUI semantic AX tree and read actual native text fields; the324ec1b4native check passed Light X0.75 and post-Undo X/Y values. Hosted focus/typing/blur/Return regression is verified separately; full island acceptance remains pending.
 - [ ] Native-verify: run `core,chat,islands,shadow-light` once more (`preview-overlay` is expected to clear with `inspector`).
 - [ ] Manager: admit `--only=core,chat,islands,shadow-light`, run the locked native suite, independent review and required CI.
+## LKM-554 — Restore system sans-serif UI font in sidebar and top bar
+
+- [x] Sidebar rows, history detail, shimmer fallback, chat title, address, branch menu, nested title and Publish use `NSFont.systemFont` at the same sizes and weights; code/editor fonts untouched.
+- [x] Font assertions in `smoke-toolbar`, `smoke-three-d`, `test/sidebar-shimmer.mjs` and the publish-toolbar fixture now expect the non-monospace system font.
+- [ ] Manager: native toolbar/sidebar verification, independent review, exact-head CI and merge.
 
 ## LKM-548 — Native suite failure on main 54c8d14f14b3
 
