@@ -3,7 +3,7 @@ import AppKit
 /// Walks the view hierarchy and the accessibility children together: the conversation hosts its rows
 /// through AppKit views that do not report their subviews as accessibility children, and a node reached
 /// both ways is visited once. `scanned` counts the nodes seen, for the caller's failure report.
-private func islandAccessibilityElement(_ root: NSObject, identifier: String, visited: inout [ObjectIdentifier: NSObject], trace: inout [String], depth: Int = 0) -> NSObject? {
+private func islandAccessibilityElement(_ root: AnyObject, identifier: String, visited: inout [ObjectIdentifier: AnyObject], trace: inout [String], depth: Int = 0) -> AnyObject? {
     let identity = ObjectIdentifier(root)
     guard depth < 80, visited.count < 1024, visited[identity] == nil else { return nil }
     // Retain synthesized AX objects: an identity-only set can reject a later node
@@ -22,8 +22,8 @@ private func islandAccessibilityElement(_ root: NSObject, identifier: String, vi
         children.append(contentsOf: view.accessibilityChildrenInNavigationOrder() ?? [])
     }
     if let element = root as? NSAccessibilityProtocol { children.append(contentsOf: element.accessibilityChildren() ?? []) }
-    for case let child as NSObject in children {
-        if let found = islandAccessibilityElement(child, identifier: identifier, visited: &visited, trace: &trace, depth: depth + 1) { return found }
+    for child in children {
+        if let found = islandAccessibilityElement(child as AnyObject, identifier: identifier, visited: &visited, trace: &trace, depth: depth + 1) { return found }
     }
     return nil
 }
@@ -303,7 +303,7 @@ extension Host {
             } else { reply(id, error: "Island not found") }
         case "islandControlInspect":
             guard ephemeral, let label = c["label"] as? String else { reply(id, error: "Test control unavailable"); return true }
-            var visited: [ObjectIdentifier: NSObject] = [:]
+            var visited: [ObjectIdentifier: AnyObject] = [:]
             var trace: [String] = []
             let field = islandAccessibilityElement(chat, identifier: "island-field-" + label, visited: &visited, trace: &trace)
             let value = (field as? NSAccessibilityProtocol)?.accessibilityValue() as? String ?? (field as? NSAccessibilityStaticText)?.accessibilityValue() ?? ""
