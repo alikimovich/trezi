@@ -69,25 +69,43 @@ try {
   assert.deepEqual(await peerObservedFiles(repo, [], 'reader'), [], 'a clean tree observes nothing')
   assert.equal(reads(), 1, 'a call with nothing in flight is one read')
 
-  // The change lands while a read that started before it is still answering.
-  const early = peerObservedFiles(repo, [], 'reader')
-  await pause(150)
-  writeFileSync(join(repo, 'a.txt'), 'one\ntwo\n')
-  const late = peerObservedFiles(repo, [], 'reader')
-  const alsoLate = peerObservedFiles(repo, [], 'reader')
-  assert.deepEqual(await early, [], 'the early read answers for the tree it saw')
-  assert.deepEqual(
-    await late,
-    ['a.txt'],
-    'a call made after the change is not answered by a read that began before it'
-  )
-  assert.equal(await alsoLate, await late, 'calls made meanwhile share the one fresh read')
-  assert.equal(late, alsoLate, 'and are the same promise: reads stay bounded to two per burst')
-  assert.equal(reads(), 3, 'one control read, the early read and one fresh read')
+  // The change lands while a read that started before it is still answering. A loaded host
+  // can push the stand-in past the 2 s Git timeout: that read answers "incomplete" ('\0'),
+  // the correct fallback rather than the stale answer under test, so only then the burst is
+  // replayed (bounded) from a clean tree. A stale `[]` still fails at once.
+  let late
+  let alsoLate
+  for (let attempt = 1; ; attempt++) {
+    const before = reads()
+    const early = peerObservedFiles(repo, [], 'reader')
+    await pause(150)
+    writeFileSync(join(repo, 'a.txt'), 'one\ntwo\n')
+    late = peerObservedFiles(repo, [], 'reader')
+    alsoLate = peerObservedFiles(repo, [], 'reader')
+    const earlyAnswer = await early
+    const lateAnswer = await late
+    const timedOut = [earlyAnswer, lateAnswer].some((answer) => answer.includes('\0'))
+    if (timedOut && attempt < 3) {
+      console.log(`Peer observed reads: Git timed out under load (attempt ${attempt}); replaying`)
+      writeFileSync(join(repo, 'a.txt'), 'one\n')
+      continue
+    }
+    assert.deepEqual(earlyAnswer, [], 'the early read answers for the tree it saw')
+    assert.deepEqual(
+      lateAnswer,
+      ['a.txt'],
+      'a call made after the change is not answered by a read that began before it'
+    )
+    assert.equal(await alsoLate, lateAnswer, 'calls made meanwhile share the one fresh read')
+    assert.equal(late, alsoLate, 'and are the same promise: reads stay bounded to two per burst')
+    assert.equal(reads() - before, 2, 'the early read and one fresh read')
+    break
+  }
 
   // After the burst the key is free again: the next call reads once.
+  const afterBurst = reads()
   assert.deepEqual(await peerObservedFiles(repo, [], 'reader'), ['a.txt'])
-  assert.equal(reads(), 4, 'a later call is one read again')
+  assert.equal(reads() - afterBurst, 1, 'a later call is one read again')
 
   // When Git fails, the shared fresh read answers with what every one of its callers had
   // captured (and the incomplete mark), not only the first caller's list.
