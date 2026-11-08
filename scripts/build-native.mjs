@@ -253,6 +253,7 @@ const host = compile(
     join(root, 'src/native/DeviceFrameVerification.swift'),
     join(root, 'src/native/PreviewStatus.swift'),
     join(root, 'src/native/PreviewLoad.swift'),
+    join(root, 'src/native/PreviewCache.swift'),
     join(root, 'src/native/AgentLoadRouting.swift'),
     join(root, 'src/native/PreviewSpeed.swift'),
     join(root, 'src/native/PreviewSpeedPlacement.swift'),

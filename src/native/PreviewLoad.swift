@@ -50,27 +50,6 @@ extension Host {
     }
 }
 
-/// LKM-197: a reload that cannot reuse a stale stylesheet or module. The preview's store
-/// is non-persistent, but WebKit still keeps responses (Vite serves dependency files as
-/// immutable) in its memory and network caches for the session; they are cleared first.
-/// The same URL reloads from origin, which keeps the route and the scroll position.
-enum PreviewCache {
-    static let types: Set<String> = [WKWebsiteDataTypeMemoryCache, WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeFetchCache]
-    /// The caches clear asynchronously, so `shouldLoad` is asked once they are clear and before anything
-    /// loads: a caller that was superseded or closed meanwhile must not start (and so cancel) a navigation.
-    /// `started` receives the navigation once the load began.
-    static func reload(_ view: WKWebView, url: URL?, shouldLoad: @escaping () -> Bool = { true }, started: ((WKNavigation?) -> Void)? = nil) {
-        view.configuration.websiteDataStore.removeData(ofTypes: types, modifiedSince: .distantPast) { [weak view] in
-            guard let view, shouldLoad() else { return }
-            let navigation: WKNavigation?
-            if let url, view.url?.absoluteString != url.absoluteString {
-                navigation = view.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData))
-            } else { navigation = view.reloadFromOrigin() }
-            started?(navigation)
-        }
-    }
-}
-
 final class PreviewLoadModel: ObservableObject {
     @Published var kind = ""
     @Published var path = ""

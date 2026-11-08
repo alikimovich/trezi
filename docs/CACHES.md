@@ -10,7 +10,7 @@ preview show, and the rule that clears each one. The hub that applies the rules 
 
 | Cache | Where | What clears it |
 | --- | --- | --- |
-| WebKit HTTP and memory cache | the preview's `WKWebView` (`PreviewCache` in `src/native/PreviewLoad.swift`) | HMR or a live reload for normal edits. A stylesheet the page kept stale is swapped for a cache-busted copy (`reloadPreviewStyles` in `src/main/preview-freshness.ts`). A hard reload (`host.send('reload', { hard: true })`) clears WebKit's memory, disk and fetch caches first. |
+| WebKit HTTP and memory cache | the preview's `WKWebView` (`PreviewCache` in `src/native/PreviewCache.swift`) | HMR or a live reload for normal edits. A stylesheet the page kept stale is swapped for a cache-busted copy (`reloadPreviewStyles` in `src/main/preview-freshness.ts`). A hard reload (`host.send('reload', { hard: true })`) clears WebKit's memory, disk and fetch caches first, and loads only if no newer load or reload of that view began meanwhile (`PreviewLoadFence`). |
 | Dev-server HMR and dependency caches (Vite `.vite`, Next `.next`) | the target's dev server | The dependency watch (`src/native/dependency-watch.ts`) restarts the server with clean caches (LKM-197). Trezi never deletes them otherwise. Edits reach the page through the server's own HMR. |
 | Token detection memo (1.5 s) | `src/main/style-tokens.ts` (`detectTokensCached`) | `invalidateTokenMemo(root)` on every source change in that project, not only on the TTL. |
 | Inspector state and `styles:read` replies | `src/native/inspector-controller.ts` (`styles`, `inspection`, `tokens`, `controls`) | `invalidated()` re-reads all four in place (no new generation). During a reload the last values stay until the page has the element again. |

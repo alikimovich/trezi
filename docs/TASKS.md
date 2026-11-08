@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-584 — Preview navigation supersession and delayed hard reload
+
+- [x] A hard preview load or reload yields to any newer `load` / `reload` of the same view while WebKit clears its caches (`PreviewLoadFence`, `src/native/PreviewCache.swift`); `PreviewCache.reload` now requires its `shouldLoad` fence. A reload during a not-yet-started hard load (a clean restart) goes to that load's URL.
+- [x] Unit `test/preview-cache-fence.mjs` (real WKWebView, real `PreviewCache`, local server, awaited events): the superseded hard load and the superseded hard reload both RED with the old unfenced call, GREEN with the fence.
+- [x] Reducer hypothesis (stale cancel/failure ending a newer navigation) measured in WebKit: the superseded navigation's -999 arrives before the next start for `load()`, `reload()`, `location.href` and `location.reload()`. Not reproduced; covered in `test/preview-open.mjs`.
+- [ ] Manager: independent review, exact-head CI, native `core` group under the shared desktop lock, and merge.
+
 ## LKM-583 — Editor Reload and Save ordering preserves document identity
 
 - [x] Save and Reload of one file run one after the other in `NativeEditorController`: a Reload during a Save reads the saved bytes, and a Save during a Reload's read saves the reloaded document.

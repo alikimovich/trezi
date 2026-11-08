@@ -54,6 +54,26 @@ const close = (server) => new Promise((resolve) => server.close(() => resolve())
   assert.equal((await waiter.done)?.finalUrl, 'http://127.0.0.1:1/a', 'only the target settles')
 }
 
+// LKM-584: WebKit reports a superseded navigation's cancel (-999) before the navigation
+// that took over starts (measured for load(), view.reload(), location.href and
+// location.reload()). The pill and `busy` follow the newer navigation, and an armed open
+// follows the navigation that took over and names its final URL.
+{
+  const loads = new PreviewLoads(10_000)
+  const waiter = loads.nextLoad('http://127.0.0.1:1/a', 1000)
+  loads.record({ type: 'start', url: 'http://127.0.0.1:1/a' })
+  loads.record({ type: 'cancelled', url: 'http://127.0.0.1:1/a' })
+  loads.record({ type: 'start', url: 'http://127.0.0.1:1/b' })
+  assert.equal(loads.busy, true, 'the navigation that took over is loading')
+  loads.record({ type: 'loaded', url: 'http://127.0.0.1:1/b' })
+  assert.equal(loads.busy, false)
+  assert.equal(
+    (await waiter.done)?.finalUrl,
+    'http://127.0.0.1:1/b',
+    'the open reports the page shown'
+  )
+}
+
 // A stand-in for the native host: it handles `preview:open` and reports WebKit events.
 const root = '/project-preview-open'
 const nativeHost = (script) => (channel, request) => {
