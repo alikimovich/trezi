@@ -21,10 +21,24 @@ export interface TurnRecoveryHost {
   exited(): Promise<void>
   /** False once the helper broke its grant (or the turn runs on the fallback provider). */
   canRestart(): boolean
-  /** Starts a new helper on the same conversation and sends `text` to it. Rejects on failure. */
-  restart(text: string, images?: ImageAttachment[]): Promise<void>
-  /** Runs the turn on the other provider and says so; false (nothing emitted) when none is configured. */
-  fallback(text: string, images?: ImageAttachment[]): Promise<boolean>
+  /**
+   * Starts a new helper on the same conversation and sends `text` to it, only while `live()`
+   * still holds after its awaits; false when it did not send. Rejects on failure.
+   */
+  restart(
+    text: string,
+    images: ImageAttachment[] | undefined,
+    live: () => boolean
+  ): Promise<boolean>
+  /**
+   * Runs the turn on the other provider and says so, only while `live()` still holds after its
+   * awaits; false (nothing emitted, nothing sent) when none is configured or it no longer holds.
+   */
+  fallback(
+    text: string,
+    images: ImageAttachment[] | undefined,
+    live: () => boolean
+  ): Promise<boolean>
 }
 
 interface Turn {
@@ -61,27 +75,36 @@ export function createTurnRecovery(host: TurnRecoveryHost) {
     host.emit({ type: 'done' })
   }
 
+  // LKM-580: every await below can outlast the turn. Stop or a newer turn then fences it: the
+  // host sends nothing once `live()` fails, a stopped turn ends with its held error, and a
+  // superseded one emits nothing (its `done` would land inside the newer turn).
   const proceed = async (hold: Held): Promise<void> => {
     const current = turn
     if (!current || current.stopped) return release(hold)
+    const live = (): boolean => turn === current && !current.stopped
+    const giveUp = (): void => {
+      if (turn === current) release(hold)
+    }
     try {
       if (hold.kind === 'restart') {
         await host.exited()
         // A helper that broke its grant, or a fallback turn's, stays down.
-        if (!host.canRestart()) return release(hold)
+        if (!live() || !host.canRestart()) return giveUp()
         current.restarts++
         host.emit({ type: 'status', text: RESTARTING_STATUS })
         current.restarted = true
-        await host.restart(
+        const sent = await host.restart(
           current.produced ? CONTINUE_PROMPT : current.text,
-          current.produced ? undefined : current.images
+          current.produced ? undefined : current.images,
+          live
         )
+        if (!sent) giveUp()
         return
       }
       current.fellBack = true
-      if (!(await host.fallback(current.text, current.images))) release(hold)
+      if (!(await host.fallback(current.text, current.images, live))) giveUp()
     } catch {
-      release(hold)
+      giveUp()
     }
   }
 

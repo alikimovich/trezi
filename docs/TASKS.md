@@ -1341,6 +1341,7 @@ Staged plan with statuses: `docs/SWIFT-PREVIEWS-PLAN.md`.
 
 ## Self-healing incidents (LKM-225)
 
+- [x] LKM-580: fence helper restart and provider fallback against Stop and a newer turn across their awaits (exit, probe, open).
 - [x] Classify known failures and collapse duplicate provider errors into a compact native row with copyable Details.
 - [x] Retry Codex routing/network failures inside the helper with bounded backoff; preserve proxy and certificate passthrough.
 - [x] Bundle doctor guidance, document safe recovery actions, and log incident class and outcome for Dreamer.
