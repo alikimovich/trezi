@@ -234,13 +234,16 @@ async function startHelperSession(
             })
           }),
     canRestart: () => gone !== 'violation' && !onFallback(),
-    restart: async (text, images) => {
+    restart: async (text, images, live) => {
       await reopen()
+      // Stop or a newer turn during the reopen: the reopened helper waits for the next message.
+      if (!live()) return false
       await owner.send(session, text, images)
+      return true
     },
-    fallback: async (text, images) => {
+    fallback: async (text, images, live) => {
       const to = await fallbackProvider(provider, options, root)
-      if (!to) return false
+      if (!to || !live()) return false
       void owner.close(session).catch(ignore)
       session = randomUUID()
       gone = null
@@ -253,6 +256,8 @@ async function startHelperSession(
         activeOptions = options
         throw error
       }
+      // The fallback helper stays open; the next message returns to the chat's own provider.
+      if (!live()) return false
       emit({ type: 'status', text: fallbackNote(provider, to) })
       await owner.send(session, withHistory(text), images)
       return true

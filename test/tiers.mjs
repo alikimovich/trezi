@@ -79,6 +79,7 @@ export const UNIT = [
   'codex-model',
   'self-heal',
   'self-heal-recovery',
+  'helper-recovery-fence',
   'native-bridge-close',
   'native-service-launch',
   'native-supervised-bridge',
