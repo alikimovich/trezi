@@ -98,3 +98,38 @@ export async function assertSplitSettles(host: NativeBridge, stage: string, time
   assertChatPreviewSplit(split, stage)
   return split
 }
+
+/** Review of LKM-559: in the mobile viewport with the chat hidden, the rule edges the pane, never
+ *  the phone screen centred in it (that line would cross the device surround and the top bar).
+ *  Hides the chat, reads the rule as laid out, then restores the chat. */
+export async function assertMobileChatHiddenSplit(host: NativeBridge, timeout = 3000) {
+  const fraction = async (target: number) => {
+    for (const end = Date.now() + timeout; Date.now() < end; )
+      if ((await host.request('layoutInspect')).fraction === target) return
+      else await new Promise((resolve) => setTimeout(resolve, 100))
+    assert.fail(`mobile, chat hidden: the split reaches fraction ${target}`)
+  }
+  await host.request('shellPerform', { action: 'expand' })
+  await fraction(0)
+  let surface: Inspect = {}
+  let ok = false
+  for (const end = Date.now() + timeout; !ok && Date.now() < end; ) {
+    surface = await host.request('previewSurfaceInspect')
+    ok =
+      surface.pageX > surface.paneX + 1 &&
+      (surface.dividerDrawn !== true || Math.abs(surface.dividerX - surface.paneX) <= 0.5)
+    if (!ok) await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  const detail = JSON.stringify(surface)
+  assert.ok(
+    surface.pageX > surface.paneX + 1,
+    `mobile, chat hidden: the phone sits inset: ${detail}`
+  )
+  assert.ok(
+    surface.dividerDrawn !== true || Math.abs(surface.dividerX - surface.paneX) <= 0.5,
+    `mobile, chat hidden: the rule edges the pane, not the phone screen: ${detail}`
+  )
+  await host.request('shellPerform', { action: 'expand' })
+  await fraction(1)
+  return surface
+}
