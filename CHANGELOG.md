@@ -17,6 +17,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 
+- The chat/preview divider now sits exactly midway between New Chat and the viewport controls in the top bar (3 pt each side; the New Chat side was one pixel wider). The divider is now one point thick on Retina displays (LKM-587).
 - An unnamed chat whose reply ended while the Trezi service could not confirm it (a lost answer or a failed save) is now named automatically after its next reply, instead of staying unnamed until it was reopened (LKM-585).
 - Switching projects (or closing one) right after a Reload Without Cache or a clean restart no longer brings the previous page back over the newly opened one (LKM-584).
 - Reloading a file in the code editor while it was saving no longer shows the text from before the save as if it were on disk, which made the next save of that file fail as a conflict (LKM-583).

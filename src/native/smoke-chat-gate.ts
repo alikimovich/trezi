@@ -3,8 +3,9 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
+import { decodePng } from './smoke-png'
 import { restoreSidebarFocus } from './smoke-sidebar'
-import { assertChatPreviewSplit, chatPreviewSplit } from './smoke-split'
+import { assertChatPreviewSplit, assertSplitGapPixels, chatPreviewSplit } from './smoke-split'
 import { nativeWorkspace } from './workspace-runtime'
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -154,6 +155,21 @@ export async function captureChatGate(
     png = await host.request('captureShell')
   } else png = (await host.request('captureVisibleWindow')).png
   writeFileSync(join(artifacts, `chat-gate-${stage}.png`), Buffer.from(png, 'base64'))
+  // LKM-587: the visible gaps either side of the rule, measured in the capture itself
+  // (foreground only: offscreen captures cannot paint the glass).
+  if (!background() && chat && state.divider.drawn) {
+    let gaps: ReturnType<typeof assertSplitGapPixels> = null
+    try {
+      gaps = assertSplitGapPixels(
+        state.divider,
+        decodePng(Buffer.from(png, 'base64')).rgb,
+        `Chat gate ${stage}`
+      )
+    } finally {
+      Object.assign(state, { dividerGapPixels: gaps })
+      writeFileSync(join(artifacts, `chat-gate-${stage}.json`), JSON.stringify(state, null, 2))
+    }
+  }
   writeFileSync(join(artifacts, `chat-gate-${stage}.json`), JSON.stringify(state, null, 2))
   return state
 }
