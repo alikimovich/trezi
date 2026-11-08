@@ -1,5 +1,15 @@
 # PROGRESS LOG
 
+## 2026-11-08 — LKM-585 uncertain terminal acknowledgement: lands once; the chat is still named
+
+Audit priority 6 (static, at df4bd93a) suspected that a terminal claim the Swift conversation owner committed, but whose answer Bun never got, skips reconciliation and may land twice or never. The new `test/terminal-uncertain-ack.mjs` drives the real `agent.ts` with the real Swift conversation and repository owners and a scripted provider that edits the chat's worktree. The owner's `terminal` runs for real. Then either its answer is dropped (Bun gets `deadlineExceeded`, as a lost or late reply after the 60 s client timeout would give), or the owner's checkpoint after the claim fails for real (its `live/` checkpoint folder is read-only for that one request, `ioFailure`). No sleeps decide an ordering; no provider or network calls.
+
+**Duplicate landing: not reproduced; covered.** In both modes Bun's catch frees the UI (`landing-finished` once), nothing lands, and the owner still holds the turn, claimed, in `landing`. A late `error` or `done` for that turn names no turn: the tracker already credited its `done`, so it never reaches the owner, which would answer `duplicate` anyway. The edit stays in the chat's worktree. The next send's `begin` is refused `busy`, `releaseOwnerTurn` ends the orphaned turn, and that turn's landing lands both edits in one commit, once. The chosen outcome is therefore: held until the next send, never twice. The orphaned turn's landing and memory evaluation are not replayed separately; the next turn's landing and memory evaluation include its transcript and edits. Not covered: a user who never sends again keeps the edit unlanded in the worktree until the chat is closed or sent to (existing behaviour, by design for UI liveness). Begin/send checkpoint failures were not exercised.
+
+**Naming: reproduced and fixed.** A claimed success on an unnamed chat sets the owner's `titling` reservation, which only a `generated` title answer clears. Bun's catch never generated one, so a chat whose first claimed reply was unacknowledged was never auto-named again until it was reopened. RED on main: the control (acknowledged first turn named) passed, and both fault modes timed out waiting for a name after the next turn. Fix: the catch also sends the existing `title(chat, '', 'generated')`, which only ends the reservation (an empty generated title names nothing and is not checkpointed). If an earlier generation is still running, a second one may start. The owner never lets a generated name replace a name, so whichever answers second is refused. GREEN 3/3.
+
+Evidence: `conversation-owner`, `turn-tracker-prep-failure`, `chat-stuck-turn`, `self-heal-recovery`, `helper-recovery-fence`, `peer-coordination`, `stop-recovery-ui`, `chat-send-queue`, `conversation-handoff` and `chat-new-instant` pass. Lint exit 0. Bun-side only: the Swift owner is unchanged, so no native run.
+
 ## 2026-11-08 — LKM-584 a superseded hard preview load no longer loads its old URL
 
 Audit priority 5 (static, at df4bd93a) had two hypotheses. They are settled differently.

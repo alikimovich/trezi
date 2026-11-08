@@ -17,6 +17,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 
+- A chat whose first reply ended while the Trezi service could not confirm it (a lost answer or a failed save) is now named automatically after its next reply, instead of staying unnamed until it was reopened (LKM-585).
 - Switching projects (or closing one) right after a Reload Without Cache or a clean restart no longer brings the previous page back over the newly opened one (LKM-584).
 - Reloading a file in the code editor while it was saving no longer shows the text from before the save as if it were on disk, which made the next save of that file fail as a conflict (LKM-583).
 - A message that failed (or was stopped) while the chat prepared it no longer leaves the chat's next reply credited to that unsent message, which kept the next turn from finishing (LKM-582).

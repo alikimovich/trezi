@@ -642,6 +642,13 @@ const interactiveEvents =
         preparingTurns.delete(sessionKey)
         turnTimings.completed(sessionKey, at.turn)
         session.emit({ type: 'landing-finished', turn: at.turn })
+        // LKM-585: the owner may have claimed this turn (the answer was lost, or its
+        // checkpoint after the claim failed) and reserved the chat's naming for it.
+        // Nothing will generate that name now; an empty generated title only ends the
+        // reservation, so the next claimed success can still name the chat.
+        void conversation()
+          .title(sessionKey, '', 'generated')
+          .catch(() => {})
         // The owner may still hold this turn; a queued live peer can now recover it.
         wakeLiveWriters(record.projectRoot)
       })
