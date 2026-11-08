@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-585 — Uncertain terminal acknowledgements reconcile without duplicate landing
+
+- [x] A terminal claim the owner committed but Bun never heard (lost or late answer; checkpoint failure after the claim) lands once: a late terminal for that turn never reaches the owner, and the next send releases the owner's orphaned turn and lands the held edit with its own. Not reproduced as a duplicate landing; covered.
+- [x] The claim's naming reservation (`titling`) is ended by Bun's uncertain-ack catch, so the next claimed success still names the chat.
+- [x] Unit `test/terminal-uncertain-ack.mjs` (real agent.ts, Swift conversation and repository owners, real checkpoint failure): naming 2 of 3 RED on main, 3 of 3 GREEN.
+- [ ] Manager: independent review, exact-head CI and merge.
+
 ## LKM-584 — Preview navigation supersession and delayed hard reload
 
 - [x] A hard preview load or reload yields to any newer `load` / `reload` of the same view while WebKit clears its caches (`PreviewLoadFence`, `src/native/PreviewCache.swift`); `PreviewCache.reload` now requires its `shouldLoad` fence. A reload during a not-yet-started hard load (a clean restart) goes to that load's URL.

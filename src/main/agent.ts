@@ -636,6 +636,14 @@ const interactiveEvents =
       .catch((error) => {
         // Never leave the chat busy because the owner could not answer.
         console.error('The conversation owner could not record the end of a turn:', error)
+        // LKM-585: the owner may have claimed this turn (the answer was lost, or its
+        // checkpoint after the claim failed) and reserved the chat's naming for it.
+        // Nothing will generate that name now; an empty generated title only ends the
+        // reservation, so the next claimed success can still name the chat. Sent even when
+        // the session was replaced (a restart keeps the owner's chat and its reservation).
+        void conversation()
+          .title(sessionKey, '', 'generated')
+          .catch(() => {})
         if (sessions.get(sessionKey) !== session) return
         runningKeys.delete(sessionKey)
         finishPeer(at.turn, sessionKey)
