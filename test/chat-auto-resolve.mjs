@@ -80,7 +80,9 @@ function harness(autoResolve, { refuse = false } = {}) {
   assert.equal(h.resolves(), 1, 'Resolve started by itself')
   assert.deepEqual(h.sent(), ['Resolve the markers.'])
   assert.ok(
-    h.frames.some((frame) => frame.cards.some((card) => card.title === 'Resolving changes…'))
+    h.frames.some((frame) =>
+      frame.cards.some((card) => card.title === 'Combining with project edits…')
+    )
   )
   assert.ok(h.frames.every((frame) => frame.cards.every((card) => card.title !== 'Problem')))
   assert.equal(records.length, 0, 'nothing logged while the resolution turn runs')
@@ -141,7 +143,10 @@ function harness(autoResolve, { refuse = false } = {}) {
   assert.equal(h.resolves(), 0)
   const ownedPark = h.frames.at(-1).cards.find((card) => card.id === 'conflict')
   assert.equal(ownedPark?.title, 'Working on held changes…')
-  assert.equal(ownedPark?.detail, 'Trezi is working on the held changes.')
+  assert.equal(
+    ownedPark?.detail,
+    'Trezi is working on the held changes. Nothing is needed from you yet.'
+  )
   h.controller.get('a').isRunning = false
   await h.emit({ type: 'done' })
   assert.equal(h.resolves(), 1)

@@ -68,7 +68,19 @@ export interface NativeChatCard {
   busy?: boolean
   /** The detail with full paths, for the tooltip and Copy, when `detail` is collapsed. */
   fullDetail?: string
-  actions: { label: string; action: string; value?: string; disabled?: boolean }[]
+  actions: {
+    label: string
+    action: string
+    value?: string
+    disabled?: boolean
+    /** LKM-590: the one recommended action (prominent), or one that deletes work. */
+    role?: 'primary' | 'destructive'
+  }[]
+  /** LKM-590: one short line under the detail saying what the primary action does. */
+  hint?: string
+  /** LKM-590: secondary actions (support report, alternatives, Discard) behind a
+   *  "More" menu, so the row holds only the recommended action. */
+  menu?: { label: string; action: string; value?: string }[]
   /** A background agent's card (LKM-193). */
   agent?: NativeAgentCard
 }

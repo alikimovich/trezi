@@ -32,6 +32,7 @@ export const UNIT = [
   'peer-feedback',
   'peer-wait-deadline',
   'chat-peer-card',
+  'held-card',
   'resolved-lessons',
   'provider-owner',
   'provider-data',

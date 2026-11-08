@@ -30,7 +30,7 @@ export function sendBlock(chat: Chat): SendBlock | null {
 const BLOCK_NOTES: Record<SendBlock, string> = {
   running: '',
   landing: '',
-  resolve: 'Waiting for Resolve — sends once the held changes land',
+  resolve: 'Waiting for the held changes — sends once they land',
   login: 'Waiting for sign-in — sends after Retry on the login card'
 }
 
@@ -65,7 +65,7 @@ export function queueNote(chat: Chat): { queueNote: string; queueCanSend: boolea
     return {
       queueNote: chat.decision
         ? 'Waiting — answer the decision or discard the held changes to send these'
-        : 'Waiting — retry, resolve or discard the held changes to send these',
+        : 'Waiting — use the held-changes card to apply or discard them, then these send',
       queueCanSend: false
     }
   if (chat.stopped === 'held')

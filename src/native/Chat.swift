@@ -15,8 +15,10 @@ struct ChatMessage: Decodable, Identifiable {
     /// LKM-555: the excerpts and comments a user message replied with (ChatQuotes.swift).
     let quotes: [ChatSentQuote]?
 }
-struct ChatAction: Decodable { let label: String; let action: String; let value: String?; let disabled: Bool? }
-struct ChatCard: Decodable, Identifiable { let id: String; let title: String; let detail: String?; let fullDetail: String?; let actions: [ChatAction]; let agent: ChatAgentInfo?; let busy: Bool? }
+/// `role` (LKM-590): "primary" is the card's one recommended action, "destructive" deletes work.
+struct ChatAction: Decodable { let label: String; let action: String; let value: String?; let disabled: Bool?; let role: String? }
+/// `hint` says what the primary action does; `menu` holds the card's secondary actions (LKM-590).
+struct ChatCard: Decodable, Identifiable { let id: String; let title: String; let detail: String?; let fullDetail: String?; let actions: [ChatAction]; let agent: ChatAgentInfo?; let busy: Bool?; let hint: String?; let menu: [ChatAction]? }
 struct ChatQuestionOption: Decodable { let label: String; let description: String? }
 struct ChatQuestion: Decodable { let header: String; let question: String; let options: [ChatQuestionOption]; let multiSelect: Bool }
 struct ChatQuestionRequest: Decodable, Identifiable { let id: String; let questions: [ChatQuestion] }
@@ -291,7 +293,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
          "activity":model.snapshot?.activity?.label ?? "", "activityKind":model.snapshot?.activity?.kind ?? "", "activityAnimated":model.snapshot?.activity?.animated ?? false,
          "islands":inspectIslands(),
          "cards":model.snapshot?.cards.map(\.id) ?? [],
-         "cardStates":model.snapshot?.cards.map { ["id":$0.id, "title":$0.title, "detail":$0.detail ?? "", "busy":$0.busy ?? false, "actions":$0.actions.map(\.label), "disabled":$0.actions.map { $0.disabled ?? false }] as [String: Any] } ?? [],
+         "cardStates":model.snapshot?.cards.map { ["id":$0.id, "title":$0.title, "detail":$0.detail ?? "", "busy":$0.busy ?? false, "actions":$0.actions.map(\.label), "disabled":$0.actions.map { $0.disabled ?? false }, "hint":$0.hint ?? "", "menu":($0.menu ?? []).map(\.label)] as [String: Any] } ?? [],
          "questionCount":model.snapshot?.questions.count ?? 0]
         return state.merging(inspectAgents()) { $1 }.merging(inspectChatUi()) { $1 }
     }
@@ -649,17 +651,39 @@ private struct NativeChatCard: View {
                 if card.busy == true { ProgressView().controlSize(.small).accessibilityLabel("Recovery in progress") }
             }
             if let detail = card.detail, !detail.isEmpty { Text(detail).textSelection(.enabled).font(.system(size: 12)).help(card.fullDetail ?? "") }
-            HStack {
-                // A collapsed detail copies with its full paths.
-                if let full = card.fullDetail {
-                    Button { copyChatText(full) } label: { Image(systemName: "doc.on.doc") }.buttonStyle(ChatActionButtonStyle()).help("Copy with full paths")
-                }
-                Spacer()
-                ForEach(Array(card.actions.enumerated()), id: \.offset) { _, action in
-                    Button(action.label) { model.action(action.action, id: card.id, value: action.value) }.disabled(action.disabled ?? false)
+            if let hint = card.hint, !hint.isEmpty { Text(hint).font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
+            if !card.actions.isEmpty || card.fullDetail != nil || !(card.menu ?? []).isEmpty {
+                HStack {
+                    // A collapsed detail copies with its full paths.
+                    if let full = card.fullDetail {
+                        Button { copyChatText(full) } label: { Image(systemName: "doc.on.doc") }.buttonStyle(ChatActionButtonStyle()).help("Copy with full paths")
+                    }
+                    Spacer(minLength: 0)
+                    ForEach(Array(card.actions.enumerated()), id: \.offset) { _, action in
+                        cardButton(action)
+                    }
+                    // LKM-590: secondary actions (alternatives, the support report, Discard) in one menu.
+                    if let menu = card.menu, !menu.isEmpty {
+                        Menu {
+                            ForEach(Array(menu.enumerated()), id: \.offset) { _, item in
+                                Button(item.label) { model.action(item.action, id: card.id, value: item.value) }
+                            }
+                        } label: { Image(systemName: "ellipsis.circle") }
+                            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                            .help("More actions").accessibilityLabel("More actions for \(card.title)")
+                    }
                 }
             }
         }.padding(12).frame(maxWidth: .infinity, alignment: .leading).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+    }
+    /// A full label (never truncated); the primary action is prominent, Discard is marked destructive.
+    @ViewBuilder private func cardButton(_ action: ChatAction) -> some View {
+        let button = Button(role: action.role == "destructive" ? .destructive : nil) {
+            model.action(action.action, id: card.id, value: action.value)
+        } label: { Text(action.label).lineLimit(1).fixedSize() }.disabled(action.disabled ?? false)
+        if action.role == "primary" { button.buttonStyle(.borderedProminent) }
+        // Esc backs out of a destructive step (LKM-590: "Keep changes" on Discard's confirm).
+        else if action.action == "discard-cancel" { button.keyboardShortcut(.cancelAction) } else { button }
     }
 }
 

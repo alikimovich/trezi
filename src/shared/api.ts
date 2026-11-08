@@ -564,6 +564,9 @@ export type AgentEvent = (
       error?: string
       /** Recovery request that produced this park, when one owns the operation. */
       recoveryId?: string
+      /** On 'parked' (LKM-590): files staged with both sides' overlapping edits (the
+       *  backend's `resolvingFiles`), so the card offers Fix conflicts only for a real overlap. */
+      conflicts?: string[]
     }
 ) & {
   /** Which project's session emitted this — set by main so the renderer routes it

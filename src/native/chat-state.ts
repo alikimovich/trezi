@@ -122,6 +122,11 @@ export interface Chat extends NativeChatMirror {
   recoveryReport?: string
   recoverySettled?: 'merged' | 'isolated' | 'parked'
   recoveryOutcome?: string
+  /** LKM-590: files the backend staged with overlapping edits from both sides (a real
+   *  conflict), from the park event; absent when it only knows the project moved. */
+  conflicts?: string[]
+  /** LKM-590: the held card asks to confirm Discard before anything is deleted. */
+  confirmingDiscard?: boolean
   /** LKM-406: the product decision holding this chat's work, and the branch that keeps it. */
   decision?: { question: string; branch?: string }
   /** LKM-406: what the service-owned peer feed says of this chat's turn now. */
@@ -198,6 +203,8 @@ export function clearSentDraft(chat: Chat, revision = chat.revision) {
 /** A turn starts thinking: its step timer and liveness start now. */
 export function begin(chat: Chat, now = Date.now()) {
   chat.recoveryOutcome = undefined
+  // LKM-590: a new turn moves the hold on; Discard must be asked again.
+  chat.confirmingDiscard = undefined
   chat.phase = 'thinking'
   chat.operation = undefined
   chat.activityDetail = ''
@@ -508,6 +515,9 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
           event.state === 'merged' ? 'merged' : event.state === 'parked' ? 'parked' : 'isolated'
       chat.isolation = event.state === 'parked' ? 'parked' : 'isolated'
       chat.isolationFiles = event.files
+      chat.conflicts = event.state === 'parked' ? event.conflicts : undefined
+      // A new hold (or none) is not what the user was asked to confirm discarding.
+      chat.confirmingDiscard = undefined
       const last = [...chat.messages].reverse().find((message) => message.role === 'assistant')
       if (last?.revertGroup?.startsWith(STOPPED_GROUP)) last.revertGroup = undefined
       chat.stopped =

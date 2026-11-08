@@ -42,7 +42,8 @@ export async function checkPeerCards(
     cards.length !== 1 ||
     !cards[0].detail?.includes(question) ||
     !cards[0].detail.includes('trezi/chat-fixture') ||
-    cards[0].actions.join() !== 'Discard'
+    cards[0].actions.length !== 0 ||
+    cards[0].menu?.join() !== 'Discard held changes…'
   )
     throw new Error(`Decision card is wrong: ${JSON.stringify(cards)}`)
   send({ type: 'isolation', state: 'isolated' })

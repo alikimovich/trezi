@@ -1,7 +1,7 @@
 /**
  * LKM-453: what the opt-in chat recovery acceptance (`bun run acceptance:chat-recovery`,
  * docs/TESTING.md "Chat recovery acceptance") requires of the shipping conflict card while
- * its Retry or Resolve request is held and after each outcome. Pure, so the unit tier runs
+ * its Try applying again or Combine request is held and after each outcome. Pure, so the unit tier runs
  * every rule against GREEN and RED inputs; `smoke-chat-recovery-acceptance.ts` applies them
  * to the real card, its real buttons and the real support report.
  */
@@ -36,6 +36,9 @@ export interface RecoveryMeasure {
   busy: boolean
   actions: string[]
   disabled: boolean[]
+  /** LKM-590: the card's More menu labels and its one-line hint. */
+  menu: string[]
+  hint?: string
   buttons: { label: string; action: string; disabled: boolean; frame: number[] }[]
   problem: string | null
   spinners: number[][]
@@ -46,8 +49,17 @@ export interface RecoveryMeasure {
 }
 
 export type RecoveryKind = 'retry' | 'resolve'
-const BUSY_LABEL: Record<RecoveryKind, string> = { retry: 'Retrying…', resolve: 'Resolving…' }
+/** LKM-590: the held card's one primary action for each recovery, and its working title. */
+export const RECOVERY_LABEL: Record<RecoveryKind, string> = {
+  retry: 'Try applying again',
+  resolve: 'Combine with project edits'
+}
+const BUSY_TITLE: Record<RecoveryKind, string> = {
+  retry: 'Trying to apply again…',
+  resolve: 'Combining with project edits…'
+}
 const MUTATIONS = ['discard', 'landing-retry', 'resolve']
+const DISCARD = 'Discard held changes…'
 
 const inside = (frame: number[], area: number[]) =>
   frame[0] >= area[0] - 0.5 &&
@@ -55,42 +67,44 @@ const inside = (frame: number[], area: number[]) =>
   frame[0] + frame[2] <= area[0] + area[2] + 0.5 &&
   frame[1] + frame[3] <= area[1] + area[3] + 0.5
 
-/** The card's mutation buttons as drawn: found, in one row, inside the reading area. */
+/** The card as drawn: found, every drawn button inside the reading area. */
 function drawnProblems(m: RecoveryMeasure): string[] {
   if (!m.present) return ['the conflict card is not shown']
   if (m.problem) return [`its buttons were not found: ${m.problem}`]
   const problems: string[] = []
-  const drawn = m.buttons.filter((b) => MUTATIONS.includes(b.action))
-  if (drawn.length !== 3) problems.push(`${drawn.length} of Discard, Retry and Resolve drawn`)
   for (const b of m.buttons)
     if (!inside(b.frame, m.reading)) problems.push(`${b.label} is outside the reading area`)
   return problems
 }
 
-/** The card while `kind`'s request is held: its busy label, a spinner, every mutation disabled. */
+/** The card while `kind`'s request is held: its working title and a spinner, and no
+ *  recovery row at all (LKM-590: no disabled cluster while Trezi owns the hold). */
 export function busyProblems(m: RecoveryMeasure, kind: RecoveryKind): string[] {
   const problems = drawnProblems(m)
   if (!m.present) return problems
-  const status = kind === 'retry' ? 'Retrying the check…' : 'Resolving changes…'
-  if (m.title !== status || m.detail.startsWith('Problem:'))
-    problems.push(`the owned failure does not show ${status} status`)
+  if (m.title !== BUSY_TITLE[kind] || m.detail.startsWith('Problem:'))
+    problems.push(`the owned failure does not show ${BUSY_TITLE[kind]} status`)
   if (!m.busy) problems.push('the card is not busy')
-  if (!m.actions.includes(BUSY_LABEL[kind])) problems.push(`no ${BUSY_LABEL[kind]} label`)
   if (!m.spinners.length) problems.push('no spinner')
-  for (const b of m.buttons)
-    if (MUTATIONS.includes(b.action) && !b.disabled) problems.push(`${b.label} is enabled`)
+  if (m.buttons.some((b) => MUTATIONS.includes(b.action)) || m.actions.length)
+    problems.push(`recovery actions are drawn: ${m.actions.join(', ')}`)
+  if (m.menu.includes(DISCARD)) problems.push('Discard is offered while Trezi works')
   return problems
 }
 
-/** The card with no request in flight: plain labels, no spinner, every mutation enabled. */
+/** The card with no request in flight: one enabled primary recovery, no spinner, and
+ *  Discard behind More. */
 export function idleProblems(m: RecoveryMeasure): string[] {
   const problems = drawnProblems(m)
   if (!m.present) return problems
   if (m.busy) problems.push('the card is still busy')
-  if (m.actions.some((label) => label.endsWith('…'))) problems.push('a busy label remains')
+  if (m.title.endsWith('…')) problems.push('a working title remains')
   if (m.spinners.length) problems.push('a spinner remains')
-  for (const b of m.buttons)
-    if (MUTATIONS.includes(b.action) && b.disabled) problems.push(`${b.label} is disabled`)
+  const drawn = m.buttons.filter((b) => MUTATIONS.includes(b.action))
+  if (drawn.length !== 1 || m.actions.length !== 1)
+    problems.push(`${m.actions.length} actions drawn (${m.actions.join(', ')}), wanted one`)
+  for (const b of drawn) if (b.disabled) problems.push(`${b.label} is disabled`)
+  if (!m.menu.includes(DISCARD)) problems.push('Discard is not in More')
   if (m.cards.includes('error')) problems.push('a second, error card is shown')
   return problems
 }
@@ -99,20 +113,20 @@ export function idleProblems(m: RecoveryMeasure): string[] {
 export function stillHeldProblems(m: RecoveryMeasure): string[] {
   const problems = idleProblems(m)
   if (!m.present) return problems
-  if (!/still held/.test(m.detail))
+  if (!/still held/i.test(m.detail))
     problems.push('the card does not say the changes are still held')
-  if (m.detail.includes('\n') || m.detail.length > 120)
-    problems.push(`the outcome is not one concise line: ${JSON.stringify(m.detail)}`)
+  if (m.detail.includes('\n'))
+    problems.push(`the outcome is not one line: ${JSON.stringify(m.detail)}`)
   return problems
 }
 
-/** A failed request: the same card says Problem and offers the written report. */
+/** A failed request: the same card says Problem and offers the written report in More. */
 export function failureProblems(m: RecoveryMeasure): string[] {
   const problems = idleProblems(m)
   if (!m.present) return problems
   if (m.title !== 'Problem' || !m.detail.startsWith('Problem:'))
     problems.push('the card does not state the Problem')
-  if (!m.actions.includes('Copy support report')) problems.push('no Copy support report')
+  if (!m.menu.includes('Copy support report')) problems.push('no Copy support report')
   return problems
 }
 

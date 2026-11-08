@@ -123,6 +123,7 @@ export function emitIsolation(
   // which can land after the renderer process is killed (OS display sleep).
   const wc = deps?.getWindow()?.webContents
   if (!wc || wc.isDestroyed()) return
+  const conflicts = state === 'parked' ? states.get(sessionKey)?.resolvingFiles : null
   wc.send('agent:event', {
     type: 'isolation',
     state,
@@ -134,6 +135,7 @@ export function emitIsolation(
     ...(error ? { error } : {}),
     ...(decision ? { decision } : {}),
     ...(recoveryId ? { recoveryId } : {}),
+    ...(conflicts?.length ? { conflicts: [...conflicts] } : {}),
     ...(turn ? { turn } : {}),
     projectKey: sessionKey
   } satisfies AgentEvent)

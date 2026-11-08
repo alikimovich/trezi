@@ -130,7 +130,7 @@ const noError = (h) => {
     'queued exactly once'
   )
   assert.equal(h.userTexts().length, 0, 'not in the transcript while queued')
-  assert.match(h.last().composer.queueNote, /^Waiting for Resolve/)
+  assert.match(h.last().composer.queueNote, /^Waiting for the held changes/)
   assert.equal(h.last().composer.queueCanSend, false)
   assert.equal(h.last().composer.queuePaused, false)
   noError(h)
@@ -205,9 +205,11 @@ const noError = (h) => {
   assert.equal(h.chat().isRunning, false)
   assert.equal(h.chat().isolation, 'parked', 'the chat shows Resolve now')
   assert.ok(h.last().cards.some((c) => c.id === 'conflict'))
-  assert.match(h.last().composer.queueNote, /^Waiting for Resolve/)
+  assert.match(h.last().composer.queueNote, /^Waiting for the held changes/)
   noError(h)
   h.accept()
+  // LKM-590: Discard asks first; only the confirmed step reaches the owner.
+  await h.act('discard-ask', 'conflict')
   await h.act('discard', 'conflict')
   assert.deepEqual(h.calls.at(-1), ['agent:discard-conflict', 'a'])
   assert.equal(h.sent().length, 1, 'still waiting until the park clears')

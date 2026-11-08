@@ -86,7 +86,7 @@ export function agentWorkspaceState(sessionKey: string): {
       ...(st.decision ? { decision: st.decision } : {}),
       guidance: st.decision
         ? 'A product decision is needed before this work can land; it is held on the chat’s branch and the project does not have it. Trezi has shown the one question on the decision card; wait for the answer and do not repeat it in prose or pick a side. When they answer, apply their choice and end your reply with `DECISION MADE: <their choice>`; if you still need something from them, end with `DECISION NEEDED: <question>` instead and the work stays held.'
-        : 'Trezi could not land this chat’s changes; they are held, not applied, and the project does not have them. Tell the user exactly that, with the error, and point them to Retry or Resolve on the chat card. Do not say the changes are pending or applied.'
+        : 'Trezi could not land this chat’s changes; they are held, not applied, and the project does not have them. Tell the user exactly that, with the error, and point them to the chat card’s Try applying again action. Do not say the changes are pending or applied.'
     }
   }
   if (st.resolvingFiles) {
@@ -107,7 +107,7 @@ export function agentWorkspaceState(sessionKey: string): {
       ...last,
       guidance: st.interrupted
         ? 'An earlier stopped or failed turn’s changes are held, not applied. Edits in this turn build on them, and Trezi tries to land everything when this turn completes.'
-        : 'Trezi held this cumulative batch safely; the project does not have these changes. Use the chat card’s Retry or Resolve action. Do not claim the changes landed. Any product decision is shown on the decision card.'
+        : 'Trezi held this cumulative batch safely; the project does not have these changes. Point the user to the chat card’s Combine with project edits (or Fix conflicts) action. Do not claim the changes landed. Any product decision is shown on the decision card.'
     }
   }
   return {
