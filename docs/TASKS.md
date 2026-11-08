@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-583 — Editor Reload and Save ordering preserves document identity
+
+- [x] Save and Reload of one file run one after the other in `NativeEditorController`: a Reload during a Save reads the saved bytes, and a Save during a Reload's read saves the reloaded document.
+- [x] Unit `test/editor-reload-save.mjs` (source write and read released by hand): 3 of 7 RED on main, 7 of 7 GREEN.
+- [ ] Manager: independent review, exact-head CI and merge.
+
 ## LKM-582 — Turn tracker cleanup when preparation fails before send
 
 - [x] `agent:send` withdraws its own tracker reservation when the turn fails or is cancelled after the reservation and before the provider got it (a rejecting peer query, Stop during the peer read).

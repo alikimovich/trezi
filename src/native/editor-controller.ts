@@ -29,6 +29,8 @@ type Session = {
   /** The latest Changes read (LKM-364, `editor-diff.ts`). */
   diffGeneration: number
   saving: Set<string>
+  /** Each file's queued Save/Reload (LKM-583): they run one after the other. */
+  serial: Map<string, Promise<void>>
   history: string[]
   cursor: number
   restored?: Promise<Map<string, SourceDraft>>
@@ -135,6 +137,7 @@ export class NativeEditorController {
         generation: 0,
         diffGeneration: 0,
         saving: new Set(),
+        serial: new Map(),
         history: [],
         cursor: -1
       }
@@ -291,13 +294,37 @@ export class NativeEditorController {
     if (now) write()
     else this.persisting.set(key, setTimeout(write, 400))
   }
+  /**
+   * Runs Save and Reload of one file one after the other (LKM-583). Save updates the
+   * document it captured once its write lands, and the source owner's reads do not wait
+   * for its write lane. A Reload overlapping a Save could therefore read the bytes from
+   * before the write and show them as clean, while the saved file and hash went to the
+   * replaced document. A Save queued behind a Reload saves the reloaded document.
+   */
+  private serial(session: Session, file: string, run: () => Promise<void>) {
+    const next = (session.serial.get(file) ?? Promise.resolve()).then(run)
+    const tail = next.catch(() => {})
+    session.serial.set(file, tail)
+    void tail.then(() => {
+      if (session.serial.get(file) === tail) session.serial.delete(file)
+    })
+    return next
+  }
   async save(session: Session) {
-    const source = session.state.source,
-      doc = session.documents.get(source)
-    if (!doc || doc.view.binary || doc.view.media || session.saving.has(source)) return
+    const source = session.state.source
+    if (session.saving.has(source)) return
+    session.saving.add(source)
+    try {
+      await this.serial(session, source, () => this.write(session, source))
+    } finally {
+      session.saving.delete(source)
+    }
+  }
+  private async write(session: Session, source: string) {
+    const doc = session.documents.get(source)
+    if (!doc || doc.view.binary || doc.view.media) return
     const content = doc.text,
       baseline = doc.baseline
-    session.saving.add(source)
     session.state.busy = true
     session.state.error = ''
     this.publish(session)
@@ -327,7 +354,6 @@ export class NativeEditorController {
     } catch (error) {
       session.state.error = String(error)
     } finally {
-      session.saving.delete(source)
       session.state.busy = false
       this.publish(session)
     }
@@ -379,10 +405,18 @@ export class NativeEditorController {
         case 'diff-open':
           await openDiff(this, session, action)
           return
-        case 'reload':
-          await this.read(session, session.state.source, ++session.generation, true)
-          this.persist(session, session.state.source, true)
+        case 'reload': {
+          // After a Save of this file in flight, so it reads the saved bytes (LKM-583).
+          const source = session.state.source,
+            generation = ++session.generation
+          await this.serial(session, source, async () => {
+            if (generation === session.generation)
+              await this.read(session, source, generation, true)
+          })
+          this.persist(session, source, true)
+          if (generation !== session.generation) return
           break
+        }
         case 'hide':
           session.state.visible = false
           ++session.generation
