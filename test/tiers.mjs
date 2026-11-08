@@ -80,6 +80,7 @@ export const UNIT = [
   'self-heal',
   'self-heal-recovery',
   'helper-recovery-fence',
+  'turn-tracker-prep-failure',
   'native-bridge-close',
   'native-service-launch',
   'native-supervised-bridge',
@@ -464,7 +465,10 @@ export const UNIT_TIMEOUT_MS = {
   // hit the 120 s limit there with every scenario passing).
   'peer-feedback': 300_000,
   // A real 100 s `peer_wait` at its longest bound, through the helper and the Swift owner.
-  'peer-wait-deadline': 300_000
+  'peer-wait-deadline': 300_000,
+  // LKM-582: the same service-owner fixture as peer-coordination (a cold Swift compile in a
+  // loaded unit run); 18 s alone.
+  'turn-tracker-prep-failure': 240_000
 }
 // `--typecheck` runs these next to the tests (quick verification in one command).
 // `typecheck-native` is dropped while it would check the same program as `typecheck`

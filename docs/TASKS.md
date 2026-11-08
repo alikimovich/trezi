@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-582 — Turn tracker cleanup when preparation fails before send
+
+- [x] `agent:send` withdraws its own tracker reservation when the turn fails or is cancelled after the reservation and before the provider got it (a rejecting peer query, Stop during the peer read).
+- [x] Unit `test/turn-tracker-prep-failure.mjs` (real agent.ts and Swift owner, peer read failed or held by hand): 2 of 5 RED on main, 5 of 5 GREEN.
+- [ ] Manager: independent review, exact-head CI and merge.
+
 ## LKM-581 — Inspector draft and Apply ownership across async target changes
 
 - [x] Staging rechecks root, generation and element after its source read: a value is never staged or previewed on an element selected during the read.

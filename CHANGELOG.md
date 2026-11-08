@@ -17,6 +17,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 
+- A message that failed (or was stopped) while the chat prepared it no longer leaves the chat's next reply credited to that unsent message, which kept the next turn from finishing (LKM-582).
 - Changing the selected element while a Styles draft is being staged, applied or confirmed no longer moves that draft, its Apply or its confirmation onto the newly selected element (LKM-581).
 - Stop now also stops an automatic helper restart or provider fallback that was still starting, and a new message is no longer preceded by a resend of the stopped one (LKM-580).
 - The line between the chat and the preview now shows while a project or preview is loading, and the preview's toolbar buttons no longer sit on it (LKM-559).

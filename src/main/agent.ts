@@ -2193,6 +2193,7 @@ export function registerAgentIpc(
       // never follow a subsequent project or chat switch.
       runningKeys.add(key)
       reconciliation.begin(key)
+      let reserved = false
       // Turn-start: sync the user's between-turn live edits into this chat's worktree
       // (serialized behind the chat's chain — waits out any in-flight merge). No-op for
       // a non-isolated chat.
@@ -2276,6 +2277,7 @@ export function registerAgentIpc(
           projectKey: key
         } satisfies AgentEvent)
         trackers.get(session)?.push(id, 0)
+        reserved = true
         watchdog.touch(key)
         logTurnStart(key, id, session.options)
         // LKM-163/LKM-215: Full access Codex can write the live tree; compare it at the end.
@@ -2296,12 +2298,16 @@ export function registerAgentIpc(
         restoredSummaries.delete(key)
         if (restored) session.emit({ type: 'status', text: RESUME_NOTE })
         session.send(handoffPrompt(history, seedPrompt(restored, body)), images)
+        reserved = false
         productLog.info('send-path', 'bun action=send stage=agent-handler-end', {
           chat: key,
           turn: id,
           uptimeNs: process.hrtime.bigint().toString()
         })
       } catch (error) {
+        // LKM-582: a turn reserved in the tracker but never sent must not stay at its
+        // head, or the next send's events would be credited to it.
+        if (reserved) trackers.get(session)?.withdraw(id, 0)
         finishPeer(id, key)
         logTurnNotSent(key, id, error)
         runningKeys.delete(key)
