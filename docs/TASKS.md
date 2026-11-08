@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-581 — Inspector draft and Apply ownership across async target changes
+
+- [x] Staging rechecks root, generation and element after its source read: a value is never staged or previewed on an element selected during the read.
+- [x] Apply preflights a snapshot of the drafts and rechecks ownership before submitting; the prompt names the element the drafts belong to. A selection change during preflight submits nothing and leaves the held draft pending and unlocked.
+- [x] Apply confirmation (`invalidated`) never clears or flags drafts it no longer owns; an interrupted confirmation settles the held draft (or the already-restored one) instead of being lost.
+- [x] `gesture()` and the token path stop once the selection moved; a drifted read for the old element never flags the new one.
+- [x] Unit `test/inspector-draft-ownership.mjs` (gated source reads, two elements in one file): 6 of 9 RED on main, 9 of 9 GREEN.
+- [ ] Manager: independent review, exact-head CI and merge.
+
 ## LKM-559 — Keep preview divider visible while loading and prevent toolbar overflow
 
 - [x] The chat/preview rule follows the chat column (`PreviewSurface.dividerEdge`), so it draws while the preview opens or failed to open, not only once a page shows.
