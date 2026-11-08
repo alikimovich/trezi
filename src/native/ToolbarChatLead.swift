@@ -13,10 +13,29 @@ struct ToolbarChatLead {
     /// slot, so New Chat's slot ends exactly on the column edge: the chat/preview rule then
     /// runs through the gap between New Chat's glass and the viewport island's, clear of both.
     /// (It ended 4 pt short, which put the viewport's glass on the rule.)
+    /// LKM-588: the title gives way before New Chat. The header shrinks to this, never New Chat's
+    /// slot: at a 100 pt floor a narrowed chat pane hid New Chat with the title, and the viewport
+    /// island then slid left across the chat/preview rule into the hidden button's slot.
+    static let minimumWidth: CGFloat = 16
+    /// Below this the title hides entirely; wider, it truncates at its tail.
+    static let titleMinimumWidth: CGFloat = 64
+    /// Where the address block's room caps the header (narrow windows): the former 100 pt floor
+    /// less New Chat's 44 pt slot, which now shows there too. The chat side then takes the
+    /// same width as before, and the measured inset's small corrections (a few points after a
+    /// resize or appearance change) stay absorbed by the floor instead of moving the block.
+    static let addressLimitedWidth: CGFloat = 56
     static func width(target: CGFloat, leading: CGFloat, newChatAdvance: CGFloat, addressLimit: CGFloat) -> CGFloat {
         let reserve = max(32, min(60, newChatAdvance))
-        return min(max(100, target - leading - reserve), max(100, addressLimit))
+        return min(max(minimumWidth, target - leading - reserve), max(addressLimitedWidth, addressLimit))
     }
+    /// Whether the chat column itself has room for New Chat beside the narrowest header. Only a
+    /// column still animating in from a hidden chat (under 100 pt, below the 320 pt minimum)
+    /// lacks it; shown there, AppKit put New Chat in its overflow menu for a frame.
+    static func newChatFits(target: CGFloat, leading: CGFloat, newChatAdvance: CGFloat) -> Bool {
+        target - leading - max(32, min(60, newChatAdvance)) >= minimumWidth
+    }
+    /// Whether a header `width` wide shows the title. New Chat's visibility never depends on it.
+    static func titleVisible(width: CGFloat) -> Bool { width >= titleMinimumWidth }
     /// The chat header's leading edge minus the detail column's, at rest.
     private(set) var offset: CGFloat = 0
     /// The detail column's and the header's leading edges when `offset` was last learned.

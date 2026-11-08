@@ -22,6 +22,22 @@ extension NativeShell {
         }
         return walk(root)
     }
+    /// LKM-588: what a click at the centre of a toolbar item's button reaches, from laid-out
+    /// geometry only (nothing is posted). The button, a view inside it, or the toolbar item view
+    /// that owns it (AppKit routes that click to the item) count as reaching it.
+    @MainActor func toolbarButtonHit(_ id: String) -> [String: Any] {
+        guard let host = toolbarWindow, let button = nativeToolbarButton(id) else { return ["hittable":false, "refused":"no button"] }
+        let located = ControlHitPoint.locate(button, in: host, onScreen: false)
+        guard let point = located.point, let frameView = host.contentView?.superview ?? host.contentView else {
+            return ["hittable":false, "refused":located.refused ?? ""]
+        }
+        let hit = frameView.hitTest(point), itemKey = NSSelectorFromString("item")
+        let owner = hit.map { view in
+            button.isDescendant(of: view) && view.responds(to: itemKey) && (view.value(forKey: "item") as? NSToolbarItem)?.itemIdentifier.rawValue == id
+        } ?? false
+        let reached = hit.map { $0 === button || $0.isDescendant(of: button) } ?? false
+        return ["hittable":reached || owner, "hitView":hit.map { String(describing: type(of: $0)) } ?? "", "point":[Double(point.x), Double(point.y)]]
+    }
     /// The rendered control, distinct from its enclosing toolbar item, in main-window coordinates.
     func nativeToolbarButtonFrame(_ id: String) -> NSRect? {
         nativeToolbarButton(id).flatMap { mainFrame($0) }

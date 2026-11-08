@@ -134,6 +134,7 @@ extension NativeShell {
                       "chatHeaderWidth":chatHeader.bounds.width, "chatHeaderTrailing":mainFrame(chatHeader)?.maxX ?? chatHeader.bounds.maxX,
                       "addressVisible":toolbar.visibleItems?.contains { $0.itemIdentifier.rawValue == "address" } ?? false]) { _, new in new }
             .merging(titleAlignment()) { _, new in new }
+            .merging(gateInspect()) { _, new in new }
             .merging(topBarFontInspect()) { _, new in new }
             .merging(publishTrailingInspect()) { _, new in new }
     }

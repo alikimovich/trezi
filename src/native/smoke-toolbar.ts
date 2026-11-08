@@ -161,11 +161,13 @@ export function assertToolbar(state: Toolbar, stage: string) {
       state.publishControlWidth + 0.5 >= state.publishIntrinsicWidth,
     `Toolbar ${stage}: Publish keeps native glass and its full label: ${detail}`
   )
-  if (state.chatHeaderContentVisible !== undefined && state.toolbar.includes('chat'))
+  // LKM-588: the title gives way first (truncated, then hidden); New Chat stays whenever the
+  // chat header is in the toolbar, on every supported macOS.
+  if (Array.isArray(state.toolbar) && state.toolbar.includes('chat'))
     assert.equal(
       state.chatNewVisible,
-      state.chatHeaderContentVisible,
-      `Toolbar ${stage}: New Chat follows the title's visibility on every supported macOS: ${detail}`
+      true,
+      `Toolbar ${stage}: New Chat stays beside the chat header: ${detail}`
     )
   assert.ok(
     state.addressVisible,
@@ -202,7 +204,8 @@ export function assertToolbar(state: Toolbar, stage: string) {
       state.chatNewStandalone &&
         buttonWidth >= 28 &&
         buttonWidth <= 48 &&
-        buttonX >= titleX + titleWidth + 7 &&
+        // LKM-588: a hidden title (header under 64 pt) leaves only New Chat to clear.
+        (state.chatHeaderContentVisible === false || buttonX >= titleX + titleWidth + 7) &&
         buttonX >= state.chatHeaderTrailing &&
         (columnEdgeFits
           ? Math.abs(buttonX + buttonWidth - columnEdge) <= 3
