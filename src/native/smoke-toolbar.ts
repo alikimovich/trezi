@@ -3,6 +3,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { restoreSidebarFocus } from './smoke-sidebar'
+import { assertSplitSettles } from './smoke-split'
 import { waitFor } from './smoke-wait'
 
 const background = () => process.env.TREZI_NATIVE_BACKGROUND_TEST === '1'
@@ -191,7 +192,8 @@ export function assertToolbar(state: Toolbar, stage: string) {
     const rect = (value: string) => (value.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
     const [titleX, , titleWidth] = rect(state.chatTitleFrame)
     const [buttonX, , buttonWidth] = rect(state.chatNewFrame)
-    const columnEdge = state.detailLeading + state.chatWidth - 4
+    // LKM-559: New Chat's slot ends on the column edge; its glass sits inside the slot.
+    const columnEdge = state.detailLeading + state.chatWidth
     // At the minimum toolbar width the viewport already starts before the chat
     // column ends. The button must stop before that adjacent item; a column-edge
     // assertion there would require the two native toolbar items to overlap.
@@ -290,6 +292,7 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
     assertToolbar(settled, name)
     // LKM-319: slow motion left or came back with this width; the islands still show no divider.
     await assertIslandDividers(host, `${name} (${width} pt)`, settled)
+    await assertSplitSettles(host, `Toolbar ${name} (${width} pt)`)
     // The layout works from the pinned inset it measured, not from its startup guess.
     assert.ok(
       settled.rightInsetMeasured &&
@@ -337,7 +340,7 @@ export async function checkToolbarAddress(host: NativeBridge, artifacts: string)
     if (name === 'wide') {
       const [newX, , newWidth] = (settled.chatNewFrame.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
       assert.ok(
-        Math.abs(newX + newWidth - (settled.detailLeading + settled.chatWidth - 4)) <= 3,
+        Math.abs(newX + newWidth - (settled.detailLeading + settled.chatWidth)) <= 3,
         `Toolbar wide: New Chat follows the actual chat pane boundary: ${JSON.stringify(pick(settled))}`
       )
       assert.ok(

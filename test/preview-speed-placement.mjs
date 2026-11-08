@@ -53,11 +53,16 @@ if (process.platform !== 'darwin') {
     chatNewVisible: true,
     detailLeading: 300,
     chatWidth: 520,
-    chatNewFrame: '{{784, 0}, {32, 32}}'
+    chatNewFrame: '{{788, 0}, {32, 32}}'
   }
   assert.equal(chatNewPaneProblem(pane, 520), undefined)
+  // LKM-559: the former 4 pt inset put the viewport island's glass on the chat/preview rule.
+  assert.match(
+    chatNewPaneProblem({ ...pane, chatNewFrame: '{{780, 0}, {32, 32}}' }, 520),
+    /inside the pane/
+  )
   assert.equal(
-    chatNewPaneProblem({ ...pane, chatWidth: 440, chatNewFrame: '{{704, 0}, {32, 32}}' }, 440),
+    chatNewPaneProblem({ ...pane, chatWidth: 440, chatNewFrame: '{{708, 0}, {32, 32}}' }, 440),
     undefined
   )
   assert.match(
@@ -74,7 +79,7 @@ if (process.platform !== 'darwin') {
   const host = readFileSync('src/native/Host.swift', 'utf8')
   assert.match(layout, /host\.placeSpeedBadge\(\)/)
   assert.match(toolbar, /func measureToolbar\(\) \{\n\s+defer \{ toolbarLaidOut\?\(\) \}/)
-  assert.match(host, /shell\.toolbarLaidOut = \{ \[weak self\] in self\?\.placeSpeedBadge\(\) \}/)
+  assert.match(host, /shell\.toolbarLaidOut = \{ \[weak self\] in self\?\.placeSpeedBadge\(\)[;}]/)
   assert.match(speed, /override func hitTest\(_ point: NSPoint\) -> NSView\? \{ nil \}/)
   assert.ok(
     host.indexOf('canvas.addSubview(layers)') < host.indexOf('canvas.addSubview(speedBadge)'),

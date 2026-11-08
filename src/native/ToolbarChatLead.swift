@@ -9,8 +9,12 @@ import CoreGraphics
 struct ToolbarChatLead {
     /// The measured address offset already includes New Chat and the viewport.
     /// Reserve New Chat only against the column edge, not again against the address limit.
+    /// LKM-559: NSToolbar's item slots abut and each draws its glass a few points inside its
+    /// slot, so New Chat's slot ends exactly on the column edge: the chat/preview rule then
+    /// runs through the gap between New Chat's glass and the viewport island's, clear of both.
+    /// (It ended 4 pt short, which put the viewport's glass on the rule.)
     static func width(target: CGFloat, leading: CGFloat, newChatAdvance: CGFloat, addressLimit: CGFloat) -> CGFloat {
-        let reserve = max(32, min(60, newChatAdvance)) + 4
+        let reserve = max(32, min(60, newChatAdvance))
         return min(max(100, target - leading - reserve), max(100, addressLimit))
     }
     /// The chat header's leading edge minus the detail column's, at rest.

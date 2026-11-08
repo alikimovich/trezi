@@ -164,7 +164,7 @@ export async function checkSidebarChats(host: NativeBridge, artifacts: string) {
         buttonWidth <= 48 &&
         buttonX >= titleX + titleWidth + 7 &&
         buttonX >= state.chatHeaderTrailing &&
-        Math.abs(buttonX + buttonWidth - (state.detailLeading + state.chatWidth - 4)) <= 3 &&
+        Math.abs(buttonX + buttonWidth - (state.detailLeading + state.chatWidth)) <= 3 &&
         state
       )
     },

@@ -119,6 +119,7 @@ import {
 import { checkSourceStamps } from './smoke-source-stamp'
 import { checkSourceSyntax, restoreSourceSyntax } from './smoke-source-syntax'
 import { checkSourceWrap, restoreSourceWrap } from './smoke-source-wrap'
+import { assertMobileChatHiddenSplit } from './smoke-split'
 import { checkStartComposer, restoreStartComposer } from './smoke-start'
 import { checkSwiftBuild, restoreSwiftBuild } from './smoke-swift-build'
 import { checkSwiftGraph, restoreSwiftGraph } from './smoke-swift-graph'
@@ -699,6 +700,7 @@ export async function runNativeCoreSmoke(
         await host.request('shellPerform', { action: 'device' })
         await wait(() => nativeWorkspace.active?.viewport === 'mobile', 'mobile viewport')
         await assertIslandDividers(host, 'after device (mobile)')
+        await assertMobileChatHiddenSplit(host)
         await host.request('shellPerform', { action: 'device' })
         await wait(() => nativeWorkspace.active?.viewport === 'desktop', 'desktop viewport')
         await assertIslandDividers(host, 'after device (desktop)')

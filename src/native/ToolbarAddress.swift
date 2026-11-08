@@ -78,6 +78,16 @@ extension NativeShell {
         alignChatHeader()
         DispatchQueue.main.async { [weak self] in self?.layoutToolbar(); self?.measureToolbar() }
     }
+    /// LKM-559: whether the top bar splits cleanly at the chat column's edge: no preview control
+    /// starts left of it. At narrow widths the preview's controls need more room than its pane, so
+    /// AppKit lays the viewport island and address over the chat column; the rule then stops at
+    /// the top bar instead of running under them. True without a chat column or a viewport island.
+    var toolbarSplitClear: Bool {
+        let chatWidth = previewLeading
+        guard chatWidth >= 1, let viewport = toolbarFrames["viewport"], viewport.width > 0 else { return true }
+        let column = split.splitViewItems[1].viewController.view.convert(NSPoint.zero, to: nil).x + chatWidth
+        return viewport.minX >= column - 0.5
+    }
     /// The first right action group (the interaction island).
     var rightGroup: NSView? { toolbar.items.first { $0.itemIdentifier.rawValue == "interaction" }?.view }
     var viewportGroup: NSView? { toolbar.items.first { $0.itemIdentifier.rawValue == "viewport" }?.view }

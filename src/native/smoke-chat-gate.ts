@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
 import { restoreSidebarFocus } from './smoke-sidebar'
+import { assertChatPreviewSplit, chatPreviewSplit } from './smoke-split'
 import { nativeWorkspace } from './workspace-runtime'
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -38,10 +39,14 @@ export async function captureChatGate(
   header: boolean | null = chat
 ) {
   if (!background()) await restoreSidebarFocus(host, `chat gate ${stage}`)
-  const [layout, shell, view, composer] = await Promise.all(
-    ['layoutInspect', 'shellInspect', 'chatInspect', 'composerInspect'].map((method) =>
-      host.request(method)
-    )
+  const [layout, shell, view, composer, surface] = await Promise.all(
+    [
+      'layoutInspect',
+      'shellInspect',
+      'chatInspect',
+      'composerInspect',
+      'previewSurfaceInspect'
+    ].map((method) => host.request(method))
   )
   const state = {
     stage,
@@ -69,6 +74,7 @@ export async function captureChatGate(
     sidebarWidth: shell.sidebarWidth,
     detailLeading: shell.detailLeading,
     toolbar: shell.toolbar,
+    divider: chatPreviewSplit(shell, surface),
     capture: background()
       ? 'offscreen (TREZI_NATIVE_BACKGROUND_TEST=1: reduced coverage)'
       : 'foreground window'
@@ -117,6 +123,7 @@ export async function captureChatGate(
       assert.equal(shell.chatTitleMode, 'none', `Chat gate ${stage}: known title stops animating`)
     }
   }
+  if (chat) assertChatPreviewSplit(state.divider, `Chat gate ${stage}`)
   if (nativeWorkspace.active && !ready) {
     assert.equal(
       layout.statusHidden,

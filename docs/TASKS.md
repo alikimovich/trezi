@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-559 — Keep preview divider visible while loading and prevent toolbar overflow
+
+- [x] The chat/preview rule follows the chat column (`PreviewSurface.dividerEdge`), so it draws while the preview opens or failed to open, not only once a page shows.
+- [x] New Chat's toolbar slot ends on the column edge (`ToolbarChatLead.width`): the rule runs between New Chat's and the viewport island's glass, 4 pt from each.
+- [x] Where the preview's controls cannot fit right of the rule (narrow windows), the rule stops at the top bar instead of running under them (`NativeShell.toolbarSplitClear`).
+- [x] Native `chat-gate` (loaded, opening, failed, retry, normal and narrow) and `toolbar-address` (850/950/1800/default) assert the rule's position, extent and clearance (`src/native/smoke-split.ts`); unit `toolbar-chat-lead` updated.
+- [ ] Manager: foreground native `sidebar`/`core` captures, independent review, exact-head CI and merge.
+
 ## LKM-555 — Reply to selected chat text with multiple quote/comment cards
 
 - [x] `ChatTextView` Reply: a button over a settled selection and a Reply item atop the text view's own context menu; selection, Copy, links and code snippets unchanged (`src/native/ChatTextReply.swift`).

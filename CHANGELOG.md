@@ -17,6 +17,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 
+- The line between the chat and the preview now shows while a project or preview is loading, and the preview's toolbar buttons no longer sit on it (LKM-559).
 - Styles preview drafts preserve their authored CSS Module source, and tuning-island inputs expose real native text-field values without requiring an accessibility client (LKM-549).
 - The sidebar and top bar use the system sans-serif UI font again instead of monospace; code and editor fonts are unchanged.
 
