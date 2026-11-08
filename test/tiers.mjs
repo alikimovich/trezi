@@ -171,6 +171,7 @@ export const UNIT = [
   'sidebar-evidence',
   'sidebar-sizing',
   'toolbar-chat-lead',
+  'split-gap-pixels',
   'publish-toolbar',
   'preview-overlay',
   'preview-markup',

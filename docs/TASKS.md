@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-587 — Match toolbar spacing either side of the chat/preview divider
+
+- [x] Measured (2x foreground capture): New Chat's glass edge 7 px from the 1 px rule, the viewport island's 6 px. The slots abut, so the gap between the two glass edges is an even 14 px, and a one-pixel rule cannot be centred in it.
+- [x] The rule is one point thick, centred on the pane edge and snapped to device pixels (`PreviewSurface.dividerRule`); controls, slots and the rule's edge are unchanged.
+- [x] `src/native/smoke-split.ts` asserts the rule is centred between New Chat and the viewport island (geometry, every `chat-gate` stage and `toolbar-address` width), and the gaps are equal in device pixels in foreground `chat-gate` captures; unit `test/split-gap-pixels.mjs`.
+- [ ] Manager: independent review, exact-head CI and merge; Andrei to confirm the slightly heavier rule.
+
 ## LKM-586 — Swift preview candidate host is not installed after Stop
 
 - [x] `PreviewSession.buildOnce` rechecks `closed` after the candidate host's readiness: a session stopped while its candidate started stops that host instead of installing it and publishing a ready generation.

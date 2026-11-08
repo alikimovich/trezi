@@ -46,6 +46,9 @@ final class PreviewSurface: NSView {
                 "dividerDrawn": dividerEdge() != nil, "dividerTop": dividerTop, "contentTopInSurface": content.maxY,
                 "dividerSpansTopBar": toolbarSplitClear, "dividerX": dividerEdge() ?? -1,
                 "dividerWindowX": dividerEdge().map { convert(NSPoint(x: $0, y: 0), to: nil).x } ?? -1,
+                "dividerWindowMinX": dividerRule().map { convert(NSPoint(x: $0.minX, y: 0), to: nil).x } ?? -1,
+                "dividerWindowMaxX": dividerRule().map { convert(NSPoint(x: $0.maxX, y: 0), to: nil).x } ?? -1,
+                "backingScale": window?.backingScaleFactor ?? 2,
                 "pageX": page.minX, "paneX": bounds.minX,
                 "red": color.redComponent, "green": color.greenComponent, "blue": color.blueComponent]
     }
@@ -61,6 +64,18 @@ final class PreviewSurface: NSView {
         guard pageShown else { return nil }
         return preview.layer?.cornerRadius == 0 ? convert(preview.bounds, from: preview).minX : bounds.minX
     }
+    /// LKM-587: the rule is one point thick (an even device-pixel count at 2x), centred on the
+    /// edge and snapped to device pixels.
+    /// AppKit's abutting toolbar slots put an even number of device pixels between New Chat's
+    /// glass and the viewport island's (14 px at 2x), so a one-pixel hairline left them 7 px and
+    /// 6 px away; an even-width rule centred on the pane boundary leaves the same gap each side.
+    func dividerRule() -> NSRect? {
+        guard let edge = dividerEdge() else { return nil }
+        let scale = window?.backingScaleFactor ?? 2
+        let pixels = max(1, scale.rounded())
+        let minX = (edge * scale - pixels / 2).rounded() / scale
+        return NSRect(x: minX, y: bounds.minY, width: pixels / scale, height: max(0, dividerTop - bounds.minY))
+    }
     /// Through the top bar when it splits at the rule, else up to the pane body's top.
     private var dividerTop: CGFloat { toolbarSplitClear || canvas == nil ? bounds.maxY : convert(canvas!.bounds, from: canvas).maxY }
     private var pageShown: Bool { preview.map { !$0.isHidden && $0.frame.width > 0 && $0.frame.height > 0 } ?? false }
@@ -73,10 +88,9 @@ final class PreviewSurface: NSView {
             preview.underPageBackgroundColor.setFill()
             NSRect(x: page.minX, y: content.maxY, width: page.width, height: max(0, bounds.maxY - content.maxY)).fill()
         }
-        guard let edge = dividerEdge() else { return }
+        guard let rule = dividerRule() else { return }
         NSColor.separatorColor.withAlphaComponent(0.12).setFill()
-        let scale = window?.backingScaleFactor ?? 2
-        NSRect(x: (edge * scale).rounded() / scale, y: bounds.minY, width: 1 / scale, height: max(0, dividerTop - bounds.minY)).fill()
+        rule.fill()
     }
     deinit { NotificationCenter.default.removeObserver(self) }
 }

@@ -25,6 +25,10 @@ export function chatPreviewSplit(shell: Inspect, surface: Inspect) {
     surfaceTop: surface.surfaceHeight as number,
     contentTop: surface.contentTop as number,
     x: surface.dividerWindowX as number,
+    // LKM-587: the rule as drawn (one point thick, centred on the edge), in window points.
+    ruleMinX: surface.dividerWindowMinX as number,
+    ruleMaxX: surface.dividerWindowMaxX as number,
+    scale: Number(surface.backingScale) || 2,
     column: (shell.detailLeading as number) + Number(shell.chatWidth ?? 0),
     chatNewVisible: shell.chatNewVisible === true,
     // The last chat-side control as drawn: New Chat's button when it shows, else the title header.
@@ -54,7 +58,7 @@ export function assertChatPreviewSplit(split: ChatPreviewSplit, stage: string) {
   )
   if (split.chatTrailing != null)
     assert.ok(
-      split.chatTrailing <= split.x - SPLIT_CLEARANCE + 0.5,
+      split.chatTrailing <= split.ruleMinX - SPLIT_CLEARANCE + 0.5,
       `${stage}: the chat's toolbar controls end before the rule: ${detail}`
     )
   const fits = split.previewSlotLeading == null || split.previewSlotLeading >= split.column - 0.5
@@ -65,9 +69,20 @@ export function assertChatPreviewSplit(split: ChatPreviewSplit, stage: string) {
   )
   if (fits) {
     assert.ok(
-      split.previewLeading >= split.x + SPLIT_CLEARANCE - 0.5,
+      split.previewLeading >= split.ruleMaxX + SPLIT_CLEARANCE - 0.5,
       `${stage}: the preview's toolbar controls start after the rule: ${detail}`
     )
+    // LKM-587: New Chat's glass and the viewport island's sit the same distance from the rule
+    // as drawn (it ran 4 pt left of a hairline and 3.5 pt right of it: 7 px against 6 px).
+    // At an odd backing scale the rule is an odd number of pixels in an even gap, so one
+    // side may differ by one device pixel.
+    const slack = Math.round(split.scale) % 2 === 0 ? 0.25 : 1 / split.scale + 0.01
+    if (split.chatNewVisible && split.chatTrailing != null)
+      assert.ok(
+        Math.abs(split.ruleMinX - split.chatTrailing - (split.previewLeading - split.ruleMaxX)) <
+          slack,
+        `${stage}: the rule sits centred between New Chat and the viewport island: ${detail}`
+      )
     assert.ok(
       Math.abs(split.top - split.surfaceTop) <= 0.5,
       `${stage}: the rule runs through the top bar: ${detail}`
@@ -77,6 +92,64 @@ export function assertChatPreviewSplit(split: ChatPreviewSplit, stage: string) {
       Math.abs(split.top - split.contentTop) <= 0.5,
       `${stage}: the rule stops at the top bar's lower edge: ${detail}`
     )
+}
+
+/** LKM-587: the visible gaps, in device pixels, between the rule and the nearest glass edge on
+ *  either side, read along one row of a foreground capture through the toolbar's middle (the
+ *  capsules' widest point). The gap is the run of pixels next to the rule that match the pixel
+ *  just beside it; it ends at the first that differs (the glass outline). Pure: `rgb` reads the
+ *  capture, y down. */
+export function splitGapsInPixels(
+  rgb: (x: number, y: number) => readonly number[],
+  row: number,
+  ruleMin: number,
+  ruleMax: number,
+  limit = 40
+) {
+  const luma = (x: number) => {
+    const [r, g, b] = rgb(x, row)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+  }
+  const run = (from: number, step: 1 | -1) => {
+    const base = luma(from)
+    let count = 0
+    while (count < limit && Math.abs(luma(from + step * count) - base) < 12) count++
+    return count
+  }
+  return { left: run(ruleMin - 1, -1), right: run(ruleMax, 1) }
+}
+
+/** LKM-587: in a foreground capture, the gap left of the rule (to New Chat's glass) equals the
+ *  gap right of it (to the viewport island's), in device pixels. */
+export function assertSplitGapPixels(
+  split: ChatPreviewSplit,
+  rgb: (x: number, y: number) => readonly number[],
+  stage: string
+) {
+  const viewport = rect(split.frames.viewport)
+  const scale = split.scale
+  if (!split.chatNewVisible || !split.spansTopBar || viewport.length < 4) return null
+  if (Math.round(scale) % 2 !== 0) return null
+  // Window points are y up from the content bottom; the capture is y down from the window top.
+  const row = Math.round((split.surfaceTop - (viewport[1] + viewport[3] / 2)) * scale)
+  const gaps = splitGapsInPixels(
+    rgb,
+    row,
+    Math.round(split.ruleMinX * scale),
+    Math.round(split.ruleMaxX * scale),
+    Math.round(8 * scale)
+  )
+  const limit = Math.round(8 * scale)
+  assert.ok(
+    gaps.left < limit && gaps.right < limit,
+    `${stage}: a glass edge lies within 8 pt either side of the rule: ${JSON.stringify({ ...gaps, row, scale })}`
+  )
+  assert.equal(
+    gaps.left,
+    gaps.right,
+    `${stage}: the toolbar gap is the same either side of the rule (device px): ${JSON.stringify({ ...gaps, row, scale })}`
+  )
+  return gaps
 }
 
 /** The split as laid out after a resize: the rule's top-bar extent follows the toolbar's
