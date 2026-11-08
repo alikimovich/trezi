@@ -38,4 +38,36 @@ expect(234 + loadedWidth + 44, 670, "New Chat slot and viewport slot meet on the
 let compactWidth = ToolbarChatLead.width(target: 550, leading: 238, newChatAdvance: 48, addressLimit: 152)
 expect(compactWidth, 152, "minimum toolbar keeps the viewport slot")
 expect(238 + compactWidth + 48, 438, "New Chat stops before the viewport")
+// LKM-588: the chat pane narrowed with the split's divider, sidebar collapsed (the header
+// starts after the traffic lights and the sidebar toggle). At the 320 pt minimum pane the
+// header fell under the old 150 pt threshold, which hid New Chat with the title; the
+// viewport island then took New Chat's slot, left of the rule. Now the title gives way and
+// New Chat's slot still ends on the column edge.
+let narrowPane = ToolbarChatLead.width(target: 320, leading: 130, newChatAdvance: 48, addressLimit: 600)
+expect(narrowPane, 142, "narrow pane: the header, not New Chat, gives way")
+expect(130 + narrowPane + 48, 320, "narrow pane: New Chat's slot ends on the column edge")
+precondition(ToolbarChatLead.titleVisible(width: narrowPane), "narrow pane: the title truncates, still shown")
+// Narrower still (a wider leading, e.g. a larger titlebar inset): the title hides before New Chat moves.
+let tightPane = ToolbarChatLead.width(target: 320, leading: 230, newChatAdvance: 48, addressLimit: 600)
+expect(tightPane, 42, "tight pane: the header shrinks below the title's minimum")
+expect(230 + tightPane + 48, 320, "tight pane: New Chat's slot still ends on the column edge")
+precondition(!ToolbarChatLead.titleVisible(width: tightPane), "tight pane: the title hides first")
+// The header never collapses to nothing (its item keeps New Chat beside it).
+expect(ToolbarChatLead.width(target: 320, leading: 300, newChatAdvance: 48, addressLimit: 600), ToolbarChatLead.minimumWidth, "header floor")
+// Widening the pane again restores the title.
+let widened = ToolbarChatLead.width(target: 520, leading: 130, newChatAdvance: 48, addressLimit: 600)
+precondition(ToolbarChatLead.titleVisible(width: widened), "wider pane: the title returns")
+expect(130 + widened + 48, 520, "wider pane: New Chat follows the column edge")
+precondition(ToolbarChatLead.titleVisible(width: ToolbarChatLead.titleMinimumWidth), "title threshold inclusive")
+precondition(!ToolbarChatLead.titleVisible(width: ToolbarChatLead.titleMinimumWidth - 1), "title hides below threshold")
+// A minimum-width window caps the header by the address's room: it keeps the former chat-side
+// width (56 + New Chat's 44 = the old 100 pt floor), title hidden, New Chat shown.
+let capped = ToolbarChatLead.width(target: 550, leading: 238, newChatAdvance: 44, addressLimit: 30)
+expect(capped, 56, "address-limited header keeps the former chat-side width")
+precondition(!ToolbarChatLead.titleVisible(width: capped), "address-limited: the title hides, New Chat stays")
+// New Chat fits beside the narrowest header at every supported pane width; only a column
+// still animating in from a hidden chat lacks room for it.
+precondition(ToolbarChatLead.newChatFits(target: 320, leading: 130, newChatAdvance: 48), "minimum pane, sidebar collapsed")
+precondition(ToolbarChatLead.newChatFits(target: 550, leading: 238, newChatAdvance: 44), "minimum pane, sidebar open")
+precondition(!ToolbarChatLead.newChatFits(target: 180, leading: 136, newChatAdvance: 44), "column animating in")
 print("TOOLBAR CHAT LEAD PASS — a header frame that has not moved with the split is not used")

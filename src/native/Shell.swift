@@ -60,6 +60,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     var toolbar: NSToolbar!
     private var toolbarLayout: ToolbarLayout!
     private var insertingChatItems = false
+    /// LKM-588: the chat column has room for New Chat (`ToolbarChatLead.newChatFits`).
+    private var chatNewFits = true
     weak var window: NSWindow?
     private(set) var toolbarItems: [String: NSToolbarItem] = [:]
     private let items = [ "chat", "chat-new", "address", "viewport", "interaction", "tools", "more", "publish"] + ToolbarIslands.interaction + ToolbarIslands.viewport + ToolbarIslands.tools
@@ -279,8 +281,10 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             // Keep New Chat at the chat column edge before giving the address its
             // preferred width. The address can compress to its existing floor.
             let width = ToolbarChatLead.width(target: target, leading: leading, newChatAdvance: advance, addressLimit: addressLayout.chatLimit(windowWidth: windowWidth, chatLeading: leading, addressPreferred: ToolbarAddressLayout.floor))
-            chatTitle.isHidden = currentProject == nil || chatHidden || width < 150
-            setChatNewVisible(!chatTitle.isHidden)
+            // LKM-588: the title truncates, then hides; New Chat stays while the chat shows.
+            chatTitle.isHidden = currentProject == nil || chatHidden || !ToolbarChatLead.titleVisible(width: width)
+            chatNewFits = ToolbarChatLead.newChatFits(target: target, leading: leading, newChatAdvance: advance)
+            setChatNewVisible(currentProject != nil && !chatHidden && chatNewFits)
             if abs(chatHeaderWidth.constant - width) > 0.5 { chatHeaderWidth.constant = width }
             // chatOffset was measured from this header edge to the address block;
             // adding New Chat here would reserve the button a second time.
@@ -346,7 +350,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             chatTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             chatTitle.translatesAutoresizingMaskIntoConstraints = false; chatHeader.addSubview(chatTitle)
             NSLayoutConstraint.activate([
-                chatHeaderWidth, chatHeader.widthAnchor.constraint(greaterThanOrEqualToConstant: 100), chatHeader.heightAnchor.constraint(equalToConstant: 32),
+                chatHeaderWidth, chatHeader.widthAnchor.constraint(greaterThanOrEqualToConstant: ToolbarChatLead.minimumWidth), chatHeader.heightAnchor.constraint(equalToConstant: 32),
                 chatTitle.leadingAnchor.constraint(equalTo: chatHeader.leadingAnchor, constant: 4), chatTitle.centerYAnchor.constraint(equalTo: chatHeader.centerYAnchor),
                 chatTitle.trailingAnchor.constraint(lessThanOrEqualTo: chatHeader.trailingAnchor, constant: -4)
             ])
@@ -525,8 +529,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         if chatHeaderWidth != nil {
             alignChatHeader()
         }
-        chatTitle.isHidden = currentProject == nil || chatHidden || (chatHeaderWidth?.constant ?? 0) < 150
-        setChatNewVisible(!chatTitle.isHidden)
+        chatTitle.isHidden = currentProject == nil || chatHidden || !ToolbarChatLead.titleVisible(width: chatHeaderWidth?.constant ?? 0)
+        setChatNewVisible(currentProject != nil && !chatHidden && chatNewFits)
         toolbarItems["chat-new"]?.isEnabled = chatReady && currentProject != nil
         address.isEnabled = ready
         if address.currentEditor() == nil { showAddress() }
@@ -786,6 +790,8 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
             "chatNewMoreFrame":NSStringFromRect(toolbarFrames["more"] ?? .zero),
             "chatNewSidebarFrame":NSStringFromRect(toolbarFrames[NSToolbarItem.Identifier.toggleSidebar.rawValue] ?? .zero),
             "chatNewRenderedFrame":NSStringFromRect(nativeToolbarButtonFrame("chat-new") ?? .zero),
+            // LKM-588: a click at New Chat's centre reaches it (geometry only; nothing is posted).
+            "chatNewHit":MainActor.assumeIsolated { toolbarButtonHit("chat-new") },
             "chatNewMoreRenderedFrame":NSStringFromRect(nativeToolbarButtonFrame("more") ?? .zero),
             "chatNewSidebarRenderedFrame":NSStringFromRect(nativeToolbarButtonFrame(NSToolbarItem.Identifier.toggleSidebar.rawValue) ?? .zero),
             "chatTitleFrame":NSStringFromRect(mainFrame(chatTitle) ?? .zero),

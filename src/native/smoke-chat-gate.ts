@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
+import { checkNarrowPaneToolbar } from './smoke-narrow-pane'
 import { decodePng } from './smoke-png'
 import { restoreSidebarFocus } from './smoke-sidebar'
 import { assertChatPreviewSplit, assertSplitGapPixels, chatPreviewSplit } from './smoke-split'
@@ -197,6 +198,15 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
   assert.ok(originalWidth >= 850 && originalWidth <= 2000, 'Original window can be restored')
   assert.equal(await host.request('shellPerform', { action: 'window-width', row: '1320' }), true)
   const loaded = await captureChatGate(host, artifacts, 'loaded', true)
+  // LKM-588: narrowed with the divider (long title, ready), New Chat stays and the viewport
+  // island stays right of the rule; the title gives way and returns when widened.
+  await checkNarrowPaneToolbar(
+    host,
+    (name) => captureChatGate(host, artifacts, name, true, true, null),
+    'loaded',
+    true,
+    true
+  )
   const normalWidth = 1320
   const root = join(fixture, '../Folder Gamma')
   mkdirSync(root, { recursive: true })
@@ -287,6 +297,13 @@ export async function checkChatGate(host: NativeBridge, fixture: string, artifac
   await host.request('composerPerform', { text: 'Draft while opening' })
   await until(() => gammaChat.text === 'Draft while opening', 'opening draft reaches selected chat')
   const busy = await captureChatGate(host, artifacts, 'opening', true, false)
+  // LKM-588: the same while the project opens (New Chat shown, disabled until ready).
+  await checkNarrowPaneToolbar(
+    host,
+    (name) => captureChatGate(host, artifacts, name, true, false, null),
+    'opening',
+    false
+  )
   assert.equal(busy.draft, 'Draft while opening', 'Opening keeps the selected draft')
   assert.equal(busy.messageCount, previousMessages, 'Opening keeps the native transcript count')
   assert.ok(busy.visibleMessageIDs.includes(transcriptID), 'Opening renders the selected reply')

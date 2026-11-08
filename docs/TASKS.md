@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-588 — Keep New Chat visible by hiding the chat title first in narrow chat panes
+
+- [x] Cause: below a 150 pt header the toolbar hid New Chat together with the title (`setChatNewVisible(!chatTitle.isHidden)`), and the header kept a 100 pt floor, so the viewport island took New Chat's slot left of the chat/preview rule (at the 320 pt minimum pane with the sidebar collapsed).
+- [x] New Chat shows whenever the chat header does; the title truncates, then hides below 64 pt (`ToolbarChatLead.titleVisible`); the header floor is 16 pt, so New Chat's slot ends on the column edge and the viewport island starts there. Where the address's room caps the header (narrow windows) its floor is 56 pt, which with New Chat's slot keeps the chat side's former 100 pt.
+- [x] Unit `toolbar-chat-lead` (narrow, tight, widened panes); native `chat-gate` narrows the pane with the real divider (sidebar collapsed and open, long title ready, and while opening) and asserts New Chat visible, enabled once ready, labelled and hittable, the island right of the rule (3 pt, equal device-pixel gaps), then widens and asserts the title returns (`src/native/smoke-narrow-pane.ts`).
+- [ ] Andrei: narrow windows (900 pt, sidebar open) still lay the preview's controls over the chat column (LKM-559), because the 350 pt preview pane cannot hold its ~530 pt of controls; keeping the island right of the rule there needs a decision on which preview control leaves the toolbar.
+- [ ] Manager: independent review, exact-head CI and merge.
+
 ## LKM-587 — Match toolbar spacing either side of the chat/preview divider
 
 - [x] Measured (2x foreground capture): New Chat's glass edge 7 px from the 1 px rule, the viewport island's 6 px. The slots abut, so the gap between the two glass edges is an even 14 px, and a one-pixel rule cannot be centred in it.
