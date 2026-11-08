@@ -430,6 +430,11 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
             undefined,
             `${layout} ${appearance} ${stage}: ${JSON.stringify(probe)}`
           )
+          if (stage === 'hover')
+            assert.ok(
+              probe.buttons.every((button: State) => button.enterDeliveries > 0),
+              `hover reaches each installed native tracking owner: ${JSON.stringify(probe)}`
+            )
           await pause(120)
           const state = await shell()
           const image: State = await host.request('captureVisibleWindow')
@@ -473,6 +478,11 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
           }
           const reset: State = await host.request('toolbarInteractionProbe', { stage: 'reset' })
           assert.equal(reset.error, undefined, `${name}: interaction reset`)
+          if (stage === 'hover')
+            assert.ok(
+              reset.buttons.every((button: State) => button.exitDeliveries > 0),
+              `hover exit reaches each native tracking owner: ${JSON.stringify(reset)}`
+            )
         }
       } finally {
         await host.request('toolbarInteractionProbe', { stage: 'reset' })

@@ -43,7 +43,8 @@ const all = [
   'composer',
   'agent-browser',
   'selection',
-  'changes'
+  'changes',
+  'inspector'
 ]
 assert.deepEqual([...NATIVE_SMOKE_GROUPS], all)
 assert.deepEqual([...parseSmokeGroups([])], all, 'No flag runs every group')
@@ -192,6 +193,11 @@ for (const group of ['islands', 'shadow-light'])
       (c) => c.name === 'chat-islands'
     )
   )
+const repairGroups = parseSmokeGroups(['--only=core,chat,islands,shadow-light'])
+const repairChecks = selectSmokeChecks(names, repairGroups).map((c) => c.name)
+for (const check of ['inspector', 'code-link-click', 'chat-islands'])
+  assert.ok(repairChecks.includes(check), `LKM-549 admission includes ${check}`)
+assert.deepEqual([...repairGroups], ['core', 'chat', 'islands', 'shadow-light'])
 assert.throws(
   () => selectSmokeChecks([{ name: 'brand-new' }], parseSmokeGroups([])),
   /brand-new has no group/
@@ -418,3 +424,41 @@ if (process.platform === 'darwin') {
   )
   console.log('dev-native: bad --only selections fail before building; --help lists the groups.')
 } else console.log('dev-native launcher checks SKIP — macOS only.')
+
+// Native Host.evaluate wraps the supplied code in (await (EXPRESSION)); a
+// statement list passes TypeScript but throws immediately inside real WebKit.
+const nativeCoreSource = readFileSync(
+  new URL('../src/native/smoke-core.ts', import.meta.url),
+  'utf8'
+)
+const moduleStorageExpressions = [
+  ...nativeCoreSource.matchAll(/page\(\s*`([^`]*sessionStorage\.(?:set|remove)Item[^`]*?)`\s*\)/g)
+]
+assert.ok(
+  moduleStorageExpressions.some(([, code]) => code.includes('sessionStorage.setItem')),
+  'module setup is covered'
+)
+assert.ok(
+  moduleStorageExpressions.some(([, code]) => code.includes('sessionStorage.removeItem')),
+  'module cleanup is covered'
+)
+for (const [, expression] of moduleStorageExpressions)
+  assert.doesNotThrow(
+    () => new Function(`return (async () => JSON.stringify((await (${expression})) ?? null))()`),
+    'native fixture setup is a valid expression'
+  )
+
+// The focused inspector path retains setup and the complete real inspector check.
+assert.deepEqual(
+  selectSmokeChecks(
+    [
+      ...SMOKE_PRELUDE.map((name) => ({ name })),
+      { name: 'inspector' },
+      { name: 'toolbar-actions' }
+    ],
+    parseSmokeGroups(['--only=inspector']),
+    () => {}
+  ).map((x) => x.name),
+  [...SMOKE_PRELUDE, 'inspector']
+)
+assert.ok(SMOKE_CHECK_GROUPS.inspector.includes('core'), 'normal core coverage remains unchanged')

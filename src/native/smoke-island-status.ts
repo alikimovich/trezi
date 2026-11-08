@@ -19,15 +19,15 @@ export async function checkIslandStatus(
   file: string,
   code: string,
   artifacts: string,
-  wait: (check: () => Promise<boolean> | boolean) => Promise<void>
+  wait: (check: () => Promise<boolean> | boolean, label?: string) => Promise<void>
 ) {
   const inspect = async () =>
     ((await host.request('chatInspect')).islands as any[]).find((i) => i.id === island)
-  const until = (check: (view: any) => boolean) =>
+  const until = (check: (view: any) => boolean, label = 'island status') =>
     wait(async () => {
       const view = await inspect()
       return !!view && check(view)
-    })
+    }, `${label}: ${check.toString()}`)
   const capture = async (name: string) => {
     await host.request('revealChatIsland', { island }).catch(() => {})
     writeFileSync(join(artifacts, name), Buffer.from(await host.request('captureShell'), 'base64'))

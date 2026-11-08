@@ -47,6 +47,8 @@ function checkOpen(state: Island, label: string) {
 export type IslandPage = {
   evaluate: (code: string, isolated?: boolean) => Promise<unknown>
   source: () => string
+  /** Explicitly Apply the real field draft through the source-bound fixture agent. */
+  applyDraft: (field: string, value: string) => Promise<void>
   /** The selected element's computed value of one style property (`styles:read`). */
   styles: (prop: string) => Promise<unknown>
   /** Selects the fixture heading in the page, as a click on it would. */
@@ -174,6 +176,15 @@ async function checkPointer(
   const edit = await island({ pointer: true, step: 'edit', value: '12' })
   evidence.pointerEdit = edit
   assert.ok(edit.focused, `pointer: a click focuses padding-top ${JSON.stringify(edit)}`)
+  assert.equal(page.source(), sourceBefore, 'typing stages a preview without writing source')
+  await waitFor(
+    async () =>
+      ((await host.request('inspectorInspect')) as { values: Record<string, string> }).values[
+        'style:padding-vertical'
+      ] === '12',
+    'the real Vertical padding field stages exactly 12'
+  )
+  await page.applyDraft('style:padding-vertical', '12')
   await waitFor(
     () => /padding(Top|-top)["']?\s*:\s*["']?12/.test(page.source()),
     'padding-top 12 in the source',
@@ -183,6 +194,16 @@ async function checkPointer(
       selection: await page.styles('padding-top')
     })
   )
+  // The real Vertical writer sets both sides and leaves every other authored pair alone.
+  const written = page.source()
+  assert.match(
+    written,
+    /padding(Bottom|-bottom)["']?\s*:\s*["']?12/,
+    'padding-bottom 12 in the source'
+  )
+  for (const [pair, key] of sourceBefore.matchAll(/(\w+): ("[^"]*"|[\d.]+)/g))
+    if (!/^padding(Top|Bottom)$/.test(key))
+      assert.ok(written.includes(pair), `the Vertical write keeps ${pair}`)
   const paddingTop = () =>
     page.evaluate(`getComputedStyle(document.querySelector('#native-title')).paddingTop`)
   await waitFor(

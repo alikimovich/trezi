@@ -18,6 +18,18 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Unit (`test/project-memory-rule.mjs`) and real-owner (`test/memory-owner.mjs`) coverage; policy lists and golden updated.
 - [ ] Manager: independent review, exact-head CI, native acceptance and merge.
 
+## LKM-549 — Native suite failures on main 957516a6
+
+- [x] Repair the inspector smoke for source-free Styles staging and one explicit batch Apply.
+- [x] Map the chat code link's disk line to the retained editor draft with the LKM-444 prepended line.
+- [x] Label every `chat-islands` wait (and the island-status predicates) and report the island list in its timeout, so the failing step is named.
+- [x] Diagnose `inspector` "both Styles preview drafts are pending" (the smoke read a `draft` key `inspectorInspect` never returns) and repair it by reading `inspector.state.draft`.
+- [x] Diagnose `chat-islands` "Light X control shows the drafted 0.75" (`islandControlInspect` missed the AppKit subviews) and widen the lookup to `NSView.subviews` plus accessibility children.
+- [x] `inspector` "two drafts submit one Apply operation": `inspectorPerform` is asynchronous, so the smoke now keeps its chat-command mock until the Apply called it (same in the CSS Module block).
+- [x] Classify the absent in-process SwiftUI semantic AX tree and read actual native text fields; the324ec1b4native check passed Light X0.75 and post-Undo X/Y values. Hosted focus/typing/blur/Return regression is verified separately; full island acceptance remains pending.
+- [x] Native-verify: `core,chat,islands,shadow-light` 66/66 on the merged head; full `bun run test:native` 79/79 plus chat-scroll/packaged-browser on 83640671.
+- [x] Independent review: no blocking findings; island focus-on-disable, real-writer pair checks and failure-evidence fixes applied.
+- [ ] Manager: admit `--only=core,chat,islands,shadow-light`, run the locked native suite, independent review and required CI.
 ## LKM-554 — Restore system sans-serif UI font in sidebar and top bar
 
 - [x] Sidebar rows, history detail, shimmer fallback, chat title, address, branch menu, nested title and Publish use `NSFont.systemFont` at the same sizes and weights; code/editor fonts untouched.

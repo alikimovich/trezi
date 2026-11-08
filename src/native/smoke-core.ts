@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { contentHash, sourceOwner } from '../main/source-owner'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
 import type { NativeContextController } from './context-controller'
@@ -169,8 +170,12 @@ export async function runNativeCoreSmoke(
       attachments: chat?.attachments?.length
     }
   }
-  const wait = (check: () => Promise<any> | any, label: string, timeout = 10000) =>
-    waitFor(check, label, timeout)
+  const wait = (
+    check: () => Promise<any> | any,
+    label: string,
+    timeout = 10000,
+    detail?: Parameters<typeof waitFor>[3]
+  ) => waitFor(check, label, timeout, detail)
   const inspect = (method: string, check: (s: any) => boolean) =>
     inspectUntil(
       (m) => host.request(m),
@@ -871,65 +876,159 @@ export async function runNativeCoreSmoke(
           Buffer.from(await host.request('captureShell'), 'base64')
         )
         const styleSource = () => readFileSync(join(fixture, 'native-style.tsx'), 'utf8')
-        // `busy` alone cannot say an edit finished: a selection refresh resets it while
-        // the write is still in flight. The controller counts finished edits (`edits`,
-        // never reset), so wait for that count to move past the one seen before the
-        // request, then for the expected source text.
-        const performEdit = async (
-          field: string,
-          value: string,
-          landed: (s: string) => boolean
-        ) => {
-          const seen = (await host.request('inspectorInspect')).edits
+        const sourceBeforeDraft = styleSource()
+        const submitFixtureDraft = async (field: string, value: string) => {
+          await wait(
+            () => inspector.state.draft?.count === 1,
+            'one source-free Styles draft pending'
+          )
+          const original = nativeChat.command.bind(nativeChat)
+          const chat = nativeChat.get(nativeChat.active),
+            priorTurn = chat.turn
+          let commands = 0
+          nativeChat.command = async (command) => {
+            assert.equal(command.type, 'submit')
+            assert.ok(
+              command.text
+                ?.split('\n')
+                .some((line) => line.endsWith(`: set ${field.slice(6)} to ${value}`)),
+              'Apply names exactly the staged field/value, not a numeric prefix'
+            )
+            const binding = inspector.bindings.get(field)
+            assert.ok(binding)
+            assert.equal((await binding.apply(value)).applied, true)
+            chat.turn = `smoke-fixture-styles-${++commands}`
+          }
+          try {
+            const state = await host.request('inspectorInspect')
+            await host.request('inspectorPerform', {
+              action: { root: fixture, generation: state.generation, action: 'apply-drafts' }
+            })
+            await wait(
+              () => commands === 1 && inspector.state.draft?.submitted === true,
+              'one Styles Apply reached mock agent',
+              10000,
+              async () => ({
+                commands,
+                draft: inspector.state.draft,
+                error: inspector.state.error,
+                localGeneration: inspector.state.generation,
+                published: await host.request('inspectorInspect')
+              })
+            )
+          } finally {
+            nativeChat.command = original
+          }
+          await inspector.settleDraftTurn(false)
+          const state = await host.request('inspectorInspect')
+          await host.request('inspectorPerform', {
+            action: { root: fixture, generation: state.generation, action: 'revert-draft' }
+          })
+          await wait(() => !inspector.state.draft, 'fixture draft cleared before source Undo')
+          chat.turn = priorTurn
+        }
+
+        // A staged preview can re-select the element and bump the generation; an
+        // action naming a stale one is dropped silently, so name the current one.
+        const liveGeneration = async () => (await host.request('inspectorInspect')).generation
+        const stageStyle = async (field: string, value: string) => {
           await host.request('inspectorPerform', {
             action: {
               root: fixture,
-              generation: inspectorState.generation,
+              generation: await liveGeneration(),
               action: 'apply',
               field,
               value
             }
           })
-          try {
-            await wait(async () => {
-              const state = await host.request('inspectorInspect')
-              return state.edits > seen && !state.busy && landed(styleSource())
-            }, `${field} edit settled`)
-          } catch (error) {
-            console.error('Native inspector failure', {
-              field,
-              seen,
-              expected: inspectorState,
-              actual: await host.request('inspectorInspect'),
-              source: styleSource()
-            })
-            throw error
-          }
+          assert.equal(styleSource(), sourceBeforeDraft, `${field} stages without a source write`)
         }
-        await performEdit('style:opacity', '0.8', (s) => s.includes('0.8'))
-        const beforePair = styleSource()
-        await performEdit(
-          'style:padding-vertical',
-          '12',
-          (s) => s.includes('paddingTop: "12px"') && s.includes('paddingBottom: "12px"')
-        )
-        const paired = styleSource()
-        for (const untouched of [
-          'paddingLeft: "var(--space-a)"',
-          'paddingRight: "18px"',
-          'marginLeft: "auto"',
-          'marginRight: "-4px"',
-          'marginTop: "-2px"',
-          'marginBottom: "3px"'
-        ])
-          assert.ok(paired.includes(untouched), `pair kept ${untouched}`)
-        const undone = await invoke('edit:undo', fixture)
-        assert.ok(undone.ok, 'one ledger Undo reverts the pair')
+        await stageStyle('style:opacity', '0.8')
+        await stageStyle('style:padding-vertical', '12')
         try {
-          await wait(() => styleSource() === beforePair, 'one Undo restores both vertical sides')
+          await wait(
+            () => inspector.state.draft?.count === 2,
+            'both Styles preview drafts are pending'
+          )
+        } catch (error) {
+          console.error('Native inspector draft failure', {
+            expected: inspectorState,
+            draft: inspector.state.draft,
+            actual: await host.request('inspectorInspect'),
+            source: styleSource()
+          })
+          throw error
+        }
+        await wait(
+          () =>
+            page(`(() => {
+              const style = getComputedStyle(document.querySelector('#native-title'));
+              return style.opacity === '0.8' && style.paddingTop === '12px' && style.paddingBottom === '12px';
+            })()`),
+          'both Styles drafts render in the preview'
+        )
+        const appliedSource = sourceBeforeDraft
+          .replace('opacity: 1', 'opacity: 0.8')
+          .replace(
+            'paddingTop: "6px", paddingBottom: "6px"',
+            'paddingTop: "12px", paddingBottom: "12px"'
+          )
+        assert.notEqual(appliedSource, sourceBeforeDraft, 'the requested source batch changes')
+        const batchOriginalCommand = nativeChat.command.bind(nativeChat)
+        const batchChat = nativeChat.get(nativeChat.active)
+        const batchPriorTurn = batchChat.turn
+        let batchCommands = 0
+        nativeChat.command = async (command) => {
+          assert.equal(command.type, 'submit', 'Apply uses one regular chat agent operation')
+          assert.match(command.text ?? '', /opacity to 0\.8/)
+          assert.match(command.text ?? '', /set padding-vertical to 12(?:\n|$)/)
+          batchCommands++
+          const saved = await sourceOwner().commit(fixture, [
+            {
+              path: 'native-style.tsx',
+              expectedHash: contentHash(sourceBeforeDraft),
+              content: appliedSource
+            }
+          ])
+          assert.equal(saved.ok, true, 'mock agent persisted one source transaction')
+          batchChat.turn = `smoke-style-batch-${batchCommands}`
+        }
+        try {
+          await host.request('inspectorPerform', {
+            action: {
+              root: fixture,
+              generation: await liveGeneration(),
+              action: 'apply-drafts'
+            }
+          })
+          // inspectorPerform only queues the action; keep the mock until the Apply used it.
+          await wait(() => batchCommands > 0, 'Apply reached the chat agent')
+          await wait(() => inspector.state.draft?.submitted === true, 'Apply marked submitted')
+        } finally {
+          nativeChat.command = batchOriginalCommand
+        }
+        assert.equal(batchCommands, 1, 'two drafts submit one Apply operation')
+        await wait(() => styleSource() === appliedSource, 'Styles batch persisted')
+        const paired = styleSource()
+        // This fixture's heading is a manually stamped preview node, not an import of
+        // native-style.tsx. Release its submitted lock without claiming rendered
+        // confirmation; the source-backed CSS Module check below exercises that proof.
+        await inspector.settleDraftTurn(false)
+        await host.request('inspectorPerform', {
+          action: { root: fixture, generation: await liveGeneration(), action: 'revert-draft' }
+        })
+        await wait(() => inspector.state.draft === undefined, 'Styles batch draft reverted')
+        batchChat.turn = batchPriorTurn
+        const undone = await invoke('edit:undo', fixture)
+        assert.ok(undone.ok, 'one ledger Undo reverts the batch')
+        try {
+          await wait(
+            () => styleSource() === sourceBeforeDraft,
+            'one Undo restores the Styles batch'
+          )
         } catch (error) {
           console.error('Native inspector Undo mismatch', {
-            beforePair,
+            sourceBeforeDraft,
             paired,
             after: styleSource(),
             undone,
@@ -1030,20 +1129,15 @@ export async function runNativeCoreSmoke(
           join(artifacts, 'inspector-layout.png'),
           Buffer.from(await host.request('captureShell'), 'base64')
         )
-        await page(`(() => {
-          document.querySelector('#native-layout')?.remove();
-          document.querySelector('#native-layout-css')?.remove();
-          const style = document.createElement('style');
-          style.id = 'native-module-css';
-          style.setAttribute('data-vite-dev-id', 'native-layout.module.css');
-          style.textContent = '._layoutCard_abcde_1 { display:grid; row-gap:8px; column-gap:16px; }';
-          document.head.append(style);
-          const card = document.createElement('div');
-          card.id = 'native-module-card';
-          card.className = '_layoutCard_abcde_1';
-          card.textContent = 'CSS Module fixture';
-          document.body.append(card);
-        })()`)
+        await page(`(sessionStorage.setItem('trezi-native-module-fixture','1'), true)`)
+        host.emit('menu', { action: 'reload' })
+        await wait(
+          () =>
+            page(
+              `document.querySelector('#native-module-card') && getComputedStyle(document.querySelector('#native-module-card')).rowGap === '8px'`
+            ),
+          'CSS Module source fixture loaded'
+        )
         const moduleNodes = await invoke('layers:read')
         const moduleNode = moduleNodes.nodes.find((n: any) => n.id === 'native-module-card')
         assert.ok(moduleNode, 'CSS Module fixture is selectable')
@@ -1064,7 +1158,7 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: moduleState.generation,
+            generation: await liveGeneration(),
             action: 'preview',
             field: 'style:row-gap',
             value: '12px'
@@ -1080,7 +1174,7 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: moduleState.generation,
+            generation: await liveGeneration(),
             action: 'cancel-preview',
             field: 'style:row-gap'
           }
@@ -1089,15 +1183,14 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: moduleState.generation,
+            generation: await liveGeneration(),
             action: 'apply',
             field: 'style:row-gap',
             value: '12px'
           }
         })
         assert.ok(!moduleSource().includes('row-gap: 12px'), 'Styles draft does not write source')
-        const pending = await host.request('inspectorInspect')
-        assert.equal(pending.draft?.count, 1, 'Styles preview is visibly pending')
+        await wait(() => inspector.state.draft?.count === 1, 'Styles preview is visibly pending')
         const originalCommand = nativeChat.command.bind(nativeChat)
         const applyChat = nativeChat.get(nativeChat.active)
         const priorApplyTurn = applyChat.turn
@@ -1116,10 +1209,13 @@ export async function runNativeCoreSmoke(
           await host.request('inspectorPerform', {
             action: {
               root: fixture,
-              generation: moduleState.generation,
+              generation: await liveGeneration(),
               action: 'apply-drafts'
             }
           })
+          // inspectorPerform only queues the action; keep the mock until the Apply used it.
+          await wait(() => applyCommands > 0, 'Apply reached the chat agent')
+          await wait(() => inspector.state.draft?.submitted === true, 'Apply marked submitted')
         } finally {
           nativeChat.command = originalCommand
         }
@@ -1135,18 +1231,13 @@ export async function runNativeCoreSmoke(
             ),
           'CSS Module applied value is visible in the rendered preview'
         )
-        await invoke('styles:clear-preview', {})
+        await send('styles:clear-preview', {})
         await settleLiveReload()
-        const authoredRule = moduleSource().replace('.layoutCard', '._layoutCard_abcde_1')
-        await page(`(() => {
-          const sheet = document.querySelector('#native-module-css');
-          if (sheet) sheet.textContent = ${JSON.stringify(authoredRule)};
-          return true;
-        })()`)
-        assert.ok(
-          await page(
-            `getComputedStyle(document.querySelector('#native-module-card')).rowGap === '12px'`
-          ),
+        await wait(
+          () =>
+            page(
+              `document.querySelector('#native-module-card') && getComputedStyle(document.querySelector('#native-module-card')).rowGap === '12px'`
+            ),
           'CSS Module authored source reaches rendered preview after clearing draft'
         )
         await inspector.settleDraftTurn(true)
@@ -1160,6 +1251,7 @@ export async function runNativeCoreSmoke(
         await wait(() => moduleSource().includes('row-gap: 8px'), 'CSS Module Undo restores source')
         await settleLiveReload()
         await page(`(() => {
+          sessionStorage.removeItem('trezi-native-module-fixture');
           document.querySelector('#native-module-card')?.remove();
           document.querySelector('#native-module-css')?.remove();
           const style = document.createElement('style');
@@ -1189,7 +1281,7 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: utilityState.generation,
+            generation: await liveGeneration(),
             action: 'preview',
             field: 'style:gap',
             value: '24px'
@@ -1203,7 +1295,7 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: utilityState.generation,
+            generation: await liveGeneration(),
             action: 'cancel-preview',
             field: 'style:gap'
           }
@@ -1213,12 +1305,13 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: utilityState.generation,
+            generation: await liveGeneration(),
             action: 'apply',
             field: 'style:gap',
             value: '24px'
           }
         })
+        await submitFixtureDraft('style:gap', '24px')
         await wait(async () => {
           const state = await host.request('inspectorInspect')
           return state.edits > utilityEdits && utilitySource().includes('gap-6')
@@ -1255,7 +1348,7 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: plainState.generation,
+            generation: await liveGeneration(),
             action: 'preview',
             field: 'style:gap',
             value: '12px'
@@ -1269,7 +1362,7 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: plainState.generation,
+            generation: await liveGeneration(),
             action: 'cancel-preview',
             field: 'style:gap'
           }
@@ -1279,12 +1372,13 @@ export async function runNativeCoreSmoke(
         await host.request('inspectorPerform', {
           action: {
             root: fixture,
-            generation: plainState.generation,
+            generation: await liveGeneration(),
             action: 'apply',
             field: 'style:gap',
             value: '12px'
           }
         })
+        await submitFixtureDraft('style:gap', '12px')
         await wait(async () => {
           const state = await host.request('inspectorInspect')
           return state.edits > plainEdits && plainSource().includes('gap:12px')
@@ -1292,7 +1386,7 @@ export async function runNativeCoreSmoke(
         assert.ok((await invoke('edit:undo', fixture)).ok, 'plain CSS edit has Undo')
         await wait(() => plainSource().includes('gap:8px'), 'plain CSS Undo restores source')
         await host.request('inspectorPerform', {
-          action: { root: fixture, generation: plainState.generation, action: 'close' }
+          action: { root: fixture, generation: await liveGeneration(), action: 'close' }
         })
         await inspect('inspectorInspect', (s) => !s.visible)
         await page(`(() => {
@@ -1307,6 +1401,7 @@ export async function runNativeCoreSmoke(
           {
             evaluate: page,
             source: () => readFileSync(join(fixture, 'native-style.tsx'), 'utf8'),
+            applyDraft: submitFixtureDraft,
             styles: (prop) => invoke('styles:read', [prop]),
             select: async () => {
               // Source edits live-reload the page, which drops the stamp set above.
@@ -1330,6 +1425,9 @@ export async function runNativeCoreSmoke(
         )
       },
       cleanup: async () => {
+        await page(`(sessionStorage.removeItem('trezi-native-module-fixture'), true)`).catch(
+          () => {}
+        )
         const state = await host.request('inspectorInspect')
         if (state.visible)
           await host.request('inspectorPerform', {

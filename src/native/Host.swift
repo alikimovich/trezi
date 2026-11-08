@@ -277,8 +277,13 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
                 guard let self, self.agentBrowserLoads[name] == id else { return }
                 self.agentBrowserLoads.removeValue(forKey: name)
-                let navigated = self.agentRoutes.removeValue(forKey: name)?.superseded == true
-                self.reply(id, error: navigated ? "Agent browser page navigated during open" : "Agent browser load timed out")
+                let route = self.agentRoutes.removeValue(forKey: name)
+                let navigated = route?.superseded == true
+                var diagnostic = ""
+                if HostLaunch.environment["TREZI_NATIVE_TEST_DIR"] != nil, let state = route?.diagnostic,
+                   let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]),
+                   let text = String(data: data, encoding: .utf8) { diagnostic = " [test routing: \(text)]" }
+                self.reply(id, error: (navigated ? "Agent browser page navigated during open" : "Agent browser load timed out") + diagnostic)
             }
         case "agentBrowserSpeed":
             guard name.hasPrefix("agent:"), let view,

@@ -20,6 +20,13 @@ struct AgentLoadRouting {
     /// The most recently started navigation of the view, answered or not.
     private var latest: AnyObject?
 
+    /// Test-run diagnostics contain state relationships only, never URLs or page content.
+    var diagnostic: [String: Bool] {
+        ["hasRecorded": recorded != nil, "recordedStarted": recordedStarted,
+         "hasLatest": latest != nil, "latestMatches": recorded != nil && recorded === latest,
+         "superseded": superseded]
+    }
+
     /// The open started `navigation`; nil when it is not known yet (a hard reload clears
     /// caches first and records it when it starts).
     init(_ navigation: AnyObject?) { recorded = navigation }

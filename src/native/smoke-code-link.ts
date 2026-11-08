@@ -134,6 +134,16 @@ export async function checkCodeLinkClick(host: NativeBridge, fixture: string, ar
     await waitFor(async () => (await editor()).dirty, 'index.html draft')
     const disk = { index: read('index.html'), filter: read('filter.html'), outside: '' }
     disk.outside = readFileSync(outside, 'utf8')
+    // The prior source-popout check can leave an unsaved line at the start of this
+    // editor document. A code link names disk line 3; the editor reveals the one
+    // matching line in its retained draft (revealRange), wherever it moved.
+    const linkedIndexLine = disk.index.split('\n')[2]
+    const draftIndexLines = (shown + DRAFT).split('\n')
+    const matchingIndexLines = draftIndexLines.flatMap((line, offset) =>
+      line === linkedIndexLine ? [offset + 1] : []
+    )
+    assert.equal(matchingIndexLines.length, 1, 'linked index source occurs once in the draft')
+    const draftIndexLine = matchingIndexLines[0]
 
     // 1. The first candidate: filter.html 8–10, exactly that code selected.
     const first = await reveal(FILTER, /^filter\.html/, 8, 10)
@@ -151,11 +161,12 @@ export async function checkCodeLinkClick(host: NativeBridge, fixture: string, ar
 
     // 3. The other candidate, then back: each click reveals its own range. index.html
     //    opens over its draft, which is kept rather than replaced by the disk text.
-    const second = await reveal(INDEX, /^index\.html/, 3, 3)
+    const second = await reveal(INDEX, /^index\.html/, draftIndexLine, draftIndexLine)
     assert.ok(
       second.state.dirty && second.state.text.includes(DRAFT.trim()),
       'Following a link keeps the draft'
     )
+    assert.equal(second.state.selectedText, linkedIndexLine, 'The draft reveals disk line 3 code')
     const back = await reveal(FILTER, /^filter\.html/, 8, 10)
     await capture('code-link-repeat', 'editor', { repeat, second, back })
 
