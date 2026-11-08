@@ -95,7 +95,10 @@ interface WalkContext {
  * compared safely is still displayed, but consumers must treat its source as ambiguous. */
 export function activeDeclarations(
   el: Element,
-  props: string[]
+  props: string[],
+  // Preview overrides are not authored inline declarations. The owning preview
+  // transport supplies the original values only for properties it actually stashed.
+  authoredInline?: ReadonlyMap<string, { value: string; priority: string }>
 ): {
   specified: Record<string, string>
   origins: Record<string, StyleDeclarationOrigin>
@@ -231,13 +234,14 @@ export function activeDeclarations(
   }
   if (el instanceof HTMLElement || el instanceof SVGElement) {
     for (const p of props) {
-      const inline = el.style.getPropertyValue(p)
+      const original = authoredInline?.get(p)
+      const inline = original?.value ?? el.style.getPropertyValue(p)
       if (inline)
         offer(
           p,
           inline,
           { kind: 'inline' },
-          el.style.getPropertyPriority(p),
+          original?.priority ?? el.style.getPropertyPriority(p),
           [1000000, 0, 0],
           null,
           true

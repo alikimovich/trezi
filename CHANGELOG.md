@@ -17,6 +17,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 
+- Styles preview drafts preserve their authored CSS Module source, and tuning-island inputs expose real native text-field values without requiring an accessibility client (LKM-549).
 - The sidebar and top bar use the system sans-serif UI font again instead of monospace; code and editor fonts are unchanged.
 
 ## [0.15.0] - 2026-11-05

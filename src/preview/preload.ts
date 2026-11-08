@@ -1177,7 +1177,7 @@ function setLayersWatch(on: boolean): void {
 // leak an override nor be replayed onto the wrong element.
 // Navigation wipes this whole isolated world, which is the correct lifetime: a
 // fresh page has no overrides left to revert.
-const styleOriginals = new Map<string, string>()
+const styleOriginals = new Map<string, { value: string; priority: string }>()
 let styleStashEl: HTMLElement | null = null
 
 /**
@@ -1211,7 +1211,7 @@ function retargetStash(el: HTMLElement): void {
   if (styleStashEl === el) return
   if (styleStashEl?.isConnected) {
     for (const [prop, orig] of styleOriginals) {
-      if (orig) styleStashEl.style.setProperty(prop, orig)
+      if (orig.value) styleStashEl.style.setProperty(prop, orig.value, orig.priority)
       else styleStashEl.style.removeProperty(prop)
     }
   }
@@ -1221,7 +1221,11 @@ function retargetStash(el: HTMLElement): void {
 
 function stashOriginal(el: HTMLElement, prop: string): void {
   retargetStash(el)
-  if (!styleOriginals.has(prop)) styleOriginals.set(prop, el.style.getPropertyValue(prop))
+  if (!styleOriginals.has(prop))
+    styleOriginals.set(prop, {
+      value: el.style.getPropertyValue(prop),
+      priority: el.style.getPropertyPriority(prop)
+    })
 }
 
 /** Restore one stashed inline value exactly (removeProperty when it was absent)
@@ -1229,12 +1233,12 @@ function stashOriginal(el: HTMLElement, prop: string): void {
  *  HMR replaced the node — the override died with it, so only the entry drops. */
 function restoreOriginal(prop: string): void {
   if (!styleOriginals.has(prop)) return
-  const orig = styleOriginals.get(prop) ?? ''
+  const orig = styleOriginals.get(prop)!
   styleOriginals.delete(prop)
   const el = styleStashEl
   if (!styleOriginals.size) styleStashEl = null
   if (!el?.isConnected) return
-  if (orig) el.style.setProperty(prop, orig)
+  if (orig.value) el.style.setProperty(prop, orig.value, orig.priority)
   else el.style.removeProperty(prop)
 }
 
@@ -1295,7 +1299,8 @@ function readStyles(id: unknown, props: string[]): void {
   // fails safe to the raw value.
   const { specified: spec, origins } = activeDeclarations(
     el,
-    bounded.filter((b) => !b.startsWith('--'))
+    bounded.filter((b) => !b.startsWith('--')),
+    styleStashEl === el ? styleOriginals : undefined
   )
   const declaredVars: Record<string, string | null> = {}
   const specified: Record<string, string> = {}

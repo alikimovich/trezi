@@ -300,6 +300,7 @@ export async function checkAgentNavigation(artifacts: string) {
     await phase('races', async () => {
       // Reload and open started together; which one is issued first alternates.
       for (let i = 0; i < ROUNDS; i++) {
+        evidence.raceProgress = { kind: 'page-reload', round: i }
         const reload = i % 2 ? reloadPage() : null
         const opening = openReload()
         const [opened] = await Promise.all([opening, reload ?? reloadPage()])
@@ -308,6 +309,7 @@ export async function checkAgentNavigation(artifacts: string) {
       }
       // A write (the live reload) with the open straight after it, as an agent edits then checks.
       for (let i = 0; i < ROUNDS; i++) {
+        evidence.raceProgress = { kind: 'source-write', round: i }
         writeFileSync(join(tree, 'index.html'), page(`Edit ${i}`))
         const opened = await openReload()
         assert.equal(opened.loaded, true, `write round ${i}: open resolved loaded`)
