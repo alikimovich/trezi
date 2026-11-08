@@ -19,7 +19,7 @@ export interface Attribution {
 export class TurnTracker {
   private runs: Array<{ turn: string; run: number; ended: boolean }> = []
 
-  /** A send reached the provider. */
+  /** A send is about to reach the provider (`withdraw` it if it never does). */
   push(turn: string, run: number): void {
     this.runs.push({ turn, run, ended: false })
   }
@@ -36,6 +36,18 @@ export class TurnTracker {
    */
   drop(turn: string): void {
     this.runs = this.runs.filter((run) => run.turn !== turn)
+  }
+
+  /**
+   * A reserved send never reached the provider (its preparation failed or was stopped):
+   * forget that one run, and no other run of the turn.
+   */
+  withdraw(turn: string, run: number): void {
+    for (let at = this.runs.length - 1; at >= 0; at--)
+      if (this.runs[at].turn === turn && this.runs[at].run === run) {
+        this.runs.splice(at, 1)
+        return
+      }
   }
 
   attribute(event: AgentEvent): Attribution | null {
