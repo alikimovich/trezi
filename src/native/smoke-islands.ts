@@ -127,6 +127,8 @@ document.body.append(card);
   )
   writeFileSync(file, code)
   writeFileSync(indexFile, originalIndex + '<script src="/island-light.js"></script>')
+  for (const stale of ['chat-island-control-failure.json', 'chat-island-control-failure.png'])
+    if (existsSync(join(artifacts, stale))) unlinkSync(join(artifacts, stale))
   const wait = async (check: () => Promise<boolean> | boolean, label = 'unlabelled') => {
     for (let i = 0; i < 100; i++) {
       if (await check()) return
@@ -136,35 +138,33 @@ document.body.append(card);
       .request('chatInspect')
       .then((s: { islands?: unknown }) => JSON.stringify(s.islands))
       .catch((error: unknown) => `unavailable: ${String(error)}`)
-    // Short facts first: the failure report truncates a long message.
-    const controls = await Promise.all(
+    // Short facts first: the failure report truncates a long message. One read per control;
+    // a failed read is evidence, never a replacement for the failing label.
+    const controlState = await Promise.all(
       ['Light X', 'Light Y'].map((name) =>
         host
           .request('islandControlInspect', { label: name })
-          .then(
-            (c: { value?: string; visible?: boolean; scanned?: number }) =>
-              `${name}=${c.value}/${c.visible}/scanned:${c.scanned}`
-          )
-          .catch((error: unknown) => `${name}=unavailable: ${String(error)}`)
+          .then((c: { value?: string; visible?: boolean; scanned?: number }) => ({ name, ...c }))
+          .catch((error: unknown) => ({ name, unavailable: String(error) }))
       )
     )
-    const controlState = await Promise.all(
-      ['Light X', 'Light Y'].map(async (name) => ({
-        name,
-        ...(await host.request('islandControlInspect', { label: name }))
-      }))
+    const controls = controlState.map((c: any) =>
+      c.unavailable
+        ? `${c.name}=unavailable: ${c.unavailable}`
+        : `${c.name}=${c.value}/${c.visible}/scanned:${c.scanned}`
     )
-    writeFileSync(
-      join(artifacts, 'chat-island-control-failure.json'),
-      JSON.stringify({ label, controls: controlState, islands }, null, 2)
-    )
-    try {
-      const visible = await host.request('captureVisibleWindow')
-      writeFileSync(
-        join(artifacts, 'chat-island-control-failure.png'),
-        Buffer.from(visible.png, 'base64')
-      )
-    } catch {}
+    // Keep the first failure's evidence: a later cleanup wait must not overwrite it.
+    const evidence = join(artifacts, 'chat-island-control-failure.json')
+    if (!existsSync(evidence)) {
+      writeFileSync(evidence, JSON.stringify({ label, controls: controlState, islands }, null, 2))
+      try {
+        const visible = await host.request('captureVisibleWindow')
+        writeFileSync(
+          join(artifacts, 'chat-island-control-failure.png'),
+          Buffer.from(visible.png, 'base64')
+        )
+      } catch {}
+    }
     throw new Error(
       `Native chat island did not update at [${label}]; controls ${controls.join(' ')}; preview=${JSON.stringify(await page("({ready:document.readyState, demo:!!document.querySelector('#island-shadow-demo')})"))}; islands=${islands}; page=${JSON.stringify(await page("({url:location.href, ready:document.readyState, scripts:Array.from(document.scripts,s=>s.src), demo:!!document.querySelector('#island-shadow-demo')})"))}`
     )

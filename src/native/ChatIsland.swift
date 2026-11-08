@@ -206,6 +206,7 @@ struct IslandInput: View {
     @State private var entry: IslandEntry
     @State private var draft = ""
     @State private var focused = false
+    @Environment(\.isEnabled) private var enabled
     init(label: String, value: String, kind: IslandEntry.Kind, commit: @escaping (IslandValue) -> Void) {
         self.label = label; self.value = value; self.commit = commit
         _entry = State(initialValue: IslandEntry(kind))
@@ -220,7 +221,10 @@ struct IslandInput: View {
                               invalid: entry.parse(draft) == nil, submit: apply)
                 .frame(maxWidth: wide ? 200 : 90).frame(height: 22)
         }.onAppear { draft = value }.onChange(of: value) { next in entry.sourceChanged(); if !focused { draft = next } }
-            .onChange(of: focused) { next in if !next { apply() } }
+            // Disabling a field mid-edit (an Apply in flight) ends that edit without applying it,
+            // so later source values still reach the field.
+            .onChange(of: enabled) { on in if !on, focused { focused = false; draft = value } }
+            .onChange(of: focused) { next in if !next && enabled { apply() } }
     }
 }
 /// A real native field keeps control values available to AppKit and assistive
@@ -260,6 +264,8 @@ struct IslandNativeInput: NSViewRepresentable {
         context.coordinator.parent = self
         field.setAccessibilityLabel(label)
         field.setAccessibilityIdentifier("island-field-" + label)
+        field.placeholderString = label
+        if !context.environment.isEnabled, field.currentEditor() != nil { field.abortEditing() }
         field.isEnabled = context.environment.isEnabled
         field.textColor = context.environment.isEnabled ? (invalid ? .systemRed : .labelColor) : .disabledControlTextColor
         if field.stringValue != text { field.stringValue = text }

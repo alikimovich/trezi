@@ -194,6 +194,16 @@ async function checkPointer(
       selection: await page.styles('padding-top')
     })
   )
+  // The real Vertical writer sets both sides and leaves every other authored pair alone.
+  const written = page.source()
+  assert.match(
+    written,
+    /padding(Bottom|-bottom)["']?\s*:\s*["']?12/,
+    'padding-bottom 12 in the source'
+  )
+  for (const [pair, key] of sourceBefore.matchAll(/(\w+): ("[^"]*"|[\d.]+)/g))
+    if (!/^padding(Top|Bottom)$/.test(key))
+      assert.ok(written.includes(pair), `the Vertical write keeps ${pair}`)
   const paddingTop = () =>
     page.evaluate(`getComputedStyle(document.querySelector('#native-title')).paddingTop`)
   await waitFor(
