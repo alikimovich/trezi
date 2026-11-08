@@ -29,6 +29,7 @@ const ARTIFACTS = join(ROOT, 'test/artifacts/swift-preview')
 const { collectSources, hostCompileArgs, libraryCompileArgs, parseDiagnostics, parseManifest } =
   await import('../src/swift-preview/manifest.ts')
 const { PreviewSession } = await import('../src/swift-preview/session.ts')
+const { PreviewHostProcess } = await import('../src/swift-preview/host-client.ts')
 const { SWIFT_PREVIEW_DRIVER, swiftPreviewCommand } = await import('../src/main/swift-preview.ts')
 const { detectProject } = await import('../src/main/project-detect.ts')
 
@@ -314,6 +315,50 @@ try {
   await session.stop()
 }
 await assert.rejects(() => session.frame('profile-card'), /No preview host/)
+
+// --- LKM-586: Stop while a candidate host is starting stops it, never installs it ---
+// A real built host whose readiness is held: the host has printed its ready banner,
+// the session stops, then readiness is released to the build still awaiting it.
+{
+  let candidate = null
+  let realReady = null
+  let release = () => {}
+  const gatedCache = join(project, '..', `${project.split('/').pop()}-gated-cache`)
+  mkdirSync(gatedCache, { recursive: true })
+  const gated = new PreviewSession({
+    root: project,
+    cacheDir: gatedCache,
+    hostSource: join(ROOT, 'src/swift-preview/PreviewHost.swift'),
+    moduleCache: MODULE_CACHE,
+    log: () => {},
+    launchHost: (executable, options) => {
+      const host = new PreviewHostProcess(executable, options)
+      realReady = host.ready
+      const held = new Promise((resolve) => {
+        release = () => resolve(realReady)
+      })
+      Object.defineProperty(host, 'ready', { value: held })
+      candidate = host
+      return host
+    }
+  })
+  try {
+    const building = gated.rebuild('Initial build')
+    await until(() => candidate, 'gated candidate launched')
+    assert.ok((await realReady).length > 0, 'the candidate host itself is ready')
+    await gated.stop()
+    release()
+    await building
+    assert.equal(candidate.alive, false, 'the candidate host was stopped')
+    assert.equal(gated.state.generation, 0, 'no ready generation published after Stop')
+    assert.notEqual(gated.state.status, 'ready')
+    assert.deepEqual(gated.state.previews, [])
+    await assert.rejects(() => gated.frame('profile-card'), /No preview host/)
+  } finally {
+    await candidate?.stop()
+    rmSync(gatedCache, { recursive: true, force: true })
+  }
+}
 
 // --- The driver Trezi runs: the page, its state and its request checks ---
 const port = await new Promise((resolve, reject) => {
