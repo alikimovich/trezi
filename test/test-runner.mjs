@@ -67,7 +67,9 @@ try {
   assert.equal(timeout.outcome, 'TIMEOUT')
   assert(timeout.duration < 4000, 'timeout escalates without hanging')
   if (process.platform !== 'win32') {
-    const tree = await run('tree', { timeoutMs: 500 })
+    // The budget only has to outlast worker startup (Node boot, spawn, pid write) on a
+    // loaded CI runner; what is asserted is that the timeout reaps the descendant.
+    const tree = await run('tree', { timeoutMs: 3000 })
     assert.equal(tree.outcome, 'TIMEOUT')
     const childPid = Number(readFileSync(join(root, `${tree.name}.json.child`), 'utf8'))
     const alive = () => {
