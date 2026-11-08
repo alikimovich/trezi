@@ -188,7 +188,20 @@ export class NativeInspectorController {
       }
       return
     }
+    const generation = this.state.generation,
+      target = this.draftTarget,
+      submittedTurn = this.submittedTurn
     if (success) await this.invalidated()
+    if (generation !== this.state.generation) {
+      // LKM-581: the selection changed while confirming; the draft was held for its
+      // element and settles when that element is selected again.
+      const held = this.heldDrafts.get(target)
+      if (held && held.submittedTurn === submittedTurn) held.completed = success
+      // Already restored (selected away and back): confirm it again on the current reads.
+      else if (submittedTurn && this.submitted && this.submittedTurn === submittedTurn)
+        await this.settleDraftTurn(success, submittedTurn)
+      return
+    }
     if (!this.submitted) return
     // A landed turn is not proof that it edited the requested source. Release
     // the submitted lock if source plus rendered preview did not confirm it.
@@ -363,6 +376,13 @@ export class NativeInspectorController {
    */
   async invalidated() {
     if (!this.state.root || this.state.busy || this.reconciles.size) return
+    const root = this.state.root,
+      generation = this.state.generation,
+      target = this.target()
+    // LKM-581: after the awaits below the selection may have moved to another element
+    // with its own drafts; the old reads must not clear or flag them.
+    const moved = () =>
+      root !== this.state.root || generation !== this.state.generation || this.target() !== target
     if (this.submitted && this.drafts.size) {
       await this.send('styles:clear-preview', {})
       await this.refresh(true)
@@ -377,6 +397,7 @@ export class NativeInspectorController {
           )
         })
       ).catch(() => [false])
+      if (moved()) return
       if (sourced.every(Boolean)) {
         this.drafts.clear()
         this.draftHistory = []
@@ -398,6 +419,7 @@ export class NativeInspectorController {
             (await sourceOwner().read(this.state.root, draft.file)).hash === draft.hash
         )
       ).catch(() => [false])
+      if (moved()) return
       this.draftConflict = !current.every(Boolean)
       await this.projectDrafts()
     }
@@ -805,14 +827,12 @@ export class NativeInspectorController {
     const field = 'style:' + prop
     const before = this.drafts.get(field)
     const target = this.state.fields.find((item) => item.id === field)
+    const root = this.state.root,
+      generation = this.state.generation
     if (target && !target.disabled && this.bindings.get(field)?.preview)
-      await this.action({
-        root: this.state.root,
-        generation: this.state.generation,
-        action: 'apply',
-        field,
-        value
-      })
+      await this.action({ root, generation, action: 'apply', field, value })
+    // LKM-581: another element was selected meanwhile; this gesture no longer owns the island.
+    if (root !== this.state.root || generation !== this.state.generation) return false
     const staged = this.drafts.get(field)
     if (staged && staged !== before) {
       // The draft and its Apply live in the inspector: show it.
@@ -882,17 +902,27 @@ export class NativeInspectorController {
         )
           throw new Error('The selected element changed. Review or revert the preview draft.')
         const target = this.draftTarget
+        const element = this.element
+        const drafts = [...this.drafts.values()]
         this.submitting = true
         this.state.busy = true
         this.publish()
         try {
-          for (const draft of this.drafts.values()) {
+          // LKM-581: a selection change during the reads holds this draft for its own
+          // element; never flag, or submit an empty batch against, the new selection.
+          const moved = () =>
+            root !== this.state.root ||
+            generation !== this.state.generation ||
+            this.target() !== target
+          for (const draft of drafts) {
             const selectedFile = this.styleSourceFile(draft.field)
             if (draft.file !== selectedFile)
               throw new Error(
                 'The selected source file changed. Review or revert the preview draft.'
               )
             const current = await sourceOwner().read(root, draft.file)
+            if (moved())
+              throw new Error('The selected element changed. The preview draft is still pending.')
             if (current.hash !== draft.hash) {
               this.draftConflict = true
               this.publishDraft()
@@ -901,7 +931,7 @@ export class NativeInspectorController {
               )
             }
           }
-          const edits = [...this.drafts.values()].map((draft) => {
+          const edits = drafts.map((draft) => {
             const token = draft.tokenChoice
               ? this.state.fields
                   .find((field) => field.id === draft.field)
@@ -911,7 +941,7 @@ export class NativeInspectorController {
           })
           const turn = await this.agent(
             root,
-            `Apply this single batch of Styles preview drafts to the actual application source. Target ${this.element?.selector ?? ''} from ${this.element?.source ?? ''} in workspace ${root}. Preserve all other edits. Refuse any changed source hash, stale selection or unsupported target. Edits:\n${edits.join('\n')}`,
+            `Apply this single batch of Styles preview drafts to the actual application source. Target ${element?.selector ?? ''} from ${element?.source ?? ''} in workspace ${root}. Preserve all other edits. Refuse any changed source hash, stale selection or unsupported target. Edits:\n${edits.join('\n')}`,
             true
           )
           const submittedTurn = turn || `draft-${Date.now()}`
@@ -1005,6 +1035,7 @@ export class NativeInspectorController {
         if (!binding.tokenValue) throw new Error('This token cannot be previewed safely.')
         const value = binding.tokenValue(action.value ?? '')
         await this.action({ ...action, action: 'apply', value })
+        if (generation !== this.state.generation) return
         const draft = this.drafts.get(action.field)
         if (draft?.value === value) draft.tokenChoice = action.value
         return
@@ -1017,10 +1048,17 @@ export class NativeInspectorController {
           throw new Error('This style has no safe live preview. Ask the agent to edit it.')
         const file = this.styleSourceFile(action.field)
         if (!file) throw new Error('This style has no source file. Ask the agent to edit it.')
+        const target = this.target()
         const current = await draftOwner.read(root, file)
+        // LKM-581: the field and file belong to the element selected before the read.
+        if (
+          root !== this.state.root ||
+          generation !== this.state.generation ||
+          this.target() !== target
+        )
+          throw new Error('The selected element changed. The edit was not staged.')
         if (!current.hash || current.binary)
           throw new Error('This source cannot be previewed safely. Ask the agent to edit it.')
-        const target = this.target()
         if (this.drafts.size && this.draftTarget !== target)
           throw new Error('The selected element changed. Review or revert the preview draft.')
         const prior = this.drafts.get(action.field)
