@@ -170,8 +170,12 @@ export async function runNativeCoreSmoke(
       attachments: chat?.attachments?.length
     }
   }
-  const wait = (check: () => Promise<any> | any, label: string, timeout = 10000) =>
-    waitFor(check, label, timeout)
+  const wait = (
+    check: () => Promise<any> | any,
+    label: string,
+    timeout = 10000,
+    detail?: Parameters<typeof waitFor>[3]
+  ) => waitFor(check, label, timeout, detail)
   const inspect = (method: string, check: (s: any) => boolean) =>
     inspectUntil(
       (m) => host.request(m),
