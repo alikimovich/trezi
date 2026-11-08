@@ -158,6 +158,7 @@ export const UNIT = [
   'native-slider-ticks',
   'native-layers',
   'native-editor',
+  'editor-reload-save',
   'native-shell-controller',
   'sidebar-recent-chats',
   'sidebar-chats-accessibility',
