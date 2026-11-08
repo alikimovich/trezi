@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-586 — Swift preview candidate host is not installed after Stop
+
+- [x] `PreviewSession.buildOnce` rechecks `closed` after the candidate host's readiness: a session stopped while its candidate started stops that host instead of installing it and publishing a ready generation.
+- [x] `test/swift-preview.mjs` (real compiled host, readiness held through the new `launchHost` option): RED on main (the candidate was still alive and installed after Stop), GREEN with the recheck.
+- [ ] Manager: independent review, exact-head CI and merge.
+
 ## LKM-585 — Uncertain terminal acknowledgements reconcile without duplicate landing
 
 - [x] A terminal claim the owner committed but Bun never heard (lost or late answer; checkpoint failure after the claim) lands once: a late terminal for that turn never reaches the owner, and the next send releases the owner's orphaned turn and lands the held edit with its own. Not reproduced as a duplicate landing; covered.

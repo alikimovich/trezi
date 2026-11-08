@@ -97,6 +97,11 @@ export class PreviewSession {
       developerDir?: string
       /** Discovery and probe options (tests point them at scripted toolchains). */
       toolchain?: Partial<ToolchainOptions>
+      /** Starts a built host (tests wrap the real one to hold its readiness, LKM-586). */
+      launchHost?: (
+        executable: string,
+        options: ConstructorParameters<typeof PreviewHostProcess>[1]
+      ) => PreviewHostProcess
     }
   ) {
     const treziPath = options.manifestDir ? join(options.manifestDir, MANIFEST) : ''
@@ -396,7 +401,9 @@ export class PreviewSession {
         this.options.log(`${d.file}:${d.line}:${d.column}: error: ${d.message}`)
       return this.fail(started, failure.message, compiled.output, failure.diagnostics)
     }
-    const host = new PreviewHostProcess(compiled.executable, {
+    const launch =
+      this.options.launchHost ?? ((binary, options) => new PreviewHostProcess(binary, options))
+    const host = launch(compiled.executable, {
       cwd: this.options.root,
       onLog: (line) => this.options.log(`[component] ${line}`),
       onExit: (code, signal) => {
@@ -419,6 +426,8 @@ export class PreviewSession {
       await host.stop()
       return this.fail(started, (error as Error).message, '', [])
     }
+    // Stopped while the candidate started: stop it rather than install it (LKM-586).
+    if (this.closed) return host.stop()
     generated?.hosted(entries)
     const previous = this.host
     this.host = host
