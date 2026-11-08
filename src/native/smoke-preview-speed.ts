@@ -66,7 +66,8 @@ export function chatNewPaneProblem(shell: Speed, expectedWidth: number): string 
   const gap = shell.detailLeading + shell.chatWidth - buttonX - buttonWidth
   if (!Number.isFinite(gap) || buttonWidth < 28 || buttonWidth > 48)
     return 'New Chat item frame is outside the native button range'
-  if (Math.abs(gap - 4) > 3) return `New Chat is ${gap} pt inside the pane, expected 4 ± 3 pt`
+  // LKM-559: New Chat's slot ends on the pane edge, so the viewport's glass is clear of the rule.
+  if (Math.abs(gap) > 3) return `New Chat is ${gap} pt inside the pane, expected 0 ± 3 pt`
 }
 /** Below this window width `fitMore` removes the slow-motion segment and "…" (ToolbarMore.swift). */
 const NARROW_WINDOW = 960
@@ -156,7 +157,7 @@ async function checkBadgeFollows(
     assert.equal(
       chatNewPaneProblem(shell, width),
       undefined,
-      `${name}: New Chat ends 4 pt inside the actual chat pane boundary: ${JSON.stringify(evidence[`chat-new-${name}`])}`
+      `${name}: New Chat's slot ends on the actual chat pane boundary: ${JSON.stringify(evidence[`chat-new-${name}`])}`
     )
   }
   const before = await overflow()

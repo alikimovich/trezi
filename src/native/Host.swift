@@ -181,7 +181,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         installMarkup()
         toast.coverChanged = { [weak self] in self?.sendPreviewCover() }
         canvas.changed = { [weak self] in self?.nativeLayout.layout() }
-        shell.toolbarLaidOut = { [weak self] in self?.placeSpeedBadge() }
+        shell.toolbarLaidOut = { [weak self] in self?.placeSpeedBadge(); self?.previewSurface.toolbarSplitChanged(self?.shell.toolbarSplitClear ?? true) }
         window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
         NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel, .keyDown, .leftMouseDragged, .rightMouseDragged]) { [weak self] event in
             self?.lastUserInteraction = Date()

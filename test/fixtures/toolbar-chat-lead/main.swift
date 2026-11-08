@@ -21,12 +21,17 @@ expect(lead.leading(header: 192, detail: 180), 192, "same column, new header fra
 expect(lead.offset, 12, "offset relearned")
 expect(lead.leading(header: 300, detail: 180), 300, "offset clamped, frame kept")
 expect(lead.offset, 16, "offset clamped to 16")
-// Saved native sidebar-340 geometry: header width 283, New Chat maxX 679,
-// column edge 696 and expected New Chat maxX 692. The 52-point advance is
-// already included in the address's measured 137-point chat offset.
+// Saved native sidebar-340 geometry: header width 283, New Chat slot maxX 679,
+// column edge 696. LKM-559: the slot ends on the column edge (AppKit's slots abut and
+// each draws its glass inside), so the rule falls between New Chat's glass and the
+// viewport's. The 48-point advance is already in the address's measured chat offset.
 let resizedWidth = ToolbarChatLead.width(target: 696, leading: 348, newChatAdvance: 48, addressLimit: 335)
-expect(resizedWidth, 296, "New Chat follows resized column without double reserve")
-expect(679 + resizedWidth - 283, 692, "New Chat measured trailing edge")
+expect(resizedWidth, 300, "New Chat follows resized column without double reserve")
+expect(679 + resizedWidth - 283, 696, "New Chat slot ends on the column edge")
+// LKM-559 native loaded/opening geometry at 1320 pt: column edge 670, New Chat slot 622–666
+// before the fix (the viewport's glass then began on the rule at 670).
+let loadedWidth = ToolbarChatLead.width(target: 670, leading: 234, newChatAdvance: 44, addressLimit: 600)
+expect(234 + loadedWidth + 44, 670, "New Chat slot and viewport slot meet on the rule")
 // At 950 pt the measured address reserve caps the chat item at 152 pt. The
 // resulting New Chat edge (438) precedes the viewport (442); moving it to the
 // 546 pt column edge would overlap that adjacent native toolbar item.
