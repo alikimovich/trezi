@@ -206,6 +206,7 @@ export const UNIT = [
   'code-links',
   'branch-diff',
   'preview-open',
+  'preview-cache-fence',
   'preview-refresh',
   'editor-freshness',
   'preview-page',

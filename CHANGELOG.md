@@ -17,6 +17,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 
+- Switching projects (or closing one) right after a Reload Without Cache or a clean restart no longer brings the previous page back over the newly opened one (LKM-584).
 - Reloading a file in the code editor while it was saving no longer shows the text from before the save as if it were on disk, which made the next save of that file fail as a conflict (LKM-583).
 - A message that failed (or was stopped) while the chat prepared it no longer leaves the chat's next reply credited to that unsent message, which kept the next turn from finishing (LKM-582).
 - Changing the selected element while a Styles draft is being staged, applied or confirmed no longer moves that draft, its Apply or its confirmation onto the newly selected element (LKM-581).

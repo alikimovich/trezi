@@ -89,6 +89,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     var lastUserInteraction = Date()
     var menuTracking = false
     var targets: [String: URL] = [:]
+    /// Orders each view's `load` / `reload` commands so a late hard load yields (`PreviewCache.swift`).
+    let loadFence = PreviewLoadFence()
     var urlObservers: [String: NSKeyValueObservation] = [:]
     var preferences: [String: Any] = [:]
     var recentMenu = NSMenu(title: "Open Recent")
@@ -387,7 +389,11 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
             targets[name] = url
             let hard = c["hard"] as? Bool == true
             ProductLog.info("preview", "Preview load \(Host.logURL(url))\(hard ? " without cache" : "")")
-            if hard { PreviewCache.reload(view, url: url) } else {
+            let live = loadFence.begin(name, hardLoad: hard ? url : nil)
+            if hard {
+                PreviewCache.reload(view, url: url, shouldLoad: { [weak self, weak view] in live() && self?.views[name] === view },
+                                    started: { [weak self] _ in self?.loadFence.started(name) })
+            } else {
                 let navigation = view.load(URLRequest(url: url))
                 // An agent's open_preview never becomes a Back/Forward step (LKM-219).
                 if name == "preview" && c["agent"] as? Bool == true { previewHistory.agentNavigation = navigation }
@@ -395,7 +401,11 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "reload":
             let hard = c["hard"] as? Bool == true
             ProductLog.info("preview", "Preview reload \(Host.logURL(view?.url))\(hard ? " without cache" : "")")
-            if hard, let view { PreviewCache.reload(view, url: nil) } else { view?.reload() }
+            // A hard load this supersedes had not loaded its URL yet: the page shown is still the old one.
+            let pending = loadFence.pending(name)
+            let live = loadFence.begin(name)
+            if hard, let view { PreviewCache.reload(view, url: pending, shouldLoad: { [weak self, weak view] in live() && self?.views[name] === view }) }
+            else if let pending, let view { view.load(URLRequest(url: pending)) } else { view?.reload() }
             reply(id)
         case "bounds":
             if name == "preview" { nativeLayout.layout(); return }
