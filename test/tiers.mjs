@@ -156,6 +156,8 @@ export const UNIT = [
   'native-inspector',
   'inspector-draft-ownership',
   'inspector-background-apply',
+  'inspector-apply-refresh',
+  'inspector-apply-presentation',
   'inspector-footer',
   'style-class-rule',
   'style-pair',

@@ -90,7 +90,12 @@ export class NativeSupportSheets {
     const conversation =
       chat?.messages
         .filter((m) => m.text.trim())
-        .map((m) => `${m.role === 'user' ? 'You' : 'Trezi'}: ${m.text.trim()}`)
+        .map((m) =>
+          // LKM-600: Trezi's own turn (an inspector Apply) is not attributed to the user.
+          m.action
+            ? `Trezi (Apply ${m.action.line}): ${m.text.trim()}`
+            : `${m.role === 'user' ? 'You' : 'Trezi'}: ${m.text.trim()}`
+        )
         .join('\n\n') ?? ''
     this.presentFeedback(
       {

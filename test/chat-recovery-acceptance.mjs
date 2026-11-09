@@ -393,6 +393,17 @@ if (process.platform !== 'darwin') {
         `offscreen key dispatch: ${all}`
       )
     }
+    // LKM-600: Trezi's own Apply turn is one short collapsed row; the same text typed by
+    // the user is still a full bubble (no string matching), and the row expands to it.
+    const app = cases['app-action']
+    assert.ok(app, `app-action ran: ${all}`)
+    assert.deepEqual(app.actions, [
+      { title: 'Apply Styles draft', line: 'font-weight: 400 on <span> in Preset.tsx:82' }
+    ])
+    assert.ok(app.collapsed > 0 && app.collapsed <= 48, `one collapsed line: ${all}`)
+    assert.ok(app.typed >= app.collapsed * 3, `the typed copy stays a bubble: ${all}`)
+    assert.ok(app.expanded > app.collapsed * 3, `expanding shows the instruction: ${all}`)
+    console.log(`APP-ACTION collapsed ${app.collapsed} typed ${app.typed} expanded ${app.expanded}`)
     console.log('CHAT-RECOVERY-ACCEPTANCE PASS')
   } finally {
     rmSync(scratch, { recursive: true, force: true })

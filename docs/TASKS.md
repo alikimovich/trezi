@@ -3,6 +3,15 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-600 — Keep inspector Apply prompts out of chat and handle stale previews clearly
+
+- [x] Traced: the screenshot's chat bubble is the pre-LKM-599 chat-turn Apply (older running app). Current main already runs Apply as a background agent; the remaining gaps were the chat fallback (`not-a-repo` / `unsupported-backend`), the spawn's History record and the selector-based rail label.
+- [x] Explicit origin: `AppAction` (`src/shared/app-action.ts`) travels with `agent:send` / `agent:spawn-comment`, is stored on the transcript entry and renders as one collapsed app row (`NativeChatMessage.action`, `ChatCommentRow`) whose detail and copy keep the exact instruction. No string matching; user text is never reclassified. Rail label, queue row, History title and review sheet name the change.
+- [x] The fallback turn no longer consumes the composer draft, attachments, quotes or selection chip; a queued Apply cannot be edited into the user's draft.
+- [x] "Stale" traced to the preview identity (`src/main/preview-identity.ts`: document started at an older live HEAD). Before dispatch the app checks it for the draft's files only, and when they changed does one bounded reload that re-resolves the same element uniquely (`src/native/inspector-preview-refresh.ts`), then re-reads the source hashes. Missing, ambiguous, moved, still-stale or timed-out outcomes keep the draft with a concise reason; nothing loops or substitutes.
+- [x] Units `inspector-apply-refresh`, `inspector-apply-presentation`; `inspector-background-apply` updated; offscreen real `NativeChat` case in `chat-recovery-acceptance`.
+- [ ] Manager: independent review, native `inspector`/`core` run, exact-head CI and merge.
+
 ## LKM-597 — Suppress transient recovery Problem cards and show one copy control
 
 - [x] Traced the screenshot to the held card's "Problem" variant from a pre-LKM-590 build; the same state on main still showed Problem during the next turn.

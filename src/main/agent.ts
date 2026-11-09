@@ -16,6 +16,7 @@ import type {
   SessionTranscriptEntry,
   WorkspaceSnapshot
 } from '../shared/api'
+import { type AppAction, appAction } from '../shared/app-action'
 import { backgroundAgentOptions, describeAgentOptions } from '../shared/background-model'
 import { CHAT_BUSY, isChatBusy, STUCK_NOTE } from '../shared/chat-busy'
 import type { ChatRecordLookup } from '../shared/chat-islands'
@@ -710,6 +711,8 @@ interface QueuedSpawn {
   /** The comment's own text, one line, for the parent chat's result row (LKM-178). */
   label?: string
   expectText?: string
+  /** LKM-600: Trezi wrote `text` (an inspector Apply); History shows `action`. */
+  action?: AppAction
 }
 const queuedSpawns = new Map<string, QueuedSpawn>()
 // Admitted by the owner but still creating their worktree + session (not yet in `spawns`).
@@ -1131,7 +1134,12 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
     s.record.projectKey = q.parentKey
     s.record.projectRoot = q.root
     s.record.projectName = basename(q.root) || q.root
-    s.record.transcript.push({ role: 'user', text: q.text, at: Date.now() })
+    s.record.transcript.push({
+      role: 'user',
+      text: q.text,
+      at: Date.now(),
+      ...(q.action ? { action: q.action } : {})
+    })
     spawns.set(wt.id, {
       session: s,
       wt,
@@ -2066,9 +2074,12 @@ export function registerAgentIpc(
       images?: ImageAttachment[],
       requestedKey?: string,
       turn?: AgentTurnOptions,
-      turnId?: string
+      turnId?: string,
+      requestedAction?: unknown
     ) => {
       const receivedAt = Date.now()
+      // LKM-600: a turn Trezi wrote (an inspector Apply) is recorded with its origin.
+      const action = appAction(requestedAction)
       const key = requestedKey ?? activeKey
       productLog.info('send-path', 'bun action=send stage=agent-handler-start', {
         chat: key,
@@ -2232,7 +2243,12 @@ export function registerAgentIpc(
         // the Resolve card's own turn continue on top of it (LKM-165).
         const refusal = requestedKey ? sendRefusal(requestedKey) : null
         if (refusal) throw new Error(refusal)
-        const entry = { role: 'user' as const, text: note, at: Date.now() }
+        const entry: SessionTranscriptEntry = {
+          role: 'user',
+          text: note,
+          at: Date.now(),
+          ...(action ? { action } : {})
+        }
         const { handoff } = await conversation()
           .send(key, id, entry)
           .catch((error) => {
@@ -2377,7 +2393,8 @@ export function registerAgentIpc(
       options: AgentOptions = {},
       requestedOrigin: BackgroundSpawnOrigin = 'comment',
       requestedLabel?: string,
-      requestedExpectText?: string
+      requestedExpectText?: string,
+      requestedAction?: unknown
     ) => {
       // Worktrees need a repo TOP LEVEL — a non-repo (or subdir) falls back to chat.
       if (!(await isRepoRoot(root))) return { ok: false, reason: 'not-a-repo' }
@@ -2403,6 +2420,8 @@ export function registerAgentIpc(
         requestedExpectText.length <= TEXT_EDIT_MAX
           ? requestedExpectText
           : undefined
+      // LKM-600: only an automatic edit can be Trezi's own instruction (an inspector Apply).
+      const action = origin === 'text-edit' ? appAction(requestedAction) : undefined
       // Stable id assigned up front so the rail row survives a queued→running flip.
       const id = randomUUID().slice(0, 8)
       const q: QueuedSpawn = {
@@ -2414,7 +2433,8 @@ export function registerAgentIpc(
         options: backgroundAgentOptions(options, origin),
         origin,
         label,
-        expectText
+        expectText,
+        ...(action ? { action } : {})
       }
       // Held before the owner answers, so a slot freed meanwhile can start it.
       queuedSpawns.set(id, q)

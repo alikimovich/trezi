@@ -752,6 +752,8 @@ export interface SessionTranscriptEntry {
   ui?: ChatUiRecord
   /** Files retained with an app-managed project planning conversation. */
   planningAttachments?: { name: string; type: string; data: string }[]
+  /** LKM-600: a user entry Trezi wrote (an inspector Apply), shown as one app row. */
+  action?: import('./app-action').AppAction
 }
 
 /**
