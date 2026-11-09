@@ -38,6 +38,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Changed
 
+- `trezi --update` keeps Git's pull summary but shows install and build as short progress lines; their full output (compiler warnings, signing details) is saved to a log under `~/Library/Logs/Trezi/`, a failure names the failed step with recent output and that log, and `trezi --update --verbose` shows everything as it runs (LKM-596).
 - Closing Layers with Selection mode off now clears the selection picked from Layers; with Selection mode on it only hides the panel (LKM-541).
 
 ## [0.14.3] - 2026-11-05

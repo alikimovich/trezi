@@ -126,8 +126,9 @@ src/
                     per-project store — see preview-overlay.md
   service/        the Swift XPC service — see service-owners.md
   main/           backend services — see backend-map.md
-bin/trezi.mjs     the `trezi` CLI (launch, `trezi --project <repo>`, `--update`); owns
-                  the update sequence (git pull + bun install + build). install.sh boots it
+bin/trezi.mjs     the `trezi` CLI (launch, `trezi --project <repo>`, `--update [--verbose]`);
+                  owns the update sequence (git pull + bun install + build; install/build
+                  output to an `update-*.log` in ~/Library/Logs/Trezi). install.sh boots it
 scripts/build-native.mjs  bundles services and preview, compiles Swift and checks that
                   the app does not depend on Electron or the retired React renderer;
                   stamps the version (scripts/version.mjs) into the plists

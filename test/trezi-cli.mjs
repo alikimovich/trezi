@@ -8,10 +8,26 @@
  * Run with: bun test/trezi-cli.mjs
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import {
+  closeSync,
+  existsSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { lockfilesToRestore } from '../bin/trezi.mjs'
+import {
+  lockfilesToRestore,
+  runStep,
+  stepExitStatus,
+  tailLines,
+  updateOptions
+} from '../bin/trezi.mjs'
 import { buildInfo, versionLabel } from '../scripts/version.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -56,10 +72,76 @@ eq(lockfilesToRestore(' M vendor/bun.lock.bak\n'), [], 'non-exact lockfile path 
 eq(lockfilesToRestore(''), [], 'empty porcelain → nothing to restore')
 eq(lockfilesToRestore('\n\n'), [], 'blank lines → nothing to restore')
 
+// --- LKM-596: `trezi --update` options, failure status and its private log ---
+eq(updateOptions([]), { verbose: false }, 'update is concise by default')
+eq(updateOptions(['--verbose']), { verbose: true }, '--verbose shows full output')
+eq(
+  updateOptions(['--no-launch', '--verbose']),
+  { verbose: true },
+  'legacy --no-launch is accepted and ignored'
+)
+for (const bad of ['-v', '--quiet', 'now'])
+  assert(
+    (() => {
+      try {
+        updateOptions([bad])
+        return false
+      } catch (error) {
+        return /Unknown option for trezi --update/.test(error.message)
+      }
+    })(),
+    `update refuses ${bad}`
+  )
+eq(stepExitStatus({ code: 3, signal: null }), 3, 'a failed step keeps its exit code')
+eq(stepExitStatus({ code: null, signal: 'SIGTERM' }), 143, 'a signalled step exits 128 + signal')
+eq(stepExitStatus({ code: null, signal: null }), 1, 'an unknown failure exits 1')
+
+const scratch = mkdtempSync(join(tmpdir(), 'trezi-cli-'))
+try {
+  const logPath = join(scratch, 'update.log')
+  const log = { path: logPath, fd: openSync(logPath, 'w') }
+  // Large, mixed stdout/stderr output streams to the log, nothing is shown, the status is real.
+  const script =
+    "for (let i = 0; i < 200000; i++) process.stdout.write('stdout line ' + i + ' ' + 'x'.repeat(60) + '\\n');" +
+    "process.stderr.write('stderr: compiler warning\\n'); process.exit(7)"
+  const big = await runStep(process.execPath, ['-e', script], { cwd: scratch, log, verbose: false })
+  closeSync(log.fd)
+  eq([big.code, big.signal], [7, null], 'runStep resolves with the real exit code')
+  const text = readFileSync(logPath, 'utf8')
+  assert(statSync(logPath).size > 14_000_000, 'the whole large output reaches the log')
+  assert(
+    text.includes('stdout line 199999') && text.includes('stderr: compiler warning'),
+    'stdout and stderr are logged'
+  )
+  assert(text.endsWith('==> exit 7\n'), 'the log records the exit')
+  eq(
+    tailLines(logPath, 2),
+    ['stderr: compiler warning', '==> exit 7'],
+    'tailLines reads the end of the log'
+  )
+  const killed = await runStep('/bin/sh', ['-c', 'kill -TERM $$'], {
+    cwd: scratch,
+    log: null,
+    verbose: false
+  })
+  eq([killed.code, killed.signal], [null, 'SIGTERM'], 'runStep reports a signal')
+  const missing = await runStep(join(scratch, 'no-such-tool'), [], {
+    cwd: scratch,
+    log: null,
+    verbose: false
+  })
+  assert(missing.error?.code === 'ENOENT', 'runStep reports a missing tool')
+  writeFileSync(join(scratch, 'short.log'), 'one\ntwo\n\n')
+  eq(tailLines(join(scratch, 'short.log')), ['one', 'two'], 'tailLines drops trailing blank lines')
+  eq(tailLines(join(scratch, 'absent.log')), [], 'tailLines of a missing log is empty')
+} finally {
+  rmSync(scratch, { recursive: true, force: true })
+}
+
 const cli = join(repoRoot, 'bin/trezi')
 const help = spawnSync(cli, ['--help'], { encoding: 'utf8' })
 assert(help.status === 0, 'CLI help exits successfully')
-for (const text of ['trezi <folder>', 'trezi .', '--update', '--version'])
+for (const text of ['trezi <folder>', 'trezi .', '--update', '--verbose', '--version'])
   assert(help.stdout.includes(text), `CLI help documents ${text}`)
 assert(!help.stdout.includes('--remote'), 'CLI no longer advertises retired remote mode')
 const version = spawnSync(cli, ['--version'], { encoding: 'utf8' })
@@ -101,5 +183,5 @@ if (failed) {
   process.exit(1)
 }
 console.log(
-  'TREZI-CLI OK — lockfilesToRestore picks dirty tracked lockfiles; bin/trezi help, version and refusals'
+  'TREZI-CLI OK — lockfilesToRestore picks dirty tracked lockfiles; update options, step status and streamed log; bin/trezi help, version and refusals'
 )

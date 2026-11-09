@@ -204,8 +204,16 @@ error banner offers a custom-command retry for monorepos / odd setups).
 ## Updating
 
 ```bash
-trezi --update      # git pull + bun install + rebuild
+trezi --update            # git pull + bun install + rebuild
+trezi --update --verbose  # the same, showing the full install and build output
 ```
+
+`trezi --update` shows Git's pull summary (what changed), then one line each for
+installing dependencies and building. Their full output, including compiler warnings
+and signing details, goes to a separate `update-*.log` file under
+`~/Library/Logs/Trezi/`, whose path is printed at the end. If a step fails, the update
+stops with that step's exit status, names the step, shows its recent output and the
+log path; `--verbose` shows all output as it runs.
 
 The native Settings update workflow checks the remote, guards unsaved work,
 then pulls, installs, rebuilds and restarts. There's no signed app or auto-download — updates are

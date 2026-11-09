@@ -1,12 +1,15 @@
 #!/usr/bin/env bun
 
-// `trezi --update`: pull, reinstall and rebuild this checkout, and `trezi logs`. The
+// `trezi --update [--verbose]`: pull, reinstall and rebuild this checkout, and `trezi
+// logs`. The update shows Git's pull summary, then short install/build progress; their
+// full output goes to a private log under ~/Library/Logs/Trezi (--verbose shows it live). The
 // `trezi` command itself is the shell script beside this file (bin/trezi), which runs
 // this with the Bun on PATH or the one bundled into Trezi.app. Any other arguments are
 // handed to bin/trezi, for installs whose `trezi` link still points here.
-import { execFileSync, spawnSync } from 'node:child_process'
-import { closeSync, openSync, readSync, realpathSync, statSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
+import { closeSync, mkdirSync, openSync, readSync, realpathSync, statSync, writeSync } from 'node:fs'
+import { constants, homedir } from 'node:os'
+import { dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { requireSupportedPlatform } from '../scripts/requirements.mjs'
 
@@ -54,7 +57,126 @@ function bun() {
   return check.error || check.status !== 0 ? process.execPath : 'bun'
 }
 
-function update() {
+const UPDATE_USAGE = 'Usage: trezi --update [--verbose]'
+
+/**
+ * `trezi --update` options. `--verbose` shows the full install and build output live;
+ * `--no-launch` (older in-app updaters pass it) is accepted and ignored, since an update
+ * never launches Trezi. Anything else is refused before the checkout is touched.
+ */
+export function updateOptions(args) {
+  const options = { verbose: false }
+  for (const arg of args) {
+    if (arg === '--verbose') options.verbose = true
+    else if (arg === '--no-launch') continue
+    else throw new Error(`Unknown option for trezi --update: ${arg}\n${UPDATE_USAGE}`)
+  }
+  return options
+}
+
+/** The private folder Trezi's logs live in (src/main/product-log.ts `logDirectory`). */
+function updateLogDirectory(env = process.env) {
+  const override = env.TREZI_LOG_DIR
+  return override && isAbsolute(override) ? override : join(homedir(), 'Library/Logs/Trezi')
+}
+
+/**
+ * One file per update for the install and build output (compiler warnings, signing
+ * details), like install.sh's `install.*` logs. Only the commands and their output go in:
+ * never the environment. Returns null when the file cannot be made; output is then shown.
+ */
+function openUpdateLog(env = process.env) {
+  const dir = updateLogDirectory(env)
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  try {
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    for (let attempt = 0; ; attempt++) {
+      const path = join(dir, `update-${stamp}-${process.pid}${attempt ? `-${attempt}` : ''}.log`)
+      try {
+        return { path, fd: openSync(path, 'wx', 0o600) }
+      } catch (error) {
+        if (error?.code !== 'EEXIST' || attempt > 20) throw error
+      }
+    }
+  } catch (error) {
+    console.error(`Could not create an update log in ${dir} (${error.code ?? error.message}); showing the full output instead.`)
+    return null
+  }
+}
+
+/** The last `count` lines of a log file, read from its end (never the whole file). */
+export function tailLines(path, count = 20, window = 64 * 1024) {
+  try {
+    const size = statSync(path).size
+    const length = Math.min(size, window)
+    const buffer = Buffer.alloc(length)
+    const fd = openSync(path, 'r')
+    try {
+      readSync(fd, buffer, 0, length, size - length)
+    } finally {
+      closeSync(fd)
+    }
+    const lines = buffer.toString('utf8').split('\n')
+    if (length < size) lines.shift() // a partial first line
+    while (lines.length && lines.at(-1).trim() === '') lines.pop()
+    return lines.slice(-count)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Runs one update step. Its output streams to the log file (and, verbose, to the
+ * terminal as well); nothing is buffered in memory. Resolves with the child's real exit
+ * code or signal, or the spawn error.
+ */
+export function runStep(command, args, { cwd, log, verbose, env = process.env }) {
+  return new Promise((resolve) => {
+    // The log write is synchronous; a slow terminal pauses the child's pipe (backpressure).
+    const forward = (source, stream) =>
+      source.on('data', (chunk) => {
+        if (log) writeSync(log.fd, chunk)
+        if ((verbose || !log) && !stream.write(chunk)) {
+          source.pause()
+          stream.once('drain', () => source.resume())
+        }
+      })
+    if (log) writeSync(log.fd, `\n==> ${[command, ...args].join(' ')} (${new Date().toISOString()})\n`)
+    let child
+    try {
+      child = spawn(command, args, { cwd, env, stdio: ['inherit', 'pipe', 'pipe'] })
+    } catch (error) {
+      resolve({ code: null, signal: null, error })
+      return
+    }
+    forward(child.stdout, process.stdout)
+    forward(child.stderr, process.stderr)
+    let error = null
+    child.on('error', (failure) => {
+      error = failure
+    })
+    child.on('close', (code, signal) => {
+      if (log) writeSync(log.fd, `==> exit ${signal ?? code ?? error?.code}\n`)
+      resolve({ code, signal, error })
+    })
+  })
+}
+
+/** The process exit status for a step result: its code, 128 + a signal, else 1. */
+export function stepExitStatus({ code, signal }) {
+  if (typeof code === 'number' && code !== 0) return code
+  if (signal) return 128 + (constants.signals[signal] ?? 0)
+  return 1
+}
+
+async function update(args) {
+  let options
+  try {
+    options = updateOptions(args)
+  } catch (error) {
+    console.error(error.message)
+    process.exit(1)
+  }
   requireSupportedPlatform()
   let before
   try {
@@ -87,24 +209,45 @@ function update() {
     }
   }
 
-  const pm = bun()
-  const steps = [
-    ['git', ['pull', '--ff-only']],
-    [pm, ['install']],
-    [pm, ['run', 'build']],
-  ]
+  // The pull's own output (fetch, fast-forward, diffstat) is always shown.
+  const pull = spawnSync('git', ['pull', '--ff-only'], { cwd: repoRoot, stdio: 'inherit' })
+  if (pull.status !== 0) {
+    console.error(
+      `Update failed while running \`git pull --ff-only\` (${pull.error ? pull.error.message : `exit code ${pull.status ?? pull.signal}`}).` +
+        ' If you have local changes, commit or stash them and try again.',
+    )
+    process.exit(pull.error ? 1 : stepExitStatus(pull))
+  }
 
-  for (const [cmd, args] of steps) {
-    const result = spawnSync(cmd, args, { cwd: repoRoot, stdio: 'inherit' })
-    if (result.status !== 0) {
-      console.error(
-        `Update failed while running \`${cmd === pm ? 'bun' : cmd} ${args.join(' ')}\` (exit code ${result.status}).` +
-          (cmd === 'git'
-            ? ' If you have local changes, commit or stash them and try again.'
-            : ''),
-      )
-      process.exit(result.status ?? 1)
+  // Install and build output (dependency chatter, compiler warnings, signing details)
+  // goes to a private log; --verbose also shows it as it runs.
+  const pm = bun()
+  const log = openUpdateLog()
+  const steps = [
+    ['Installing dependencies', ['install']],
+    ['Building Trezi', ['run', 'build']],
+  ]
+  try {
+    for (const [label, stepArgs] of steps) {
+      console.log(`==> ${label}…`)
+      const result = await runStep(pm, stepArgs, { cwd: repoRoot, log, verbose: options.verbose })
+      if (result.code === 0 && !result.error) continue
+      const how = result.error
+        ? `could not start: ${result.error.message}`
+        : result.signal
+          ? `stopped by ${result.signal}`
+          : `exit code ${result.code}`
+      console.error(`Update failed while running \`bun ${stepArgs.join(' ')}\` (${label[0].toLowerCase()}${label.slice(1)}, ${how}).`)
+      if (log && !options.verbose) {
+        const recent = tailLines(log.path)
+        if (recent.length) console.error(`Recent output:\n${recent.join('\n')}`)
+      }
+      if (log) console.error(`Full output: ${log.path}`)
+      if (!options.verbose) console.error('To see all output as it runs: trezi --update --verbose')
+      process.exit(result.error ? 1 : stepExitStatus(result))
     }
+  } finally {
+    if (log) closeSync(log.fd)
   }
 
   const after = execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
@@ -118,6 +261,7 @@ function update() {
   } else {
     console.log(`Updated ${before} → ${after}.`)
   }
+  if (log) console.log(`Install and build output: ${log.path}`)
 
   console.log('Run `trezi` to (re)start.')
   process.exit(0)
@@ -183,8 +327,7 @@ export function followLogs(dir, out, { now = Date.now, interval = 500, fileName 
 
 function main() {
   const args = process.argv.slice(2)
-  // --no-launch (older in-app updaters pass it) is accepted and ignored.
-  if (args[0] === '--update' || args[0] === 'update') return update()
+  if (args[0] === '--update' || args[0] === 'update') return update(args.slice(1))
   if (args[0] === 'logs') {
     return logs(args.slice(1)).then(
       (stop) => {
@@ -211,5 +354,6 @@ function invokedAsScript() {
 }
 
 if (invokedAsScript()) {
-  try { main() } catch (error) { console.error(error.message); process.exitCode = 1 }
+  const fail = (error) => { console.error(error?.message ?? String(error)); process.exitCode = 1 }
+  try { Promise.resolve(main()).catch(fail) } catch (error) { fail(error) }
 }
