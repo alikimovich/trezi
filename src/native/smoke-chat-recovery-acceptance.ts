@@ -13,6 +13,7 @@ import {
   failureProblems,
   idleProblems,
   PLANTED,
+  RECOVERY_LABEL,
   type RecoveryKind,
   type RecoveryMeasure,
   reportProblems,
@@ -31,8 +32,9 @@ import { waitFor } from './smoke-wait'
  * the provider stub of the native smoke and synthetic isolation events; Retry and Resolve
  * pressed on the real conflict card with a click or focus plus Space
  * (src/native/ChatRecoveryAcceptance.swift). Each recovery request is held at the backend
- * seam (`services.invoke`) until the card's busy state has been measured and captured, and a
- * second click, Discard and the other recovery were tried on it. Outcomes: still held, clean,
+ * seam (`services.invoke`) until the card's busy state (progress, no recovery row, LKM-590)
+ * has been measured and captured, and a second dispatch, Discard and the other recovery
+ * were tried on it. Outcomes: still held, clean,
  * agent handover, failure with its written report, a second chat kept apart, terminal clear.
  * Evidence: test/artifacts/native/chat-recovery-acceptance/.
  */
@@ -184,15 +186,23 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
     }
     record()
   }
-  const parked = async (key = chat) => {
-    nativeChat.event({ type: 'isolation', projectKey: key, state: 'parked', files })
+  // LKM-590: `failed` parks as a failed landing (its one action is Try applying again);
+  // otherwise the project moved under the work (its one action is Combine).
+  const parked = async (key = chat, failed = false) => {
+    nativeChat.event({
+      type: 'isolation',
+      projectKey: key,
+      state: 'parked',
+      files,
+      ...(failed ? { reason: 'failed' as const, error: 'Fixture landing failed.' } : {})
+    })
     if (key !== chat) return
-    // The parked card's Problem, its written report and so its whole action row.
-    await checkpoint('parked')
+    const label = RECOVERY_LABEL[failed ? 'retry' : 'resolve']
+    await checkpoint('parked', { failed })
     await waitFor(async () => {
       const m = await measure()
-      return !m.problem && m.actions.includes('Copy support report') && !idleProblems(m).length
-    }, 'the parked card is drawn with its report')
+      return !m.problem && m.actions.join() === label && !idleProblems(m).length
+    }, `the parked card is drawn with ${label}`)
   }
   /** Presses `label` with real input while its request is held: busy within the bound, before any reply. */
   const pressHeld = async (kind: RecoveryKind, label: string, input: 'pointer' | 'keyboard') => {
@@ -240,19 +250,21 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
     if (input === 'keyboard') await step('blur')
     return { input: posted, busyAfterMs: busyAfter, boundMs: BUSY_WITHIN_MS, busy: last }
   }
-  /** A click on a held card that must change nothing: no request, still busy. */
-  const blocked = async (kind: RecoveryKind, label: string) => {
-    await checkpoint(`blocked-${kind}`, { label })
+  /** A second dispatch of `action` on a held card (as a double press would send) must
+   *  change nothing: no request, still busy. LKM-590: the held card draws no recovery
+   *  buttons, so the dispatch goes through the host's chat action route. */
+  const blocked = async (kind: RecoveryKind, action: string) => {
+    await checkpoint(`blocked-${kind}`, { action })
     const counts = { ...calls }
-    const posted = await step('click', { label })
+    const posted = await host.request('chatPerform', { action, card: 'conflict' })
     await delay(400)
     const after = await measure()
     if (JSON.stringify(calls) !== JSON.stringify(counts))
-      throw new Error(`${label} on the busy card sent a request: ${JSON.stringify(calls)}`)
+      throw new Error(`${action} on the busy card sent a request: ${JSON.stringify(calls)}`)
     const problems = busyProblems(after, kind)
     if (problems.length || nativeChat.get(chat).recovery !== kind)
-      throw new Error(`${label} on the busy card changed it: ${problems.join('; ')}`)
-    return { label, input: posted, requests: { ...calls } }
+      throw new Error(`${action} on the busy card changed it: ${problems.join('; ')}`)
+    return { action, input: posted ?? 'chatPerform', requests: { ...calls } }
   }
   const settle = async (label: string, check: (m: RecoveryMeasure) => string[], card?: string) => {
     await checkpoint('settle', { waitingFor: label })
@@ -288,16 +300,17 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
     await parked(other)
     await checkpoint('other-parked')
     await waitFor(() => !!nativeChat.get(other).recoveryReport, "the other chat's report")
-    await parked()
+    await parked(chat, true)
     const turns = sent.length
 
-    // 1. Retry by pointer, held: busy before the reply; a second click, Discard and Resolve change nothing.
-    const retry = await pressHeld('retry', 'Retry', 'pointer')
+    // 1. Try applying again by pointer, held: busy before the reply, with no recovery row;
+    // a second Retry, Discard and Resolve dispatched meanwhile change nothing.
+    const retry = await pressHeld('retry', RECOVERY_LABEL.retry, 'pointer')
     const heldShot = await capture('held-busy', { press: retry })
     const tries = [
-      await blocked('retry', 'Retrying…'),
-      await blocked('retry', 'Discard'),
-      await blocked('retry', 'Resolve')
+      await blocked('retry', 'landing-retry'),
+      await blocked('retry', 'discard'),
+      await blocked('retry', 'resolve')
     ]
     await capture('held-blocked', { tries })
     release({ ok: true, state: 'parked' })
@@ -306,8 +319,9 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
     evidence.outcomes['held-busy'] = { busyAfterMs: retry.busyAfterMs, at: heldShot.at, tries }
     evidence.outcomes['still-held'] = await capture('still-held')
 
-    // 2. Resolve by pointer that lands cleanly: one outcome line, no agent turn.
-    const clean = await pressHeld('resolve', 'Resolve', 'pointer')
+    // 2. Combine by pointer that lands cleanly: one outcome line, no agent turn.
+    await parked()
+    const clean = await pressHeld('resolve', RECOVERY_LABEL.resolve, 'pointer')
     nativeChat.event({ type: 'isolation', projectKey: chat, state: 'merged', files: [] })
     release({ ok: true, conflicted: [], prompt: null })
     await checkpoint('clean-released')
@@ -322,7 +336,7 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
 
     // 3. Resolve by keyboard that hands over to one agent turn.
     await parked()
-    const handover = await pressHeld('resolve', 'Resolve', 'keyboard')
+    const handover = await pressHeld('resolve', RECOVERY_LABEL.resolve, 'keyboard')
     release({ ok: true, conflicted: files, prompt: 'Resolve the recovery fixture conflict.' })
     await checkpoint('handover-released')
     await waitFor(
@@ -336,8 +350,8 @@ export async function checkChatRecoveryAcceptance(host: NativeBridge, artifacts:
     await waitFor(() => !nativeChat.get(chat).isRunning, 'the handover turn ended')
 
     // 4. Retry by pointer that fails: the same card states the Problem; its report is written.
-    await parked()
-    const failing = await pressHeld('retry', 'Retry', 'pointer')
+    await parked(chat, true)
+    const failing = await pressHeld('retry', RECOVERY_LABEL.retry, 'pointer')
     release({ ok: false, error: `Fixture recovery failed ${PLANTED.key} token=${PLANTED.token}` })
     await settle('a failed Retry states its Problem', (m) =>
       failureProblems(m).concat(

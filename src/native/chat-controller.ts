@@ -585,7 +585,9 @@ export class NativeChatController {
       autoResolve(this, chat, event.type === 'isolation' && event.state === 'parked')
     if (event.type === 'isolation' && !chat.recovery) {
       // Landed or discarded: the held problem and its report are history.
-      if (event.state !== 'parked') {
+      // LKM-590: staged overlapping edits are a known next step (Fix conflicts), not a
+      // Problem; an older Problem and its report no longer describe this hold.
+      if (event.state !== 'parked' || (event.conflicts?.length && !event.decision)) {
         chat.recoveryProblem = undefined
         chat.recoveryReport = undefined
       } else if (
@@ -956,6 +958,7 @@ export class NativeChatController {
           chat.isolation = 'parked'
           chat.stopped = undefined
           chat.landingError = undefined
+          chat.conflicts = undefined
         } else {
           chat.isRunning = true
           chat.phase = 'applying'

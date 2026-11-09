@@ -93,12 +93,24 @@ assert.deepEqual(held.detail.split('\n').slice(0, 2), [
   'Nothing landed. This chat’s work is kept on trezi/chat-1.'
 ])
 assert.ok(held.detail.endsWith('page.txt'))
+// LKM-590: answering is the way on. Retry and Resolve would pick a side (both refuse), so
+// neither is offered; Discard sits in More and asks first, naming the branch it deletes.
+assert.deepEqual(held.actions, [], 'Retry and Resolve would pick a side, and both refuse')
 assert.deepEqual(
-  held.actions.map((action) => action.action),
-  ['discard'],
-  'Retry and Resolve would pick a side, and both refuse'
+  held.menu.map((action) => [action.action, action.label]),
+  [['discard-ask', 'Discard held changes…']]
 )
-assert.equal(decisionCard({ ...chat, isRunning: true }, chat.decision).actions[0].disabled, true)
+assert.deepEqual(decisionCard({ ...chat, isRunning: true }, chat.decision).menu, [])
+const confirm = decisionCard({ ...chat, confirmingDiscard: true }, chat.decision)
+assert.equal(confirm.title, 'Discard held changes?')
+assert.match(confirm.detail, /their branch trezi\/chat-1.*\n.*can’t be undone/)
+assert.deepEqual(
+  confirm.actions.map((action) => [action.action, action.role]),
+  [
+    ['discard-cancel', undefined],
+    ['discard', 'destructive']
+  ]
+)
 assert.equal(
   snapshot(
     Object.assign(chat, { queue: [{ id: 'q', text: 'x', attachments: [] }], paused: true }),
@@ -116,11 +128,14 @@ reduce(chat, {
   error: 'x'
 })
 assert.equal(chat.decision, undefined)
+const failedCard = cards().find((card) => card.id === 'conflict')
 assert.deepEqual(
-  cards()
-    .find((card) => card.id === 'conflict')
-    .actions.map((action) => action.label),
-  ['Discard', 'Retry', 'Resolve']
+  failedCard.actions.map((action) => action.label),
+  ['Try applying again']
+)
+assert.deepEqual(
+  failedCard.menu.map((action) => action.label),
+  ['Combine with project edits', 'Discard held changes…']
 )
 reduce(chat, {
   type: 'isolation',
@@ -215,10 +230,7 @@ states.clear()
     stillHeld.recovery = recovery
     const busy = snapshot(stillHeld, []).cards.find((card) => card.id === 'conflict')
     assert.equal(busy.busy, true, `${recovery} shows progress`)
-    assert.ok(
-      busy.actions.every((action) => action.disabled),
-      'and locks every action'
-    )
+    assert.deepEqual(busy.actions, [], 'and offers nothing to press while it works')
     stillHeld.recovery = undefined
     stillHeld.recoveryProblem =
       'Problem: the changes are still held: the browser check did not pass'
@@ -229,9 +241,7 @@ states.clear()
     assert.equal(done.find((card) => card.id === 'conflict').busy, false)
     assert.equal(done.find((card) => card.id === 'conflict').detail.split('\n').length, 1)
     assert.ok(
-      done
-        .find((card) => card.id === 'conflict')
-        .actions.some((a) => a.action === 'recovery-report')
+      done.find((card) => card.id === 'conflict').menu.some((a) => a.action === 'recovery-report')
     )
     stillHeld.recoveryProblem = undefined
     stillHeld.recoveryReport = undefined

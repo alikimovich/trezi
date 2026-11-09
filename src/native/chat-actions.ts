@@ -10,6 +10,7 @@ import { editQueued, sendBlock } from './chat-queue'
 import { recoveryAction } from './chat-recovery'
 import { writeRecoveryReport } from './chat-recovery-report'
 import { assistant, begin, type Chat, placeUi, type Submission } from './chat-state'
+import { recoveryBlocked, STILL_HELD } from './held-card'
 import { landingFixPrompt } from './landing-check'
 
 const RECOVERY_REQUEST_MS = 120_000
@@ -47,8 +48,7 @@ export async function resolveHeld(controller: NativeChatController, chat: Chat) 
           'resolving'
         )
     }
-    if (chat.isolation === 'parked')
-      chat.recoveryProblem = result.error ?? 'The changes are still held. Review the reason below.'
+    if (chat.isolation === 'parked') chat.recoveryProblem = result.error ?? STILL_HELD
   })
 }
 
@@ -68,6 +68,7 @@ async function recoveryRequest(
   chat.recoveryReport = undefined
   chat.recoverySettled = undefined
   chat.recoveryOutcome = undefined
+  chat.confirmingDiscard = undefined
   chat.recoveryId = crypto.randomUUID()
   const id = chat.recoveryId
   chat.recoveryStartedAt = Date.now()
@@ -165,20 +166,35 @@ export async function cardAction(
   // Handle these before the general asynchronous card dispatcher. A double click
   // cannot reach the backend while the first request is still in flight.
   if (action.action === 'resolve') return resolveHeld(controller, chat).catch(() => {})
-  if (action.action === 'discard')
+  // LKM-590: Discard deletes held work, so the card asks first; only its confirm step
+  // offers `discard`. Asking is refused while anything else owns the hold.
+  if (action.action === 'discard-ask') {
+    if (chat.isolation === 'parked' && !recoveryBlocked(chat)) chat.confirmingDiscard = true
+    return
+  }
+  if (action.action === 'discard-cancel') {
+    chat.confirmingDiscard = undefined
+    return
+  }
+  if (action.action === 'discard') {
+    // Only the confirm step the user saw may delete: a new hold clears the question, so a
+    // click still on its way from the old confirm card deletes nothing.
+    if (!chat.confirmingDiscard) return
+    chat.confirmingDiscard = undefined
     return recoveryRequest(controller, chat, 'discard', async () => {
       chat.paused = false
       const result = await invoke('agent:discard-conflict', chat.chat)
       if (!result.ok && result.error) throw new Error(result.error)
     })
+  }
   if (action.action === 'landing-retry')
     return recoveryRequest(controller, chat, 'retry', async () => {
       chat.paused = false
       const result = await invoke('agent:retry-landing', chat.chat, chat.recoveryId)
       if (!result.ok) throw new Error(result.error ?? 'Unable to retry the landing.')
-      if (result.state === 'parked' && chat.isolation === 'parked')
-        chat.recoveryProblem =
-          result.error ?? 'The changes are still held. Review the reason below.'
+      // A staged overlap (`conflicts`) is the card's next step (Fix conflicts), not a problem.
+      if (result.state === 'parked' && chat.isolation === 'parked' && !chat.conflicts?.length)
+        chat.recoveryProblem = result.error ?? STILL_HELD
     })
   if (await recoveryAction(controller, chat, action.action, action.id)) return
   switch (action.action) {

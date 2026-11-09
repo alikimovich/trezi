@@ -433,7 +433,8 @@ async function caseRun(
       )
       const card = held.cardStates.find((value: any) => value.title === 'Decision needed')
       assert.match(card.detail, /dark only or light only/)
-      assert.deepEqual(card.actions, ['Discard'])
+      assert.deepEqual(card.actions, [])
+      assert.deepEqual(card.menu, ['Discard held changes…'])
       assert.equal(
         git(project, 'rev-parse', 'HEAD'),
         afterComment,

@@ -339,7 +339,8 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       const composer = await inspectUntil(
         (method) => host.request(method),
         'composerInspect',
-        (value) => value.queueCount === 1 && value.queueNote.startsWith('Waiting for Resolve')
+        (value) =>
+          value.queueCount === 1 && value.queueNote.startsWith('Waiting for the held changes')
       )
       const card = current.cardStates.find((value: any) => value.id === 'conflict')
       const layout = await host.request('layoutInspect')
@@ -348,7 +349,7 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
       if (
         composer.queueCount !== 1 ||
         composer.queue[0].text !== parkedText ||
-        !composer.queueNote.startsWith('Waiting for Resolve')
+        !composer.queueNote.startsWith('Waiting for the held changes')
       )
         throw new Error(`Resolve queue is not visibly waiting: ${JSON.stringify(composer)}`)
       await checkQueueGeometry(
@@ -365,7 +366,8 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
         !card?.detail?.startsWith('Problem:') ||
         !card.detail.includes('still held') ||
         !nativeChat.get(state.chat).isolationFiles?.includes('src/native/fixture.ts') ||
-        !card.actions.includes('Resolve')
+        card.actions.join() !== 'Combine with project edits' ||
+        !card.menu?.includes('Discard held changes…')
       )
         throw new Error(`Resolve card lacks reason or action: ${JSON.stringify(card)}`)
       if (
@@ -417,10 +419,9 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     )
     const busyCard = busy.cardStates.find((card: any) => card.id === 'conflict')
     if (
-      busyCard.title !== 'Retrying the check…' ||
+      busyCard.title !== 'Trying to apply again…' ||
       busyCard.detail.startsWith('Problem:') ||
-      !busyCard.actions.includes('Retrying…') ||
-      !busyCard.disabled.every(Boolean)
+      busyCard.actions.length !== 0
     )
       throw new Error(`Retry was not visibly busy before its reply: ${JSON.stringify(busyCard)}`)
     await host.request('chatPerform', { action: 'landing-retry', card: 'conflict' })
@@ -429,7 +430,7 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     const stillHeld = await wait((value) =>
       value.cardStates.some(
         (card: any) =>
-          card.id === 'conflict' && card.busy === false && card.actions.includes('Retry')
+          card.id === 'conflict' && card.busy === false && card.menu?.includes('Try applying again')
       )
     )
     const heldCard = stillHeld.cardStates.find((card: any) => card.id === 'conflict')
@@ -476,10 +477,9 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     )
     const resolvingCard = resolving.cardStates.find((card: any) => card.id === 'conflict')
     if (
-      resolvingCard.title !== 'Resolving changes…' ||
+      resolvingCard.title !== 'Combining with project edits…' ||
       resolvingCard.detail.startsWith('Problem:') ||
-      !resolvingCard.actions.includes('Resolving…') ||
-      !resolvingCard.disabled.every(Boolean)
+      resolvingCard.actions.length !== 0
     )
       throw new Error(
         `Resolve was not visibly busy before its reply: ${JSON.stringify(resolvingCard)}`

@@ -858,18 +858,19 @@ try {
         {},
         `live-second-${first}`
       )
-      await sleep(50)
-      assert.equal(p2.sent.length, 0, 'the second live writer waits for the first')
-      assert.equal(
+      const waiting = () =>
         liveEvents.filter(
           (event) =>
             event.type === 'status' &&
             event.projectKey === second.sessionKey &&
             event.text === 'Waiting: Another chat is editing this live project.'
-        ).length,
-        1,
-        'one waiting status explains the admission delay'
-      )
+        ).length
+      // Wait for the refusal to reach the window instead of a fixed sleep: a
+      // loaded CI runner can take longer than 50ms to round-trip the XPC refusal.
+      await until(() => waiting() > 0, 'live admission waiting status')
+      await sleep(50)
+      assert.equal(p2.sent.length, 0, 'the second live writer waits for the first')
+      assert.equal(waiting(), 1, 'one waiting status explains the admission delay')
       p1.done()
       await within(competing, 'queued live admission')
       await until(() => p2.sent.length === 1, 'queued live provider send')

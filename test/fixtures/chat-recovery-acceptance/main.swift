@@ -33,20 +33,28 @@ func spin(_ seconds: Double) {
 }
 func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap { descendants($0) } }
 
-/// The conflict card as `chat-snapshot.ts` builds it; `busy` is the in-flight recovery.
-/// `enabled` draws the busy card with its buttons enabled: the same layout, with every
-/// button's real frame, to check the frames the locator derives for disabled ones.
-func conflict(busy: String?, report: Bool = false, full: Bool = false, enabled: Bool = false) -> [String: Any] {
-    let disabled = busy != nil && !enabled
-    var actions: [[String: Any]] = [
-        ["label": "Discard", "action": "discard", "disabled": disabled],
-        ["label": busy == "retry" ? "Retrying…" : "Retry", "action": "landing-retry", "disabled": disabled],
-        ["label": busy == "resolve" ? "Resolving…" : "Resolve", "action": "resolve", "disabled": disabled]
-    ]
-    if report { actions.append(["label": "Copy support report", "action": "recovery-report"]) }
-    var card: [String: Any] = ["id": "conflict", "title": busy == "retry" ? "Retrying the check…" : busy == "resolve" ? "Resolving changes…" : report ? "Problem" : "This turn’s changes didn’t land",
-                               "detail": busy != nil ? "Trezi is working on the held changes." : report ? "Problem: Fixture recovery failed" : "The project changed under them, so Trezi held them instead of overwriting.\nfixture.ts",
-                               "busy": busy != nil, "actions": actions]
+/// The held card as `held-card.ts` builds it (LKM-590): `kind` "moved" offers Combine,
+/// "failed" offers Try applying again; `busy` is the in-flight recovery, with no row.
+func conflict(kind: String = "moved", busy: String? = nil, report: Bool = false, full: Bool = false) -> [String: Any] {
+    let combine: [String: Any] = ["label": "Combine with project edits", "action": "resolve"]
+    let retry: [String: Any] = ["label": "Try applying again", "action": "landing-retry"]
+    var card: [String: Any] = ["id": "conflict", "busy": busy != nil]
+    if let busy {
+        card["title"] = busy == "retry" ? "Trying to apply again…" : "Combining with project edits…"
+        card["detail"] = "Trezi is working on the held changes. Nothing is needed from you yet."
+        card["actions"] = [] as [[String: Any]]
+        return card
+    }
+    var primary = kind == "failed" ? retry : combine
+    primary["role"] = "primary"
+    var menu: [[String: Any]] = report ? [["label": "Copy support report", "action": "recovery-report"]] : []
+    menu.append(kind == "failed" ? combine : retry)
+    menu.append(["label": "Discard held changes…", "action": "discard-ask"])
+    card["title"] = report ? "Problem" : kind == "failed" ? "Changes couldn’t be applied" : "This turn’s changes didn’t land"
+    card["detail"] = report ? "Problem: Fixture recovery failed" : "The project changed under them, so Trezi held them instead of overwriting.\nfixture.ts"
+    card["hint"] = "Combine with project edits merges them with the newer edits and applies the result."
+    card["actions"] = [primary]
+    card["menu"] = menu
     if full { card["fullDetail"] = "/fixture/project/fixture.ts" }
     return card
 }
@@ -100,80 +108,28 @@ func report(_ name: String, _ extra: [String: Any] = [:]) {
 }
 
 window.makeKey()
-push(conflict(busy: nil))
-report("idle", ["click": press("Retry"), "key": press("Resolve", key: true),
+push(conflict())
+report("idle", ["click": press("Combine with project edits"), "key": press("Combine with project edits", key: true),
                 "keyboardNavigation": NSApp.isFullKeyboardAccessEnabled, "keyWindow": window.isKeyWindow])
-// Each busy card follows the idle row it is derived from, then is drawn enabled for its real frames.
+push(conflict(kind: "failed"))
+report("failed", ["click": press("Try applying again")])
 push(conflict(busy: "retry"))
-report("busy-retry", ["click": press("Retrying…"), "discard": press("Discard"), "resolve": press("Resolve"), "key": press("Retrying…", key: true)])
-push(nil)
-push(conflict(busy: "retry", enabled: true))
-report("busy-retry-drawn")
-push(conflict(busy: nil))
-_ = chat.recoveryCardButtons("conflict")
+report("busy-retry")
 push(conflict(busy: "resolve"))
-report("busy-resolve", ["click": press("Resolving…")])
-push(nil)
-push(conflict(busy: "resolve", enabled: true))
-report("busy-resolve-drawn")
-push(conflict(busy: nil, report: true, full: true))
-report("problem", ["click": press("Retry")])
-push(conflict(busy: "retry", report: true, full: true))
-report("problem-busy", ["copy": press("Copy support report"), "click": press("Retrying…")])
-push(nil)
-push(conflict(busy: "retry", report: true, full: true, enabled: true))
-report("problem-busy-drawn")
-push(conflict(busy: nil), question: true)
+report("busy-resolve")
+push(conflict(report: true, full: true))
+report("problem", ["click": press("Combine with project edits")])
+push(conflict(), question: true)
 report("question")
 
-// LKM-458: the cards the real controller draws (test/chat-recovery-acceptance.mjs passes them
-// as JSON). A request clears the Problem and its report, so the busy card drops the trailing
-// Copy support report and the copy glyph, and its title and detail change. On a2c03fbb the
-// locator refused that busy card ("…no all-enabled row of the same actions at this width was
-// measured first"): it required the row's whole action list.
+// The cards the real controller draws (test/chat-recovery-acceptance.mjs passes them as
+// JSON): the parked card with its report, and the busy card of each held request.
 let real = CommandLine.arguments.count > 1
     ? (try? JSONSerialization.jsonObject(with: Data(CommandLine.arguments[1].utf8))) as? [String: [String: Any]] ?? [:] : [:]
-func enabledTwin(_ card: [String: Any]) -> [String: Any] {
-    var twin = card
-    twin["actions"] = (card["actions"] as? [[String: Any]] ?? []).map { var action = $0; action["disabled"] = false; return action }
-    return twin
-}
-/// Clicks the drawn card at each point and returns what each click emitted.
-func clicks(_ points: [[Double]]) -> [[String]] {
-    points.map { point in
-        emitted = []
-        for event in NativeChat.recoveryClick(at: NSPoint(x: point[0], y: point[1]), in: window) { window.sendEvent(event) }
-        spin(0.3)
-        return emitted
-    }
-}
-func realCase(_ name: String, busy: [String: Any], labels: [String], tall: Bool) {
-    guard let parked = real["parked"] else { return }
-    let id = name
-    push(parked, chatId: id, tall: tall)
-    report("\(name)-parked")
-    push(busy, chatId: id, tall: tall)
-    let found = chat.recoveryCardButtons("conflict").buttons
-    report(name, ["presses": labels.map { press($0) }, "key": press(labels[0], key: true)])
-    push(nil, chatId: id, tall: tall)
-    push(enabledTwin(busy), chatId: id, tall: tall)
-    // The busy card's derived centres, clicked on the same card drawn enabled: each must
-    // press the button it names.
-    report("\(name)-drawn", ["derivedClicks": clicks(found.map { [Double($0.center.x), Double($0.center.y)] }),
-                             "derivedActions": found.map(\.action)])
-}
-if let retry = real["busyRetry"], let resolve = real["busyResolve"] {
-    realCase("real-retry", busy: retry, labels: ["Retrying…", "Discard", "Resolve"], tall: false)
-    realCase("real-resolve", busy: resolve, labels: ["Resolving…", "Discard", "Retry"], tall: false)
-    // Rows are kept per chat: one measured in another chat never stands in for this one.
-    // (Before the tall case: this offscreen view, switched from a scrolled chat to a short
-    // one, lays out no rows within one push.)
-    if let parked = real["parked"] {
-        push(parked, chatId: "real-other")
-        report("other-parked")
-        push(retry, chatId: "real-unmeasured")
-        report("unmeasured")
-    }
-    realCase("real-retry-tall", busy: retry, labels: ["Retrying…", "Discard", "Resolve"], tall: true)
+for (name, key, tall) in [("real-parked", "parked", false), ("real-retry", "busyRetry", false), ("real-resolve", "busyResolve", false),
+                          ("real-parked-tall", "parked", true)] {
+    guard let card = real[key] else { continue }
+    push(card, chatId: name, tall: tall)
+    report(name)
 }
 window.close()

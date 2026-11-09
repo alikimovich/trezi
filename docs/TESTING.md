@@ -775,7 +775,8 @@ full suite.
 ### Chat recovery acceptance (LKM-453)
 
 An opt-in native check, `chat-recovery-flow-native`, drives the LKM-446 recovery card
-(Retry, Resolve, Discard on held changes) in the shipping chat. It is not part of any
+(Try applying again, Combine with project edits and Discard on held changes; LKM-590) in
+the shipping chat. It is not part of any
 tier, and its pass is not full-suite acceptance.
 
 ```sh
@@ -807,19 +808,21 @@ bun run acceptance:chat-recovery --red=delay-busy  # RED: must fail at the held 
   - Product code is not stubbed.
 - **Deferred boundary.** Each press waits for the card to be busy within 1 s, while the
   request is still held:
-  - the busy label (Retrying…/Resolving…);
+  - the working title (Trying to apply again…/Combining with project edits…);
   - a spinner (an `NSProgressIndicator` in the card);
-  - Retry, Resolve and Discard disabled.
+  - no recovery row and no Discard in More (LKM-590: nothing to press while Trezi works).
 
   The rules are in `busyProblems` (`src/native/chat-recovery-acceptance.ts`). Then a
-  second click on the busy label, a click on Discard and a click on the other recovery
-  must send no request and leave the card busy.
+  second Retry, a Discard and the other recovery dispatched through `chatPerform` (the
+  same chat action route a press takes) must send no request and leave the card busy.
+  Retry steps park a failed landing (its one action is Try applying again); Resolve steps
+  park a moved project (its one action is Combine with project edits).
 - **Outcomes.** One PNG and one JSON each, in this order:
   - `held-busy` and `held-blocked`;
-  - `still-held`: one line, at most 120 characters;
+  - `still-held`: one line;
   - `clean`: a merged Resolve with one outcome line and no agent turn;
   - `handover`: a Resolve with conflicts, which starts exactly one agent turn;
-  - `failure`: the card states the Problem and offers Copy support report. The written
+  - `failure`: the card states the Problem and offers Copy support report in More. The written
     report must be 0600, readable JSON, name only this chat and have its planted fake
     key and token redacted. It is kept as `failure-report.json`;
   - `isolation`: a second chat's Problem and report are its own and it was never busy;
@@ -839,23 +842,17 @@ bun run acceptance:chat-recovery --red=delay-busy  # RED: must fail at the held 
     `firstResponderBeforeSpace` and `foreground`. If the Space sends no request, the check
     fails with a "keyboard route" error that names them, not the busy-state error.
     Programmatic focus alone never counts as a keyboard pass.
-  - A disabled SwiftUI button has no key-view proxy. On the busy card the disabled
-    buttons' frames are derived from the last all-enabled row of the same chat and card
-    (LKM-458). The card's actions must be the leading actions of that row: a request
-    clears the Problem, so the busy card loses Copy support report and the copy glyph.
-    The row must have the same chat frame and inset, and the card must be the last one.
-    The row is moved by how far the conversation's end has moved since it was measured.
-    It must match the live proxies still on the card and have a spinner above it. The
-    JSON marks each frame as `frameSource`. The unit `chat-recovery-acceptance` checks
-    the derivation against the busy cards the real chat controller builds, short and
-    scrolled: each derived centre, clicked on the same card drawn enabled, must press
-    that button. It also checks that a row measured in another chat is refused.
+  - The held card never draws disabled buttons (LKM-590), so the locator takes the
+    lowest row of key-view proxies (copy glyph, then the actions) and refuses a card that
+    draws a disabled action. The More menu is an AppKit pop-up button, found on its own
+    (`more` in the JSON). The unit `chat-recovery-acceptance` checks the locator on the
+    cards the real chat controller builds, short and scrolled.
   - The second chat is set up by events, not input.
 - **Artifacts.** In `test/artifacts/native/chat-recovery-acceptance/`, cleared at the
   start of each run: `evidence.json` (source sha, build stamp, outcomes, steps, error), the
   PNG/JSON pairs above and `failure-report.json`. Before every press, fallible wait and
   refusal, a numbered `step-NN-<name>.json` and `.png` record the source sha, the card's
-  measurement (frame sources, stored row, window), `layoutInspect` geometry and both
+  measurement (frame sources, More menu, window), `layoutInspect` geometry and both
   chats' controller state. A refused run ends with `step-NN-refused`, taken before
   the held request is released. The failure PNG shows the planted fake
   secret in the card's reason, as the product does. Only the report is redacted.

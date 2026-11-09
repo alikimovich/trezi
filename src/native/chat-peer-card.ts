@@ -1,6 +1,7 @@
 import type { PeerFeedbackLine } from '../shared/api'
 import type { NativeChatCard } from '../shared/native-chat'
 import type { Chat } from './chat-state'
+import { decisionMenu, discardConfirmCard, recoveryBlocked } from './held-card'
 
 const ORIGINS: Record<PeerFeedbackLine['origin'], string> = {
   chat: 'another chat',
@@ -50,6 +51,9 @@ export function peerCard(lines: PeerFeedbackLine[] | undefined): NativeChatCard 
 
 /** Two goals that cannot both hold: the question, where the work is, and the ways on. */
 export function decisionCard(chat: Chat, decision: NonNullable<Chat['decision']>): NativeChatCard {
+  // LKM-590: the answer is the way on; Discard sits in More and asks first.
+  if (chat.confirmingDiscard && !recoveryBlocked(chat))
+    return discardConfirmCard(chat, decision.branch)
   return {
     id: 'conflict',
     title: 'Decision needed',
@@ -58,10 +62,11 @@ export function decisionCard(chat: Chat, decision: NonNullable<Chat['decision']>
       decision.branch
         ? `Nothing landed. This chat’s work is kept on ${decision.branch}.`
         : 'Nothing landed. This chat’s work is kept.',
-      'Answer in this chat to continue, or discard the work.',
+      'Answer in this chat to continue.',
       ...(chat.isolationFiles ?? [])
     ].join('\n'),
     busy: !!chat.recovery && !chat.recoveryTimedOut,
-    actions: [{ label: 'Discard', action: 'discard', disabled: chat.isRunning || !!chat.recovery }]
+    actions: [],
+    menu: decisionMenu(chat)
   }
 }

@@ -150,7 +150,7 @@ assert.equal(error.detail, `Could not apply ${TEMPORARY_PATCH}`)
 assert.equal(error.fullDetail, chat.error, 'Copy keeps the full path')
 assert.equal(
   state.cards.find((card) => card.id === 'conflict').detail,
-  'Trezi is working on the held changes.',
+  'Trezi is working on the held changes. Nothing is needed from you yet.',
   'a running turn presents the owned park as status'
 )
 const conflict = snapshot({ ...chat, isRunning: false }, []).cards.find(

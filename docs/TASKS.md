@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-590 — Simplify held-changes recovery to one clear contextual action
+
+- [x] Projection (`src/native/held-card.ts`): while Trezi owns the hold, progress only (no disabled Retry/Resolve/Discard row); otherwise one primary action from structured state: failed landing → Try applying again (`agent:retry-landing`), staged overlap (`conflicts`, new on the park event from the backend's `resolvingFiles`) → Fix conflicts (`agent:resolve-conflict`), moved project → Combine with project edits (same Resolve). A hint line says what it does.
+- [x] More menu (SwiftUI `Menu`) holds the support report, the applicable alternative and Discard; Discard asks first (`discard-ask` → confirm card naming what is deleted → `discard`), on the held and decision cards. No auto-discard; owners and fences unchanged.
+- [x] A staged overlap is not reported as a turn-end Problem; a Retry that ended still held names its reason instead of "Review the reason below".
+- [x] Unit `held-card` (working, retryable failure, real conflict, unknown, decision, timed-out recovery, settled, Discard confirmation through the controller); `stop-recovery-ui`, `chat-peer-card`, `chat-recovery-acceptance` (locator on the narrow card) updated; native smokes and the opt-in recovery acceptance adapted.
+- [ ] Manager: foreground native `chat` run and the opt-in `bun run acceptance:chat-recovery` under the desktop lock; independent review, exact-head CI and merge.
+
 ## LKM-588 — Keep New Chat visible by hiding the chat title first in narrow chat panes
 
 - [x] Cause: below a 150 pt header the toolbar hid New Chat together with the title (`setChatNewVisible(!chatTitle.isHidden)`), and the header kept a 100 pt floor, so the viewport island took New Chat's slot left of the chat/preview rule (at the 320 pt minimum pane with the sidebar collapsed).
