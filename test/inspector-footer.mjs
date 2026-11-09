@@ -13,9 +13,13 @@ if (process.platform !== 'darwin') {
 }
 const binary = swiftBuild('inspector-footer', [
   'test/fixtures/inspector-footer/main.swift',
-  ...['EditingInspector', 'FloatingIsland', 'IslandLayout', 'SnappedSlider'].map(
-    (name) => `src/native/${name}.swift`
-  )
+  ...[
+    'EditingInspector',
+    'InspectorNumberStep',
+    'FloatingIsland',
+    'IslandLayout',
+    'SnappedSlider'
+  ].map((name) => `src/native/${name}.swift`)
 ])
 const output = runFixture(binary, [], { timeout: 120_000 })
 const cases = Object.fromEntries(

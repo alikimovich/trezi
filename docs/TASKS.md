@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-601 — Up/Down arrow stepping in inspector numeric fields
+
+- [x] Verified on main: the compact Layout fields' `onMoveCommand` never fired (the AppKit field editor consumes `moveUp:`/`moveDown:`), and it needed a bare number and a declared step; the generic numeric fields had no stepping.
+- [x] `src/native/InspectorNumberStep.swift`: step arithmetic (declared step or 1, inline units, precision, per-field bounds; foreign units step by 1 and keep only a nonnegative minimum; non-numbers untouched) and `NumericArrowKeys`, a key hook acting only while that field's own editor has focus. Wired into `CompactLayoutValue` and `InspectorFieldView`.
+- [x] Steps go through the typing path: one preview per press, staged once on Return/blur (style drafts) or Return only (props); never Apply.
+- [x] Unit `inspector-number-step` (real island, real key events through the app event path).
+- [ ] Manager: independent review, native `inspector` group, exact-head CI and merge.
+
 ## LKM-600 — Keep inspector Apply prompts out of chat and handle stale previews clearly
 
 - [x] Traced: the screenshot's chat bubble is the pre-LKM-599 chat-turn Apply (older running app). Current main already runs Apply as a background agent; the remaining gaps were the chat fallback (`not-a-repo` / `unsupported-backend`), the spawn's History record and the selector-based rail label.
