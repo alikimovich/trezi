@@ -6,10 +6,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 ## LKM-618 — One running-cat loading line instead of repeated sidebar "Loading chat" rows
 
 - [x] Traced: the rows were the project's stored `sessionKeys` (last run's open chats), listed before the select path read the agent's snapshot. `agent:open-project` reopens only the current chat and sends its peers to History, so the extra rows were never going to load.
-- [x] `NativeWorkspaceController.chatListPending`: a project's list is pending until the live agent lists it this run (restore, select/open, cleared on close). The shell hides unresolved chats of a pending list (identity, order and selection kept) and marks the selected project `chatsLoading` unless the status is an error.
+- [x] `NativeWorkspaceController.chatListPending`: a project's list is pending until the live agent lists it this run (restore, select/open, cleared on close). The shell hides unresolved chats of a pending list, except the active chat when it is the project key (the key `agent:open-project` resumes); identity, order and selection are kept and marks the selected project `chatsLoading` unless the status is an error.
 - [x] `src/native/SidebarChatsLoader.swift`: one noninteractive line after the known chats; the existing cat's run frames travel the row and turn, all in Core Animation (no app timer); resize re-lays the run; Reduce Motion still; hidden/unmounted removes the animations; one static "Loading chats" for VoiceOver.
 - [x] Units `sidebar-chats-loading` (real workspace/chat/shell controllers, held agent replies) and `sidebar-chats-loader` (real cell offscreen).
-- [ ] Manager: independent review, foreground native capture of the run/turn/resize and Reduce Motion, exact-head CI and merge.
+- [x] Merged (PR 455).
+- [x] Native `--only=sidebar`: the first run failed `chat-gate` (opening a new project hid its active chat, so the header lost its LKM-523 loading title); fixed by keeping the active project-key chat a row while the list is pending (an active peer key stays hidden: it is resumed as the project key); rerun 10/10 with the 8 sidebar captures.
+- [x] Foreground WindowServer capture of the real loader cell: run, turn, two frames, light/dark, resize, cramped, Reduce Motion (test seam), removal.
+- [ ] Manager: independent review of the follow-up fix, exact-head CI and merge; Reduce Motion with the real system setting on a Mac (tests never change it).
 
 ## LKM-601 — Up/Down arrow stepping in inspector numeric fields
 

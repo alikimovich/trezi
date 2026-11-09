@@ -137,14 +137,22 @@ const keys = ['/p', '/p#1', '/p#2', '/p#3']
   const attached = app.workspace.command({ type: 'attach' })
   const open = await app.opened('/p')
   assert.equal(app.workspace.chatListPending('/p'), true)
-  assert.deepEqual(app.shown('/p'), [], 'no unresolved chat is a row while the list is read')
-  assert.equal(app.row('/p').chatsLoading, true, 'one loading line stands for the list')
-  assert.equal(
-    app.row('/p').children.filter((r) => r.kind === 'chat').length,
-    0,
-    'no chat rows to select, archive or open a menu on'
+  assert.deepEqual(
+    app.shown('/p'),
+    [['/p', '••••••••']],
+    'only the active chat (the one the agent reopens) is a row while the list is read'
   )
-  assert.equal(app.state().selected, 'chat:/p', 'the selected chat keeps its identity')
+  assert.equal(app.row('/p').recent[0].loadingTitle, true, 'with its loading title')
+  assert.equal(app.row('/p').chatsLoading, true, 'one loading line stands for the rest')
+  assert.deepEqual(
+    app
+      .row('/p')
+      .children.filter((r) => r.kind === 'chat')
+      .map((r) => r.session),
+    ['/p'],
+    'no stored peer is a row to select, archive or open a menu on'
+  )
+  assert.equal(app.state().selected, 'chat:/p', 'the selected chat keeps its identity and row')
   assert.deepEqual(app.workspace.active.sessionKeys, keys, 'stored keys are kept, not dropped')
   open.resolve()
   await attached
@@ -157,6 +165,23 @@ const keys = ['/p', '/p#1', '/p#2', '/p#3']
   assert.equal(app.state().selected, 'chat:/p')
 }
 
+// --- Last in a peer chat: the agent resumes it under the project key, so no peer row shows ---
+{
+  const app = launch([record('/p', { sessionKeys: keys, activeSessionKey: '/p#2' })], '/p')
+  const attached = app.workspace.command({ type: 'attach' })
+  const open = await app.opened('/p')
+  assert.deepEqual(app.shown('/p'), [], 'a stored peer key is not a row, even when active')
+  assert.equal(app.row('/p').chatsLoading, true)
+  assert.equal(app.state().selected, 'chat:/p#2', 'its identity is kept until the agent answers')
+  open.resolve()
+  await attached
+  await settle()
+  await app.chat.initialize(app.chat.get('/p'))
+  assert.deepEqual(app.shown('/p'), [['/p', 'p chat']], 'the resumed chat, under the project key')
+  assert.equal(app.state().selected, 'chat:/p')
+  assert.equal(app.row('/p').chatsLoading, undefined)
+}
+
 // --- Several actual chats survive, and a valid cached title stays while the list is read ----
 {
   const app = launch([record('/p', { sessionKeys: keys, activeSessionKey: '/p' })], '/p')
@@ -164,7 +189,14 @@ const keys = ['/p', '/p#1', '/p#2', '/p#3']
   app.chat.get('/p#2').title = 'Cached second'
   const attached = app.workspace.command({ type: 'attach' })
   const open = await app.opened('/p')
-  assert.deepEqual(app.shown('/p'), [['/p#2', 'Cached second']], 'cached real content is kept')
+  assert.deepEqual(
+    app.shown('/p'),
+    [
+      ['/p#2', 'Cached second'],
+      ['/p', '••••••••']
+    ],
+    'cached real content and the active chat are kept'
+  )
   assert.equal(app.row('/p').chatsLoading, true, 'and the rest are still loading')
   open.resolve()
   await attached
@@ -203,7 +235,8 @@ const keys = ['/p', '/p#1', '/p#2', '/p#3']
   await settle()
   assert.equal(app.workspace.state.status.kind, 'error')
   assert.equal(app.row('/p').chatsLoading, undefined, 'no cat hides the error')
-  assert.deepEqual(app.shown('/p'), [], 'and no fake rows')
+  assert.deepEqual(app.shown('/p'), [['/p', '••••••••']], 'only the selected chat, no peers')
+  assert.equal(app.row('/p').recent[0].loadingTitle, false, 'with no loading effect on an error')
   assert.deepEqual(app.workspace.active.sessionKeys, keys, 'the stored keys stay for a retry')
   // Retry: selecting the project again reopens it.
   const retried = app.workspace.select('/p')
@@ -238,7 +271,7 @@ const keys = ['/p', '/p#1', '/p#2', '/p#3']
   await settle()
   assert.equal(app.state().project, '/b', 'a late completion does not select the old project')
   assert.equal(app.row('/b').chatsLoading, true, "and does not end the new project's loader")
-  assert.deepEqual(app.shown('/b'), [], 'nor put its chats under the new project')
+  assert.deepEqual(app.shown('/b'), [['/b', '••••••••']], 'nor put its chats under /b')
   assert.deepEqual(app.workspace.state.projects.find((p) => p.key === '/a').sessionKeys, ['/a'])
   openB.resolve()
   await toB
