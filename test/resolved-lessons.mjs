@@ -510,7 +510,9 @@ try {
     const restored = await undoProjectMemoryUpdate(update)
     assert.ok(restored, 'Undo succeeds while the committed memory is current')
     assert.equal(restored.content, update.before.content, 'Undo restores the exact prior memory')
-    assert.equal(projectHasRunningAgents(p.repo), false)
+    // `spawn-finished` is sent before the spawn leaves the running set; a slow runner can
+    // observe that gap, so wait for the project to go idle instead of sampling once.
+    await wait(() => !projectHasRunningAgents(p.repo), 'the project to have no running agents')
   })
 
   console.log(
