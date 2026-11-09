@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-08 — LKM-596 follow-up: Andrei's real update tail
+
+Andrei supplied the missing tail of his `trezi --update`: a successful release build (TreziHost compiled release -O in 105.4 s, signed, `Built Trezi 0.15.0 (build 1362, aa769f4)`, `Updated 68b69ef5 → aa769f45`). The noise was bun's "Checked 276 installs… [86.00ms]", `[build]` cache-hit/JS bundle/signing/total timings, the `Signed Trezi: …` line and two Swift compiler warnings (`PreviewMarkupView.swift:144:62` unused `map` result, `ToolbarLayout.swift:46:9` mutable `plain` on a Sendable `NSImage` subclass). Not a failed update. With the earlier change all of it goes to the private update log (and to the terminal only with `--verbose`); the warnings are untouched at their source and no flags changed (cleanup is a separate task). Default success now adds one line, `Built Trezi <version> (build N, sha).` (from `scripts/version.mjs`, loaded lazily so a missing script never fails the update), in place of the hidden build summary. The `install-update` fixture now prints those exact kinds of lines; the default run must hide every one (`[build]`, `warning:`, `Checked … installs`, `Signed Trezi`, `build-native`), the log must keep each, and `--verbose` shows them on stdout/stderr. The log assertions no longer depend on stdout/stderr interleaving order.
+
 ## 2026-11-08 — LKM-596 `trezi --update` is concise; full build output behind `--verbose`
 
 Andrei accepts the Git fetch/fast-forward/diffstat at the start of `trezi --update` but not the errors and warnings at the end. On main, `bin/trezi.mjs` ran `git pull`, `bun install` and `bun run build` with inherited stdio, so all dependency and native build output (compiler/SDK warnings, signing detail) reached the terminal. His paste stops at `bun install`, so the exact trailing lines were not seen and were not reproduced here; this change is about where that output goes, not about the warnings themselves.

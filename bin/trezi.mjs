@@ -256,6 +256,11 @@ async function update(args) {
     .toString()
     .trim()
 
+  // One short line for the build in place of its timings, cache, bundle and signing detail.
+  try {
+    const { buildInfo, versionLabel } = await import('../scripts/version.mjs')
+    console.log(`Built ${versionLabel(buildInfo(repoRoot))}.`)
+  } catch {}
   if (before === after) {
     console.log('Trezi is already up to date.')
   } else {

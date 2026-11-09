@@ -74,12 +74,21 @@ shim(
 case "$1" in
   *.mjs|--version|-v) exec "${process.execPath}" "$@";;
   -p) echo 1.0.0; exit 0;;
-  install) echo "install $(git rev-parse --short HEAD)" >> "$TEST_STATE/calls.log"; echo 'bun dependency detail (fixture)'; [ -f "$TEST_STATE/fail-install" ] && exit 1; exit 0;;
+  install) echo "install $(git rev-parse --short HEAD)" >> "$TEST_STATE/calls.log"; echo 'bun dependency detail (fixture)'
+    echo 'Checked 276 installs across 283 packages (no changes) [86.00ms]'; [ -f "$TEST_STATE/fail-install" ] && exit 1; exit 0;;
   run) echo "run $2 $(git rev-parse --short HEAD)" >> "$TEST_STATE/calls.log"
     if [ -f "$TEST_STATE/fail-build" ]; then echo "build failed (fixture)" >&2; exit 1; fi
+    echo '$ bun scripts/build-native.mjs' >&2
+    echo '[build] TreziService: 0.0 s (cache hit 34dbd7ef8cad, release)'
+    echo '[build] JS bundles: 0.7 s'
+    echo '/x/src/native/PreviewMarkupView.swift:144:62: warning: result of call to '"'map'"' is unused [#NoUsage]' >&2
     echo 'swift warning: fixture compiler warning' >&2
+    echo "/x/src/native/ToolbarLayout.swift:46:9: warning: stored property 'plain' of 'Sendable'-conforming class 'ToolbarAccentImage' is mutable; this is an error in the Swift 6 language mode" >&2
+    echo '[build] Bun copy and signing: 0.6 s'
     echo 'signing detail: fixture' >&2
+    echo 'Signed Trezi: Trezi Local (41CAA592), designated => identifier "dev.praxis.native"'
     echo 'build timing: fixture'
+    echo '[build] total: 106.6 s (release profile)'
     [ -f "$TEST_STATE/big-output" ] && yes 'fixture build line padded to make the output large enough' | head -n 400000
     mkdir -p out/native/Trezi.app/Contents/MacOS out/native/Trezi.app/Contents/Helpers out/native/Trezi.app/Contents/Resources/backend && : > out/native/Trezi.app/Contents/Resources/backend/index.cjs && : > out/native/TreziService
     : > out/native/Trezi.app/Contents/MacOS/TreziHost && : > out/native/Trezi.app/Contents/Helpers/bun; exit 0;;
@@ -198,7 +207,13 @@ const seed = join(scratch, 'seed')
 git(scratch, 'init', '-q', '--bare', '--initial-branch=main', 'origin.git')
 git(scratch, 'init', '-q', '--initial-branch=main', 'seed')
 for (const dir of ['bin', 'scripts']) mkdirSync(join(seed, dir))
-for (const file of ['bin/trezi', 'bin/trezi.mjs', 'scripts/requirements.mjs', 'install.sh'])
+for (const file of [
+  'bin/trezi',
+  'bin/trezi.mjs',
+  'scripts/requirements.mjs',
+  'scripts/version.mjs',
+  'install.sh'
+])
   copyFileSync(join(root, file), join(seed, file))
 for (const file of ['bin/trezi', 'install.sh']) chmodSync(join(seed, file), 0o755)
 writeFileSync(
@@ -325,7 +340,7 @@ try {
   // Update: pull, install, build. Git's pull summary is shown; the install and build
   // output (dependency detail, compiler warnings, signing) goes to a private log only.
   const fixtureChatter =
-    /swift warning: fixture|signing detail: fixture|bun dependency detail|build timing: fixture/
+    /swift warning: fixture|signing detail: fixture|bun dependency detail|build timing: fixture|Checked \d+ installs|\[build\]|warning:|#NoUsage|Swift 6 language mode|Signed Trezi|build-native/
   const updateLog = (output) => {
     const path = output.match(/^(?:Install and build output|Full output): (.+)$/m)?.[1]
     assert.ok(path, `update log location: ${output}`)
@@ -337,12 +352,25 @@ try {
   assert.equal(updated.code, 0, updated.stderr)
   assert.match(updated.stdout, /Updated [0-9a-f]+ → [0-9a-f]+\./)
   assert.match(updated.stdout, /Fast-forward[\s\S]*two\.txt/, "Git's diff summary stays")
-  assert.match(updated.stdout, /==> Installing dependencies…\n==> Building Trezi…/)
-  assert.doesNotMatch(updated.stdout + updated.stderr, fixtureChatter)
   assert.match(
-    updateLog(updated.stdout),
-    /bun dependency detail[\s\S]*swift warning: fixture compiler warning[\s\S]*signing detail: fixture[\s\S]*build timing: fixture/
+    updated.stdout,
+    /==> Installing dependencies…\n==> Building Trezi…\nBuilt Trezi \S+ \(build \d+, [0-9a-f]+\)\.\n/
   )
+  assert.match(updated.stdout, /Run `trezi` to \(re\)start\./)
+  for (const line of [
+    /bun dependency detail/,
+    /swift warning: fixture compiler warning/,
+    /signing detail: fixture/,
+    /build timing: fixture/,
+    /Checked 276 installs/,
+    /\[build\] TreziService: 0\.0 s \(cache hit/,
+    /PreviewMarkupView\.swift:144:62: warning/,
+    /ToolbarLayout\.swift:46:9: warning/,
+    /Signed Trezi/,
+    /\[build\] total/
+  ])
+    assert.match(updateLog(updated.stdout), line, 'the log keeps the full install and build output')
+  assert.doesNotMatch(updated.stdout + updated.stderr, fixtureChatter)
   assert.doesNotMatch(
     updateLog(updated.stdout),
     /TEST_STATE|GIT_AUTHOR_EMAIL/,
@@ -359,6 +387,11 @@ try {
   assert.match(loud.stdout, /two-b\.txt/)
   assert.match(loud.stdout, /bun dependency detail[\s\S]*build timing: fixture/)
   assert.match(loud.stderr, /swift warning: fixture compiler warning[\s\S]*signing detail: fixture/)
+  assert.match(loud.stderr, /PreviewMarkupView\.swift:144:62: warning[\s\S]*Swift 6 language mode/)
+  assert.match(
+    loud.stdout,
+    /Checked 276 installs[\s\S]*\[build\] TreziService[\s\S]*Signed Trezi[\s\S]*\[build\] total/
+  )
   assert.match(updateLog(loud.stdout), /swift warning: fixture compiler warning/)
   assert.ok(!existsSync(join(state, 'opened')))
 

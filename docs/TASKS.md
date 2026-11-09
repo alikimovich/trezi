@@ -8,6 +8,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] `bin/trezi.mjs`: Git's pull output stays as before; `bun install` and `bun run build` stream to a private `update-*.log` under `~/Library/Logs/Trezi` (or `TREZI_LOG_DIR`), the terminal shows `==> Installing dependencies…` / `==> Building Trezi…` and the result with the log path. `--verbose` also streams both to the terminal. Unknown update options are refused; `update` alias and `--no-launch` kept.
 - [x] Failure: names the step, shows the last 20 log lines, the log path and the verbose rerun; exits with the step's own status (128 + signal when signalled). No in-memory buffer; build flags and safeguards untouched.
 - [x] Tests: `install-update` (concise default with diffstat, verbose stdout/stderr, alias + `--no-launch`, refused option, ~22 MB output, failing build and install), `trezi-cli` (options, status, streamed log, tail, signal, missing tool, help).
+- [x] Follow-up from Andrei's real tail: the fixture prints bun install timings, `[build]` cache/bundle/signing/total lines, `Signed Trezi` and the two real Swift warnings; default hides them all (log keeps them), success adds `Built Trezi <version> (build N, sha).`
 - [ ] Manager: independent review, CI and merge.
 
 ## LKM-590 — Simplify held-changes recovery to one clear contextual action
