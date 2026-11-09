@@ -12,6 +12,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Added
 
+- Up and Down arrows now step a focused numeric inspector field (Width/Height, Padding, Margin, Gap, Radius, Opacity, font sizes, number props and the like) by its step, or by 1, keeping units like px, decimals and each field's limits; the preview follows each press, and the value is staged like a typed one, never applied by itself (LKM-601).
 - Select text in an agent's reply and choose Reply (the button over the selection or the right-click menu) to quote it in the composer with your comment; collect several quoted comments and send them together, with or without a message.
 - When you ask the agent to remember a rule or guide, it now saves it to the project's memory (shown in Project memory, with Undo) and only says so once the save succeeded.
 

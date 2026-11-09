@@ -46,7 +46,17 @@ struct InspectorFieldView: View {
     @ObservedObject var model: InspectorModel
     @State var value: String = ""
     @FocusState var focused: Bool
-    func apply() { model.send("apply", field: field.id, value: value) }
+    /// An arrow step previewed a value Return has not staged yet (LKM-601).
+    @State var stepped = false
+    func apply() { stepped = false; model.send("apply", field: field.id, value: value) }
+    /// Up/Down on a focused number: preview each step like the slider; Return stages it, and
+    /// for a style (a draft, never a source write) so does leaving the field.
+    func step(_ direction: Double) -> String? {
+        guard let next = InspectorNumberStep.stepped(value, field: field, direction: direction) else { return nil }
+        value = next; stepped = true
+        model.send("preview", field: field.id, value: next)
+        return next
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
@@ -73,6 +83,11 @@ struct InspectorFieldView: View {
             } else {
                 HStack {
                     TextField(field.label, text: $value).textFieldStyle(.roundedBorder).focused($focused).onSubmit { apply() }
+                        .background(NumericArrowKeys(enabled: field.kind == "number" && field.disabled != true && model.state?.busy != true && InspectorNumberStep.isNumber(value), step: step))
+                        .onChange(of: focused) { now in
+                            if !now && stepped && field.id.hasPrefix("style:") && value != field.value { apply() }
+                            if !now { stepped = false }
+                        }
                     if field.kind == "color" {
                         ColorPicker("Color", selection: Binding(get: { Color(nsColor: editorColor(value)) }, set: { color in let c = NSColor(color).usingColorSpace(.deviceRGB) ?? .black; value = String(format: "rgba(%d, %d, %d, %.3f)", Int(c.redComponent * 255), Int(c.greenComponent * 255), Int(c.blueComponent * 255), c.alphaComponent); model.send("preview", field: field.id, value: value) })).labelsHidden()
                     }
@@ -137,6 +152,8 @@ private struct CompactLayoutValue: View {
     @State private var draft = ""
     @State private var submitted = ""
     @State private var cancelling = false
+    /// The text an arrow step just wrote: previewed once by onChange(of: draft), even with a unit.
+    @State private var stepped: String?
     @FocusState private var focused: Bool
     private var title: String {
         switch field.axis {
@@ -179,11 +196,12 @@ private struct CompactLayoutValue: View {
         focused = false
         model.send("cancel-preview", field: field.id)
     }
-    private func increment(_ direction: Double) {
-        guard let current = Double(draft), let step = field.step else { return }
-        let next = min(field.max ?? .infinity, max(field.min ?? -.infinity, current + direction * step))
-        draft = String(format: "%g", next)
-        model.send("preview", field: field.id, value: draft)
+    /// LKM-601: Up/Down on the focused field, through the same preview as typing; Return or
+    /// leaving the field stages the draft once, however many steps were taken.
+    private func step(_ direction: Double) -> String? {
+        guard field.kind == "number", let next = InspectorNumberStep.stepped(draft, field: field, direction: direction) else { return nil }
+        stepped = next; draft = next
+        return next
     }
     var body: some View {
         HStack(spacing: 5) {
@@ -194,14 +212,12 @@ private struct CompactLayoutValue: View {
                 .focused($focused).onSubmit(commit)
                 .onChange(of: focused) { next in if !next && !cancelling { commit() }; if next { cancelling = false } }
                 .onChange(of: draft) { next in
-                    if focused && !cancelling && bareNumber && next != field.value {
+                    let step = next == stepped; stepped = nil
+                    if focused && !cancelling && (step || (bareNumber && next != field.value)) {
                         model.send("preview", field: field.id, value: next)
                     }
                 }
-                .onMoveCommand { direction in
-                    if direction == .up { increment(1) }
-                    if direction == .down { increment(-1) }
-                }
+                .background(NumericArrowKeys(enabled: field.kind == "number" && field.disabled != true && model.state?.busy != true && InspectorNumberStep.isNumber(draft), step: step))
                 .onExitCommand(perform: cancel)
                 .accessibilityLabel(title + " " + (field.layout ?? ""))
                 .help(field.detail ?? title)

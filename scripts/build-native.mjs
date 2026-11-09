@@ -246,6 +246,7 @@ const host = compile(
     join(root, 'src/native/LayersLayout.swift'),
     join(root, 'src/native/LayersVerification.swift'),
     join(root, 'src/native/EditingInspector.swift'),
+    join(root, 'src/native/InspectorNumberStep.swift'),
     join(root, 'src/native/InspectorIslandVerification.swift'),
     join(root, 'src/native/PreviewPlatform.swift'),
     join(root, 'src/native/WorkspaceLayout.swift'),

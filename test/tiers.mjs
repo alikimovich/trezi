@@ -159,6 +159,7 @@ export const UNIT = [
   'inspector-apply-refresh',
   'inspector-apply-presentation',
   'inspector-footer',
+  'inspector-number-step',
   'style-class-rule',
   'style-pair',
   'native-slider-ticks',
