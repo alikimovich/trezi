@@ -173,6 +173,8 @@ export const UNIT = [
   'sidebar-marquee',
   'sidebar-project-actions',
   'sidebar-shimmer',
+  'sidebar-chats-loading',
+  'sidebar-chats-loader',
   'sidebar-thinking-render',
   'sidebar-evidence',
   'sidebar-sizing',

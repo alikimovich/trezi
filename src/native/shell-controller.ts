@@ -73,14 +73,23 @@ export class NativeShellController {
           .catch(() => {})
       }
     const rows: NativeShellState['rows'] = ws.projects.map((p) => {
+      // LKM-618: until the agent lists the project's open chats, its stored keys may name chats
+      // that reopen as History. Only those with a known title are shown; the rest stay listed
+      // here (identity, order, selection) and appear once the agent confirms and they load.
+      const pending = this.workspace.chatListPending(p.key)
+      let unresolved = false
       const chats = new Map(
-        p.sessionKeys.map((key) => {
+        p.sessionKeys.flatMap((key) => {
           const chat = this.chat.chats.get(key)
           // LKM-600: a first turn Trezi wrote (an inspector Apply) is named by its change.
           const first = chat?.messages.find((m) => m.role === 'user')
           const knownTitle =
             chat?.title || (first?.action ? `Apply ${first.action.line}` : first?.text)
           const loadingTitle = !knownTitle && !chat?.ready
+          if (pending && loadingTitle && !chat?.error) {
+            unresolved = true
+            return []
+          }
           const row: NativeShellRow = {
             id: `chat:${key}`,
             project: p.key,
@@ -92,7 +101,7 @@ export class NativeShellController {
             thinking: chat ? chatThinking(chat) : false,
             unread: chat?.unreadAnswer ?? false
           }
-          return [key, row]
+          return [[key, row] as const]
         })
       )
       // LKM-378: only the selected project nests its chats; the others stay compact.
@@ -104,6 +113,8 @@ export class NativeShellController {
         icon: this.icons.get(p.root),
         kind: 'project' as const,
         ...(recent && { recent: recent.flatMap((key) => chats.get(key) ?? []) }),
+        // One sidebar loading line for the whole list: no guessed chat count, never an error.
+        ...(recent && unresolved && ws.status.kind !== 'error' ? { chatsLoading: true } : {}),
         children: [
           ...chats.values(),
           ...(ws.history[p.key] ?? []).map((r) => ({

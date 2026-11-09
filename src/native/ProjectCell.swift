@@ -187,6 +187,9 @@ final class ShellRow: NSObject {
     let thinking: Bool
     let unread: Bool
     let loadingTitle: Bool
+    /// LKM-618, selected project only: its open-chat list is still being read, shown as one
+    /// `SidebarChatsLoaderCell` line (`kind` "chats-loading") after the chats already known.
+    let chatsLoading: Bool
     /// A history row's age ("3d"); the History toggle's chat count.
     let detail: String
     /// Bun sent favicon data for this row, decodable or not.
@@ -211,6 +214,7 @@ final class ShellRow: NSObject {
         thinking = data["thinking"] as? Bool ?? false
         unread = data["unread"] as? Bool ?? false
         loadingTitle = data["loadingTitle"] as? Bool ?? false
+        chatsLoading = data["chatsLoading"] as? Bool ?? false
         detail = data["detail"] as? String ?? ""
         // Decoded from this row's own snapshot entry, never from a later load: no icon can land on another row.
         offeredIcon = data["icon"] is String
@@ -223,6 +227,8 @@ final class ShellRow: NSObject {
         layoutNested(open: false, all: false)
     }
     func layoutNested(open: Bool, all: Bool) {
+        let recent = recent + (chatsLoading ? [ShellRow(["id":"chats-loading:\(project)", "kind":"chats-loading",
+                                                          "title":"Loading chats", "project":project])] : [])
         guard open, !past.isEmpty else { nested = recent; return }
         let toggle = ShellRow(["id":"history-toggle:\(project)", "kind":"history-toggle", "title":"History",
                                "detail":"\(past.count)", "project":project])

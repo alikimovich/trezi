@@ -18,6 +18,7 @@ const projectEntry = {
   previewKind: 'web'
 }
 const workspace = {
+  chatListPending: () => false,
   active: projectEntry,
   state: {
     projects: [projectEntry],

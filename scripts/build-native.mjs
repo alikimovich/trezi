@@ -147,6 +147,7 @@ const host = compile(
     join(root, 'src/native/ShellSelection.swift'),
     join(root, 'src/native/ProjectCell.swift'),
     join(root, 'src/native/SidebarChats.swift'),
+    join(root, 'src/native/SidebarChatsLoader.swift'),
     join(root, 'src/native/SidebarChatsAccessibility.swift'),
     join(root, 'src/native/SidebarMarquee.swift'),
     join(root, 'src/native/SidebarTitleShimmer.swift'),

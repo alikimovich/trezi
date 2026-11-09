@@ -85,6 +85,14 @@ export class NativeWorkspaceController {
   private selections = 0
   private jobs = new Map<string, Promise<void>>()
   private closing = new Set<string>()
+  /** LKM-618: projects whose `sessionKeys` came from the live agent this run. Until then the
+   *  list is the one stored at the last quit: `agent:open-project` keeps only the current chat
+   *  and sends its peers to History, so the stored keys are no evidence of open chats. */
+  private listed = new Set<string>()
+  /** The project's open-chat list is still the stored one, not yet read from the agent. */
+  chatListPending(key: string) {
+    return !this.listed.has(key)
+  }
   private closes = new Map<string, Promise<void>>()
   /** Mixed JS + native repos (LKM-276): the preview each runs, and whether it can switch. */
   readonly previewChoices = new Map<string, PreviewChoiceInfo>()
@@ -392,6 +400,7 @@ export class NativeWorkspaceController {
       }
       entry.sessionKeys = project.chats.map((c) => c.sessionKey)
       entry.activeSessionKey = project.activeSessionKey ?? entry.sessionKeys[0]
+      this.listed.add(entry.key)
       entry.chatSettings = Object.fromEntries(
         project.chats.map((c) => [c.sessionKey, chatAgentSettingsFromOptions(c.options)])
       )
@@ -468,6 +477,7 @@ export class NativeWorkspaceController {
           )
           entry.sessionKeys = [key]
           entry.activeSessionKey = key
+          this.listed.add(key)
           live = await this.services.invoke('agent:workspace-snapshot')
         }
         const project = live.projects.find((p) => p.projectKey === key)
@@ -475,6 +485,7 @@ export class NativeWorkspaceController {
           entry.sessionKeys = project.chats.map((c) => c.sessionKey)
           if (!entry.sessionKeys.includes(entry.activeSessionKey))
             entry.activeSessionKey = project.activeSessionKey ?? entry.sessionKeys[0]
+          this.listed.add(key)
           entry.chatSettings = Object.fromEntries(
             project.chats.map((c) => [c.sessionKey, chatAgentSettingsFromOptions(c.options)])
           )
@@ -613,6 +624,7 @@ export class NativeWorkspaceController {
     if (wasActive) ++this.intent
     const done = (async () => {
       try {
+        this.listed.delete(key)
         // Removed from the store before its session and server are torn down.
         await this.services.store.close(key)
         this.adopt()

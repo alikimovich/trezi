@@ -691,6 +691,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
     func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool { !((item as? ShellRow)?.nested.isEmpty ?? true) }
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
         let row = item as! ShellRow
+        if row.kind == "chats-loading" { return SidebarChatsLoaderCell(row: row) }
         if row.kind != "project" { return sidebarChatCell(row) }
         let cell = ProjectCell(); cell.selected = row.project == currentProject
         let symbol = row.kind == "project" ? "folder" : row.kind == "history" ? "clock" : "bubble.left"
@@ -824,6 +825,7 @@ final class NativeShell: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegat
         result.merge(moreInspect(toolbarItems["more"] as? NSMenuToolbarItem)) { _, new in new }
         result.merge(islandInspect()) { _, new in new }
         result.merge(sidebarChatsInspect()) { _, new in new }
+        result["sidebarChatsLoading"] = sidebarChatsLoadingInspect()
         return result
     }
     func perform(_ action: String, id: String?) -> Bool {

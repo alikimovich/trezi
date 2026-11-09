@@ -65,6 +65,7 @@ assert.ok(frames.at(-1).length > 1_000_000, 'the first frame carries the whole t
 
 const active = { key: 'p', root: ROOT, url: 'http://127.0.0.1:7784/', viewport: 'desktop' }
 const workspace = {
+  chatListPending: () => false,
   state: {
     projects: [{ key: 'p', root: ROOT, name: 'app', sessionKeys: ['long'] }],
     status: { kind: 'running' },

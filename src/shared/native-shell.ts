@@ -21,6 +21,9 @@ export interface NativeShellRow {
   children?: NativeShellRow[]
   /** LKM-378, selected project only: its open chats, newest first, nested under its sidebar row. */
   recent?: NativeShellRow[]
+  /** LKM-618, selected project only: its open-chat list is still being read, so a single
+   *  noninteractive loading line follows `recent` in place of chats with nothing to show yet. */
+  chatsLoading?: boolean
 }
 export interface BranchStatus {
   base: string
