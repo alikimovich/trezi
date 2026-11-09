@@ -21,7 +21,9 @@ Usage: trezi [folder | option]
   trezi               Open Trezi (builds it first if needed)
   trezi .             Open the current folder as a project
   trezi <folder>      Open that folder as a project
-  trezi --update      Pull the latest Trezi, reinstall and rebuild
+  trezi --update [--verbose]
+                      Pull the latest Trezi, reinstall and rebuild; --verbose
+                      shows the full install and build output as it runs
   trezi logs [--since 30m] [--follow]
                       Print Trezi's logs (~/Library/Logs/Trezi), newest last
   trezi --help        Show this help

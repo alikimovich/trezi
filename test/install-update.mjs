@@ -74,12 +74,22 @@ shim(
 case "$1" in
   *.mjs|--version|-v) exec "${process.execPath}" "$@";;
   -p) echo 1.0.0; exit 0;;
-  install) echo "install $(git rev-parse --short HEAD)" >> "$TEST_STATE/calls.log"; echo 'bun dependency detail (fixture)'; [ -f "$TEST_STATE/fail-install" ] && exit 1; exit 0;;
+  install) echo "install $(git rev-parse --short HEAD)" >> "$TEST_STATE/calls.log"; echo 'bun dependency detail (fixture)'
+    echo 'Checked 276 installs across 283 packages (no changes) [86.00ms]'; [ -f "$TEST_STATE/fail-install" ] && exit 1; exit 0;;
   run) echo "run $2 $(git rev-parse --short HEAD)" >> "$TEST_STATE/calls.log"
     if [ -f "$TEST_STATE/fail-build" ]; then echo "build failed (fixture)" >&2; exit 1; fi
+    echo '$ bun scripts/build-native.mjs' >&2
+    echo '[build] TreziService: 0.0 s (cache hit 34dbd7ef8cad, release)'
+    echo '[build] JS bundles: 0.7 s'
+    echo '/x/src/native/PreviewMarkupView.swift:144:62: warning: result of call to '"'map'"' is unused [#NoUsage]' >&2
     echo 'swift warning: fixture compiler warning' >&2
+    echo "/x/src/native/ToolbarLayout.swift:46:9: warning: stored property 'plain' of 'Sendable'-conforming class 'ToolbarAccentImage' is mutable; this is an error in the Swift 6 language mode" >&2
+    echo '[build] Bun copy and signing: 0.6 s'
     echo 'signing detail: fixture' >&2
+    echo 'Signed Trezi: Trezi Local (41CAA592), designated => identifier "dev.praxis.native"'
     echo 'build timing: fixture'
+    echo '[build] total: 106.6 s (release profile)'
+    [ -f "$TEST_STATE/big-output" ] && yes 'fixture build line padded to make the output large enough' | head -n 400000
     mkdir -p out/native/Trezi.app/Contents/MacOS out/native/Trezi.app/Contents/Helpers out/native/Trezi.app/Contents/Resources/backend && : > out/native/Trezi.app/Contents/Resources/backend/index.cjs && : > out/native/TreziService
     : > out/native/Trezi.app/Contents/MacOS/TreziHost && : > out/native/Trezi.app/Contents/Helpers/bun; exit 0;;
 esac
@@ -197,7 +207,13 @@ const seed = join(scratch, 'seed')
 git(scratch, 'init', '-q', '--bare', '--initial-branch=main', 'origin.git')
 git(scratch, 'init', '-q', '--initial-branch=main', 'seed')
 for (const dir of ['bin', 'scripts']) mkdirSync(join(seed, dir))
-for (const file of ['bin/trezi', 'bin/trezi.mjs', 'scripts/requirements.mjs', 'install.sh'])
+for (const file of [
+  'bin/trezi',
+  'bin/trezi.mjs',
+  'scripts/requirements.mjs',
+  'scripts/version.mjs',
+  'install.sh'
+])
   copyFileSync(join(root, file), join(seed, file))
 for (const file of ['bin/trezi', 'install.sh']) chmodSync(join(seed, file), 0o755)
 writeFileSync(
@@ -321,29 +337,126 @@ try {
   assert.ok(built())
   console.log('install-update: launch with and without a build')
 
-  // Update: pull, install, build.
+  // Update: pull, install, build. Git's pull summary is shown; the install and build
+  // output (dependency detail, compiler warnings, signing) goes to a private log only.
+  const fixtureChatter =
+    /swift warning: fixture|signing detail: fixture|bun dependency detail|build timing: fixture|Checked \d+ installs|\[build\]|warning:|#NoUsage|Swift 6 language mode|Signed Trezi|build-native/
+  const updateLog = (output) => {
+    const path = output.match(/^(?:Install and build output|Full output): (.+)$/m)?.[1]
+    assert.ok(path, `update log location: ${output}`)
+    assert.ok(path.startsWith(`${join(home, 'Library/Logs/Trezi')}/update-`))
+    return readFileSync(path, 'utf8')
+  }
   release('two')
   const updated = await exec(join(home, '.local/bin/trezi'), ['--update'])
   assert.equal(updated.code, 0, updated.stderr)
   assert.match(updated.stdout, /Updated [0-9a-f]+ → [0-9a-f]+\./)
+  assert.match(updated.stdout, /Fast-forward[\s\S]*two\.txt/, "Git's diff summary stays")
+  assert.match(
+    updated.stdout,
+    /==> Installing dependencies…\n==> Building Trezi…\nBuilt Trezi \S+ \(build \d+, [0-9a-f]+\)\.\n/
+  )
+  assert.match(updated.stdout, /Run `trezi` to \(re\)start\./)
+  for (const line of [
+    /bun dependency detail/,
+    /swift warning: fixture compiler warning/,
+    /signing detail: fixture/,
+    /build timing: fixture/,
+    /Checked 276 installs/,
+    /\[build\] TreziService: 0\.0 s \(cache hit/,
+    /PreviewMarkupView\.swift:144:62: warning/,
+    /ToolbarLayout\.swift:46:9: warning/,
+    /Signed Trezi/,
+    /\[build\] total/
+  ])
+    assert.match(updateLog(updated.stdout), line, 'the log keeps the full install and build output')
+  assert.doesNotMatch(updated.stdout + updated.stderr, fixtureChatter)
+  assert.doesNotMatch(
+    updateLog(updated.stdout),
+    /TEST_STATE|GIT_AUTHOR_EMAIL/,
+    'no environment in the log'
+  )
   assert.equal(head(), tip('main'))
   assert.deepEqual(log().slice(-2).map(step), ['install', 'run build'])
+  assert.ok(!existsSync(join(state, 'opened')), 'an update never launches Trezi')
+
+  // --verbose (through the `update` alias, with the legacy --no-launch) shows stdout and stderr live.
+  release('two-b')
+  const loud = await exec(join(home, '.local/bin/trezi'), ['update', '--verbose', '--no-launch'])
+  assert.equal(loud.code, 0, loud.stderr)
+  assert.match(loud.stdout, /two-b\.txt/)
+  assert.match(loud.stdout, /bun dependency detail[\s\S]*build timing: fixture/)
+  assert.match(loud.stderr, /swift warning: fixture compiler warning[\s\S]*signing detail: fixture/)
+  assert.match(loud.stderr, /PreviewMarkupView\.swift:144:62: warning[\s\S]*Swift 6 language mode/)
+  assert.match(
+    loud.stdout,
+    /Checked 276 installs[\s\S]*\[build\] TreziService[\s\S]*Signed Trezi[\s\S]*\[build\] total/
+  )
+  assert.match(updateLog(loud.stdout), /swift warning: fixture compiler warning/)
+  assert.ok(!existsSync(join(state, 'opened')))
+
+  // Unknown update options are refused before the checkout is touched.
+  const refusedFrom = lines('git.log').length
+  const odd = await exec(join(home, '.local/bin/trezi'), ['--update', '--quiet'])
+  assert.equal(odd.code, 1)
+  assert.match(
+    odd.stderr,
+    /Unknown option for trezi --update: --quiet\nUsage: trezi --update \[--verbose\]/
+  )
+  assert.deepEqual(lines('git.log').slice(refusedFrom), [])
+
+  // Large build output streams to the log without being held in memory or truncated.
+  writeFileSync(join(state, 'big-output'), '')
+  const big = await exec(join(home, '.local/bin/trezi'), ['--update'])
+  rmSync(join(state, 'big-output'))
+  assert.equal(big.code, 0, big.stderr)
+  assert.ok(big.stdout.length < 4096, `default output stays short (${big.stdout.length} bytes)`)
+  const bigLog = updateLog(big.stdout)
+  assert.ok(bigLog.length > 20_000_000, `the log holds all output (${bigLog.length} bytes)`)
+  assert.match(bigLog, /==> exit 0\n$/)
 
   // Interrupted at the build: the pull stays, the earlier build stays usable, the next run completes.
+  // The failure is short by default: stage, recent output, the log and the verbose rerun.
   release('three')
   writeFileSync(join(state, 'fail-build'), '')
   const broken = await exec(join(home, '.local/bin/trezi'), ['--update'])
-  assert.notEqual(broken.code, 0)
-  assert.match(broken.stderr, /Update failed while running `bun run build`/)
+  assert.equal(broken.code, 1, 'the build’s own exit status')
+  assert.match(
+    broken.stderr,
+    /Update failed while running `bun run build` \(building Trezi, exit code 1\)/
+  )
+  assert.match(broken.stderr, /Recent output:[\s\S]*build failed \(fixture\)/)
+  assert.match(broken.stderr, /To see all output as it runs: trezi --update --verbose/)
+  assert.match(updateLog(broken.stderr), /bun dependency detail[\s\S]*build failed \(fixture\)/)
+  assert.doesNotMatch(broken.stdout, /Updated|up to date|Run `trezi`/)
+  assert.doesNotMatch(broken.stdout, fixtureChatter)
   assert.equal(head(), tip('main'), 'the pull was not undone or repeated')
   assert.ok(built(), 'a failed rebuild leaves the previous build in place')
+  const brokenLoud = await exec(join(home, '.local/bin/trezi'), ['--update', '--verbose'])
+  assert.equal(brokenLoud.code, 1)
+  assert.match(
+    brokenLoud.stderr,
+    /build failed \(fixture\)[\s\S]*Update failed while running `bun run build`/
+  )
+  assert.doesNotMatch(brokenLoud.stderr, /To see all output/)
+  writeFileSync(join(state, 'fail-install'), '')
+  const noDeps = await exec(join(home, '.local/bin/trezi'), ['--update'])
+  rmSync(join(state, 'fail-install'))
+  assert.equal(noDeps.code, 1)
+  assert.match(
+    noDeps.stderr,
+    /Update failed while running `bun install` \(installing dependencies, exit code 1\)/
+  )
+  assert.equal(step(log().at(-1)), 'install', 'a failed install does not build')
   rmSync(join(state, 'fail-build'))
   const resumed = await exec(join(home, '.local/bin/trezi'), ['--update'])
   assert.equal(resumed.code, 0, resumed.stderr)
   assert.match(resumed.stdout, /already up to date/)
   assert.equal(step(log().at(-1)), 'run build')
   assert.ok(built())
-  console.log('install-update: update, interrupted update resumed')
+  console.log(
+    'install-update: update (concise, --verbose, update alias, refused option, large output), interrupted update resumed'
+  )
 
   // A checkout that cannot fast-forward stops before installing or building, and keeps its own commit.
   writeFileSync(join(trezi, 'mine.txt'), 'local\n')

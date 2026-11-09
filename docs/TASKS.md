@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-596 — Keep trezi --update concise and put detailed build diagnostics behind --verbose
+
+- [x] `bin/trezi.mjs`: Git's pull output stays as before; `bun install` and `bun run build` stream to a private `update-*.log` under `~/Library/Logs/Trezi` (or `TREZI_LOG_DIR`), the terminal shows `==> Installing dependencies…` / `==> Building Trezi…` and the result with the log path. `--verbose` also streams both to the terminal. Unknown update options are refused; `update` alias and `--no-launch` kept.
+- [x] Failure: names the step, shows the last 20 log lines, the log path and the verbose rerun; exits with the step's own status (128 + signal when signalled). No in-memory buffer; build flags and safeguards untouched.
+- [x] Tests: `install-update` (concise default with diffstat, verbose stdout/stderr, alias + `--no-launch`, refused option, ~22 MB output, failing build and install), `trezi-cli` (options, status, streamed log, tail, signal, missing tool, help).
+- [x] Follow-up from Andrei's real tail: the fixture prints bun install timings, `[build]` cache/bundle/signing/total lines, `Signed Trezi` and the two real Swift warnings; default hides them all (log keeps them), success adds `Built Trezi <version> (build N, sha).`
+- [ ] Manager: independent review, CI and merge.
+
 ## LKM-590 — Simplify held-changes recovery to one clear contextual action
 
 - [x] Projection (`src/native/held-card.ts`): while Trezi owns the hold, progress only (no disabled Retry/Resolve/Discard row); otherwise one primary action from structured state: failed landing → Try applying again (`agent:retry-landing`), staged overlap (`conflicts`, new on the park event from the backend's `resolvingFiles`) → Fix conflicts (`agent:resolve-conflict`), moved project → Combine with project edits (same Resolve). A hint line says what it does.
