@@ -155,6 +155,8 @@ export const UNIT = [
   'native-updates',
   'native-inspector',
   'inspector-draft-ownership',
+  'inspector-background-apply',
+  'inspector-footer',
   'style-class-rule',
   'style-pair',
   'native-slider-ticks',

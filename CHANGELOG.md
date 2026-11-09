@@ -15,6 +15,10 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 - Select text in an agent's reply and choose Reply (the button over the selection or the right-click menu) to quote it in the composer with your comment; collect several quoted comments and send them together, with or without a message.
 - When you ask the agent to remember a rule or guide, it now saves it to the project's memory (shown in Project memory, with Undo) and only says so once the save succeeded.
 
+### Changed
+
+- The inspector's Apply, Undo draft and Revert draft now stay pinned at the bottom of the panel while its fields scroll, and Apply runs as its own background agent instead of waiting for the current chat turn to finish; the chat keeps running, and a stale, conflicting, cancelled or failed Apply says why and keeps the draft (LKM-599).
+
 ### Fixed
 
 - A held change whose check failed no longer shows a Problem card while the next turn is already working on it and will check it again; recovery cards show one copy place (Copy details sits in More beside Copy support report).
