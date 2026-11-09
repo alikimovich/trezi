@@ -14,7 +14,7 @@ struct InspectorDraftState: Decodable {
     /// If/else rather than a nested ternary: four chained string ternaries are slow to type-check.
     var draftLabel: String {
         if conflict { return "Draft pending · source changed" }
-        if submitted { return "Applying draft · waiting for source and preview" }
+        if submitted { return "Applying in the background · waiting for source and preview" }
         if preview { return "Preview draft pending · \(count) values" }
         return "Draft pending · live preview unavailable"
     }
@@ -334,6 +334,40 @@ private struct CompactLayoutFields: View {
         }
     }
 }
+/// Apply, Undo draft and Revert draft, always in view at the island's foot (LKM-599).
+/// Apply runs as its own background agent, so it is never gated on the chat; it is
+/// disabled only while that Apply is in flight or the draft is stale.
+struct InspectorDraftFooter: View {
+    let draft: InspectorDraftState
+    let busy: Bool
+    @ObservedObject var model: InspectorModel
+    private var buttons: some View {
+        Group {
+            Button("Apply") { model.send("apply-drafts") }.disabled(busy || draft.submitted || draft.conflict)
+            Button("Undo draft") { model.send("undo-draft") }.disabled(busy || draft.submitted)
+            Button("Revert draft") { model.send("revert-draft") }.disabled(busy || draft.submitted)
+        }
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
+            HStack(spacing: 6) {
+                if draft.submitted { ProgressView().controlSize(.mini) }
+                Text(draft.draftLabel)
+                    .font(.caption).foregroundStyle(draft.conflict ? Color.orange : Color.secondary)
+                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+            }
+            ViewThatFits(in: .horizontal) {
+                HStack { buttons }
+                VStack(alignment: .leading, spacing: 4) { buttons }
+            }.controlSize(.small)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .layoutPriority(1)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Draft actions")
+    }
+}
 struct EditingInspectorContent: View {
     @ObservedObject var model: InspectorModel
     var body: some View {
@@ -354,17 +388,6 @@ struct EditingInspectorContent: View {
                 Picker("Inspector section", selection: Binding(get: { state.tab == "props" ? "props" : "styles" }, set: { model.send("tab", value: $0) })) { Text("Props").tag("props"); Text("Styles").tag("styles") }.pickerStyle(.segmented).labelsHidden()
                 if state.busy { ProgressView().controlSize(.small) }
                 if !state.error.isEmpty { Text(state.error).foregroundStyle(.red).font(.caption).textSelection(.enabled) }
-                if state.tab == "styles", let draft = state.draft {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(draft.draftLabel)
-                            .font(.caption).foregroundStyle(draft.conflict ? Color.orange : Color.secondary)
-                        HStack {
-                            Button("Apply") { model.send("apply-drafts") }.disabled(draft.submitted || draft.conflict)
-                            Button("Undo draft") { model.send("undo-draft") }.disabled(draft.submitted)
-                            Button("Revert draft") { model.send("revert-draft") }.disabled(draft.submitted)
-                        }.controlSize(.small)
-                    }
-                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         if state.tab == "styles" {
@@ -382,6 +405,11 @@ struct EditingInspectorContent: View {
                     // Trailing room keeps units and apply buttons clear of the overlay scroller.
                     }.id("\(state.root):\(state.generation)").padding(2).padding(.trailing, 10)
                 }.overlay(alignment: .topTrailing) { if model.pulse { UpdatedPulse().transition(.opacity) } }
+                // LKM-599: the draft's actions are pinned under the scrolling fields, inside
+                // the island: the scroll view gives up height first, never this row.
+                if state.tab == "styles", let draft = state.draft {
+                    InspectorDraftFooter(draft: draft, busy: state.busy, model: model)
+                }
             }.padding(.horizontal, FloatingIsland.padding).padding(.top, 4).padding(.bottom, FloatingIsland.padding).frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }

@@ -14,6 +14,7 @@ import type {
   NativeInspectorField,
   NativeInspectorState
 } from '../shared/native-inspector'
+import { projectRelative } from '../shared/project-path'
 import { describeSelectionForPrompt } from '../shared/selection-context'
 import { tokensForProp } from '../shared/token-match'
 
@@ -37,6 +38,21 @@ type HeldDraft = {
   conflict: boolean
   submittedTurn?: string
   completed?: boolean
+  /** Why a held Apply did not land, shown once its element is selected again. */
+  reason?: string
+}
+/**
+ * LKM-599: the immutable instruction for one Apply, captured when it is dispatched. Paths
+ * are project-relative (LKM-151): the background agent edits its own checkout, never the
+ * live one. The hashes are the versions the draft was staged on, read from the live project.
+ */
+export function applyDraftsPrompt(
+  element: SelectedElement | null,
+  root: string,
+  edits: string[]
+): string {
+  const source = element?.source ? projectRelative(element.source, root) : ''
+  return `Apply this single batch of Styles preview drafts to the actual application source. Target ${element?.selector ?? ''} from ${source}. Change only these properties of this element and preserve all other edits. If the file no longer holds this element, or it differs from the staged version in a way that touches this element, make no change and say why. Refuse an unsupported target. Edits:\n${edits.join('\n')}`
 }
 /** Exact submitted turns survive another chat or workspace starting its own Apply. */
 export class InspectorDraftTurns {
@@ -127,7 +143,8 @@ export class NativeInspectorController {
     this.submitted = !!held.submittedTurn
     this.draftConflict = held.conflict || (!held.submittedTurn && !hashes.every(Boolean))
     await this.projectDrafts()
-    if (held.completed !== undefined) await this.settleDraftTurn(held.completed, held.submittedTurn)
+    if (held.completed !== undefined)
+      await this.settleDraftTurn(held.completed, held.submittedTurn, held.reason)
   }
   private target() {
     const e = this.element
@@ -178,14 +195,25 @@ export class NativeInspectorController {
     }
     this.publishDraft()
   }
-  async settleDraftTurn(success: boolean, turn?: string) {
+  /** LKM-599: a background Apply that finished before its dispatch was recorded. */
+  private readonly early = new Map<string, { success: boolean; reason?: string }>()
+  /**
+   * The Apply operation `turn` (a chat turn, or a background Apply's id) finished.
+   * Only the draft that operation was dispatched for settles: a result for an id that no
+   * draft holds changes nothing, so a late result never clears a newer draft.
+   * `reason` is shown when it did not land. `dispatched` marks an id this inspector sent
+   * whose result may arrive before the dispatch is recorded.
+   */
+  async settleDraftTurn(success: boolean, turn?: string, reason?: string, dispatched = false) {
     if (!this.submitted || (turn && this.submittedTurn !== turn)) {
       for (const held of this.heldDrafts.values()) {
         if (held.submittedTurn && (!turn || held.submittedTurn === turn)) {
           held.completed = success
+          held.reason = reason
           return
         }
       }
+      if (turn && dispatched) this.early.set(turn, { success, reason })
       return
     }
     const generation = this.state.generation,
@@ -196,10 +224,13 @@ export class NativeInspectorController {
       // LKM-581: the selection changed while confirming; the draft was held for its
       // element and settles when that element is selected again.
       const held = this.heldDrafts.get(target)
-      if (held && held.submittedTurn === submittedTurn) held.completed = success
+      if (held && held.submittedTurn === submittedTurn) {
+        held.completed = success
+        held.reason = reason
+      }
       // Already restored (selected away and back): confirm it again on the current reads.
       else if (submittedTurn && this.submitted && this.submittedTurn === submittedTurn)
-        await this.settleDraftTurn(success, submittedTurn)
+        await this.settleDraftTurn(success, submittedTurn, reason)
       return
     }
     if (!this.submitted) return
@@ -209,7 +240,7 @@ export class NativeInspectorController {
     this.submittedTurn = undefined
     this.state.error = success
       ? 'Apply did not confirm source and rendered preview. The draft is still pending.'
-      : 'Apply failed. The preview draft is still pending.'
+      : (reason ?? 'Apply failed. The preview draft is still pending.')
     await this.projectDrafts()
   }
   private sequence = 0
@@ -893,6 +924,8 @@ export class NativeInspectorController {
         return
       }
       if (action.action === 'apply-drafts') {
+        // LKM-599: one Apply per draft at a time; a repeated press is not an error.
+        if (this.submitted || this.submitting) return
         if (
           !this.drafts.size ||
           this.submitted ||
@@ -937,18 +970,20 @@ export class NativeInspectorController {
                   .find((field) => field.id === draft.field)
                   ?.tokens?.find((item) => item.id === draft.tokenChoice)?.label
               : undefined
-            return `${draft.file} (SHA-256 ${draft.hash}): set ${draft.field.slice(6)} to ${draft.value}${token ? ` using token ${token}` : ''}`
+            return `${projectRelative(draft.file, root)} (staged against SHA-256 ${draft.hash}): set ${draft.field.slice(6)} to ${draft.value}${token ? ` using token ${token}` : ''}`
           })
-          const turn = await this.agent(
-            root,
-            `Apply this single batch of Styles preview drafts to the actual application source. Target ${element?.selector ?? ''} from ${element?.source ?? ''} in workspace ${root}. Preserve all other edits. Refuse any changed source hash, stale selection or unsupported target. Edits:\n${edits.join('\n')}`,
-            true
-          )
+          const turn = await this.agent(root, applyDraftsPrompt(element, root, edits), true)
           const submittedTurn = turn || `draft-${Date.now()}`
+          const early = this.early.get(submittedTurn)
+          this.early.delete(submittedTurn)
           if (root !== this.state.root || generation !== this.state.generation) {
             const held = this.heldDrafts.get(target)
             if (held) {
               held.submittedTurn = submittedTurn
+              if (early) {
+                held.completed = early.success
+                held.reason = early.reason
+              }
               this.state.edits = (this.state.edits ?? 0) + 1
               return
             }
@@ -956,8 +991,15 @@ export class NativeInspectorController {
           }
           this.submittedTurn = submittedTurn
           this.submitted = true
+          this.state.error = ''
           this.state.edits = (this.state.edits ?? 0) + 1
           this.publishDraft()
+          if (early) {
+            // Settled outside the try below: its confirmation reads must not hold `busy`.
+            queueMicrotask(() => {
+              void this.settleDraftTurn(early.success, submittedTurn, early.reason).catch(() => {})
+            })
+          }
         } finally {
           this.submitting = false
           this.state.busy = false

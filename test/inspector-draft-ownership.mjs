@@ -105,7 +105,7 @@ test('control: a gated staging read and Apply without a selection change', async
   await applying
   assert.equal(prompts.length, 1)
   assert.match(prompts[0], /Target div#a from card\.tsx:3/)
-  assert.match(prompts[0], /card\.tsx \(SHA-256 base\): set opacity to 0\.4/)
+  assert.match(prompts[0], /card\.tsx \(staged against SHA-256 base\): set opacity to 0\.4/)
   authoredHash = 'applied'
   authoredOpacity = '0.4'
   await c.settleDraftTurn(true, 'turn-1')

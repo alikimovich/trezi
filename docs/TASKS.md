@@ -69,6 +69,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Unit `test/editor-reload-save.mjs` (source write and read released by hand): 3 of 7 RED on main, 7 of 7 GREEN.
 - [ ] Manager: independent review, exact-head CI and merge.
 
+## LKM-599 — Pin inspector draft actions and run Apply independently of the active chat
+
+- [x] Apply / Undo draft / Revert draft pinned at the island's foot below the scrolling fields (`InspectorDraftFooter`), stacked at narrow widths, truthful disabled/progress states.
+- [x] Apply launches its own background worktree agent (`startApply`, existing spawn: admission cap, landing gate, reconciliation) with an immutable project-relative snapshot; the active chat is never used. Only non-repo/unsupported-backend projects fall back to the chat turn.
+- [x] `spawn-finished` settles only the draft dispatched under its id (LKM-581 routing); outcome-specific reasons; early results; repeated presses ignored.
+- [x] Unit `inspector-background-apply` and Swift off-screen `inspector-footer`; native smoke simulates the background agent and fails if Apply reaches the chat.
+- [ ] Manager: native `inspector`/`core` run with a foreground capture, independent review, exact-head CI and merge.
+
 ## LKM-582 — Turn tracker cleanup when preparation fails before send
 
 - [x] `agent:send` withdraws its own tracker reservation when the turn fails or is cancelled after the reservation and before the provider got it (a rejecting peer query, Stop during the peer read).

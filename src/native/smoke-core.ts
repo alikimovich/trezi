@@ -7,6 +7,7 @@ import { nativeChat } from './chat-runtime'
 import type { NativeContextController } from './context-controller'
 import { nativeDreamer } from './dreamer-controller'
 import type { NativeGitController } from './git-controller'
+import { setInspectorApplyDispatch } from './inspector-apply'
 import type { NativeInspectorController } from './inspector-controller'
 import { dispatchIPC, serviceEvents } from './platform'
 import { checkAgentIntegration, restoreAgentIntegration } from './smoke-agent-integration'
@@ -884,23 +885,27 @@ export async function runNativeCoreSmoke(
             () => inspector.state.draft?.count === 1,
             'one source-free Styles draft pending'
           )
+          // LKM-599: Apply runs as its own background agent, simulated here; the chat is
+          // never asked, so a command reaching it fails the check.
           const original = nativeChat.command.bind(nativeChat)
           const chat = nativeChat.get(nativeChat.active),
             priorTurn = chat.turn
           let commands = 0
-          nativeChat.command = async (command) => {
-            assert.equal(command.type, 'submit')
+          nativeChat.command = async () => {
+            throw new Error('Apply must not use the chat')
+          }
+          setInspectorApplyDispatch(async (_root, prompt) => {
             assert.ok(
-              command.text
-                ?.split('\n')
+              prompt
+                .split('\n')
                 .some((line) => line.endsWith(`: set ${field.slice(6)} to ${value}`)),
               'Apply names exactly the staged field/value, not a numeric prefix'
             )
             const binding = inspector.bindings.get(field)
             assert.ok(binding)
             assert.equal((await binding.apply(value)).applied, true)
-            chat.turn = `smoke-fixture-styles-${++commands}`
-          }
+            return { ok: true, spawnId: `smoke-fixture-styles-${++commands}` }
+          })
           try {
             const state = await host.request('inspectorInspect')
             await host.request('inspectorPerform', {
@@ -920,6 +925,7 @@ export async function runNativeCoreSmoke(
             )
           } finally {
             nativeChat.command = original
+            setInspectorApplyDispatch(null)
           }
           await inspector.settleDraftTurn(false)
           const state = await host.request('inspectorInspect')
@@ -980,10 +986,12 @@ export async function runNativeCoreSmoke(
         const batchChat = nativeChat.get(nativeChat.active)
         const batchPriorTurn = batchChat.turn
         let batchCommands = 0
-        nativeChat.command = async (command) => {
-          assert.equal(command.type, 'submit', 'Apply uses one regular chat agent operation')
-          assert.match(command.text ?? '', /opacity to 0\.8/)
-          assert.match(command.text ?? '', /set padding-vertical to 12(?:\n|$)/)
+        nativeChat.command = async () => {
+          throw new Error('Apply must not use the chat')
+        }
+        setInspectorApplyDispatch(async (_root, prompt) => {
+          assert.match(prompt, /opacity to 0\.8/)
+          assert.match(prompt, /set padding-vertical to 12(?:\n|$)/)
           batchCommands++
           const saved = await sourceOwner().commit(fixture, [
             {
@@ -993,8 +1001,8 @@ export async function runNativeCoreSmoke(
             }
           ])
           assert.equal(saved.ok, true, 'mock agent persisted one source transaction')
-          batchChat.turn = `smoke-style-batch-${batchCommands}`
-        }
+          return { ok: true, spawnId: `smoke-style-batch-${batchCommands}` }
+        })
         try {
           await host.request('inspectorPerform', {
             action: {
@@ -1004,10 +1012,11 @@ export async function runNativeCoreSmoke(
             }
           })
           // inspectorPerform only queues the action; keep the mock until the Apply used it.
-          await wait(() => batchCommands > 0, 'Apply reached the chat agent')
+          await wait(() => batchCommands > 0, 'Apply reached its background agent')
           await wait(() => inspector.state.draft?.submitted === true, 'Apply marked submitted')
         } finally {
           nativeChat.command = batchOriginalCommand
+          setInspectorApplyDispatch(null)
         }
         assert.equal(batchCommands, 1, 'two drafts submit one Apply operation')
         await wait(() => styleSource() === appliedSource, 'Styles batch persisted')
@@ -1197,16 +1206,18 @@ export async function runNativeCoreSmoke(
         const applyChat = nativeChat.get(nativeChat.active)
         const priorApplyTurn = applyChat.turn
         let applyCommands = 0
-        nativeChat.command = async (command) => {
-          assert.equal(command.type, 'submit', 'Apply uses the regular chat agent operation')
-          assert.match(command.text ?? '', /row-gap to 12px/)
+        nativeChat.command = async () => {
+          throw new Error('Apply must not use the chat')
+        }
+        setInspectorApplyDispatch(async (_root, prompt) => {
+          assert.match(prompt, /row-gap to 12px/)
           applyCommands++
           const binding = inspector.bindings.get('style:row-gap')
           assert.ok(binding, 'mock agent has the same source-bound Styles target')
           const result = await binding.apply('12px')
           assert.equal(result.applied, true, 'mock agent persisted the requested source edit')
-          applyChat.turn = `smoke-style-apply-${applyCommands}`
-        }
+          return { ok: true, spawnId: `smoke-style-apply-${applyCommands}` }
+        })
         try {
           await host.request('inspectorPerform', {
             action: {
@@ -1216,10 +1227,11 @@ export async function runNativeCoreSmoke(
             }
           })
           // inspectorPerform only queues the action; keep the mock until the Apply used it.
-          await wait(() => applyCommands > 0, 'Apply reached the chat agent')
+          await wait(() => applyCommands > 0, 'Apply reached its background agent')
           await wait(() => inspector.state.draft?.submitted === true, 'Apply marked submitted')
         } finally {
           nativeChat.command = originalCommand
+          setInspectorApplyDispatch(null)
         }
         assert.equal(applyCommands, 1, 'one Apply submits one agent operation')
         await wait(async () => {

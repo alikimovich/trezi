@@ -748,7 +748,13 @@ async function main() {
   serviceEvents.on('command', (channel, args, result) => {
     if (channel === 'agent:spawn-comment' && result?.ok)
       // The whole request: the card collapses it at a word and expands on click (LKM-193).
-      contextController.queued(args[2], result.spawnId, String(args[1]), !!result.queued)
+      // An automatic edit with its own label (an inspector Apply, LKM-599) shows that label.
+      contextController.queued(
+        args[2],
+        result.spawnId,
+        String(args[4] === 'text-edit' && typeof args[5] === 'string' ? args[5] : args[1]),
+        !!result.queued
+      )
     if (channel === 'annotations:add' || channel === 'annotations:remove')
       void contextController.notes(args[0]).catch((error) => workspaceController.reportError(error))
     if (channel === 'agent:close-project') contextController.projects.delete(args[0])

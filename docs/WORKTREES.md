@@ -83,8 +83,11 @@ from growing with every chat.
   chat rather than disappearing from the rail with its cancel control. Automatic edit
   completion is recorded in the activity log, not the chat transcript. The legacy
   `text-edit` event origin now covers committed props, styles, custom controls,
-  and layer moves as well as text. Failed/interrupted children keep partial work
-  recoverable without auto-applying it.
+  and layer moves as well as text, and the inspector's Styles Apply (LKM-599): Apply
+  starts its own background agent with the draft's captured target, values and base
+  hashes, never the active chat, and its `spawn-finished` settles only the draft it was
+  dispatched for. Failed/interrupted children keep partial work recoverable without
+  auto-applying it.
 
 ## What “conflict” means in Trezi
 
