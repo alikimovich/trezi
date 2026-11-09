@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-597 — Suppress transient recovery Problem cards and show one copy control
+
+- [x] Traced the screenshot to the held card's "Problem" variant from a pre-LKM-590 build; the same state on main still showed Problem during the next turn.
+- [x] A newer running turn that carries a failed hold (`failedTurn` ≠ current turn, not stopping) shows working progress, no row; report and Problem text kept; own/terminal failures, decisions and late parks unchanged.
+- [x] One copy place: "Copy details" moves into More when a card has one; the glyph stays only on cards without More (labelled for accessibility).
+- [x] Unit `held-card`, `stop-recovery-ui`, `chat-recovery-acceptance` (offscreen native card).
+- [ ] Manager: foreground native `chat` run, independent review, CI and merge.
+
 ## LKM-596 — Keep trezi --update concise and put detailed build diagnostics behind --verbose
 
 - [x] `bin/trezi.mjs`: Git's pull output stays as before; `bun install` and `bun run build` stream to a private `update-*.log` under `~/Library/Logs/Trezi` (or `TREZI_LOG_DIR`), the terminal shows `==> Installing dependencies…` / `==> Building Trezi…` and the result with the log path. `--verbose` also streams both to the terminal. Unknown update options are refused; `update` alias and `--no-launch` kept.

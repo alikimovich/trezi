@@ -112,6 +112,9 @@ export interface Chat extends NativeChatMirror {
   autoResolved?: 'tried' | 'failed'
   /** LKM-165: why the last landing failed; its work is held until Retry or Resolve. */
   landingError?: string
+  /** LKM-597: the turn whose landing failed (`''` when no turn is known). A newer turn
+   *  that runs on top of the hold owns it: its own landing checks the held work again. */
+  failedTurn?: string
   /** A chat-scoped recovery request, distinct from an agent turn. */
   recovery?: 'retry' | 'resolve' | 'discard'
   /** A deadline can stop the spinner while the original IPC still owns the mutation. */
@@ -529,6 +532,7 @@ export function reduce(chat: Chat, event: AgentEvent, now = Date.now()) {
       if (event.reason === 'interrupted') chat.stoppedTurn = chat.turn
       chat.landingError =
         event.reason === 'failed' ? (event.error ?? 'The landing failed.') : undefined
+      chat.failedTurn = chat.landingError ? (event.turn ?? chat.turn ?? '') : undefined
       chat.decision =
         event.state === 'parked' && event.decision
           ? { question: event.decision, branch: event.branch }

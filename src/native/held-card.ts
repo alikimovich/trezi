@@ -30,6 +30,21 @@ const discardAsk: MenuItem = { label: DISCARD_ASK_LABEL, action: 'discard-ask' }
 const report = (chat: Chat): MenuItem[] =>
   chat.recoveryReport ? [{ label: 'Copy support report', action: 'recovery-report' }] : []
 
+/**
+ * LKM-597: a newer turn is running on top of a failed landing. The next message continues
+ * on the held work (`needsResolve` is false for it) and that turn's own landing checks and
+ * applies it, so the earlier failure is an intermediate step it owns, not a Problem to act
+ * on. Structured: the running turn's id differs from the turn whose landing failed. The
+ * failed turn itself (still landing) and a stopping turn do not carry it.
+ */
+export const carriedByTurn = (chat: Chat) =>
+  !!chat.landingError &&
+  chat.failedTurn !== undefined &&
+  chat.isRunning &&
+  !chat.stopping &&
+  !!chat.turn &&
+  chat.turn !== chat.failedTurn
+
 /** A request, Keep or turn holds the chat: no recovery can start now. */
 export const recoveryBlocked = (chat: Chat) =>
   chat.isRunning || chat.sending || !!chat.recovery || !!chat.keepingStopped
@@ -66,7 +81,9 @@ function workingTitle(chat: Chat): string {
 export function heldCard(chat: Chat): NativeChatCard {
   // A running turn, check, or live recovery request still owns this park. Once that
   // operation ends, the same card exposes its actual reason and report.
+  const carried = carriedByTurn(chat)
   const owned =
+    carried ||
     (!!chat.recovery && !chat.recoveryTimedOut) ||
     !!chat.keepingStopped ||
     (chat.isRunning &&
@@ -79,7 +96,9 @@ export function heldCard(chat: Chat): NativeChatCard {
     return {
       id: 'conflict',
       title: workingTitle(chat),
-      detail: 'Trezi is working on the held changes. Nothing is needed from you yet.',
+      detail: carried
+        ? 'This turn continues on the held changes; Trezi checks them again when it finishes. Nothing is needed from you yet.'
+        : 'Trezi is working on the held changes. Nothing is needed from you yet.',
       busy,
       actions: [],
       ...(report(chat).length ? { menu: report(chat) } : {})

@@ -31,7 +31,7 @@ extension NativeChat {
     /// client, but every enabled button keeps a key-view proxy at its frame (as in
     /// DreamerAcceptance.swift). Cards follow the transcript, so with no question open the
     /// card's action row is the lowest row of proxies in the reading area: the copy-detail
-    /// glyph first when the card has one, then the actions, then the More menu when the card
+    /// glyph first when the card has one and no More menu (LKM-597), then the actions, then the More menu when the card
     /// has one. LKM-590: a held card never draws disabled buttons (while Trezi works it shows
     /// progress and no row), so a disabled action is a refusal, not a frame to derive. A card
     /// with no row has no buttons to find. `problem` says why the row could not be matched.
@@ -56,7 +56,7 @@ extension NativeChat {
         }
         // The More menu is an AppKit pop-up button (focusable on its own), not a proxy.
         if !(card.menu ?? []).isEmpty, recoveryMoreMenus.isEmpty { return ([], frames, "The \(id) card's More menu is not drawn") }
-        let glyph = card.fullDetail != nil ? 1 : 0
+        let glyph = card.showsCopyGlyph ? 1 : 0
         if card.actions.isEmpty && glyph == 0 { return ([], frames, nil) }
         let shape = "\(card.actions.count) actions\(glyph == 1 ? " and a copy glyph" : "")"
         guard let row = rows.first else { return ([], frames, "No rendered buttons in the reading area") }
@@ -94,9 +94,9 @@ extension NativeChat {
         func numbers(_ rect: NSRect) -> [Double] { [rect.minX, rect.minY, rect.width, rect.height].map { Double($0) } }
         return ["card": id, "present": card != nil, "title": card?.title ?? "", "detail": card?.detail ?? "",
                 "busy": card?.busy ?? false, "actions": card?.actions.map(\.label) ?? [],
-                "actionIds": card?.actions.map(\.action) ?? [], "copyGlyph": card?.fullDetail != nil,
+                "actionIds": card?.actions.map(\.action) ?? [], "copyGlyph": card?.showsCopyGlyph ?? false,
                 "disabled": card?.actions.map { $0.disabled ?? false } ?? [],
-                "menu": card?.menu?.map(\.label) ?? [], "hint": card?.hint ?? "",
+                "menu": card?.menuLabels ?? [], "hint": card?.hint ?? "",
                 "buttons": found.buttons.map { ["label": $0.label, "action": $0.action, "disabled": $0.disabled, "frame": numbers($0.frame),
                                                 "frameSource": "key-view proxy"] as [String: Any] },
                 "rows": found.rows.map { $0.map(numbers) }, "problem": found.problem ?? NSNull(),

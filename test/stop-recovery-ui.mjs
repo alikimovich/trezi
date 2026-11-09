@@ -752,7 +752,10 @@ await controller.run(chat, {
   selection: null,
   turn: {}
 })
-assert.equal(card('conflict').title, 'Problem', 'a later turn does not own the failed park')
+// LKM-597: a later turn continues on the held work and its landing checks the cumulative
+// batch again, so it owns the failed park: progress, nothing to press, the report kept.
+assert.equal(card('conflict').title, 'Working on held changes…', 'a later turn carries the park')
+assert.deepEqual(card('conflict').actions, [])
 assert.equal(chat.recoveryReport, terminalReport, 'the earlier report remains available')
 assert.ok(offers(card('conflict'), 'recovery-report'))
 emit({ type: 'done' })
