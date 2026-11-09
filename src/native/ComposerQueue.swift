@@ -6,6 +6,8 @@ struct QueuedComposerMessage: Decodable, Identifiable {
     let text: String
     let attachments: Int
     let chatUiId: String?
+    /// LKM-600: false for a turn Trezi wrote (an inspector Apply); it can be removed, not edited.
+    let editable: Bool?
     var label: String { text.isEmpty ? "\(attachments) attachment\(attachments == 1 ? "" : "s")" : text }
     var url: URL? {
         guard let url = URL(string: text), ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host != nil,
@@ -179,13 +181,13 @@ struct ComposerQueue: View {
                 }
             }.padding(.leading, Self.textGap)
             Button { action("queue-edit", message.id) } label: { controlLabel("pencil") }
-                .buttonStyle(.plain).foregroundStyle(.secondary).queueFrame("edit-\(index)")
+                .buttonStyle(.plain).foregroundStyle(.secondary).queueFrame("edit-\(index)").disabled(message.editable == false)
                 .help("Edit queued message").accessibilityLabel("Edit queued message: \(message.label)")
             Button { action("queue-remove", message.id) } label: { controlLabel("trash") }
                 .buttonStyle(.plain).foregroundStyle(.secondary).queueFrame("remove-\(index)")
                 .help("Remove queued message").accessibilityLabel("Remove queued message: \(message.label)")
             Menu {
-                Button("Edit message") { action("queue-edit", message.id) }
+                Button("Edit message") { action("queue-edit", message.id) }.disabled(message.editable == false)
                 Button("Copy message") { copyChatText(message.text) }.disabled(message.text.isEmpty)
                 Button("Remove from queue") { action("queue-remove", message.id) }
             } label: { Image(systemName: "ellipsis") }

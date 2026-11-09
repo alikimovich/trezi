@@ -1,6 +1,7 @@
 // LKM-599: the inspector's Apply runs as its own background agent (a worktree spawn).
 // What its rail row says, what the inspector says when it did not land, and the native
 // smoke's seam for a simulated agent.
+import type { AppAction } from '../shared/app-action'
 import { backgroundAgentOptions } from '../shared/background-model'
 import { agentOptionsFor } from '../shared/chat-settings'
 import { oneLine } from '../shared/selection-context'
@@ -12,17 +13,36 @@ type ApplyDispatch = (
   root: string,
   prompt: string,
   parent: string,
-  label: string
+  label: string,
+  action?: AppAction
 ) => Promise<{ ok: boolean; spawnId?: string; reason?: string } | null>
 let override: ApplyDispatch | null = null
 /** The native smoke's simulated background agent for Apply; null restores the real spawn. */
 export function setInspectorApplyDispatch(dispatch: ApplyDispatch | null): void {
   override = dispatch
 }
-/** The rail row's one line for a background Apply (LKM-599). */
-export function applyLabel(prompt: string): string {
-  const target = /Target (.+?) from /.exec(prompt)?.[1]
-  return target ? `Apply Styles draft to ${oneLine(target, 120)}` : 'Apply Styles draft'
+/**
+ * LKM-600: what the user sees for an Apply, from the draft itself (never parsed from the
+ * instruction): "font-weight: 400 on <span> in PresetPreview.tsx:82". No selector, hash
+ * or workspace path; the full instruction stays with the worker and the row's detail.
+ */
+export function applySummary(
+  element: { tag?: string; source?: string | null } | null,
+  changes: { prop: string; value: string }[]
+): string {
+  const shown = changes
+    .slice(0, 3)
+    .map((change) => `${oneLine(change.prop, 40)}: ${oneLine(change.value, 60)}`)
+    .join(', ')
+  const more = changes.length > 3 ? ` and ${changes.length - 3} more` : ''
+  const tag = element?.tag ? ` on <${oneLine(element.tag, 32)}>` : ''
+  const file = /([^/\\]+?)(?::(\d+))?(?::\d+)?$/.exec(element?.source ?? '')
+  const where = file ? ` in ${oneLine(file[1], 60)}${file[2] ? `:${file[2]}` : ''}` : ''
+  return `${shown || 'Styles draft'}${more}${tag}${where}`
+}
+/** The rail row's one line for a background Apply (LKM-599, LKM-600: the change, not the selector). */
+export function applyLabel(action: AppAction): string {
+  return `Apply ${action.summary}`
 }
 /** What the inspector says when a background Apply did not land (LKM-599). */
 export function applyOutcome(event: {
@@ -53,6 +73,7 @@ async function applyThroughChat(
   draftTurns: InspectorDraftTurns,
   root: string,
   prompt: string,
+  action: AppAction | undefined,
   why: string
 ): Promise<string> {
   const entry = workspace.state.projects.find((p) => p.root === root)
@@ -69,7 +90,8 @@ async function applyThroughChat(
   )
     throw new Error(`${why} Finish the current chat turn to apply this draft through the chat.`)
   const previousTurn = session.turn
-  await chat.command({ type: 'submit', chat: key, text: prompt })
+  // LKM-600: the chat shows Trezi's own row (the change), not the instruction as user text.
+  await chat.command({ type: 'submit', chat: key, text: prompt, ...(action ? { action } : {}) })
   if (!session.turn || session.turn === previousTurn)
     throw new Error('The chat could not start the Apply turn. The draft is still pending.')
   draftTurns.add(key, session.turn)
@@ -89,15 +111,16 @@ export async function startApply(
   draftTurns: InspectorDraftTurns,
   applies: Map<string, string>,
   root: string,
-  prompt: string
+  prompt: string,
+  action?: AppAction
 ): Promise<string> {
   const entry = workspace.state.projects.find((p) => p.root === root)
   if (!entry) throw new Error('The project is no longer open. The draft is still pending.')
   const parent = entry.activeSessionKey
   const current = chat.chats.get(parent)
-  const label = applyLabel(prompt)
+  const label = action ? applyLabel(action) : 'Apply Styles draft'
   const result = override
-    ? await override(root, prompt, parent, label)
+    ? await override(root, prompt, parent, label, action)
     : await workspace.services.invoke(
         'agent:spawn-comment',
         root,
@@ -105,7 +128,9 @@ export async function startApply(
         parent,
         backgroundAgentOptions(current ? agentOptionsFor(current.settings) : {}, 'text-edit'),
         'text-edit',
-        label
+        label,
+        undefined,
+        action
       )
   if (result?.ok && typeof result.spawnId === 'string') {
     applies.set(result.spawnId, root)
@@ -119,6 +144,7 @@ export async function startApply(
       draftTurns,
       root,
       prompt,
+      action,
       'This project is not a Git repository, so Apply cannot run in the background.'
     )
   if (result?.reason === 'unsupported-backend')
@@ -128,6 +154,7 @@ export async function startApply(
       draftTurns,
       root,
       prompt,
+      action,
       "This chat's provider cannot run Apply in the background."
     )
   throw new Error(

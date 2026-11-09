@@ -27,6 +27,9 @@ export interface NativeChatMessage {
   /** A comment agent's result (LKM-178): shown collapsed as "<title>: <line>", where
    *  `line` names the comment; `detail` (partial-changes note and summary) on expand. */
   comment?: { title: string; line: string; detail: string }
+  /** LKM-600: a user turn Trezi wrote (an inspector Apply): one collapsed app row whose
+   *  detail is the exact instruction; `text` keeps it whole for copy. */
+  action?: import('./app-action').AppActionRow
   /** A problem Trezi's own check of the preview found after a turn landed (LKM-195,
    *  LKM-210: a passing check adds no row), one compact warning row. */
   landingCheck?: NativeLandingCheck

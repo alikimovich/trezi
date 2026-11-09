@@ -1,5 +1,6 @@
 import { productLog } from '../main/product-log'
 import type { AgentEvent, ModelChoice, WorkspaceSnapshot } from '../shared/api'
+import { type AppAction, appActionRow } from '../shared/app-action'
 import { isChatBusy, isResolveNeeded } from '../shared/chat-busy'
 import {
   newQuote,
@@ -478,7 +479,8 @@ export class NativeChatController {
       chat.dismissed = false
       this.changed(chat)
       this.services.effect({ type: 'focus' })
-    } else await this.submit(chat, command.text)
+    } else if (command.action) await this.submitAction(chat, command.text, command.action)
+    else await this.submit(chat, command.text)
   }
   event(event: AgentEvent, fromStoppedKeepResult = false) {
     if (event.sessionId) {
@@ -837,6 +839,30 @@ export class NativeChatController {
     }
     this.changed(chat)
   }
+  /**
+   * LKM-600: a turn Trezi wrote itself (an inspector Apply on a project that cannot run a
+   * background agent). It is not the user's draft: the composer text, attachments, quotes
+   * and selection chip stay as they are, and the row shows `action`, not the instruction.
+   */
+  private async submitAction(chat: Chat, text: string, action: AppAction) {
+    if (chat.chat === HOME || chat.chat === this.start.planningKey || this.start.holds(this, chat))
+      return
+    if (!chat.ready || chat.switching || !text.trim()) return
+    const submission: Submission = {
+      id: crypto.randomUUID(),
+      text: text.trim(),
+      attachments: [],
+      selection: null,
+      turn: chat.context?.turn ?? {},
+      action
+    }
+    if (sendBlock(chat) || chat.queue.length) chat.queue.push(submission)
+    else {
+      chat.paused = false
+      void this.run(chat, submission)
+    }
+    this.changed(chat)
+  }
   /** LKM-338: a send waits for `wait` with its draft still in the composer, which shows it
    *  as sending after 1.5 s. False when Stop (`cancel-send`) or a newer send ended the wait. */
   private async holdDraft(chat: Chat, wait: Promise<unknown>) {
@@ -879,6 +905,7 @@ export class NativeChatController {
       statuses: [],
       segments: text ? [{ kind: 'text', text }] : [],
       ...(quotes.length ? { quotes } : {}),
+      ...(submission.action ? { action: appActionRow(submission.action, text) } : {}),
       selection: selection?.bubble,
       attachments: attachments.map((a) => ({
         id: a.id,
@@ -921,7 +948,8 @@ export class NativeChatController {
         plan.images.length ? plan.images : undefined,
         chat.chat,
         turn,
-        submission.id
+        submission.id,
+        submission.action
       )
       // The owner admitted the turn. A provider may be quiet before its first
       // event, so do not keep showing the earlier live-writer wait as current.

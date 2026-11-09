@@ -17,6 +17,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Changed
 
+- An inspector Apply now shows as one short Trezi row naming the change (for example "font-weight: 400 on <span>"), not as a long message you seemed to type; the full instruction stays one click away. If the preview is out of date for the edited file, Trezi refreshes it and finds the same element again before Apply starts, or keeps the draft and says to reselect or refresh (LKM-600).
 - The inspector's Apply, Undo draft and Revert draft now stay pinned at the bottom of the panel while its fields scroll, and Apply runs as its own background agent instead of waiting for the current chat turn to finish; the chat keeps running, and a stale, conflicting, cancelled or failed Apply says why and keeps the draft (LKM-599).
 
 ### Fixed

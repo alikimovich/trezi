@@ -7,6 +7,7 @@ import type {
   StyleReadResult,
   TokenSet
 } from '../shared/api'
+import type { AppAction } from '../shared/app-action'
 import { animationControlsPrompt } from '../shared/controls-prompt'
 import { numericValue, STYLE_PROP_META, sameCssValue, toCssText } from '../shared/css-values'
 import type {
@@ -17,6 +18,12 @@ import type {
 import { projectRelative } from '../shared/project-path'
 import { describeSelectionForPrompt } from '../shared/selection-context'
 import { tokensForProp } from '../shared/token-match'
+import { applySummary } from './inspector-apply'
+import {
+  type PreviewFreshness,
+  type PreviewRefreshOutcome,
+  refreshRefusal
+} from './inspector-preview-refresh'
 
 type Binding = {
   apply(value: string): Promise<any>
@@ -52,7 +59,7 @@ export function applyDraftsPrompt(
   edits: string[]
 ): string {
   const source = element?.source ? projectRelative(element.source, root) : ''
-  return `Apply this single batch of Styles preview drafts to the actual application source. Target ${element?.selector ?? ''} from ${source}. Change only these properties of this element and preserve all other edits. If the file no longer holds this element, or it differs from the staged version in a way that touches this element, make no change and say why. Refuse an unsupported target. Edits:\n${edits.join('\n')}`
+  return `Apply this single batch of Styles preview drafts to the actual application source. Target ${element?.selector ?? ''} from ${source}. Change only these properties of this element and preserve all other edits. If the file no longer holds this element, or it differs from the staged version in a way that touches this element, make no change and say why. Refuse an unsupported target. Judge this by the source only: Trezi checked the staged hashes before starting and refreshes its own preview when these files need it, so a preview identity marked stale is not a reason to refuse, and you do not need to reload the preview. Edits:\n${edits.join('\n')}`
 }
 /** Exact submitted turns survive another chat or workspace starting its own Apply. */
 export class InspectorDraftTurns {
@@ -88,6 +95,15 @@ export class NativeInspectorController {
   requestedFile: string | null = null
   expanded = new Set<string>()
   element: SelectedElement | null = null
+  /** LKM-600: whether the preview document predates a change to the draft's files. */
+  previewFreshness: (root: string, files: string[]) => Promise<PreviewFreshness> = async () =>
+    'current'
+  /** LKM-600: one bounded preview reload that re-resolves `element` uniquely. */
+  refreshPreview: (
+    root: string,
+    element: SelectedElement,
+    still: () => boolean
+  ) => Promise<PreviewRefreshOutcome> = async () => 'timeout'
   /** Every selection change, null when cleared; Layers follows it (LKM-179). */
   onElement: (element: SelectedElement | null) => void = () => {}
   inspection: PropInspection | null = null
@@ -295,7 +311,12 @@ export class NativeInspectorController {
     readonly invoke: (channel: string, ...args: any[]) => Promise<any>,
     readonly send: (channel: string, ...args: any[]) => Promise<any>,
     readonly render: (state: NativeInspectorState) => void,
-    readonly agent: (root: string, prompt: string, submit?: boolean) => Promise<void | string>,
+    readonly agent: (
+      root: string,
+      prompt: string,
+      submit?: boolean,
+      action?: AppAction
+    ) => Promise<void | string>,
     readonly setup: () => Promise<void>,
     readonly provider: () => string = () => 'claude',
     readonly setupReason: (root: string) => string = () =>
@@ -465,7 +486,14 @@ export class NativeInspectorController {
       (current.id ?? null) !== (element.id ?? null)
     )
       return false
+    // LKM-600: the same element (tag, source stamp, id, matched uniquely by the caller) may
+    // sit at a new structural selector after a reload; its draft follows it.
+    const draft = this.draftTarget && this.draftTarget === this.target()
     this.element = element
+    if (draft) {
+      this.draftTarget = this.target()
+      this.publishDraft()
+    }
     this.onElement(element)
     await this.refresh(true)
     return true
@@ -883,8 +911,8 @@ export class NativeInspectorController {
   }
   async action(action: NativeInspectorAction) {
     if (action.root !== this.state.root || action.generation !== this.state.generation) return
-    const root = this.state.root,
-      generation = this.state.generation
+    const root = this.state.root
+    let generation = this.state.generation
     try {
       if (action.action.startsWith('spacing:')) {
         const group = action.action.slice(8)
@@ -912,7 +940,7 @@ export class NativeInspectorController {
         return
       }
       if (action.action === 'undo-draft' || action.action === 'revert-draft') {
-        if (this.submitted) return
+        if (this.submitted || this.submitting) return
         this.drafts =
           action.action === 'undo-draft' ? (this.draftHistory.pop() ?? new Map()) : new Map()
         if (!this.drafts.size) {
@@ -934,8 +962,8 @@ export class NativeInspectorController {
           this.target() !== this.draftTarget
         )
           throw new Error('The selected element changed. Review or revert the preview draft.')
-        const target = this.draftTarget
-        const element = this.element
+        let target = this.draftTarget
+        let element = this.element
         const drafts = [...this.drafts.values()]
         this.submitting = true
         this.state.busy = true
@@ -943,27 +971,72 @@ export class NativeInspectorController {
         try {
           // LKM-581: a selection change during the reads holds this draft for its own
           // element; never flag, or submit an empty batch against, the new selection.
+          // LKM-600: a refreshed preview re-attaches the same element (tag, source stamp and
+          // id; possibly a new selector or generation), so after it the draft itself must
+          // still be the one captured here, on that element.
+          const identity = (e: SelectedElement | null) =>
+            e ? JSON.stringify([e.source, e.tag, e.id ?? null]) : ''
+          const original = identity(element)
           const moved = () =>
             root !== this.state.root ||
             generation !== this.state.generation ||
             this.target() !== target
-          for (const draft of drafts) {
-            const selectedFile = this.styleSourceFile(draft.field)
-            if (draft.file !== selectedFile)
-              throw new Error(
-                'The selected source file changed. Review or revert the preview draft.'
-              )
-            const current = await sourceOwner().read(root, draft.file)
-            if (moved())
-              throw new Error('The selected element changed. The preview draft is still pending.')
-            if (current.hash !== draft.hash) {
-              this.draftConflict = true
-              this.publishDraft()
-              throw new Error(
-                'Source changed while the preview draft was pending. Review or revert it.'
-              )
+          const draftKept = () =>
+            root === this.state.root &&
+            this.target() === this.draftTarget &&
+            identity(this.element) === original &&
+            !this.submitted &&
+            this.drafts.size === drafts.length &&
+            drafts.every((draft) => this.drafts.get(draft.field) === draft)
+          const verify = async (changed: () => boolean) => {
+            for (const draft of drafts) {
+              const selectedFile = this.styleSourceFile(draft.field)
+              if (draft.file !== selectedFile)
+                throw new Error(
+                  'The selected source file changed. Review or revert the preview draft.'
+                )
+              const current = await sourceOwner().read(root, draft.file)
+              if (changed())
+                throw new Error('The selected element changed. The preview draft is still pending.')
+              if (current.hash !== draft.hash) {
+                this.draftConflict = true
+                this.publishDraft()
+                throw new Error(
+                  'Source changed while the preview draft was pending. Review or revert it.'
+                )
+              }
             }
           }
+          await verify(moved)
+          // LKM-600: the app, not the agent, brings an out-of-date preview current: one
+          // bounded reload that re-resolves this element, then the same source checks.
+          const files = [...new Set(drafts.map((draft) => projectRelative(draft.file, root)))]
+          if (element && (await this.previewFreshness(root, files)) === 'stale') {
+            if (moved())
+              throw new Error('The selected element changed. The preview draft is still pending.')
+            const outcome = await this.refreshPreview(root, element, draftKept)
+            // The same draft, re-picked under a new generation, still owns this inspector:
+            // its outcome is shown there. A draft held for another selection is not.
+            if (draftKept()) {
+              generation = this.state.generation
+              target = this.draftTarget
+            }
+            if (outcome !== 'ok' || !draftKept())
+              throw new Error(refreshRefusal(outcome === 'ok' ? 'moved' : outcome))
+            element = this.element
+            await this.projectDrafts()
+            this.state.busy = true
+            this.publish()
+            if (!draftKept() || moved()) throw new Error(refreshRefusal('moved'))
+            await verify(moved)
+            if ((await this.previewFreshness(root, files)) === 'stale')
+              throw new Error(refreshRefusal('timeout'))
+            if (moved()) throw new Error(refreshRefusal('moved'))
+          }
+          const changes = drafts.map((draft) => ({
+            prop: draft.field.slice(6),
+            value: draft.value
+          }))
           const edits = drafts.map((draft) => {
             const token = draft.tokenChoice
               ? this.state.fields
@@ -972,7 +1045,10 @@ export class NativeInspectorController {
               : undefined
             return `${projectRelative(draft.file, root)} (staged against SHA-256 ${draft.hash}): set ${draft.field.slice(6)} to ${draft.value}${token ? ` using token ${token}` : ''}`
           })
-          const turn = await this.agent(root, applyDraftsPrompt(element, root, edits), true)
+          const turn = await this.agent(root, applyDraftsPrompt(element, root, edits), true, {
+            kind: 'inspector-apply',
+            summary: applySummary(element, changes)
+          })
           const submittedTurn = turn || `draft-${Date.now()}`
           const early = this.early.get(submittedTurn)
           this.early.delete(submittedTurn)

@@ -8,6 +8,7 @@ import type {
   SessionTranscriptEntry,
   SlashCommandItem
 } from '../shared/api'
+import { type AppAction, appActionRow } from '../shared/app-action'
 import { type DraftQuote, parseQuotedPrompt } from '../shared/chat-quotes'
 import { type ChatAgentSettings, defaultChatAgentSettings } from '../shared/chat-settings'
 import { migrateChatTitle } from '../shared/chat-title'
@@ -39,6 +40,8 @@ export interface Submission {
   quotes?: DraftQuote[]
   selection: NativeChatContext['selection']
   turn: NativeChatContext['turn']
+  /** LKM-600: Trezi wrote this turn (an inspector Apply); shown as an app row. */
+  action?: AppAction
 }
 export interface Chat extends NativeChatMirror {
   /** A live assistant answer arrived since this conversation was last visible. */
@@ -278,6 +281,7 @@ export function hydrate(chat: Chat, transcript: SessionTranscriptEntry[]) {
         statuses: [],
         segments: text ? [{ kind: 'text', text, at: entry.at }] : [],
         ...(quoted ? { quotes: quoted.quotes } : {}),
+        ...(entry.action ? { action: appActionRow(entry.action, entry.text) } : {}),
         attachments: entry.planningAttachments?.map((a) => ({
           id: crypto.randomUUID(),
           kind: a.type.startsWith('image/') ? 'image' : 'file',

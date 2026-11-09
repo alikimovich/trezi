@@ -80,7 +80,8 @@ export function queueNote(chat: Chat): { queueNote: string; queueCanSend: boolea
  *  attachments, quote cards and selection, and leaves the queue. Sending it queues it again. */
 export function editQueued(chat: Chat, id?: string): boolean {
   const index = chat.queue.findIndex((q) => `queued-${q.id}` === id)
-  if (index < 0) return false
+  // LKM-600: Trezi's own instruction never becomes the user's draft; Remove still works.
+  if (index < 0 || chat.queue[index].action) return false
   const [submission] = chat.queue.splice(index, 1)
   const draft = chat.text.trim()
   chat.text = draft ? `${submission.text}\n\n${draft}` : submission.text
@@ -95,6 +96,8 @@ export function editQueued(chat: Chat, id?: string): boolean {
 
 /** A queued message as its row shows it: a reply with quote cards says how many it carries. */
 export function queuedText(submission: Submission): string {
+  // LKM-600: Trezi's own turn is named by its summary, not its instruction.
+  if (submission.action) return `Apply ${submission.action.summary}`
   const count = submission.quotes?.length ?? 0
   if (!count) return submission.text
   const replies = count === 1 ? '1 quoted reply' : `${count} quoted replies`

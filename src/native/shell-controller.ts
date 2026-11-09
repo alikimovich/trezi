@@ -1,5 +1,6 @@
 import { previewLoads } from '../main/preview-loads'
 import { previewSpeed } from '../main/preview-speed'
+import { entryLine } from '../shared/app-action'
 import type { NativeChatEffect } from '../shared/native-chat-controller'
 import type { NativeShellAction, NativeShellRow, NativeShellState } from '../shared/native-shell'
 import type { NativeProjectStatus } from '../shared/native-workspace'
@@ -75,7 +76,10 @@ export class NativeShellController {
       const chats = new Map(
         p.sessionKeys.map((key) => {
           const chat = this.chat.chats.get(key)
-          const knownTitle = chat?.title || chat?.messages.find((m) => m.role === 'user')?.text
+          // LKM-600: a first turn Trezi wrote (an inspector Apply) is named by its change.
+          const first = chat?.messages.find((m) => m.role === 'user')
+          const knownTitle =
+            chat?.title || (first?.action ? `Apply ${first.action.line}` : first?.text)
           const loadingTitle = !knownTitle && !chat?.ready
           const row: NativeShellRow = {
             id: `chat:${key}`,
@@ -109,7 +113,8 @@ export class NativeShellController {
             kind: 'history' as const,
             detail: shortAgo(r.startedAt),
             title:
-              r.title || title(r.transcript.find((m) => m.role === 'user')?.text, 'Previous chat')
+              r.title ||
+              title(entryLine(r.transcript.find((m) => m.role === 'user')), 'Previous chat')
           }))
         ]
       }

@@ -12,6 +12,7 @@ import { turnBoundaries } from './chat-runtime'
 import type { NativeContextController } from './context-controller'
 import { applyOutcome, startApply } from './inspector-apply'
 import { InspectorDraftTurns, NativeInspectorController } from './inspector-controller'
+import { wireApplyRefresh } from './inspector-preview-refresh'
 import { NavigationController } from './navigation-controller'
 import { dispatchIPC, serviceEvents } from './platform'
 import { recordThreeDRoute } from './three-d-route-trace'
@@ -35,10 +36,10 @@ export function installNativeInspector(
     workspace.services.invoke,
     send,
     (state) => host.send('inspectorState', { state }),
-    async (root, prompt, submit) => {
+    async (root, prompt, submit, action) => {
       const entry = workspace.state.projects.find((p) => p.root === root)
       if (!entry) throw new Error('The project is no longer open. The draft is still pending.')
-      if (submit) return startApply(workspace, chat, draftTurns, applies, root, prompt)
+      if (submit) return startApply(workspace, chat, draftTurns, applies, root, prompt, action)
       else await visualEdit(root, prompt)
     },
     () => chat.action({ chat: chat.active, action: 'setup' }),
@@ -257,6 +258,8 @@ export function installNativeInspector(
       reattaching = false
     }
   }
+  // LKM-600: an Apply whose preview is out of date for its files refreshes it here first.
+  wireApplyRefresh(controller, workspace, host, reattachSelection)
   // LKM-344: turning the select tool off drops the page selection with its island, chip and
   // saved element, so neither restoreSelection nor reattachSelection brings it back on a reload.
   const selectToolOff = () => {

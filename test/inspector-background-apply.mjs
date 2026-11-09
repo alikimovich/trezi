@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict'
 import { setEditingOwner } from '../src/main/editing-owner.ts'
 import { setSourceOwner } from '../src/main/source-owner.ts'
-import { applyLabel, applyOutcome } from '../src/native/inspector-apply.ts'
+import { applyLabel, applyOutcome, applySummary } from '../src/native/inspector-apply.ts'
 import { NativeInspectorController } from '../src/native/inspector-controller.ts'
 import { installNativeInspector } from '../src/native/inspector-runtime.ts'
 import { NativeView, serviceEvents } from '../src/native/platform.ts'
@@ -122,12 +122,18 @@ test('Apply starts a background agent while the chat turn runs; the chat is unto
   assert.equal(inspector.state.draft?.count, 1)
   await act('apply-drafts')
   assert.equal(spawns.length, 1, 'one background Apply')
-  const [root, prompt, parent, options, origin, label] = spawns[0]
+  const [root, prompt, parent, options, origin, label, expectText, action] = spawns[0]
   assert.equal(root, '/p')
   assert.equal(parent, 'chat-1')
   assert.equal(origin, 'text-edit')
   assert.equal(options.permissionMode, undefined, 'the backend sets the spawn mode')
-  assert.equal(label, 'Apply Styles draft to span#a')
+  // LKM-600: the user sees the change, not the selector, hash or instruction.
+  assert.equal(label, 'Apply opacity: 0.4 on <span> in card.tsx:3')
+  assert.equal(expectText, undefined)
+  assert.deepEqual(action, {
+    kind: 'inspector-apply',
+    summary: 'opacity: 0.4 on <span> in card.tsx:3'
+  })
   assert.match(prompt, /Target span#a from src\/card\.tsx:3\./)
   assert.match(prompt, /src\/card\.tsx \(staged against SHA-256 base\): set opacity to 0\.4/)
   assert.doesNotMatch(prompt, /\/p\//, 'no live absolute path reaches the agent')
@@ -244,6 +250,12 @@ test('a project that cannot run a background agent falls back to the chat, truth
   await act('apply-drafts')
   assert.equal(commands.length, 1)
   assert.equal(commands[0].type, 'submit')
+  // LKM-600: the fallback turn carries its explicit origin; the chat shows the summary.
+  assert.deepEqual(commands[0].action, {
+    kind: 'inspector-apply',
+    summary: 'opacity: 0.4 on <span> in card.tsx:3'
+  })
+  assert.match(commands[0].text, /staged against SHA-256 base/, 'the worker keeps everything')
 })
 
 test('a result that arrives before its dispatch is recorded still settles it', async () => {
@@ -291,11 +303,21 @@ test('outcome text and rail label', () => {
     applyOutcome({ outcome: 'failed' }).reason,
     /^Apply failed\. The draft is still pending\.$/
   )
-  assert.equal(
-    applyLabel('x Target div.a > span from src/a.tsx. y'),
-    'Apply Styles draft to div.a > span'
+  const summary = applySummary(
+    { tag: 'span', source: '/Users/someone/dev/site/src/components/Preset.tsx:82:24' },
+    [{ prop: 'font-weight', value: '400' }]
   )
-  assert.equal(applyLabel('nothing'), 'Apply Styles draft')
+  assert.equal(summary, 'font-weight: 400 on <span> in Preset.tsx:82')
+  assert.equal(applyLabel({ kind: 'inspector-apply', summary }), `Apply ${summary}`)
+  assert.equal(
+    applySummary({ tag: 'div', source: null }, [
+      { prop: 'a', value: '1' },
+      { prop: 'b', value: '2' },
+      { prop: 'c', value: '3' },
+      { prop: 'd', value: '4' }
+    ]),
+    'a: 1, b: 2, c: 3 and 1 more on <div>'
+  )
 })
 
 let failed = 0

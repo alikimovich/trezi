@@ -86,7 +86,9 @@ export type NativeChatCommand =
   | { type: 'attach' }
   | { type: 'context'; context: NativeChatContext }
   | { type: 'layout'; layout: NativeChatLayout }
-  | { type: 'seed' | 'submit'; chat: string; text: string }
+  | { type: 'seed'; chat: string; text: string }
+  /** `action` (LKM-600): set only by app code that wrote `text` itself. */
+  | { type: 'submit'; chat: string; text: string; action?: import('./app-action').AppAction }
 export type NativeChatSnapshot = NativeChatState & NativeChatLayout
 
 declare global {

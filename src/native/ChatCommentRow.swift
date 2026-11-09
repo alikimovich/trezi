@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// A comment agent's result (LKM-178, `NativeChatMessage.comment`).
+/// A comment agent's result (LKM-178, `NativeChatMessage.comment`), or a turn Trezi wrote
+/// itself (LKM-600, `NativeChatMessage.action`): same title, line and expandable detail.
 struct ChatComment: Decodable { let title: String; let line: String; let detail: String }
 
 /// One collapsed line, "Comment applied: <the comment>", in a bubble lighter than the
@@ -32,8 +33,10 @@ struct ChatCommentRow: View {
             if expanded {
                 if !comment.detail.isEmpty { ChatMarkdown(source: comment.detail) }
                 HStack {
+                    // LKM-600: an app-written turn copies the exact instruction it sent.
+                    let copy = message.action == nil ? "Copy result" : "Copy instruction"
                     Button { copyChatText(message.text) } label: { Image(systemName: "doc.on.doc") }
-                        .help("Copy result").accessibilityLabel("Copy result")
+                        .help(copy).accessibilityLabel(copy)
                     if message.revertGroup != nil {
                         Button { model.action("revert", id: message.id) } label: { Image(systemName: "arrow.uturn.backward") }
                             .help("Revert this comment's edits").accessibilityLabel("Revert this comment's edits")

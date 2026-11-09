@@ -1,4 +1,5 @@
 import type { SessionRecord } from '../shared/api'
+import { entryLine } from '../shared/app-action'
 import type { NativeSheetController } from './sheets-runtime'
 export class NativeReviewController {
   constructor(
@@ -36,9 +37,11 @@ export class NativeReviewController {
             kind: 'readonly',
             value:
               record.transcript
-                .map(
-                  (t) =>
-                    `${t.role === 'user' ? 'You' : t.role === 'assistant' ? 'Trezi' : t.role}\n${t.text}`
+                .map((t) =>
+                  // LKM-600: Trezi's own turn is not "You"; its instruction stays readable.
+                  t.action
+                    ? `Trezi: ${entryLine(t)}\n${t.text}`
+                    : `${t.role === 'user' ? 'You' : t.role === 'assistant' ? 'Trezi' : t.role}\n${t.text}`
                 )
                 .join('\n\n') || 'No messages were saved for this chat.'
           }
@@ -61,7 +64,7 @@ export class NativeReviewController {
       async (action) => {
         const current = () => this.sheets.current?.state.id === action.id
         const title =
-          record.transcript.find((t) => t.role === 'user')?.text.slice(0, 70) ||
+          entryLine(record.transcript.find((t) => t.role === 'user'))?.slice(0, 70) ||
           'Trezi comment edit'
         if (action.action === 'rename') {
           const project = this.sheets.workspace.state.projects.find(

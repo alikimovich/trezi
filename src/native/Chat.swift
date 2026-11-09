@@ -11,6 +11,8 @@ struct ChatMessage: Decodable, Identifiable {
     let id: String; let role: String; let text: String; let segments: [ChatSegment]
     let at: Double?; let workedMs: Double?
     let attachments: [ChatAttachment]?; let selection: ChatSelection?; let revertGroup: String?
+    /// LKM-600: a turn Trezi wrote (an inspector Apply), drawn as one collapsed app row.
+    let action: ChatComment?
     let comment: ChatComment?; let landingCheck: ChatLandingCheck?; let liveChange: ChatLiveChange?; let incident: ChatIncident?
     /// LKM-555: the excerpts and comments a user message replied with (ChatQuotes.swift).
     let quotes: [ChatSentQuote]?
@@ -293,6 +295,7 @@ final class NativeChat: NSHostingView<ChatConversation> {
          "followRevision":model.followRevision, "controlInteraction":model.controlInteraction, "visibleMessageIDs":model.messageFrames.filter { $0.value.maxY > 0 && $0.value.minY < bounds.height - model.bottomInset }.map(\.key), "bottomPosition":model.bottomPosition, "composerInset":model.bottomInset, "height":bounds.height, "revealRevision":model.revealRevision, "revealAppliedRevision":model.revealAppliedRevision, "revealAttempt":model.revealAttempt, "islandPositions":model.islandPositions.mapValues { NSStringFromRect($0) }, "catPose":model.cat.pose, "catFrame":model.cat.frame, "catArtwork":!CatArtwork.frames.isEmpty, "frame":NSStringFromRect(frame), "native":true, "visible":!isHidden, "chat":model.snapshot?.chat ?? "", "messageCount":model.snapshot?.messages.count ?? 0,
          "messages":model.snapshot?.messages.map { ["id":$0.id,"role":$0.role,"text":$0.text] } ?? [],
          "comments":model.snapshot?.messages.compactMap { m in m.comment.map { ["id":m.id, "title":$0.title, "line":$0.line, "expanded":model.expandedComments.contains(m.id)] as [String: Any] } } ?? [],
+         "actions":model.snapshot?.messages.compactMap { m in m.action.map { ["id":m.id, "title":$0.title, "line":$0.line, "expanded":model.expandedComments.contains(m.id)] as [String: Any] } } ?? [],
          "landingChecks":model.snapshot?.messages.compactMap { m in m.landingCheck.map { ["id":m.id, "problem":$0.problem, "line":$0.line, "errors":$0.errors] as [String: Any] } } ?? [],
          "liveChanges":model.snapshot?.messages.compactMap { m in m.liveChange.map { ["id":m.id, "line":$0.line, "agent":$0.agent, "expanded":model.expandedComments.contains(m.id)] as [String: Any] } } ?? [],
          "incidents":model.snapshot?.messages.compactMap { m in m.incident.map { ["id":m.id, "class":$0.class, "line":$0.line, "detail":$0.detail, "expanded":model.expandedComments.contains(m.id)] as [String: Any] } } ?? [],
@@ -392,7 +395,7 @@ struct ChatConversation: View {
             }
             ForEach(snapshot.messages) { message in
                 Group {
-                    if let comment = message.comment { ChatCommentRow(message: message, comment: comment, model: model) }
+                    if let comment = message.comment ?? message.action { ChatCommentRow(message: message, comment: comment, model: model) }
                     else if let check = message.landingCheck { ChatLandingCheckRow(message: message, check: check, model: model) }
                     else if let change = message.liveChange { ChatLiveChangeRow(message: message, change: change, model: model) }
                     else if let incident = message.incident { ChatIncidentRow(message: message, incident: incident, model: model) }

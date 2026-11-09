@@ -107,6 +107,32 @@ func report(_ name: String, _ extra: [String: Any] = [:]) {
     print(String(data: try! JSONSerialization.data(withJSONObject: line), encoding: .utf8)!)
 }
 
+// LKM-600: an inspector Apply turn Trezi wrote is one collapsed app row, not a user bubble
+// holding the instruction; the same text sent by the user stays a bubble. Expanding the row
+// shows the exact instruction. Frames are the real NativeChat's own message frames, read
+// first, before the cases below leave the window key with a pressed card.
+let instruction = "Apply this single batch of Styles preview drafts to the actual application source. Target div > div > div:nth-of-type(2) > button:nth-of-type(2) > span from src/components/Preset.tsx:82:24. Change only these properties of this element and preserve all other edits. Edits:\nsrc/components/Preset.tsx (staged against SHA-256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef): set font-weight to 400"
+func appTurn(_ id: String, action: Bool) -> [String: Any] {
+    var message: [String: Any] = ["id": id, "role": "user", "text": instruction, "segments": [["kind": "text", "text": instruction]], "at": 1_760_000_000_000.0]
+    if action { message["action"] = ["title": "Apply Styles draft", "line": "font-weight: 400 on <span> in Preset.tsx:82", "detail": "Sent by Trezi to the agent:\n\n```text\n\(instruction)\n```"] }
+    return message
+}
+func pushTurns() {
+    let state: [String: Any] = ["visible": true, "chat": "app-action", "messages": [appTurn("app", action: true), appTurn("typed", action: false)], "running": false, "cards": [] as [Any], "questions": [] as [Any], "ready": true,
+                                "bounds": ["x": 0.0, "y": 0.0, "width": Double(width), "height": Double(height)], "composer": ["text": ""]]
+    chat.update(state, composer: composer)
+    chat.model.pressLatest()
+    spin(0.8)
+}
+pushTurns()
+let collapsed = chat.model.messageFrames["app"] ?? .zero, typed = chat.model.messageFrames["typed"] ?? .zero
+let actions = (chat.inspect()["actions"] as? [[String: Any]]) ?? []
+chat.model.toggleComment("app")
+chat.model.pressLatest()
+spin(0.8)
+let expanded = chat.model.messageFrames["app"] ?? .zero
+print(String(data: try! JSONSerialization.data(withJSONObject: ["case": "app-action", "collapsed": collapsed.height, "typed": typed.height, "expanded": expanded.height,
+                                                               "actions": actions.map { ["line": $0["line"] ?? "", "title": $0["title"] ?? ""] }]), encoding: .utf8)!)
 window.makeKey()
 push(conflict())
 report("idle", ["click": press("Combine with project edits"), "key": press("Combine with project edits", key: true),

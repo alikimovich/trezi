@@ -259,7 +259,9 @@ export function snapshot(
         id: `queued-${q.id}`,
         text: queuedText(q),
         attachments: q.attachments.length,
-        ...(q.chatUiId ? { chatUiId: q.chatUiId } : {})
+        ...(q.chatUiId ? { chatUiId: q.chatUiId } : {}),
+        // LKM-600: Trezi's own turn cannot be edited into the user's draft.
+        ...(q.action ? { editable: false } : {})
       })),
       queuePaused: chat.paused,
       ...queueNote(chat),
