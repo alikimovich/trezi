@@ -412,6 +412,8 @@ export class NativeChatController {
           live.isolation?.reason === 'failed'
             ? (live.isolation.error ?? 'The landing failed.')
             : undefined
+        // A turn running at hydration may be the one whose landing failed: never assume newer.
+        chat.failedTurn = chat.landingError ? (chat.turn ?? '') : undefined
         chat.decision = live.isolation?.decision
           ? { question: live.isolation.decision, branch: live.isolation.branch }
           : undefined
@@ -958,6 +960,7 @@ export class NativeChatController {
           chat.isolation = 'parked'
           chat.stopped = undefined
           chat.landingError = undefined
+          chat.failedTurn = undefined
           chat.conflicts = undefined
         } else {
           chat.isRunning = true

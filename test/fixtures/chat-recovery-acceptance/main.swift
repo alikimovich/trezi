@@ -121,6 +121,11 @@ push(conflict(report: true, full: true))
 report("problem", ["click": press("Combine with project edits")])
 push(conflict(), question: true)
 report("question")
+// LKM-597: a card with a collapsed detail and no More menu keeps its one copy glyph.
+var copyOnly = conflict(busy: "retry")
+copyOnly["fullDetail"] = "/fixture/project/fixture.ts"
+push(copyOnly)
+report("copy-only")
 
 // The cards the real controller draws (test/chat-recovery-acceptance.mjs passes them as
 // JSON): the parked card with its report, and the busy card of each held request.

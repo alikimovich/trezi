@@ -241,7 +241,7 @@ assert.deepEqual(
   ['recovery-report', 'landing-retry', 'discard-ask'],
   'the parked card offers its report'
 )
-assert.ok(parkedCard.fullDetail, 'the parked card has the copy glyph')
+assert.ok(parkedCard.fullDetail, 'the parked card copies its full detail (from More)')
 for (const [card, title] of [
   [busyRetry, 'Trying to apply again…'],
   [busyResolve, 'Combining with project edits…']
@@ -352,8 +352,24 @@ if (process.platform !== 'darwin') {
     assert.deepEqual(busyProblems(cases['real-retry'], 'retry'), [], `real retry: ${all}`)
     assert.deepEqual(busyProblems(cases['real-resolve'], 'resolve'), [], `real resolve: ${all}`)
     assert.notEqual(cases['real-parked-tall'].end, cases['real-parked'].end, `tall end: ${all}`)
-    // A Problem card: the copy glyph leads its row, the primary and the More menu follow.
+    // A Problem card (LKM-597): one copy place. The card has a More menu, so its full detail
+    // copies from there ("Copy details", beside "Copy support report") and its row draws
+    // no copy glyph: only the primary and More.
     assert.equal(problem.problem, null, `problem locator: ${all}`)
+    assert.equal(problem.copyGlyph, false, `no standalone copy glyph beside More: ${all}`)
+    assert.deepEqual(problem.rows[0]?.length, 1, `one proxy (the primary) in the row: ${all}`)
+    assert.equal(problem.more.length, 1, `one More menu: ${all}`)
+    assert.deepEqual(
+      problem.menu.filter((label) => label.startsWith('Copy')),
+      ['Copy details', 'Copy support report'],
+      `named copies, in More only: ${all}`
+    )
+    // A card with a collapsed detail and no More menu keeps its single copy glyph.
+    const copyOnly = cases['copy-only']
+    assert.equal(copyOnly?.copyGlyph, true, `copy-only glyph: ${all}`)
+    assert.equal(copyOnly.problem, null, `copy-only locator: ${all}`)
+    assert.deepEqual(copyOnly.rows[0]?.length, 1, `copy-only row: ${all}`)
+    assert.deepEqual(copyOnly.more, [], `copy-only has no More: ${all}`)
     assert.deepEqual(
       problem.buttons.map((b) => b.label),
       ['Combine with project edits']

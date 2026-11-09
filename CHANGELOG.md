@@ -17,6 +17,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 
+- A held change whose check failed no longer shows a Problem card while the next turn is already working on it and will check it again; recovery cards show one copy place (Copy details sits in More beside Copy support report).
 - The held-changes card now offers one clear next step (Try applying again, Fix conflicts, or Combine with project edits) with a line on what it does, shows only progress while Trezi is working, and keeps the support report, alternatives and Discard (which now asks first) in a More menu (LKM-590).
 - Narrowing the chat pane no longer hides New Chat: the chat title truncates and then hides first, and the viewport controls stay right of the chat/preview divider (LKM-588).
 - The chat/preview divider now sits exactly midway between New Chat and the viewport controls in the top bar (3 pt each side; the New Chat side was one pixel wider). The divider is now one point thick on Retina displays (LKM-587).

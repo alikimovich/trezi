@@ -256,4 +256,118 @@ states.clear()
   assert.equal(discards(), 1, 'one confirmed Discard, one request')
 }
 
+// LKM-597: a failed landing that a newer turn carries is an intermediate step, not a Problem.
+// The real controller path: the failed park writes the Problem and its report; the user's
+// next message (a new turn id) continues on the held work, and that turn's landing checks it.
+{
+  const controller = new NativeChatController({
+    invoke: async (channel) => {
+      if (channel === 'agent:workspace-snapshot')
+        return {
+          projects: [
+            {
+              root: '/fixture',
+              chats: [
+                {
+                  sessionKey: 'b',
+                  record: { transcript: [] },
+                  isRunning: false,
+                  options: { provider: 'claude' }
+                }
+              ]
+            }
+          ]
+        }
+      if (channel === 'providers:choices') return []
+      return { ok: true }
+    },
+    render: () => {},
+    effect: () => {}
+  })
+  await controller.command({
+    type: 'context',
+    context: {
+      chat: 'b',
+      root: '/fixture',
+      selection: null,
+      turn: {},
+      setup: { needed: false, dismissed: false, status: null },
+      tokens: { needed: false, dismissed: false },
+      notes: [],
+      spawns: []
+    }
+  })
+  const chat = controller.get('b')
+  const card = () => held(chat)
+  const failed = (turn, error) =>
+    controller.event({
+      projectKey: 'b',
+      type: 'isolation',
+      state: 'parked',
+      files,
+      reason: 'failed',
+      error,
+      turn
+    })
+  const gate = 'the check "webkit /portfolio" did not pass on this exact source (checks-failed).'
+  // Turn t1 ends held: while it is still landing it is its own outcome (no newer owner).
+  Object.assign(chat, { turn: 't1', isRunning: true, phase: 'applying', operation: 'landing' })
+  failed('t1', gate)
+  chat.recoveryReport = '/tmp/report.json'
+  Object.assign(chat, { isRunning: false, phase: 'thinking', operation: undefined })
+  assert.equal(card().title, 'Problem', 't1’s own unresolved outcome stays honest')
+  assert.deepEqual(row(card()), [['landing-retry', 'Try applying again', 'primary']])
+  // The user answers (a new turn): it continues on the held work, so it owns the hold.
+  Object.assign(chat, { turn: 't2', isRunning: true, phase: 'working' })
+  const working = card()
+  assert.equal(working.title, 'Working on held changes…')
+  assert.match(working.detail, /checks them again when it finishes\. Nothing is needed/)
+  assert.deepEqual(working.actions, [], 'no Retry/Resolve/Discard while the turn owns it')
+  assert.equal(working.hint, undefined)
+  assert.deepEqual(menu(working), ['recovery-report'], 'the earlier failure’s report is kept')
+  assert.equal(chat.recoveryProblem, `Problem: ${gate}`, 'diagnostic history is not erased')
+  // Its landing: still progress.
+  Object.assign(chat, { phase: 'applying', operation: 'landing' })
+  assert.equal(card().title, 'Checking changes…')
+  // A late park from t1 cannot restore the obsolete Problem over t2's work.
+  failed('t1', 'stale')
+  assert.equal(chat.landingError, gate)
+  assert.equal(card().title, 'Checking changes…')
+  // A stopping turn no longer carries it: the failure is shown again, with nothing to press yet.
+  chat.stopping = true
+  assert.equal(card().title, 'Problem')
+  assert.deepEqual(card().actions, [])
+  chat.stopping = false
+  // Terminal: t2's own landing also fails. The new reason, the one next action.
+  failed('t2', 'the check "webkit /" did not pass on this exact source (checks-failed).')
+  Object.assign(chat, { isRunning: false, phase: 'thinking', operation: undefined })
+  assert.equal(card().title, 'Problem')
+  assert.match(card().detail, /check "webkit \/" did not pass/)
+  assert.deepEqual(row(card()), [['landing-retry', 'Try applying again', 'primary']])
+  // t3 recovers: the merge clears the Problem and its report; a late t2 park cannot revive it.
+  Object.assign(chat, { turn: 't3', isRunning: true, phase: 'working' })
+  assert.equal(card().title, 'Working on held changes…')
+  controller.event({ projectKey: 'b', type: 'isolation', state: 'merged', files, turn: 't3' })
+  assert.equal(card(), undefined)
+  assert.equal(chat.recoveryProblem, undefined)
+  failed('t2', 'late')
+  assert.equal(card(), undefined, 'a late older park does not restore an obsolete Problem')
+  // A product decision is never presented as progress, even while a turn runs.
+  controller.event({
+    projectKey: 'b',
+    type: 'isolation',
+    state: 'parked',
+    files,
+    decision: 'Keep the old heading?',
+    turn: 't3'
+  })
+  const decision = snapshot(chat, []).cards.find((c) => c.id === 'conflict')
+  assert.equal(decision.title, 'Decision needed')
+  // Hydration cannot tell whether a running turn is the failed one: never assumed newer.
+  const fresh = newChat('hydrated')
+  reduce(fresh, { type: 'isolation', state: 'parked', files, reason: 'failed', error: 'x' })
+  Object.assign(fresh, { failedTurn: 'live', turn: 'live', isRunning: true, phase: 'working' })
+  assert.equal(held(fresh).title, 'Changes couldn’t be applied')
+}
+
 console.log('HELD-CARD PASS')

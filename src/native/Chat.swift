@@ -19,6 +19,15 @@ struct ChatMessage: Decodable, Identifiable {
 struct ChatAction: Decodable { let label: String; let action: String; let value: String?; let disabled: Bool?; let role: String? }
 /// `hint` says what the primary action does; `menu` holds the card's secondary actions (LKM-590).
 struct ChatCard: Decodable, Identifiable { let id: String; let title: String; let detail: String?; let fullDetail: String?; let actions: [ChatAction]; let agent: ChatAgentInfo?; let busy: Bool?; let hint: String?; let menu: [ChatAction]? }
+extension ChatCard {
+    /// LKM-597: one copy affordance per card. A card with a More menu copies its full
+    /// detail from that menu ("Copy details", beside "Copy support report"); only a card
+    /// without one draws the standalone copy glyph in its row.
+    var showsCopyGlyph: Bool { fullDetail != nil && (menu ?? []).isEmpty }
+    /// The More menu's labels as drawn: "Copy details" first when the detail copies there.
+    var menuLabels: [String] { (fullDetail != nil && !(menu ?? []).isEmpty ? [ChatCard.copyDetailsLabel] : []) + (menu ?? []).map(\.label) }
+    static let copyDetailsLabel = "Copy details"
+}
 struct ChatQuestionOption: Decodable { let label: String; let description: String? }
 struct ChatQuestion: Decodable { let header: String; let question: String; let options: [ChatQuestionOption]; let multiSelect: Bool }
 struct ChatQuestionRequest: Decodable, Identifiable { let id: String; let questions: [ChatQuestion] }
@@ -654,9 +663,10 @@ private struct NativeChatCard: View {
             if let hint = card.hint, !hint.isEmpty { Text(hint).font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
             if !card.actions.isEmpty || card.fullDetail != nil || !(card.menu ?? []).isEmpty {
                 HStack {
-                    // A collapsed detail copies with its full paths.
-                    if let full = card.fullDetail {
-                        Button { copyChatText(full) } label: { Image(systemName: "doc.on.doc") }.buttonStyle(ChatActionButtonStyle()).help("Copy with full paths")
+                    // A collapsed detail copies with its full paths: here only when the card has no More menu.
+                    if card.showsCopyGlyph, let full = card.fullDetail {
+                        Button { copyChatText(full) } label: { Image(systemName: "doc.on.doc") }.buttonStyle(ChatActionButtonStyle())
+                            .help("Copy details with full paths").accessibilityLabel("Copy details")
                     }
                     Spacer(minLength: 0)
                     ForEach(Array(card.actions.enumerated()), id: \.offset) { _, action in
@@ -665,6 +675,7 @@ private struct NativeChatCard: View {
                     // LKM-590: secondary actions (alternatives, the support report, Discard) in one menu.
                     if let menu = card.menu, !menu.isEmpty {
                         Menu {
+                            if let full = card.fullDetail { Button(ChatCard.copyDetailsLabel) { copyChatText(full) } }
                             ForEach(Array(menu.enumerated()), id: \.offset) { _, item in
                                 Button(item.label) { model.action(item.action, id: card.id, value: item.value) }
                             }
