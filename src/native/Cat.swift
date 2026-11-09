@@ -3,7 +3,8 @@ import SwiftUI
 
 struct CatFrame: Decodable { let duration: Double; let pixels: [[Double]] }
 enum CatArtwork {
-    static let frames: [String: [CatFrame]] = {
+    /// Settable for the unit fixtures, which have no app bundle.
+    static var frames: [String: [CatFrame]] = {
         guard let url = Bundle.main.url(forResource: "cat", withExtension: "json"),
               let data = try? Data(contentsOf: url), let result = try? JSONDecoder().decode([String: [CatFrame]].self, from: data) else { return [:] }
         return result

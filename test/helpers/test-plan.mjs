@@ -74,7 +74,8 @@ export const UI_SOURCES = {
       'sidebar-marquee',
       'sidebar-marquee-resume',
       'sidebar-project-actions',
-      'sidebar-shimmer'
+      'sidebar-shimmer',
+      'sidebar-chats-loader'
     ],
     native: ['sidebar', 'settings']
   }

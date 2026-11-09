@@ -85,6 +85,7 @@ const alpha = {
 }
 const beta = { key: 'beta', root: '/beta', name: 'Beta', activeSessionKey: 'z', sessionKeys: ['z'] }
 const workspace = {
+  chatListPending: () => false,
   active: alpha,
   state: {
     projects: [alpha, beta],

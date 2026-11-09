@@ -15,6 +15,7 @@ const active = {
   previewKind: 'web'
 }
 const workspace = {
+  chatListPending: () => false,
   active,
   state: {
     projects: [active],
@@ -154,6 +155,7 @@ assert.equal(renders.at(-1).previewURL, active.url)
   })
   const [a, b, c] = ['a', 'b', 'c'].map(project)
   const iconWorkspace = {
+    chatListPending: () => false,
     active: a,
     state: {
       projects: [a, b],
