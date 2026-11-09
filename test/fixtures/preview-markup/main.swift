@@ -605,7 +605,9 @@ var stalled: ((Result<PreviewMarkup.Captured, PreviewMarkup.Failure>) -> Void)?
 let stalling = PreviewMarkup(parent: parent, emit: { events.append($0) }, refusal: { nil }, capture: { stalled = $0 }, restoreFocus: { _ in }, changed: {}, captureTimeout: 0.2)
 stalling.begin("s6")
 check(stalling.session == "s6" && stalling.overlay == nil, "a stalled capture is waited for")
-RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+// Spin until the 0.2s timeout fires; a loaded CI runner can miss a fixed short wait.
+let timeoutDeadline = Date().addingTimeInterval(10)
+while stalling.session != nil && Date() < timeoutDeadline { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
 check(state() == "failed" && stalling.session == nil, "it times out and releases the session")
 check((events.last?["message"] as? String)?.contains("did not answer") == true, "with a message the user reads")
 check(events.last?["session"] as? String == "s6", "for its own session")
@@ -615,7 +617,10 @@ check(stalling.overlay == nil && stalling.session == nil, "a late answer opens n
 stalling.begin("s7")
 check(stalling.session == "s7", "and the next press starts a new session")
 stalled?(.success(captured(solid(400, 300, .white)))); stalled = nil
-RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+let openDeadline = Date().addingTimeInterval(10)
+while stalling.overlay == nil && Date() < openDeadline { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+// Then outlast the 0.2s timeout so a timer that was not cancelled would show.
+RunLoop.main.run(until: Date().addingTimeInterval(0.4))
 check(stalling.overlay != nil && state() == "open", "a capture that answered in time is not timed out")
 stalling.cancel()
 
