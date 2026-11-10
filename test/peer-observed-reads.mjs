@@ -35,18 +35,31 @@ git(repo, 'commit', '-qm', 'base')
 const base = git(repo, 'rev-parse', 'HEAD')
 
 const log = join(home, 'git.log')
+// The stand-in notes here when real Git has taken its snapshot (before its 400 ms answer).
+const seen = join(home, 'git.seen')
 const bin = join(home, 'bin')
 mkdirSync(bin)
 writeFileSync(
   join(bin, 'git'),
-  `#!/bin/sh\necho "$@" >> '${log}'\n[ -e '${join(home, 'fail')}' ] && { sleep 0.4; exit 1; }\nout=$('${realGit}' "$@")\nstatus=$?\nsleep 0.4\nprintf '%s\\n' "$out"\nexit $status\n`
+  `#!/bin/sh\necho "$@" >> '${log}'\n[ -e '${join(home, 'fail')}' ] && { sleep 0.4; exit 1; }\nout=$('${realGit}' "$@")\nstatus=$?\necho "$@" >> '${seen}'\nsleep 0.4\nprintf '%s\\n' "$out"\nexit $status\n`
 )
 chmodSync(join(bin, 'git'), 0o755)
 process.env.PATH = `${bin}:${process.env.PATH}`
-const reads = () =>
-  readFileSync(log, 'utf8')
-    .split('\n')
-    .filter((line) => / diff /.test(line)).length
+const diffs = (file) => {
+  try {
+    return readFileSync(file, 'utf8')
+      .split('\n')
+      .filter((line) => / diff /.test(line)).length
+  } catch {
+    return 0
+  }
+}
+const reads = () => diffs(log)
+// Wait until the early read's Git has looked at the tree, not a fixed pause: on a loaded
+// host spawning it can take longer than any guess, and then it would see the later change.
+const snapshotTaken = async (count) => {
+  for (let waited = 0; diffs(seen) < count && waited < 10_000; waited += 10) await pause(10)
+}
 
 try {
   await startPeer(
@@ -77,8 +90,9 @@ try {
   let alsoLate
   for (let attempt = 1; ; attempt++) {
     const before = reads()
+    const seenBefore = diffs(seen)
     const early = peerObservedFiles(repo, [], 'reader')
-    await pause(150)
+    await snapshotTaken(seenBefore + 1)
     writeFileSync(join(repo, 'a.txt'), 'one\ntwo\n')
     late = peerObservedFiles(repo, [], 'reader')
     alsoLate = peerObservedFiles(repo, [], 'reader')

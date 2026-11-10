@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-09 — LKM-618 CI: `peer-observed-reads` waits for the early read's snapshot
+
+PR 456's unit shard 1 failed in `peer-observed-reads` (not touched by this branch): the early read answered `['a.txt']`. The test changed the file a fixed 150 ms after starting the early read; on a loaded runner the stand-in `git` had not yet spawned real Git, so the "early" read saw the change. The stand-in now notes when real Git has taken its snapshot (before its 400 ms answer), and the test waits for that note instead of sleeping. The early read is still in flight for ~400 ms after the change, so the stale-share regression it guards still fails. `peer-observed-reads` 3/3 PASS; `--changed=origin/main`: 340 PASS, 1 SKIP; lint exit 0, typecheck pass.
+
 ## 2026-11-09 — LKM-618 native acceptance: sidebar group and foreground loader capture; active chat kept as a row
 
 Remaining acceptance after PR 455 (merged at af7f45bb). No implementation was replayed; only the defect the native check reproduced was fixed.
