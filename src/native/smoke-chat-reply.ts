@@ -18,6 +18,9 @@ const SECOND = 'approve the filter-branch command when it prompts'
 const SHORT = 'Done, the backup is safe.'
 const SHORT_PART = 'the backup is safe'
 const MESSAGE = 'Also keep the backup until I confirm.'
+// LKM-627: the reported shape, a short message that wraps onto two lines (synthetic text).
+const TIGHT = 'Merged PR #182. The footer version is now **3.10.15** on `main`.'
+const TIGHT_TEXT = 'Merged PR #182. The footer version is now 3.10.15 on main.'
 
 /** Offscreen windows cannot be captured: the logic still runs, the captures are skipped. */
 const background = () => process.env.TREZI_NATIVE_BACKGROUND_TEST === '1'
@@ -51,30 +54,58 @@ export async function checkChatReply(host: NativeBridge, artifacts: string) {
     throw new Error(`Chat reply: timed out waiting for ${what}`)
   }
   const cards = async (): Promise<Card[]> => (await host.request('composerInspect')).quotes.cards
-  const reply = async (select: string, capture = false, message = id, menu = false) => {
+  const reply = async (
+    select: string,
+    capture: string | false = false,
+    message = id,
+    menu = false,
+    strict = false
+  ) => {
     const result = await host.request('chatReply', {
       message,
       select,
       click: !menu,
       menuReply: menu,
-      capture: capture && !background()
+      capture: capture !== false && !background()
     })
     assert.equal(result.identity, `${message}#0`)
-    assert.ok(result.buttonVisible, `Reply shows over "${select}"`)
+    assert.ok(result.buttonVisible, `Reply shows next to "${select}"`)
+    // LKM-627: a floating action over the transcript, clear of every line of text, and the
+    // first thing the window hit-tests at its centre (the click below goes through that).
+    assert.equal(
+      result.buttonHost,
+      'chat-overlay',
+      'Reply floats over the chat, not in the text view'
+    )
     assert.ok(
       result.buttonInside,
-      `Reply is inside the text view ${result.buttonFrame} ${result.bounds}`
+      `Reply ${result.buttonFrame} is inside the reading area ${result.readingArea}`
     )
+    assert.deepEqual(
+      result.coversSelection,
+      [],
+      `Reply ${result.buttonFrame} is not on the selected glyphs ${result.selectionLines}`
+    )
+    // Clear of every line where the transcript leaves room (the reported two-line message);
+    // a dense paragraph filling the view may leave none, so that is only asserted there.
+    if (strict)
+      assert.deepEqual(
+        result.coversText,
+        [],
+        `Reply ${result.buttonFrame} covers no line of text (selection ${result.selectionLines})`
+      )
+    assert.ok(result.hitIsButton, `Reply is foremost at its centre, not ${result.hit}`)
     assert.equal(result.buttonTitle, 'Reply')
     assert.equal(result.menu[0], 'Reply', `the menu leads with Reply: ${result.menu}`)
     assert.ok(result.menu.includes('Copy'), `the text view's own menu keeps Copy: ${result.menu}`)
     assert.equal(result.copied, result.excerpt, 'Copy still copies the selection')
     assert.equal(result.selectionAfter, 0, 'Reply clears the selection')
     if (capture && result.png)
-      writeFileSync(join(artifacts, 'chat-reply-button.png'), Buffer.from(result.png, 'base64'))
+      writeFileSync(join(artifacts, capture), Buffer.from(result.png, 'base64'))
     return result.excerpt as string
   }
   const short = 'chat-reply-short'
+  const tight = 'chat-reply-tight'
   chat.messages.push(
     {
       id,
@@ -91,6 +122,14 @@ export async function checkChatReply(host: NativeBridge, artifacts: string) {
       text: SHORT,
       statuses: [],
       segments: [{ kind: 'text', text: SHORT }]
+    },
+    {
+      id: tight,
+      role: 'assistant',
+      at: Date.now(),
+      text: TIGHT,
+      statuses: [],
+      segments: [{ kind: 'text', text: TIGHT }]
     }
   )
   nativeChat.changed(chat)
@@ -105,7 +144,7 @@ export async function checkChatReply(host: NativeBridge, artifacts: string) {
       console.log('SKIP chat reply captures: TREZI_NATIVE_BACKGROUND_TEST (reduced coverage)')
     else await host.request('chatAcceptance', { prepare: true })
     // 1. Reply on the first excerpt: a card whose comment field takes focus.
-    const first = await reply(FIRST, true)
+    const first = await reply(FIRST, 'chat-reply-button.png')
     assert.equal(first, FIRST)
     await wait(async () => (await cards()).length === 1, 'the first card')
     let shown = await cards()
@@ -126,12 +165,24 @@ export async function checkChatReply(host: NativeBridge, artifacts: string) {
     await wait(async () => (await cards()).length === 2, 'the second card')
     await host.request('composerPerform', { quoteComment: { index: 1, text: 'Run it for me.' } })
     await wait(() => chat.quotes?.[1]?.comment === 'Run it for me.', 'the second comment')
-    // A one-line message: Reply stays inside it and clickable; this one is chosen from the menu.
+    // A one-line message: Reply floats clear of it; this one is chosen from the menu.
     await reply(SHORT_PART, false, short, true)
     await wait(async () => (await cards()).length === 3, 'the third card')
     assert.equal((await cards())[2].excerpt, SHORT_PART)
     await host.request('composerPerform', { quoteRemove: 2 })
     await wait(async () => (await cards()).length === 2, 'the third card removed')
+    // LKM-627: the reported tight message, all of it: Reply floats clear of both lines and a
+    // real click quotes it exactly once; that card is removed again.
+    const whole = await reply(TIGHT_TEXT, 'chat-reply-tight.png', tight, false, true)
+    assert.equal(whole, TIGHT_TEXT)
+    await wait(async () => (await cards()).length === 3, 'the tight card')
+    assert.deepEqual(
+      (chat.quotes ?? []).filter((q) => q.message === tight).map((q) => q.excerpt),
+      [TIGHT_TEXT],
+      'one quote of the tight message, its exact text'
+    )
+    await host.request('composerPerform', { quoteRemove: 2 })
+    await wait(async () => (await cards()).length === 2, 'the tight card removed')
     // 3. The first message streams on and reparses: the cards keep their message and excerpt.
     const source = chat.messages.find((m) => m.id === id)!
     source.text = `${SOURCE}\n\n**Update:** the backup is ~/.git-backup.`

@@ -38,8 +38,9 @@ final class ChatTextView: NSTextView {
     private var pointerArea: NSTrackingArea?
     private var measured: (width: CGFloat, size: CGSize)?
     private var observer: NSObjectProtocol?
-    /// LKM-555: Reply over a settled selection (ChatTextReply.swift); nil until one is made.
-    var replyButton: NSButton?
+    /// LKM-555/627: the chat's floating Reply this view last showed (ChatTextReply.swift), kept
+    /// so the view can hide it after it has left the conversation.
+    weak var floatingReply: ChatReplyButton?
 
     static func make() -> ChatTextView {
         let storage = NSTextStorage(), manager = NSLayoutManager()
@@ -271,7 +272,7 @@ final class ChatTextView: NSTextView {
         clickTimer?.invalidate(); clickTimer = nil
         hovered = nil
         ChatCopiedToast.dismiss(from: self)
-        replyButton?.isHidden = true
+        releaseReply()
     }
 
     // MARK: Pointer (LKM-442)

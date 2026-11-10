@@ -95,7 +95,9 @@ final class ChatModel: ObservableObject {
         get { layout.composerHeight }
         set { layout.composerHeight = newValue }
     }
-    var messageFrames: [String: CGRect] = [:]
+    /// LKM-627: rows moved (a row above grew, a jump scrolled): Reply is placed again.
+    var messageFrames: [String: CGRect] = [:] { didSet { if messageFrames != oldValue { framesChanged() } } }
+    var framesChanged: () -> Void = {}
     var islandPositions: [String: CGRect] = [:]
     /// Response footers and their token counters (`<id>-tokens`), for inspection.
     var footerFrames: [String: CGRect] = [:]
@@ -154,16 +156,19 @@ final class ChatModel: ObservableObject {
 }
 
 /// Native conversation extends behind the composer; AppKit owns both frames.
-final class NativeChat: NSHostingView<ChatConversation> {
+final class NativeChat: NSHostingView<ChatConversation>, ChatReplyHost {
     let model = ChatModel()
     var lastState: [String: Any] = [:]
     private var lastConversation: [String: Any] = [:]
     /// Native sibling over the conversation (see ChatLatestButton).
     let latestButton = ChatLatestButton()
+    /// LKM-627: Reply for selected text, a sibling over the conversation (ChatTextReply.swift).
+    let replyButton = ChatReplyButton()
     private var latestObservers: Set<AnyCancellable> = []
     init() {
         super.init(rootView: ChatConversation(model: model, layout: model.layout)); isHidden = true; sizingOptions = []
         latestButton.onPress = { [weak self] in self?.model.pressLatest() }
+        model.framesChanged = { [weak self] in self?.replyButton.refresh() }
         // @Published fires before the value changes; place on the next turn.
         model.$showsLatest.combineLatest(model.layout.$composerHeight)
             .sink { [weak self] _ in DispatchQueue.main.async { self?.layoutLatestButton() } }
@@ -172,12 +177,29 @@ final class NativeChat: NSHostingView<ChatConversation> {
     override var isHidden: Bool { didSet { layoutLatestButton() } }
     override func viewDidMoveToSuperview() {
         super.viewDidMoveToSuperview()
-        if let superview { superview.addSubview(latestButton, positioned: .above, relativeTo: self) } else { latestButton.removeFromSuperview() }
+        if let superview {
+            superview.addSubview(replyButton, positioned: .above, relativeTo: self)
+            superview.addSubview(latestButton, positioned: .above, relativeTo: self)
+        } else { replyButton.removeFromSuperview(); latestButton.removeFromSuperview() }
         layoutLatestButton()
     }
     override func layout() { super.layout(); layoutLatestButton() }
     func layoutLatestButton() {
         model.latestButtonFrame = latestButton.place(over: self, composerHeight: model.composerHeight, visible: model.showsLatest)
+        // The reading area moved with it (resize, composer height, shown or hidden).
+        replyButton.refresh()
+    }
+    /// Above the composer clearance: the transcript the reader sees (top-down: NSHostingView is flipped).
+    var replyArea: NSRect { isHidden ? .zero : NSRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - model.bottomInset)) }
+    /// Every other message row, and what the selected row draws besides its text (turn footer
+    /// with Copy/Revert, islands, attachments, answer components, agent cards), in the scroll's
+    /// viewport space (this view's, top-down).
+    func replyObstacles(excluding message: String) -> [NSRect] {
+        var rects = model.messageFrames.filter { $0.key != message }.map(\.value)
+        for frames in [model.footerFrames, model.islandPositions, model.attachmentFrames, model.chatUiFrames, model.agentCardFrames] {
+            rects += frames.values.filter { $0.width > 0 && $0.height > 0 }
+        }
+        return rects
     }
     required init(rootView: ChatConversation) { fatalError("init(rootView:) has not been implemented") }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }

@@ -136,6 +136,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Unit `test/chat-quotes.mjs`; native `chat-reply` smoke (two selections, comments, menu Reply, remove, streaming, chat switch, one stubbed native send).
 - [ ] Manager: foreground native `chat`/`composer` acceptance with captures, independent review, exact-head CI and merge.
 
+## LKM-627 — Keep the selected-text Reply action above chat text without overlap
+
+- [x] Reply floats over the transcript (one `ChatReplyButton` per chat, a sibling above `NativeChat` like the latest button), no longer a subview clamped into the tight text view (`src/native/ChatTextReply.swift`).
+- [x] `ChatReplyPlacement`: above the selection, else below, else beside past every line it crosses, inside the reading area (no composer clearance), clear of all text lines and other messages; covering the least only when nothing near is clear; hidden while out of view.
+- [x] Follows scroll (clip bounds), resize/composer (`layoutLatestButton`), hides on cleared/still-dragging selection, view reuse, leaving the window; one selection owns it.
+- [x] Unit `native-chat-reply-float` (real window: reported two-line message between neighbours, no glyph overlap, hit-test, real press → exact quote once, scroll out/in/edge, reuse/removal); native `chat-reply` asserts the overlay host, reading area, no covered text, hit-test and a posted real click, plus the two-line case.
+- [ ] Manager: foreground native `chat` group with captures, independent review, exact-head CI and merge.
+
 ## LKM-556 — Agents save rules and guides to project memory
 
 - [x] `remember_rule` agent tool (Claude and Codex, foreground only) saves one rule through the project-memory update queue over the Swift owner; merge under its heading, user lines kept, duplicates skipped, near-duplicates reported (`replaces`/`distinct`), stale/failed/unanswered writes never reported as saved.

@@ -140,6 +140,7 @@ export const UNIT = [
   'native-chat-reveal',
   'native-chat-text',
   'native-chat-code-click',
+  'native-chat-reply-float',
   'native-diff-list',
   'native-changes-fixture',
   'native-island-editing',
