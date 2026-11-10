@@ -76,6 +76,11 @@ export class NativeShellController {
       // LKM-618: until the agent lists the project's open chats, its stored keys may name chats
       // that reopen as History. Only those with a known title are shown; the rest stay listed
       // here (identity, order, selection) and appear once the agent confirms and they load.
+      // `agent:open-project` resumes the current chat under the project key. When that key is the
+      // active one it stays a row, so the selection and the header keep its LKM-523 loading title
+      // (native chat-gate check). An active peer key is replaced by the project key on open, so
+      // it stays hidden like the other stored peers rather than becoming a row that vanishes.
+      const reopened = p.activeSessionKey === p.key ? p.key : null
       const pending = this.workspace.chatListPending(p.key)
       let unresolved = false
       const chats = new Map(
@@ -86,7 +91,7 @@ export class NativeShellController {
           const knownTitle =
             chat?.title || (first?.action ? `Apply ${first.action.line}` : first?.text)
           const loadingTitle = !knownTitle && !chat?.ready
-          if (pending && loadingTitle && !chat?.error) {
+          if (pending && loadingTitle && !chat?.error && key !== reopened) {
             unresolved = true
             return []
           }
