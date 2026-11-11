@@ -9,6 +9,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Phase timeline per spawn id (`src/main/spawn-phases.ts`) and inspector stages (`src/native/inspector-apply-timing.ts`), one `op`, non-overlapping spans, bounded fields.
 - [x] Baseline on the padding 2rem → 0.75rem fixture (unit `spawn-phases`): Trezi overhead ≈ 0.6 s; cold private dev server measured separately (Next ≈ 2 s ready + 1.1 s compile, Vite ≈ 0.4 s).
 - [x] Prestart the spawn worktree's private dev server alongside the model (`src/main/spawn-prewarm.ts`); fixture total 5692 → 4188 ms with a 2 s cold start; stopped with the spawn.
+- [x] Landing span broken into steps (`landing<Step>Ms`); the prestarted server is not on the landing path (landing 544 vs 750 ms under the suite, all git/owner steps). Prestart test asserts the pre-landing path, not full totals.
 - [ ] Manager: read the first real `Background agent phases` lines from the owner's Apply; decide on a scoped Apply model if `modelMs` dominates; native groups and exact-head CI.
 
 ## LKM-638 — Keep styling editable and the preview steady while inspector Apply runs

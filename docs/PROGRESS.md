@@ -1,5 +1,31 @@
 # PROGRESS LOG
 
+## 2026-11-10 — LKM-639: landing breakdown; prestart assertion measures only what the prestart moves
+
+- Correction: the entry below said `node test/run.mjs unit --changed=origin/main` passed with
+  0 FAIL. The next required run failed in `spawn-phases` (this branch's test): its prestart
+  assertion compared full `totalMs` (6761 → 16302 ms) and the prestarted case's `landingMs` was
+  12233 ms under the parallel suite.
+- Checked whether the prestarted server waits on the landing path: `finalizeSpawn` stops it
+  with `void releaseSpawnRuntime(…)` (not awaited), the gate only reads the runtime's
+  generation, and nothing in the lease waits on a stop. To show it, the landing span is now
+  broken into steps (`timeLandingStep` in `src/main/spawn-phases.ts`, used by
+  `spawn-landing.ts` and `finalizeSpawn`): commit, peers, gate, apply, reconcile, live
+  commit, worktree removal, logged as `landing<Step>Ms` parts of `landingMs`.
+- Measured: alone, serial vs prestarted landing 510 vs 504 ms with the same steps (commit
+  ≈100, gate ≈36, apply ≈190, live commit ≈80, worktree removal ≈70). Under
+  `node test/run.mjs unit --changed=origin/main`: 544 vs 750 ms (1.4x), the extra spread
+  over commit (+92), gate (+32), apply (+47) and live commit (+31), git/owner work, not a
+  wait. The 12 s landing was not reproduced; that run had no step breakdown, so it cannot be
+  attributed after the fact, but no step waits on the server and the reproduction under the
+  same suite shows load only. No product change to landing was needed.
+- `test/spawn-phases.mjs` now asserts `serverWaitMs < 700` and that the pre-landing critical
+  path (`totalMs - landingMs - leaseWaitMs`) is at least 1000 ms shorter with the prestart
+  (alone 5258 → 3772, under the suite 5310 → 3761 ms); landing steps must sum within
+  `landingMs`. Full `totalMs` is no longer compared.
+- Checks: `bun run lint` exit 0; `bun run typecheck && node test/run.mjs unit --changed=origin/main`
+  exit 0 (343 PASS, 3 SKIP, 0 FAIL, `spawn-phases` PASS).
+
 ## 2026-11-10 — LKM-639: deflake the preview-apply-layers fixture
 
 - The changed-unit check failed once on `preview-apply-layers` (LKM-638's WebKit fixture, not

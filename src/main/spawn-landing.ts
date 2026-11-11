@@ -6,6 +6,7 @@ import { productLog } from './product-log'
 import type { OwnedEdit } from './repository-owner'
 import { heldResolution, resolutionFor, restoreOwnFiles } from './resolution-context'
 import type { PendingResolution } from './resolution-evidence'
+import { timeLandingStep } from './spawn-phases'
 import { autoApplyWorktree, commitWorktree, type Worktree } from './worktrees'
 
 /**
@@ -69,7 +70,8 @@ export async function landSpawn(
       ? await heldResolution(wt, opts.resolution, opts.reply ?? '').catch(() => null)
       : null
   if (held && opts.resolution) await restoreOwnFiles(wt, opts.resolution, held.restore)
-  let { committed, files } = await commitWorktree(wt, message)
+  const op = opts.peerId
+  let { committed, files } = await timeLandingStep(op, 'commit', () => commitWorktree(wt, message))
   const result = (over: Partial<SpawnLanding> = {}): SpawnLanding => ({
     committed,
     files,
@@ -83,10 +85,8 @@ export async function landSpawn(
   let reconciled = opts.reconciled
   try {
     const self = opts.peerId ?? ''
-    const gate = await peerGateRefresh(
-      scope.liveRoot,
-      self,
-      opts.resolution?.revisions.base ?? wt.baseSha
+    const gate = await timeLandingStep(op, 'peers', () =>
+      peerGateRefresh(scope.liveRoot, self, opts.resolution?.revisions.base ?? wt.baseSha)
     )
     if (held)
       return result({
@@ -102,17 +102,22 @@ export async function landSpawn(
           reason: `this comment's edits overlap with changes that landed meanwhile, and its agent could not combine them (${markers.slice(0, 5).join(', ')}). Its work is kept for review.`,
           gate
         })
-      let verdict = await integrationGate(scope)
-      // A reconciled tree is new source: the checks that passed before run again on it.
-      if (
-        reconciled &&
-        !verdict.ok &&
-        (verdict.reason === 'unchecked' || verdict.reason === 'runtime-changed')
-      ) {
-        await replayChecks(scope)
-        verdict = await integrationGate(scope)
-      }
-      const auto = await autoApplyWorktree(scope.liveRoot, wt, files, verdict.candidate)
+      const verdict = await timeLandingStep(op, 'gate', async () => {
+        const first = await integrationGate(scope)
+        // A reconciled tree is new source: the checks that passed before run again on it.
+        if (
+          reconciled &&
+          !first.ok &&
+          (first.reason === 'unchecked' || first.reason === 'runtime-changed')
+        ) {
+          await replayChecks(scope)
+          return integrationGate(scope)
+        }
+        return first
+      })
+      const auto = await timeLandingStep(op, 'apply', () =>
+        autoApplyWorktree(scope.liveRoot, wt, files, verdict.candidate)
+      )
       if (auto.applied)
         return result({
           applied: true,
@@ -123,7 +128,7 @@ export async function landSpawn(
       if (!drift || attempt >= MAX_RECONCILES || !opts.mayContinue)
         return result({ reason: auto.hold ? holdMessage(auto.hold, verdict) : null, gate })
       // Live moved since the fork point (another landing): stage live plus this change.
-      const prep = await stageResolve(scope.liveRoot, wt)
+      const prep = await timeLandingStep(op, 'reconcile', () => stageResolve(scope.liveRoot, wt))
       reconciled = true
       productLog.info('landing', 'Background agent reconciled with the live tree', {
         worktree: wt.id,
@@ -144,7 +149,9 @@ export async function landSpawn(
               }
             : {})
         })
-      ;({ committed, files } = await commitWorktree(wt, message))
+      ;({ committed, files } = await timeLandingStep(op, 'commit', () =>
+        commitWorktree(wt, message)
+      ))
       // The same change already landed: nothing of its own is left to land.
       if (!committed || !files.length) return result()
     }

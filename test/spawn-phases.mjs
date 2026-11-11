@@ -22,7 +22,7 @@ import {
 import { createRecordCapture } from '../src/main/backends/record.ts'
 import { enqueueRepoWrite } from '../src/main/repo-write-queue.ts'
 import { sourceSnapshot } from '../src/main/source-snapshot.ts'
-import { finishedSpawnPhases, spawnSpans } from '../src/main/spawn-phases.ts'
+import { finishedSpawnPhases, landingStepFields, spawnSpans } from '../src/main/spawn-phases.ts'
 import { setSpawnPrewarm } from '../src/main/spawn-prewarm.ts'
 import { newReceiptId, receiptSession, recordReceipt } from '../src/main/verification-receipts.ts'
 import { projectKey } from '../src/shared/projectKey.ts'
@@ -220,12 +220,17 @@ async function apply(label) {
     'lease'
   ])
     assert.ok(timeline.marks[mark] !== undefined, `${label}: ${mark} reached`)
+  const steps = landingStepFields(timeline)
+  const stepSum = Object.values(steps).reduce((sum, ms) => sum + ms, 0)
+  assert.ok(stepSum <= spans.landingMs + 5, `${label}: landing steps are parts of landing`)
   const root = providers.at(-1).root
   spans.serverWaitMs = serverWaits.get(root) ?? 0
   await wait(() => !agentRuntimes().length)
-  console.log(`${label}: wall=${wall}ms ${JSON.stringify(spans)} checkMs=${timeline.checkMs}`)
+  console.log(
+    `${label}: wall=${wall}ms ${JSON.stringify(spans)} checkMs=${timeline.checkMs} landing=${JSON.stringify(steps)}`
+  )
   reset()
-  return spans
+  return { ...spans, steps }
 }
 
 try {
@@ -255,9 +260,12 @@ try {
   setSpawnPrewarm(true)
   const prestarted = await apply('web, server prestarted with the worktree')
   assert.ok(prestarted.serverWaitMs < 700, 'the check finds the server started or nearly so')
+  // What the prestart moves is the path up to landing; landing itself (git and owner work
+  // under the lease) varies with machine load and is reported, not compared.
+  const preLanding = (s) => s.totalMs - s.landingMs - s.leaseWaitMs
   assert.ok(
-    prestarted.totalMs <= serial.totalMs - 1000,
-    `the cold start is off the critical path (${serial.totalMs} → ${prestarted.totalMs} ms)`
+    preLanding(prestarted) <= preLanding(serial) - 1000,
+    `the cold start is off the critical path before landing (${preLanding(serial)} → ${preLanding(prestarted)} ms)`
   )
   // One start per Apply, never a second server for the same page, and it stops with the spawn.
   const starts = runtimeCalls.filter(([kind]) => kind === 'start')
@@ -273,7 +281,14 @@ try {
   await apply('web, finishes during the prestart')
   await new Promise((r) => setTimeout(r, SERVER_START_MS + 200))
   assert.equal(agentRuntimes().length, 0, 'no private server outlives its spawn')
-  console.log('serial vs prestarted totalMs:', serial.totalMs, prestarted.totalMs)
+  console.log(
+    'serial vs prestarted pre-landing ms:',
+    preLanding(serial),
+    preLanding(prestarted),
+    'landingMs:',
+    serial.landingMs,
+    prestarted.landingMs
+  )
 } finally {
   // Worktrees live under the fixture's temp dir; the service fixture is killed on exit.
 }

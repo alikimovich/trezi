@@ -144,7 +144,8 @@ import {
   finishSpawnPhases,
   markSpawn,
   noteSpawnChecks,
-  spawnCheckDurations
+  spawnCheckDurations,
+  timeLandingStep
 } from './spawn-phases'
 import { prewarmSpawnRuntime, releaseSpawnRuntime } from './spawn-prewarm'
 import { keepStoppedTurn, revertStoppedTurn, undoStoppedRevert } from './stopped-turn'
@@ -963,10 +964,12 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
           recordEdit(parentRoot, e.file, e.before, e.after, undefined, group)
         // …and as one commit on the live checkout, like an interactive chat's turn, so
         // the spawn shows up in `git log` and can be reverted on its own.
-        const commit = await commitLiveTurn(parentRoot, files, {
-          title: firstLine(text),
-          body: origin === 'text-edit' ? 'Trezi background text edit.' : 'Trezi comment spawn.'
-        })
+        const commit = await timeLandingStep(id, 'liveCommit', () =>
+          commitLiveTurn(parentRoot, files, {
+            title: firstLine(text),
+            body: origin === 'text-edit' ? 'Trezi background text edit.' : 'Trezi comment spawn.'
+          })
+        )
         notePeerLanded(id, files, commit.sha)
         // LKM-405: combined overlapping work that passed its checks on this tree and landed.
         const lesson =
@@ -982,7 +985,9 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
               )
             : null
         if (lesson) saveLesson(parentRoot, lesson)
-        await removeWorktree(parentRoot, wt, { keepBranch: false, intent: 'landed' })
+        await timeLandingStep(id, 'removeWorktree', () =>
+          removeWorktree(parentRoot, wt, { keepBranch: false, intent: 'landed' })
+        )
         try {
           removeRecord(session.record.id, session)
         } catch {

@@ -69,7 +69,10 @@ Lifecycle facts only:
   agent phases op=<id> origin= outcome=` line per spawn with consecutive, non-overlapping
   spans `queueMs laneWaitMs worktreeMs providerMs peerMs toFirstEditMs modelMs
   preLandingMs leaseWaitMs landingMs totalMs`, plus `checkMs checks` (the agent's checks,
-  inside `modelMs`) and `continuations` (`src/main/spawn-phases.ts`); `Background agent
+  inside `modelMs`), `continuations` and the landing's own steps
+  `landingCommitMs landingPeersMs landingGateMs landingApplyMs landingReconcileMs
+  landingLiveCommitMs landingRemoveWorktreeMs` (parts of `landingMs`, not extra spans;
+  `src/main/spawn-phases.ts`); `Background agent
   dev server prestarted|prestart failed op= ms=` (`src/main/spawn-prewarm.ts`); and the
   inspector's `Inspector Apply dispatched|landed|visible|returned op= fields=` with
   `preflightMs`, `workerMs`, `previewMs`, `totalMs` (`src/native/inspector-apply-timing.ts`),
