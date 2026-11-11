@@ -131,8 +131,13 @@ func resize(_ cell: SidebarChatCell, to width: CGFloat, at time: Double) {
 /// Selection: the row's title gets wider with no change to the title's own frame.
 func select(_ cell: SidebarChatCell, at time: Double) {
     plan.append((time, "select", {
-        cell.title!.label.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        let label = cell.title!.label, before = label.frame.width
+        label.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
         cell.backgroundStyle = .emphasized
+        // The title applies the wider text on its next frame timer. A loaded runner can be behind
+        // the plan, so the next sample would run with no run-loop turn: wait for that frame.
+        let deadline = Date(timeIntervalSinceNow: 1)
+        while label.frame.width == before, Date() < deadline { pump(1.0 / 60) }
     }))
 }
 /// Start, middle and end of a title with this travel; the end is well after the text arrives.

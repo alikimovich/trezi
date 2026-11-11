@@ -1,5 +1,14 @@
 # PROGRESS LOG
 
+## 2026-11-11 — LKM-644: sidebar-marquee's selection step waits for the title's frame
+
+- CI shard 2/3 failed `sidebar-marquee` ("selected at the end: label frame: 304, expected
+  316"). Selection calls `restyled()`, which only schedules the title's 1/60 s step timer;
+  when a loaded runner is behind the fixture's plan, `pump(max(0, …))` is 0 and the next
+  sample ran with no run-loop turn, reading the pre-selection frame. The fixture's `select`
+  step now pumps until the label frame changes (1 s bound). No assertion changed; passed 3/3
+  locally with 2× ncpu busy `yes` processes. Undo/Redo code untouched.
+
 ## 2026-11-11 — LKM-644: native-chat-reply-float's synthetic click survives CI load
 
 - CI shard 2/3 failed `native-chat-reply-float` ("One click, one Reply: 0") twice on
