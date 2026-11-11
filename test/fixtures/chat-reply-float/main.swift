@@ -121,12 +121,29 @@ let right = NSEvent.mouseEvent(with: .rightMouseDown, location: inside, modifier
 require(tight.menu(for: right)?.items.first?.title == "Reply", "The context menu keeps Reply first")
 // A real press: both events enter the app's queue and are dispatched as the run loop would
 // (`NSApp.sendEvent`: the window hit-tests the press, the button's own tracking loop takes the
-// release). Pumped here, since this fixture never calls `NSApp.run()`.
+// release). Pumped here, since this fixture never calls `NSApp.run()`. Under load (CI runs this
+// beside a heavy Swift compile) one fixed window can end before the queue hands both events
+// over, so the pump runs until a local monitor has seen both posted events dequeued (by this
+// loop or by the button's tracking loop) and the Reply has fired, bounded by a deadline; then
+// it drains what is left so a duplicate Reply would still be counted.
 func press() {
+    window.makeKeyAndOrderFront(nil)
+    until { window.isVisible }
+    var delivered: Set<NSEvent.EventType> = []
+    let monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { event in
+        if event.windowNumber == window.windowNumber { delivered.insert(event.type) }
+        return event
+    }
+    defer { monitor.map(NSEvent.removeMonitor) }
     for (type, pressure) in [(NSEvent.EventType.leftMouseDown, Float(1)), (.leftMouseUp, 0)] {
         NSApp.postEvent(NSEvent.mouseEvent(with: type, location: center(), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: pressure)!, atStart: false)
     }
-    while let event = NSApp.nextEvent(matching: .any, until: Date(timeIntervalSinceNow: 0.2), inMode: .default, dequeue: true) { NSApp.sendEvent(event) }
+    let deadline = Date(timeIntervalSinceNow: 5)
+    while !(delivered.count == 2 && replies.count == 1), Date() < deadline {
+        if let event = NSApp.nextEvent(matching: .any, until: Date(timeIntervalSinceNow: 0.05), inMode: .default, dequeue: true) { NSApp.sendEvent(event) }
+    }
+    while let event = NSApp.nextEvent(matching: .any, until: Date(timeIntervalSinceNow: 0.1), inMode: .default, dequeue: true) { NSApp.sendEvent(event) }
+    require(delivered.count == 2, "Both posted events reach the window: \(delivered.map(\.rawValue))")
 }
 press()
 require(replies.count == 1, "One click, one Reply: \(replies.count)")

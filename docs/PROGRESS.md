@@ -1,5 +1,16 @@
 # PROGRESS LOG
 
+## 2026-11-11 — LKM-644: native-chat-reply-float's synthetic click survives CI load
+
+- CI shard 2/3 failed `native-chat-reply-float` ("One click, one Reply: 0") twice on
+  33d6e2a3; in this branch's shard layout it runs beside the swift-preview-build compile.
+  `press()` pumped the queue for one fixed 0.2 s window, which could end before both posted
+  mouse events were handed over. It now orders the window front and key, counts both events
+  as dequeued with a local monitor (the button's tracking loop takes the release), pumps
+  until both arrived and exactly one Reply fired (5 s bound), then drains the rest so a
+  duplicate Reply still fails. No assertion weakened; it also asserts both events arrive.
+  Passed 4/4 locally with 12 busy `yes` processes. Undo/Redo code untouched.
+
 ## 2026-11-11 — LKM-644: ⌘Z / ⇧⌘Z step the visual Styles draft; Undo draft updates the field
 
 - Owner bug reproduced at the controller (`test/inspector-undo-redo.mjs`, first case fails
