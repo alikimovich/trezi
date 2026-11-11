@@ -162,6 +162,8 @@ var mark = frameCount()
 let before = transitions().count
 let pending = read()
 settle()
+// A loaded host throttles an off-screen view's timers past any fixed settle: wait for a sample.
+until("a task-boundary sample after the lifted read") { frameCount() > mark }
 let base = pending["base"] as? [String: String] ?? [:]
 let values = pending["values"] as? [String: String] ?? [:]
 require(base["padding-top"] == "4px", "lifted base is the authored value: \(pending)")
@@ -191,6 +193,7 @@ require(js("return document.querySelector('.card').style.getPropertyValue('opaci
 require(js("return document.querySelector('.card').style.getPropertyValue('padding-top')") as? String == "", "the retired override is gone")
 toPage("styles:clear-preview", "{}")
 spin(1.3)
+until("a task-boundary sample after the retire") { frameCount() > mark }
 let afterRetire = snapshot("after-retire")
 let changed = same(beforeRetire, afterRetire)
 require(frames(from: mark).allSatisfy { $0 == withB }, "the retire moved nothing: \(frames(from: mark))")

@@ -1,5 +1,14 @@
 # PROGRESS LOG
 
+## 2026-11-10 — LKM-639: deflake the preview-apply-layers fixture
+
+- The changed-unit check failed once on `preview-apply-layers` (LKM-638's WebKit fixture, not
+  touched by this branch): with ~340 tests running in parallel, the off-screen view's
+  `setTimeout` sampler produced no task-boundary sample within the fixed 0.6 s settle, so
+  `pending.frames > 0` failed. The same test passed in a sibling run. The fixture now waits
+  (bounded by `until`'s 20 s) for at least one sample after the lifted read and after the
+  retire. The assertions themselves are unchanged.
+
 ## 2026-11-10 — LKM-639 CI follow-up: retry transient git reads in the update verifier
 
 PR #460's unit shard 2/3 failed once in `native-updates`: `verifyUpdatedArtifact` reported
