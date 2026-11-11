@@ -241,19 +241,78 @@ overlay.layoutSubtreeIfNeeded(); overlay.layout()
 let chooserOverlay = PreviewMarkupOverlay(image: solid(1600, 1000, .systemBlue))
 chooserOverlay.frame = overlay.frame
 chooserOverlay.layoutSubtreeIfNeeded(); chooserOverlay.layout()
-let colorPopup = chooserOverlay.island.face.subviews.compactMap { $0 as? NSPopUpButton }.first!
-check(colorPopup.accessibilityLabel() == "Annotation color", "color chooser has an accessible label")
-colorPopup.selectItem(withTitle: "Green")
-check(NSApp.sendAction(colorPopup.action!, to: colorPopup.target, from: colorPopup), "popup selection reaches its action")
-check(chooserOverlay.canvas.ink == .green && colorPopup.accessibilityValue() as? String == "Green", "popup chooses and exposes green")
+// LKM-645: the ink is a real colour well bound to the standard panel, any colour, sRGB.
+let colorWell = chooserOverlay.colorWell
+check(chooserOverlay.island.face.subviews.contains { $0 is NSPopUpButton } == false, "no preset color menu")
+check(colorWell.accessibilityLabel() == "Annotation color" && colorWell.accessibilityRole() == .colorWell, "color well has an accessible label and role")
+check(colorWell.colorWellStyle == .default && colorWell.frame.width <= 44, "a compact swatch in the toolbar")
+check(MarkupInk(colorWell.color) == .red && chooserOverlay.canvas.ink == .red, "the well shows the current ink")
+window.contentView!.addSubview(chooserOverlay)
+colorWell.activate(true)
+check(colorWell.isActive && NSColorPanel.shared.isVisible, "the well opens the standard color panel")
+// Display P3, the way the panel's pickers hand it over: an orange no preset ever had.
+let orange = NSColor(displayP3Red: 0.83, green: 0.5, blue: 0.16, alpha: 1)
+NSColorPanel.shared.color = orange
+let expectedOrange = MarkupInk(orange)!
+check(chooserOverlay.canvas.ink == expectedOrange && ![MarkupInk.red, .blue, .green, .purple, .black].contains(expectedOrange), "the panel's choice is the ink, not a preset")
+check(expectedOrange.red > 0.85 && expectedOrange.green > 0.45 && expectedOrange.blue < 0.15, "P3 converts to sRGB, not reinterpreted")
+check(MarkupInk(NSColor(displayP3Red: 0, green: 1, blue: 0, alpha: 1))!.green == 1, "out-of-gamut P3 clamps into sRGB")
+check(MarkupInk(NSColor(white: 0.5, alpha: 0.3))! == MarkupInk(red: 0.5, green: 0.5, blue: 0.5), "grey converts, alpha is dropped: ink stays opaque")
+check(MarkupInk(hex: expectedOrange.hex)!.hex == expectedOrange.hex && MarkupInk.green.hex == "#057547", "hex round-trips")
 let colorMapping = chooserOverlay.canvas.mapping
-chooserOverlay.canvas.pointerDown(colorMapping.toView(CGPoint(x: 80, y: 90)), tool: .pen)
-chooserOverlay.canvas.pointerDragged(colorMapping.toView(CGPoint(x: 180, y: 90)))
-chooserOverlay.canvas.pointerUp()
-check(chooserOverlay.canvas.document.marks.last?.ink == .green, "popup color reaches the canvas mark")
-let popupAttachment = MarkupEncoder.encode(chooserOverlay.canvas.image, marks: chooserOverlay.canvas.document.marks)!
-let popupPixel = Pixels(decode(popupAttachment.data)).rgb(130, 90)
-check(popupPixel.g > 70 && popupPixel.b < 130 && popupPixel.r < 70, "popup color reaches the encoded attachment")
+func stroke(_ y: CGFloat) {
+    chooserOverlay.canvas.pointerDown(colorMapping.toView(CGPoint(x: 80, y: y)), tool: .pen)
+    chooserOverlay.canvas.pointerDragged(colorMapping.toView(CGPoint(x: 180, y: y)))
+    chooserOverlay.canvas.pointerUp()
+}
+stroke(90)
+check(chooserOverlay.canvas.document.marks.last?.ink == expectedOrange, "the chosen color reaches the canvas mark")
+chooserOverlay.canvas.pointerDown(colorMapping.toView(CGPoint(x: 300, y: 300)), tool: .text)
+chooserOverlay.canvas.subviews.compactMap { $0 as? NSTextField }.first?.stringValue = "Orange"
+// A choice while a text draft is open commits the draft in the colour it was typed in.
+let teal = NSColor(srgbRed: 0.08, green: 0.64, blue: 0.63, alpha: 1)
+NSColorPanel.shared.color = teal
+check(chooserOverlay.canvas.document.marks.last?.text == "Orange" && chooserOverlay.canvas.document.marks.last?.ink == expectedOrange, "text commits in its own color")
+stroke(200)
+let colorMarks = chooserOverlay.canvas.document.marks
+check(colorMarks.map(\.ink) == [expectedOrange, expectedOrange, MarkupInk(teal)!], "a new choice colours only the next mark")
+check(MarkupInk(colorWell.color) == MarkupInk(teal), "the well shows the choice")
+let colorAttachment = MarkupEncoder.encode(chooserOverlay.canvas.image, marks: colorMarks)!
+let orangePixel = Pixels(decode(colorAttachment.data)).rgb(130, 90), tealPixel = Pixels(decode(colorAttachment.data)).rgb(130, 200)
+let orangeBytes = (Int((expectedOrange.red * 255).rounded()), Int((expectedOrange.green * 255).rounded()), Int((expectedOrange.blue * 255).rounded()))
+check(abs(orangePixel.r - orangeBytes.0) <= 2 && abs(orangePixel.g - orangeBytes.1) <= 2 && abs(orangePixel.b - orangeBytes.2) <= 2, "the exact orange reaches the encoded attachment: \(orangePixel)")
+check(abs(tealPixel.r - 20) <= 2 && abs(tealPixel.g - 163) <= 2 && abs(tealPixel.b - 161) <= 2, "the teal reaches the encoded attachment: \(tealPixel)")
+chooserOverlay.undo()
+check(chooserOverlay.canvas.document.marks.map(\.ink) == [expectedOrange, expectedOrange], "Undo keeps the earlier colours")
+// Adding freezes the well and lets go of the panel.
+chooserOverlay.adding = true
+check(!colorWell.isEnabled && !colorWell.isActive && !NSColorPanel.shared.isVisible, "Add freezes the well and releases the panel")
+NSColorPanel.shared.color = .blue
+check(chooserOverlay.canvas.ink == MarkupInk(teal)!, "no change reaches a committing overlay")
+chooserOverlay.adding = false
+// Another control's well owns the panel: closing this overlay leaves it bound and shown.
+let other = NSColorWell(style: .default)
+window.contentView!.addSubview(other)
+colorWell.activate(true)
+other.activate(true)
+check(!colorWell.isActive && other.isActive, "one well owns the shared panel at a time")
+chooserOverlay.removeFromSuperview()
+check(other.isActive && NSColorPanel.shared.isVisible, "closing Mark up keeps another control's panel")
+NSColorPanel.shared.color = .systemPink
+check(chooserOverlay.canvas.ink == MarkupInk(teal)!, "a closed overlay never takes another control's colour")
+other.deactivate()
+// Closing or hiding with this well bound releases it and puts the panel away.
+window.contentView!.addSubview(chooserOverlay)
+colorWell.activate(true)
+chooserOverlay.isHidden = true
+check(!colorWell.isActive && !NSColorPanel.shared.isVisible, "Select (hide) releases the panel")
+chooserOverlay.isHidden = false
+colorWell.activate(true)
+chooserOverlay.removeFromSuperview()
+check(!colorWell.isActive && !NSColorPanel.shared.isVisible, "closing Mark up releases its panel")
+NSColorPanel.shared.color = .systemYellow
+check(chooserOverlay.canvas.ink == MarkupInk(teal)!, "no retained binding updates a closed overlay")
+other.removeFromSuperview()
 let names = overlay.controls.map { $0.cell?.accessibilityLabel() ?? "" }
 for name in ["Pen", "Rectangle", "Circle", "Arrow", "Undo", "Clear", "Cancel", "Add to chat"] { check(names.contains(name), "VoiceOver reads \(name)") }
 check(overlay.controls.allSatisfy { $0.cell?.accessibilityRole() == .button || $0.cell?.accessibilityRole() == .radioButton }, "control roles")
@@ -272,8 +331,9 @@ overlay.keyDown(with: key("a", 0, window: window)); check(overlay.tool == .arrow
 overlay.keyDown(with: key("p", 35, window: window)); check(overlay.tool == .pen, "P picks the pen")
 overlay.keyDown(with: key("t", 17, window: window)); check(overlay.tool == .text, "T picks canvas text")
 let textButton = overlay.controls.first { $0.cell?.accessibilityLabel() == "Text" }!
-let focusedColor = overlay.island.face.subviews.compactMap { $0 as? NSPopUpButton }.first!
-check(window.makeFirstResponder(focusedColor) && window.firstResponder === focusedColor, "focus moves to the color chooser")
+let focusedColor = overlay.colorWell
+check(focusedColor.canBecomeKeyView && overlay.controls.last(where: { $0.cell?.accessibilityLabel() == "Text" })?.nextKeyView === focusedColor, "Tab reaches the color well after the tools")
+check(window.makeFirstResponder(focusedColor) && window.firstResponder === focusedColor, "focus moves to the color well")
 check(textButton.state == .on && textButton.contentTintColor == .controlAccentColor &&
       textButton.cell?.accessibilityValue() as? String == "selected", "Text stays tinted and accessibly selected after focus moves")
 for name in ["Pen", "Rectangle", "Circle", "Arrow"] {

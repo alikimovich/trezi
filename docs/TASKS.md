@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-645 — Standard macOS color picker for Mark up ink
+
+- [x] Replace the five-item ink popup with a compact `NSColorWell` that opens the shared standard `NSColorPanel`.
+- [x] `MarkupInk` holds any opaque sRGB colour (picked colours converted and clamped; presets kept as named values); each mark keeps its own.
+- [x] Release only this overlay's panel binding on close, hide (Select) and Add; freeze the well while Add commits.
+- [x] Fixture: P3 choice, arbitrary colours in canvas marks and the encoded attachment, Undo, text draft, ownership with another well; smoke seams click the real well and choose in the panel.
+- [ ] Manager: independent review, exact-head CI, merge and post-merge native acceptance.
+
 ## LKM-644 — Command-Z / Shift-Command-Z incremental visual edit Undo and Redo
 
 - [x] Reproduced the owner's bug at the controller: a page-update read taken with the preview override on fed the override into an unauthored field, so Undo draft reverted the preview but the field kept the undone value; the native fields also skipped any update while focused. Fields now build from the read with overrides lifted (`base`), and every Undo/Redo/Revert bumps `history.restored`, which resyncs the native fields even focused (no stale blur commit).
