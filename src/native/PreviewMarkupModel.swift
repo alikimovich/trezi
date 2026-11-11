@@ -7,14 +7,15 @@ import CryptoKit
 /// zoom, responsive width and overlay resizes, and one renderer paints the canvas and the
 /// composite, so the two agree by construction.
 enum MarkupTool: String, CaseIterable {
-    /// LKM-646: Select region picks part of the snapshot to send; it draws no mark.
+    /// LKM-646/647: Select picks a drawn mark to edit, or drags a region of the snapshot to
+    /// send; it draws no mark itself.
     case select, pen, rectangle, circle, arrow, text
-    var label: String { self == .select ? "Select region" : rawValue.capitalized }
+    var label: String { rawValue.capitalized }
     /// The plain key that picks it.
     var key: String { String(rawValue.prefix(1)) }
     var symbol: String {
         switch self {
-        case .select: "rectangle.dashed"
+        case .select: "cursorarrow"
         case .pen: "pencil"
         case .rectangle: "rectangle"
         case .circle: "circle"
@@ -22,6 +23,25 @@ enum MarkupTool: String, CaseIterable {
         case .text: "textformat"
         }
     }
+    /// LKM-647: the shapes share one toolbar slot and its menu.
+    static let shapes: [MarkupTool] = [.rectangle, .circle, .arrow]
+    var isShape: Bool { Self.shapes.contains(self) }
+    /// Draws a stroked mark, so a stroke width applies to it.
+    var strokes: Bool { self == .pen || isShape }
+}
+
+/// LKM-647: a mark's line weight, relative to the snapshot's base line width, so it reads the
+/// same at any capture size. Each mark keeps its own.
+enum MarkupStroke: String, CaseIterable {
+    case thin, medium, thick
+    var scale: CGFloat {
+        switch self {
+        case .thin: 0.5
+        case .medium: 1
+        case .thick: 2
+        }
+    }
+    var label: String { rawValue.capitalized }
 }
 
 /// LKM-645: a mark's colour, any colour the standard macOS picker gives, stored as opaque
@@ -63,28 +83,43 @@ struct MarkupMark: Equatable {
     var points: [CGPoint]
     var ink: MarkupInk = .red
     var text: String = ""
+    /// LKM-647: ignored by text.
+    var stroke: MarkupStroke = .medium
 }
 
-/// The marks on one snapshot. Clear is one undo step, so ⌘Z brings back what it removed.
+/// The marks on one snapshot and their history. Every finished edit (a mark, a text, a
+/// restyle, a move or resize, a delete, Clear) is one Undo step; Redo replays what Undo took,
+/// and any new edit drops it.
 struct MarkupDocument {
     /// A shape smaller than this, in captured pixels, is a click, not a shape.
     static let minimumShape: CGFloat = 3
     let size: CGSize
     private(set) var marks: [MarkupMark] = []
     private var history: [[MarkupMark]] = []
+    private var future: [[MarkupMark]] = []
     private var stroke: MarkupMark?
+    /// The marks before a move or resize in progress.
+    private var editBase: [MarkupMark]?
+    /// A colour drag on one mark is one step, not one per panel update.
+    private var restyling: Int?
 
     init(size: CGSize) { self.size = size }
     var isDrawing: Bool { stroke != nil }
-    var canUndo: Bool { isDrawing || !history.isEmpty }
+    var isEditing: Bool { editBase != nil }
+    var canUndo: Bool { isDrawing || isEditing || !history.isEmpty }
+    var canRedo: Bool { !isDrawing && !isEditing && !future.isEmpty }
     /// The finished marks and the stroke in progress.
     var visible: [MarkupMark] { marks + (stroke.map { [$0] } ?? []) }
     private func clamped(_ point: CGPoint) -> CGPoint {
         CGPoint(x: min(size.width, max(0, point.x)), y: min(size.height, max(0, point.y)))
     }
-    mutating func begin(_ tool: MarkupTool, at point: CGPoint, ink: MarkupInk = .red) {
+    /// A new step: what was there goes on the Undo stack, and Redo's branch is gone.
+    private mutating func record(_ previous: [MarkupMark]) {
+        history.append(previous); future.removeAll(); restyling = nil
+    }
+    mutating func begin(_ tool: MarkupTool, at point: CGPoint, ink: MarkupInk = .red, stroke weight: MarkupStroke = .medium) {
         guard tool != .text, tool != .select else { return }
-        stroke = MarkupMark(tool: tool, points: [clamped(point)], ink: ink)
+        stroke = MarkupMark(tool: tool, points: [clamped(point)], ink: ink, stroke: weight)
     }
     mutating func extend(to point: CGPoint) {
         guard var mark = stroke else { return }
@@ -97,29 +132,65 @@ struct MarkupDocument {
         if mark.tool != .pen {
             guard mark.points.count == 2, hypot(mark.points[1].x - mark.points[0].x, mark.points[1].y - mark.points[0].y) >= Self.minimumShape else { return }
         }
-        history.append(marks); marks.append(mark)
+        record(marks); marks.append(mark)
     }
     mutating func putText(_ text: String, at point: CGPoint, ink: MarkupInk, replacing index: Int? = nil) {
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if content.isEmpty {
             if let index, marks.indices.contains(index), marks[index].tool == .text {
-                history.append(marks); marks.remove(at: index)
+                record(marks); marks.remove(at: index)
             }
             return
         }
-        history.append(marks)
         let mark = MarkupMark(tool: .text, points: [clamped(point)], ink: ink, text: content)
-        if let index, marks.indices.contains(index), marks[index].tool == .text { marks[index] = mark }
-        else { marks.append(mark) }
+        if let index, marks.indices.contains(index), marks[index].tool == .text {
+            guard marks[index] != mark else { return }
+            record(marks); marks[index] = mark
+        } else { record(marks); marks.append(mark) }
+    }
+    /// LKM-647: a new colour or weight for one mark. `coalesce` folds a run of live colour
+    /// updates to the same mark into the step that started it.
+    mutating func restyle(at index: Int, ink: MarkupInk? = nil, stroke weight: MarkupStroke? = nil, coalesce: Bool = false) {
+        guard marks.indices.contains(index), !isDrawing, !isEditing else { return }
+        var mark = marks[index]
+        if let ink { mark.ink = ink }
+        if let weight, mark.tool != .text { mark.stroke = weight }
+        guard mark != marks[index] else { return }
+        if !(coalesce && restyling == index) { record(marks) }
+        restyling = coalesce ? index : nil
+        marks[index] = mark
+    }
+    /// LKM-647: the selected mark goes, and only it.
+    mutating func remove(at index: Int) {
+        guard marks.indices.contains(index), !isDrawing, !isEditing else { return }
+        record(marks); marks.remove(at: index)
+    }
+    /// A move or resize: `update` while dragging, `endEdit` makes it one step (none if nothing moved).
+    mutating func beginEdit() { guard !isDrawing, editBase == nil else { return }; editBase = marks }
+    mutating func update(at index: Int, points: [CGPoint]) {
+        guard editBase != nil, marks.indices.contains(index) else { return }
+        marks[index].points = points.map(clamped)
+    }
+    mutating func endEdit() {
+        guard let base = editBase else { return }
+        editBase = nil
+        if base != marks { record(base) }
     }
     mutating func undo() {
         if stroke != nil { stroke = nil; return }
-        if let previous = history.popLast() { marks = previous }
+        if let base = editBase { marks = base; editBase = nil; return }
+        guard let previous = history.popLast() else { return }
+        future.append(marks); marks = previous; restyling = nil
+    }
+    mutating func redo() {
+        guard canRedo, let next = future.popLast() else { return }
+        history.append(marks); marks = next; restyling = nil
     }
     mutating func clear() {
         stroke = nil
+        if let base = editBase { marks = base; editBase = nil }
         guard !marks.isEmpty else { return }
-        history.append(marks); marks = []
+        record(marks); marks = []
     }
 }
 
@@ -182,8 +253,15 @@ enum MarkupRenderer {
     }
     /// `context` has a top-left origin and captured-pixel units. A white halo keeps the ink
     /// readable on any page. `minimumWidth` keeps a mark visible on a small canvas.
+    /// LKM-647: the line width one mark is drawn at, its own weight over the snapshot's base.
+    static func width(of mark: MarkupMark, size: CGSize, minimumWidth: CGFloat = 0) -> CGFloat {
+        max(lineWidth(for: size), minimumWidth) * mark.stroke.scale
+    }
+    /// The stroked outline of a mark (no halo), for hit-testing and selection bounds.
+    static func outline(_ mark: MarkupMark, size: CGSize) -> CGPath {
+        path(mark, width: width(of: mark, size: size))
+    }
     static func draw(_ marks: [MarkupMark], in context: CGContext, size: CGSize, minimumWidth: CGFloat = 0) {
-        let width = max(lineWidth(for: size), minimumWidth)
         context.saveGState(); defer { context.restoreGState() }
         context.setLineCap(.round); context.setLineJoin(.round)
         for mark in marks {
@@ -197,6 +275,7 @@ enum MarkupRenderer {
                 CTLineDraw(line, context)
                 context.restoreGState()
             } else {
+                let width = width(of: mark, size: size, minimumWidth: minimumWidth)
                 for (color, stroke) in [(halo, width * 1.8), (mark.ink.color, width)] {
                     context.setStrokeColor(color); context.setLineWidth(stroke)
                     context.addPath(path(mark, width: width)); context.strokePath()

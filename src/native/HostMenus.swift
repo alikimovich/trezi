@@ -93,7 +93,7 @@ extension Host {
             case .visual: break
             }
         }
-        if undo, markup?.undo() == true { return }
+        if undo ? markup?.undo() == true : markup?.redo() == true { return }
         // The field shows the restored value at once; nothing typed is pending in it.
         InspectorTyping.dirty = false
         // From the page, only the visual draft may answer: a page with its own ⌘Z never

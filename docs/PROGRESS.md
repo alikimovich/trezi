@@ -1,5 +1,44 @@
 # PROGRESS LOG
 
+## 2026-11-11 — LKM-647: Mark up toolbar is compact, contextual, bottom-anchored, with a trailing Close
+
+- The island (`PreviewMarkupOverlay`, now its own file) shows only what applies. Idle (no marks,
+  no region): Select, Pen, the shapes slot (last shape + a chevron `NSMenu` with Rectangle,
+  Circle, Arrow; R/C/A still pick directly), Text, a divider and an icon-only X ("Close
+  annotation tools", tooltip says it discards unsent marks when there are some). A drawing
+  tool or a selected mark adds the LKM-645 `NSColorWell` and, for stroked marks, a Thin /
+  Medium / Thick `NSPopUpButton`; content adds Undo, Redo, Delete and a tinted Add to chat.
+  After undoing everything Undo/Redo stay (Redo still has work), Delete and Add go. The
+  "Snapshot of the preview" label and its space are gone; `statusText` is only an error or
+  "Adding…" (also the Add button's title while busy). Close keeps Cancel's semantics (the
+  session and its marks go, nothing is added).
+- Layout: the shown controls flow in rows, Close pinned at the right of the first row, and
+  the island is anchored 10 pt above the page's bottom edge, growing upward (error row on top).
+  The snapshot frame never changes with the toolbar. At 300–360 pt panes the island wraps to
+  two or three rows with Close and Add inside it.
+- One Select tool (`cursorarrow`, S) replaces Select region and opens by default, as in the
+  reference: its handles first, then a mark's stroke (or text box) selects it, then the
+  region as in LKM-646. Selection is editor state on the canvas (`selection`), cleared by any
+  other tool; its accent outline and handles (`MarkupSelection`) are drawn after the region
+  guides and never by the renderer. Rectangles/circles get 8 box handles, arrows their two
+  ends; pen strokes and text get a dashed outline only and move (no handles that do nothing).
+- `MarkupMark.stroke` (thin 0.5× / medium / thick 2× the base width) is stored and drawn per
+  mark, in canvas and composite. The colour well and stroke menu change the selected mark only,
+  else the next marks' defaults; a live colour drag on one mark coalesces into one step.
+- `MarkupDocument` gained Redo (any new step drops it), `restyle`, `remove` and a move/resize
+  edit (`beginEdit`/`update`/`endEdit`, one step, none if nothing moved). Delete (button or
+  ⌫) removes the selected mark (undoable) or else the region; Clear All moved to the canvas's
+  context menu. Escape: deselect, then clear the region, then close. ⇧⌘Z and the menu's Redo
+  reach the marks (`PreviewMarkup.redo`, `Host.editUndo`); ⌘Z/⇧⌘Z while typing on the canvas
+  are left to the text field.
+- Evidence: new `test/preview-markup-toolbar.mjs` (unit; `TREZI_MARKUP_TOOLBAR_SHOTS=<dir>`
+  writes each state as PNG, offscreen so no Liquid Glass); `preview-markup` and
+  `preview-markup-region` fixtures updated. Native smoke gains `smoke-markup-toolbar.ts`
+  (idle, drawn, selected + panel colour + stroke, ⌘Z/⇧⌘Z, ⌫, marks + region, Add bytes ==
+  composite, 360 pt pane, Close); the other Mark up smokes use the new labels, keys for
+  shapes, the `clearAll`/`stroke` seams and the bottom anchor. Native smoke not run locally
+  (Forge/CI run it); `bun run build:native` passes.
+
 ## 2026-11-11 — LKM-646: Mark up Select region sends a cropped screenshot without drawing
 
 - New first tool in the Mark up island: Select region (`rectangle.dashed`, S). A drag in

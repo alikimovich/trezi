@@ -309,6 +309,7 @@ retirement). LKM-111 removed the `rollback` class with the writers it listed.
 | `src/native/smoke-inspector-island.ts` | test | — | smoke fixture |
 | `src/native/smoke-markup-acceptance.ts` | test | — | opt-in foreground Mark up acceptance PNG and JSON evidence (LKM-455) |
 | `src/native/smoke-markup-region.ts` | test | — | Mark up Select region smoke PNG and JSON evidence (LKM-646) |
+| `src/native/smoke-markup-toolbar.ts` | test | — | Mark up contextual toolbar and selection smoke PNG and JSON evidence (LKM-647) |
 | `src/native/smoke-incident.ts` | test | — | smoke fixture |
 | `src/native/smoke-preview-timing.ts` | test | — | smoke fixture |
 | `src/native/smoke-preview-speed.ts` | test | — | smoke fixture |

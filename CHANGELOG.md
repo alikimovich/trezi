@@ -21,6 +21,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Changed
 
+- The Mark up toolbar is compact and contextual at the bottom of the preview: Select, Pen, a shapes menu, Text and a trailing close button (X) when idle; colour and stroke width appear for drawing tools or a selected mark, and Undo, Redo, Delete and Add to chat once there is something to send. The "Snapshot of the preview" text and the Cancel button are gone. Select picks a drawn mark to recolour, restroke, move, resize or delete it, or drags a region to send (LKM-647).
+
 - Mark up ink is chosen with the standard macOS color picker (a compact color well in the Mark up toolbar) instead of a five-color menu; any color works, and each mark keeps the color it was drawn in (LKM-645).
 - An inspector Apply or comment agent on a web project now starts its private dev server as soon as its worktree is ready, alongside the model, instead of only when the agent checks its edit, so a cold dev-server start no longer adds to the wait; each Apply's phases (queue, setup, model, checks, landing, preview) are now in Trezi's log to show where the time goes (LKM-639).
 - You can keep editing styles while an inspector Apply runs: the applied values stay on the preview (no jump back to the old style) until the page itself shows them, your next edits sit on top and get their own Apply, which waits for the previous one on the same file; Undo and Revert act on the new edits only, and a failed or cancelled Apply comes back under them with the reason instead of being lost (LKM-638).

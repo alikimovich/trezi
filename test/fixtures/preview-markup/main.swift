@@ -241,9 +241,13 @@ overlay.layoutSubtreeIfNeeded(); overlay.layout()
 let chooserOverlay = PreviewMarkupOverlay(image: solid(1600, 1000, .systemBlue))
 chooserOverlay.frame = overlay.frame
 chooserOverlay.layoutSubtreeIfNeeded(); chooserOverlay.layout()
+// LKM-647: the swatch belongs to a drawing tool (or a selected mark); Mark up opens on Select.
+check(chooserOverlay.colorWell.isHidden, "no colour in the idle island")
+chooserOverlay.select(.pen)
 // LKM-645: the ink is a real colour well bound to the standard panel, any colour, sRGB.
 let colorWell = chooserOverlay.colorWell
-check(chooserOverlay.island.face.subviews.contains { $0 is NSPopUpButton } == false, "no preset color menu")
+check(!chooserOverlay.island.face.subviews.contains { ($0 as? NSPopUpButton).map { $0 !== chooserOverlay.strokePopUp } ?? false }, "no preset color menu")
+check(chooserOverlay.strokePopUp.itemTitles == ["Thin", "Medium", "Thick"], "the only menu is the stroke width")
 check(colorWell.accessibilityLabel() == "Annotation color" && colorWell.accessibilityRole() == .colorWell, "color well has an accessible label and role")
 check(colorWell.colorWellStyle == .default && colorWell.frame.width <= 44, "a compact swatch in the toolbar")
 check(MarkupInk(colorWell.color) == .red && chooserOverlay.canvas.ink == .red, "the well shows the current ink")
@@ -314,10 +318,10 @@ NSColorPanel.shared.color = .systemYellow
 check(chooserOverlay.canvas.ink == MarkupInk(teal)!, "no retained binding updates a closed overlay")
 other.removeFromSuperview()
 let names = overlay.controls.map { $0.cell?.accessibilityLabel() ?? "" }
-for name in ["Pen", "Rectangle", "Circle", "Arrow", "Undo", "Clear", "Cancel", "Add to chat"] { check(names.contains(name), "VoiceOver reads \(name)") }
-check(overlay.controls.allSatisfy { $0.cell?.accessibilityRole() == .button || $0.cell?.accessibilityRole() == .radioButton }, "control roles")
+for name in ["Select", "Pen", "Rectangle", "Shapes", "Text", "Stroke width", "Undo", "Redo", "Delete", "Add to chat", "Close annotation tools"] { check(names.contains(name), "VoiceOver reads \(name)") }
+check(overlay.controls.allSatisfy { [.button, .radioButton, .menuButton, .popUpButton].contains($0.cell?.accessibilityRole()) || $0 === overlay.strokePopUp }, "control roles")
 check(!overlay.statusText.lowercased().contains("pause") && !overlay.statusText.lowercased().contains("frozen page"), "it never claims the page is paused")
-check(overlay.statusText == "Snapshot of the preview", "it says what is shown")
+check(overlay.statusText.isEmpty, "no filler text (LKM-647)")
 check(overlay.layer?.backgroundColor?.alpha == 1, "opaque: the live page never shows through")
 check(!overlay.addEnabled, "Add is off with no marks: no unmarked original can leave")
 check(!overlay.undoEnabled, "nothing to undo")
@@ -331,14 +335,14 @@ overlay.keyDown(with: key("a", 0, window: window)); check(overlay.tool == .arrow
 overlay.keyDown(with: key("p", 35, window: window)); check(overlay.tool == .pen, "P picks the pen")
 overlay.keyDown(with: key("t", 17, window: window)); check(overlay.tool == .text, "T picks canvas text")
 let textButton = overlay.controls.first { $0.cell?.accessibilityLabel() == "Text" }!
+check(overlay.shapeButton.cell?.accessibilityLabel() == "Arrow", "the shapes slot shows the last shape")
 let focusedColor = overlay.colorWell
 check(focusedColor.canBecomeKeyView && overlay.controls.last(where: { $0.cell?.accessibilityLabel() == "Text" })?.nextKeyView === focusedColor, "Tab reaches the color well after the tools")
 check(window.makeFirstResponder(focusedColor) && window.firstResponder === focusedColor, "focus moves to the color well")
 check(textButton.state == .on && textButton.contentTintColor == .controlAccentColor &&
       textButton.cell?.accessibilityValue() as? String == "selected", "Text stays tinted and accessibly selected after focus moves")
-for name in ["Pen", "Rectangle", "Circle", "Arrow"] {
-    let peer = overlay.controls.first { $0.cell?.accessibilityLabel() == name }!
-    check(peer.state == .off && peer.contentTintColor == nil && peer.cell?.accessibilityValue() as? String != "selected", "\(name) stays unselected after Text loses focus")
+for peer in overlay.controls where peer !== textButton && peer.cell?.accessibilityRole() == .radioButton {
+    check(peer.state == .off && peer.contentTintColor == nil && peer.cell?.accessibilityValue() as? String != "selected", "\(peer.cell?.accessibilityLabel() ?? "") stays unselected after Text loses focus")
 }
 overlay.keyDown(with: key("p", 35, window: window))
 overlay.keyDown(with: key("x", 7, window: window)); check(overlay.tool == .pen, "another key does nothing and goes nowhere")
@@ -364,8 +368,9 @@ for _ in 0..<(overlay.controls.count + 1) {
     next = next?.nextValidKeyView ?? next?.nextKeyView
     if let view = next { seen.append(view) }
 }
-for control in overlay.controls { check(seen.contains(control), "Tab reaches \(control.cell?.accessibilityLabel() ?? "")"); check(control.canBecomeKeyView, "without Full Keyboard Access") }
-check(seen.allSatisfy { $0 === overlay || overlay.controls.contains($0 as? NSButton ?? NSButton()) }, "Tab stays in the overlay")
+for control in overlay.controls where !control.isHidden && control.isEnabled { check(seen.contains(control), "Tab reaches \(control.cell?.accessibilityLabel() ?? "")"); check(control.canBecomeKeyView, "without Full Keyboard Access") }
+check(seen.allSatisfy { $0 === overlay || $0 === overlay.colorWell || overlay.controls.contains($0 as? NSButton ?? NSButton()) }, "Tab stays in the overlay")
+check(overlay.controls.filter(\.isHidden).allSatisfy { !seen.contains($0) }, "and skips what is not shown")
 // ⌘Z with the composer's focus is the composer's.
 let elsewhere = NSTextView(frame: NSRect(x: 0, y: 0, width: 10, height: 10)); window.contentView!.addSubview(elsewhere)
 window.makeFirstResponder(elsewhere)
@@ -375,13 +380,17 @@ elsewhere.removeFromSuperview()
 // an island at its top: one row when wide, wrapped when narrow, nothing clipped or overlapping.
 func noOverlap(_ label: String) {
     let island = overlay.barFrame, shown = overlay.canvas.frame
-    let frames = overlay.controls.map { $0.convert($0.bounds, to: overlay) }
+    let frames = (overlay.controls.filter { !$0.isHidden } + (overlay.colorWell.isHidden ? [] : [overlay.colorWell])).map { $0.convert($0.bounds, to: overlay) }
     for (i, a) in frames.enumerated() {
         check(island.contains(a), "\(label): control \(i) inside the island \(a) \(island)")
         for b in frames[(i + 1)...] { check(!a.intersects(b), "\(label): controls overlap") }
     }
     check(shown.contains(island), "\(label): the island floats inside the snapshot")
-    check(near(island.minY, shown.minY + PreviewMarkupOverlay.inset, 1), "\(label): at its top")
+    // LKM-647: at its bottom, with Close at the right edge of the first row.
+    check(near(island.maxY, shown.maxY - PreviewMarkupOverlay.inset, 1), "\(label): at its bottom")
+    let close = overlay.controls.last!.convert(overlay.controls.last!.bounds, to: overlay)
+    check(overlay.controls.last?.cell?.accessibilityLabel() == "Close annotation tools" && !overlay.controls.last!.isHidden && near(close.maxX, island.maxX - 8, 1), "\(label): Close at the right edge")
+    check(frames.allSatisfy { $0.minY >= close.minY - 0.5 } && frames.filter { abs($0.minY - close.minY) < 0.5 }.allSatisfy { $0.maxX <= close.maxX }, "\(label): Close ends the first row")
     check(near(island.midX, shown.midX, 1), "\(label): centred")
     check(island.minX >= shown.minX + PreviewMarkupOverlay.inset - 1 && island.maxX <= shown.maxX - PreviewMarkupOverlay.inset + 1, "\(label): inset from its sides")
     // Over the snapshot, not beside it: no row, so the snapshot loses no height.

@@ -14,7 +14,9 @@ if (process.platform !== 'darwin') {
     'src/native/KeyShortcuts.swift',
     'src/native/PreviewMarkupModel.swift',
     'src/native/PreviewMarkupRegion.swift',
+    'src/native/PreviewMarkupSelection.swift',
     'src/native/PreviewMarkupView.swift',
+    'src/native/PreviewMarkupOverlay.swift',
     'src/native/PreviewMarkup.swift'
   ])
   const report = JSON.parse(runFixture(binary))

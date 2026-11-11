@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
 import { checkMarkupRegion } from './smoke-markup-region'
+import { checkMarkupToolbar } from './smoke-markup-toolbar'
 import { waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -293,14 +294,17 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
     return reply
   }
   const button = (label: string) => event({ action: 'button', label })
+  // LKM-647: the shapes share one slot and a menu (a modal menu the smoke does not track), so
+  // they are picked by their keys, a real AppKit route; the pen by its button.
   const stroke = async (tool: string, points: number[][]) => {
-    const labels: Record<string, string> = {
-      rectangle: 'Rectangle',
-      circle: 'Circle',
-      arrow: 'Arrow',
-      pen: 'Pen'
+    const keys: Record<string, [string, number]> = {
+      rectangle: ['r', 15],
+      circle: ['c', 8],
+      arrow: ['a', 0]
     }
-    await button(labels[tool])
+    if (tool === 'pen') await button('Pen')
+    else await event({ action: 'key', key: keys[tool][0], code: keys[tool][1] })
+    assert.equal((await inspect()).tool, tool, `${tool} is the tool`)
     await event({ action: 'pointer', points })
   }
 
@@ -330,15 +334,21 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   assert.equal(opened.topmost, true, 'the overlay is above the preview')
   assert.ok(opened.cover > 0, 'the page is told the overlay covers it')
   assert.doesNotMatch(opened.status, /pause/i, 'the status does not claim a paused page')
-  for (const label of ['Pen', 'Rectangle', 'Circle', 'Arrow', 'Undo', 'Clear', 'Cancel'])
+  // LKM-647: the idle island is compact: tools and a trailing Close, no filler, no disabled
+  // Undo/Delete/Add; the rest has labels and appears with content.
+  assert.equal(opened.status, '', 'no filler text in the island')
+  assert.deepEqual(
+    opened.controls
+      .filter((control: State) => !control.hidden)
+      .map((control: State) => control.label),
+    ['Select', 'Pen', 'Rectangle', 'Shapes', 'Text', 'Close annotation tools'],
+    'the idle island is compact'
+  )
+  for (const label of ['Undo', 'Redo', 'Delete', 'Add to chat', 'Stroke width'])
     assert.ok(
       opened.controls.some((control: State) => control.label === label),
       `${label} has a label`
     )
-  assert.ok(
-    opened.controls.some((control: State) => control.label === 'Add to chat'),
-    'Add to chat has a label'
-  )
   // Retina: the image holds the backing pixels of the viewport it shows.
   assert.ok(
     Math.abs(
@@ -405,8 +415,10 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   assert.equal((await inspect()).marks.length, 3, '⌘Z takes the last mark')
   await button('Undo')
   assert.equal((await inspect()).marks.length, 2, 'Undo button takes another mark')
-  await button('Clear')
-  assert.equal((await inspect()).marks.length, 0, 'Clear takes every mark')
+  // Clear All lives in the canvas's context menu, apart from Delete (a context menu tracks
+  // modally, so the smoke calls its item's action).
+  await test({ action: 'clearAll' })
+  assert.equal((await inspect()).marks.length, 0, 'Clear All takes every mark')
   await stroke('rectangle', box(0.1, 0.3, 0.3, 0.2))
   await stroke('arrow', box(0.4, 0.4, 0.3, 0.2))
 
@@ -447,10 +459,10 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   assert.equal(state.text, DRAFT, 'Escape keeps the draft')
   assert.equal(state.attachments.length, 1, 'Escape attaches nothing')
 
-  // Cancel the same way.
+  // Close the same way.
   await open('cancel')
   await stroke('circle', box(0.1, 0.3, 0.2, 0.2))
-  await button('Cancel')
+  await button('Close annotation tools')
   await closed('cancel')
   await step('cancelled', 'real event route')
   assert.equal((await composer()).attachments.length, 1, 'Cancel attaches nothing')
@@ -491,7 +503,7 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
       Math.abs(marked.marks[0].view[0][0] - (shown.x + shown.width * 0.25)) < 1,
       `${label}: the mark lands on the image`
     )
-    await button('Cancel')
+    await button('Close annotation tools')
     await closed(label)
     await host.request('previewViewport', {})
   }
@@ -596,6 +608,9 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   // LKM-646: Select region, crop-only and marked, on the same page and chat.
   await page(PAGE)
   await checkMarkupRegion(host, page, folder)
+  // LKM-647: the contextual island and single-mark selection, on the same page and chat.
+  await page(PAGE)
+  await checkMarkupToolbar(host, folder)
 }
 
 type Composite = { type: string; data: string; name: string; note?: string }

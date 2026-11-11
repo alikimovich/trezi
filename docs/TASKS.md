@@ -3,6 +3,16 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-647 — Compact, contextual Mark up toolbar with a trailing Close
+
+- [x] Remove the "Snapshot of the preview" filler; errors and "Adding…" stay visible.
+- [x] Icon-only Close (X) at the island's right edge with Cancel's semantics; honest tooltip when marks would be discarded.
+- [x] Compact idle island (Select, Pen, shapes menu, Text, Close); colour/stroke for drawing tools or a selected mark; Undo/Redo/Delete/Add with content; back to compact when content is undone.
+- [x] Single-mark selection with the Select tool: colour (standard panel) and per-mark stroke for that mark only, move, box/end handles, Delete; region selection kept (LKM-646); annotation Redo.
+- [x] Island anchored at the bottom of the page; wraps with Close and Add reachable at narrow panes; the snapshot never moves.
+- [x] Fixture `test/preview-markup-toolbar.mjs`; native smoke `smoke-markup-toolbar.ts`; existing Mark up fixtures/smokes updated.
+- [ ] Manager: independent review, exact-head CI (native `preview-markup` group), merge and post-merge native acceptance.
+
 ## LKM-646 — Mark up Select region: send a cropped preview screenshot without drawing
 
 - [x] `MarkupTool.select` ("Select region", `rectangle.dashed`, key S) in the island; `MarkupRegion` (captured whole pixels, either drag direction, clamped, move, 8 resize handles, too-small = none) held by the canvas apart from the marks' Undo/Clear history.
