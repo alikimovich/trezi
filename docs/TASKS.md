@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-639 — Measure and reduce inspector edit and subagent Apply latency
+
+- [x] Traced the Apply path and checked existing logs: no phase data for the owner's operation; model time unmeasured.
+- [x] Phase timeline per spawn id (`src/main/spawn-phases.ts`) and inspector stages (`src/native/inspector-apply-timing.ts`), one `op`, non-overlapping spans, bounded fields.
+- [x] Baseline on the padding 2rem → 0.75rem fixture (unit `spawn-phases`): Trezi overhead ≈ 0.6 s; cold private dev server measured separately (Next ≈ 2 s ready + 1.1 s compile, Vite ≈ 0.4 s).
+- [x] Prestart the spawn worktree's private dev server alongside the model (`src/main/spawn-prewarm.ts`); fixture total 5692 → 4188 ms with a 2 s cold start; stopped with the spawn.
+- [ ] Manager: read the first real `Background agent phases` lines from the owner's Apply; decide on a scoped Apply model if `modelMs` dominates; native groups and exact-head CI.
+
 ## LKM-638 — Keep styling editable and the preview steady while inspector Apply runs
 
 - [x] Traced on main: `action('apply')` refused every style edit while `submitted`/`submitting`/`draftConflict` (the screenshot's "Wait for Apply…"); the success path cleared all preview overrides before re-reading (`invalidated`: clear, refresh, re-project), a visible snapback; and A's own landing flagged the next draft as a source conflict.

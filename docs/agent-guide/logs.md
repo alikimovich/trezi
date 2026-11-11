@@ -65,6 +65,15 @@ Lifecycle facts only:
   providerMs= landingMs= calls= toolMs= perTool=<tool:count/ms,…>` per turn
   (`src/main/turn-timing.ts`). The agent reads the same timing in `workspace_state`;
   tool arguments and answers are never logged;
+- background agent (comment, inspector Apply) phases (LKM-639): one `spawn` `Background
+  agent phases op=<id> origin= outcome=` line per spawn with consecutive, non-overlapping
+  spans `queueMs laneWaitMs worktreeMs providerMs peerMs toFirstEditMs modelMs
+  preLandingMs leaseWaitMs landingMs totalMs`, plus `checkMs checks` (the agent's checks,
+  inside `modelMs`) and `continuations` (`src/main/spawn-phases.ts`); `Background agent
+  dev server prestarted|prestart failed op= ms=` (`src/main/spawn-prewarm.ts`); and the
+  inspector's `Inspector Apply dispatched|landed|visible|returned op= fields=` with
+  `preflightMs`, `workerMs`, `previewMs`, `totalMs` (`src/native/inspector-apply-timing.ts`),
+  joined on the same `op`;
 - provider helper start, exit and crash with status, and backend start and exit;
   `Backend stopping chats=<n> background=<n>` when a quit begins counts the agent work
   it cuts off (LKM-346): a chat restored as interrupted with no such line before the

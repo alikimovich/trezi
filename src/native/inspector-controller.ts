@@ -19,6 +19,7 @@ import { projectRelative } from '../shared/project-path'
 import { describeSelectionForPrompt } from '../shared/selection-context'
 import { tokensForProp } from '../shared/token-match'
 import { applySummary } from './inspector-apply'
+import { noteApplyStage } from './inspector-apply-timing'
 import {
   type ApplyBatch,
   batchesLabel,
@@ -332,6 +333,7 @@ export class NativeInspectorController {
       }
       for (const prop of adopt) this.adopting.add(prop)
       this.batches.splice(this.batches.indexOf(batch), 1)
+      noteApplyStage(batch, 'visible')
       retired = true
     })
     return retired
@@ -410,6 +412,7 @@ export class NativeInspectorController {
     }
     batch.status = 'landed'
     batch.landedAt = this.invalidations
+    noteApplyStage(batch, 'landed')
     await this.pump()
     if (batch.root === this.state.root && batch.target === this.target())
       await this.reconcileLayers()
@@ -436,6 +439,7 @@ export class NativeInspectorController {
     const at = this.batches.indexOf(batch)
     if (at < 0) return
     this.batches.splice(at, 1)
+    noteApplyStage(batch, 'returned')
     const later = this.batches
       .slice(at)
       .filter((other) => other.root === batch.root && other.target === batch.target)
@@ -572,6 +576,7 @@ export class NativeInspectorController {
       const id = turn || `draft-${Date.now()}-${batch.key}`
       batch.id = id
       batch.status = 'running'
+      noteApplyStage(batch, 'dispatched')
       this.state.edits = (this.state.edits ?? 0) + 1
       const early = this.early.get(id)
       this.early.delete(id)
@@ -1224,7 +1229,7 @@ export class NativeInspectorController {
   async action(action: NativeInspectorAction) {
     if (action.root !== this.state.root || action.generation !== this.state.generation) return
     const root = this.state.root
-    let generation = this.state.generation
+    const generation = this.state.generation
     try {
       if (action.action.startsWith('spacing:')) {
         const group = action.action.slice(8)
@@ -1301,6 +1306,7 @@ export class NativeInspectorController {
           drafts: new Map(this.drafts),
           history: this.draftHistory.map((step) => new Map(step)),
           tokens,
+          times: { applied: Date.now() },
           status: 'queued'
         })
         this.drafts = new Map()
