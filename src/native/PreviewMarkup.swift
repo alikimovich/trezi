@@ -166,8 +166,12 @@ final class PreviewMarkup {
         guard let overlay, let token = session, overlay.addEnabled else { return }
         overlay.show(error: nil)
         let canvas = overlay.canvas
-        guard let encoded = MarkupEncoder.encode(canvas.image, marks: canvas.document.marks, budget: budget) else {
-            let message = "Mark up could not make an image small enough to send. Nothing was added."
+        // LKM-646: a selected region sends exactly that part; a failed crop fails out loud and
+        // never falls back to the whole snapshot.
+        let crop = canvas.region.valid
+        guard let encoded = MarkupEncoder.encode(canvas.image, marks: canvas.document.marks, crop: crop, budget: budget) else {
+            let message = crop == nil ? "Mark up could not make an image small enough to send. Nothing was added."
+                : "Mark up could not make an image of the selected region. Nothing was added."
             overlay.show(error: message)
             recovery?.show(error: message)
             return
@@ -176,6 +180,12 @@ final class PreviewMarkup {
         recovery?.adding = true
         var capture = context
         capture["imageWidth"] = encoded.width; capture["imageHeight"] = encoded.height
+        capture["marks"] = canvas.document.marks.count
+        if let crop {
+            capture["regionX"] = Int(crop.minX); capture["regionY"] = Int(crop.minY)
+            capture["regionWidth"] = Int(crop.width); capture["regionHeight"] = Int(crop.height)
+            capture["snapshotWidth"] = canvas.image.width; capture["snapshotHeight"] = canvas.image.height
+        }
         emit(["event":"markup-add", "session":token, "name":encoded.name, "type":encoded.type,
               "data":encoded.data.base64EncodedString(), "capture":capture])
     }
@@ -190,8 +200,8 @@ final class PreviewMarkup {
     }
     /// The host's Escape; the chat next to it keeps its own.
     func escape() -> Bool {
-        guard overlay?.isHidden == false, overlay?.ownsFocus == true else { return false }
-        cancel()
+        guard let overlay, !overlay.isHidden, overlay.ownsFocus else { return false }
+        overlay.escape()
         return true
     }
     /// The menu's Undo, when no text view took it.

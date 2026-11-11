@@ -102,7 +102,9 @@ extension Host {
                 "adding":overlay.adding, "status":overlay.statusText, "error":overlay.errorShown, "animates":overlay.animates, "focused":overlay.ownsFocus,
                 "topmost":canvasTopmost(overlay), "cover":previewCoverRects().count, "context":markup?.context ?? [:], "magenta":magentaPixels(bitmap),
                 "controls":overlay.controls.map { ["label":$0.cell?.accessibilityLabel() ?? "", "enabled":$0.isEnabled, "frame":rect($0.convert($0.bounds, to: overlay))] as [String: Any] },
-                "island":islandState, "geometry":previewMarkupGeometry(), "colorWell":markupColorWellState(overlay)]
+                "island":islandState, "geometry":previewMarkupGeometry(), "colorWell":markupColorWellState(overlay),
+                "region":canvas.region.valid.map { rect($0) } ?? NSNull(), "regionDragging":canvas.region.isDragging,
+                "regionView":canvas.region.valid.map { rect(MarkupRegionChrome.viewRect($0, mapping)) } ?? NSNull()]
     }
     /// LKM-645: the ink well and the shared standard colour panel it binds.
     private func markupColorWellState(_ overlay: PreviewMarkupOverlay) -> [String: Any] {
@@ -155,16 +157,16 @@ extension Host {
                     "tool":overlay.tool.rawValue, "textSelected":text?.state == .on,
                     "textAccessible":text?.cell?.accessibilityValue() as? String ?? "",
                     "textTinted":text?.contentTintColor == .controlAccentColor,
-                    "peersOff":overlay.controls.filter { ["Pen", "Rectangle", "Circle", "Arrow"].contains($0.cell?.accessibilityLabel() ?? "") }
+                    "peersOff":overlay.controls.filter { ["Select region", "Pen", "Rectangle", "Circle", "Arrow"].contains($0.cell?.accessibilityLabel() ?? "") }
                         .allSatisfy { $0.state == .off && $0.contentTintColor == nil }]
         case "colorPanelClose":
             // Cleanup seam only: the panel the smoke opened, whoever it is bound to now.
             if NSColorPanel.sharedColorPanelExists { NSColorPanel.shared.orderOut(nil) }
             return ["ok":true]
         case "annotationComposite":
-            guard let canvas = markup?.overlay?.canvas,
-                  let image = MarkupRenderer.composite(canvas.image, marks: canvas.document.marks, maxPixels: 2048),
-                  let encoded = MarkupEncoder.encode(canvas.image, marks: canvas.document.marks) else { return ["error":"Composite unavailable"] }
+            guard let canvas = markup?.overlay?.canvas, case let crop = canvas.region.valid,
+                  let image = MarkupRenderer.composite(canvas.image, marks: canvas.document.marks, maxPixels: 2048, crop: crop),
+                  let encoded = MarkupEncoder.encode(canvas.image, marks: canvas.document.marks, crop: crop) else { return ["error":"Composite unavailable"] }
             let bitmap = NSBitmapImageRep(cgImage: image)
             // Pixels within a few steps of each ink the marks were drawn in, keyed by its hex.
             let inks = Set(canvas.document.marks.map(\.ink.hex))
@@ -179,6 +181,10 @@ extension Host {
             }
             return ["data":encoded.data.base64EncodedString(), "type":encoded.type,
                     "width":image.width, "height":image.height, "inkPixels":counts]
+        case "imageStats":
+            // LKM-646: an attachment the smoke took from the composer, measured (seam only).
+            guard let data = (c["data"] as? String).flatMap({ Data(base64Encoded: $0) }) else { return ["error":"Image unreadable"] }
+            return MarkupImageStats.measure(data, expect: c["expect"] as? String, ink: c["ink"] as? String, tolerance: c["tolerance"] as? Double ?? 0.06)
         default: return ["error":"Unknown Mark up test action"]
         }
     }

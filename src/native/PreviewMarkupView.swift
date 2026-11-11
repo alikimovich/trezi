@@ -6,7 +6,9 @@ import AppKit
 final class PreviewMarkupCanvas: NSView, NSTextFieldDelegate {
     let image: CGImage
     private(set) var document: MarkupDocument
-    var tool = MarkupTool.pen
+    /// LKM-646: the part of the snapshot Add sends; never a mark.
+    private(set) var region: MarkupRegion
+    var tool = MarkupTool.pen { didSet { if tool != oldValue { needsDisplay = true; updateCursor() } } }
     var ink = MarkupInk.red
     var changed: (() -> Void)?
     private var textEditor: NSTextField?
@@ -16,6 +18,7 @@ final class PreviewMarkupCanvas: NSView, NSTextFieldDelegate {
     init(image: CGImage) {
         self.image = image
         document = MarkupDocument(size: CGSize(width: image.width, height: image.height))
+        region = MarkupRegion(size: CGSize(width: image.width, height: image.height))
         super.init(frame: .zero)
         setAccessibilityElement(true); setAccessibilityRole(.image)
         updateLabel()
@@ -37,19 +40,38 @@ final class PreviewMarkupCanvas: NSView, NSTextFieldDelegate {
         // 2 pt on screen at the least; the geometry is the composite's whatever the width.
         MarkupRenderer.draw(document.visible, in: context, size: document.size, minimumWidth: mapping.scale > 0 ? 2 / mapping.scale : 0)
         context.restoreGState()
+        // On screen only: the composite never sees the dimming, outline or handles.
+        if let rect = region.rect { MarkupRegionChrome.draw(rect, mapping: mapping, handles: tool == .select, in: context) }
     }
     private func updateLabel() {
         let count = document.marks.count
-        setAccessibilityLabel("Preview snapshot, \(count) \(count == 1 ? "mark" : "marks")")
+        var label = "Preview snapshot, \(count) \(count == 1 ? "mark" : "marks")"
+        if let rect = region.valid { label += ", region \(Int(rect.width)) by \(Int(rect.height)) pixels selected" }
+        setAccessibilityLabel(label)
     }
-    private func edited() { needsDisplay = true; updateLabel(); changed?() }
+    private func edited() { needsDisplay = true; updateLabel(); updateCursor(); changed?() }
     func pointerDown(_ point: NSPoint, tool: MarkupTool) {
         commitText()
         if tool == .text { editText(at: point); return }
+        if tool == .select {
+            let tolerance = mapping.scale > 0 ? MarkupRegionChrome.grab / mapping.scale : MarkupRegionChrome.grab
+            region.begin(at: mapping.toImage(point), tolerance: tolerance); edited(); return
+        }
         document.begin(tool, at: mapping.toImage(point), ink: ink); edited()
     }
-    func pointerDragged(_ point: NSPoint) { document.extend(to: mapping.toImage(point)); edited() }
-    func pointerUp() { document.finish(); edited() }
+    func pointerDragged(_ point: NSPoint) {
+        if region.isDragging { region.extend(to: mapping.toImage(point)) } else { document.extend(to: mapping.toImage(point)) }
+        edited()
+    }
+    func pointerUp() {
+        if region.isDragging { region.finish() } else { document.finish() }
+        edited()
+    }
+    /// Escape's first step: the region goes and the session stays. False with no region.
+    func clearRegion() -> Bool {
+        guard region.clear() else { return false }
+        edited(); return true
+    }
     func undo() { document.undo(); edited() }
     func clear() { document.clear(); edited() }
     var hasDraft: Bool { textEditor?.stringValue.isEmpty == false }
@@ -83,10 +105,38 @@ final class PreviewMarkupCanvas: NSView, NSTextFieldDelegate {
 
     override func mouseDown(with event: NSEvent) {
         if tool != .text, let overlay = superview { window?.makeFirstResponder(overlay) }
-        pointerDown(convert(event.locationInWindow, from: nil), tool: tool)
+        let point = convert(event.locationInWindow, from: nil)
+        let moving = tool == .select && MarkupRegionChrome.cursor(at: point, region: region, mapping: mapping) == .openHand
+        pointerDown(point, tool: tool)
+        if moving { NSCursor.closedHand.set(); selectCursorShown = true }
     }
     override func mouseDragged(with event: NSEvent) { pointerDragged(convert(event.locationInWindow, from: nil)) }
     override func mouseUp(with event: NSEvent) { pointerUp() }
+
+    // LKM-646: the pointer tells what a press will do while Select region is the tool. Set only
+    // where the canvas is what the pointer is over, so the island's buttons keep the arrow.
+    private var pointerArea: NSTrackingArea?
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let pointerArea { removeTrackingArea(pointerArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .cursorUpdate, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil)
+        addTrackingArea(area); pointerArea = area
+    }
+    override func cursorUpdate(with event: NSEvent) { if tool == .select { updateCursor() } else { super.cursorUpdate(with: event) } }
+    override func mouseMoved(with event: NSEvent) { updateCursor() }
+    override func mouseExited(with event: NSEvent) { if tool == .select { NSCursor.arrow.set() } }
+    private var selectCursorShown = false
+    private func updateCursor() {
+        guard let window, !isHidden else { return }
+        let location = window.mouseLocationOutsideOfEventStream
+        let over = window.contentView?.superview?.hitTest(location) === self
+        let point = convert(location, from: nil)
+        if tool == .select, over, !region.isDragging, mapping.frame.contains(point) {
+            MarkupRegionChrome.cursor(at: point, region: region, mapping: mapping).set(); selectCursorShown = true
+        } else if selectCursorShown, !region.isDragging {
+            NSCursor.arrow.set(); selectCursorShown = false
+        }
+    }
 }
 
 /// Tab reaches it with or without Full Keyboard Access; a disabled one is skipped. Keys it
@@ -275,7 +325,7 @@ final class PreviewMarkupOverlay: NSView {
         configure(undoButton, label: "Undo", symbol: "arrow.uturn.backward", hint: "Undo (⌘Z)"); undoButton.action = #selector(undo)
         configure(clearButton, label: "Clear", symbol: "trash", hint: "Clear all marks"); clearButton.action = #selector(clear)
         configure(cancelButton, label: "Cancel", symbol: nil, hint: "Discard this mark up (Esc)"); cancelButton.action = #selector(cancel)
-        configure(addButton, label: "Add to chat", symbol: nil, hint: "Add the marked-up image to the message"); addButton.action = #selector(add)
+        configure(addButton, label: "Add to chat", symbol: nil, hint: "Add the selected region or the marked-up image to the message"); addButton.action = #selector(add)
         statusLabel.font = .systemFont(ofSize: 12); statusLabel.textColor = .secondaryLabelColor; statusLabel.lineBreakMode = .byTruncatingTail
         errorLabel.font = .systemFont(ofSize: 12); errorLabel.textColor = .systemRed; errorLabel.isHidden = true
         island.face.addSubview(statusLabel); island.face.addSubview(errorLabel)
@@ -360,9 +410,11 @@ final class PreviewMarkupOverlay: NSView {
         colorWell.isEnabled = !adding
         undoButton.isEnabled = !adding && canvas.document.canUndo
         clearButton.isEnabled = !adding && marks > 0
-        // Only a marked image can leave: an unmarked original is never added.
-        addButton.isEnabled = !adding && (marks > 0 || canvas.hasDraft) && !canvas.document.isDrawing
-        statusLabel.stringValue = adding ? "Adding…" : Self.status
+        // Only a marked image or an explicitly selected region (LKM-646) can leave: an unmarked
+        // whole original is never added.
+        let region = canvas.region.valid
+        addButton.isEnabled = !adding && (marks > 0 || canvas.hasDraft || region != nil) && !canvas.document.isDrawing && !canvas.region.isDragging
+        statusLabel.stringValue = adding ? "Adding…" : region.map { "Region \(Int($0.width)) × \(Int($0.height)) px" } ?? Self.status
     }
     /// A failure stays on screen, in its own row, until the next attempt.
     func show(error: String?) {
@@ -394,12 +446,14 @@ final class PreviewMarkupOverlay: NSView {
     @objc func undo() { if !adding { canvas.commitText(); canvas.undo() } }
     @objc func clear() { if !adding { canvas.commitText(); canvas.clear() } }
     @objc func cancel() { onCancel?() }
+    /// Escape: a selected region goes first, as in other macOS selections; then the session.
+    func escape() { if adding || !canvas.clearRegion() { cancel() } }
     @objc func add() { canvas.commitText(); onAdd?() }
 
     /// Whether the keyboard is here, not on the chat next to it.
     var ownsFocus: Bool { (window?.firstResponder as? NSView)?.isDescendant(of: self) == true }
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 { cancel(); return }
+        if event.keyCode == 53 { escape(); return }
         if event.keyCode == 48 {
             if event.modifierFlags.contains(.shift) { window?.selectPreviousKeyView(nil) } else { window?.selectNextKeyView(nil) }
             return
@@ -408,7 +462,7 @@ final class PreviewMarkupOverlay: NSView {
               let tool = MarkupTool.allCases.first(where: { $0.key == key }) else { return }
         select(tool)
     }
-    override func cancelOperation(_ sender: Any?) { cancel() }
+    override func cancelOperation(_ sender: Any?) { escape() }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if ownsFocus, KeyShortcut.matches(event, "z", .command) { undo(); return true }
         return super.performKeyEquivalent(with: event)

@@ -5,6 +5,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
+import { checkMarkupRegion } from './smoke-markup-region'
 import { waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -591,6 +592,10 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
   await sendThroughComposer(host, folder, chat, retained, messages, () =>
     event({ action: 'sendButton' })
   )
+
+  // LKM-646: Select region, crop-only and marked, on the same page and chat.
+  await page(PAGE)
+  await checkMarkupRegion(host, page, folder)
 }
 
 type Composite = { type: string; data: string; name: string; note?: string }
