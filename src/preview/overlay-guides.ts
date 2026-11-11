@@ -28,6 +28,8 @@ export function createOverlayGuides(options: {
   send: (geometry: OverlayGeometry) => void
   selection: () => Element | null
   layer: () => HTMLElement | null
+  /** LKM-637: the distance labels go in the overlay's top badge layer; `layer` when absent. */
+  badges?: () => HTMLElement | null
   draw: Draw
 }) {
   let lines: OverlayLines = normalizeLines(null)
@@ -68,6 +70,8 @@ export function createOverlayGuides(options: {
     drawnKey = ''
     const layer = options.layer()
     if (layer) layer.textContent = ''
+    const badges = options.badges?.()
+    if (badges) badges.textContent = ''
   }
   /** Labels the hovered element's distances to the nearest lines; null clears them. */
   const hover = (el: Element | null): void => {
@@ -89,12 +93,13 @@ export function createOverlayGuides(options: {
     const layer = options.layer()
     if (!layer) return
     drawnKey = key || ' '
-    layer.replaceChildren(
-      ...segments.flatMap((s) => [
-        options.draw.line(s),
-        options.draw.label(formatDistance(s.distance), (s.x1 + s.x2) / 2, (s.y1 + s.y2) / 2)
-      ])
-    )
+    const label = (s: MeasureSegment) =>
+      options.draw.label(formatDistance(s.distance), (s.x1 + s.x2) / 2, (s.y1 + s.y2) / 2)
+    const badges = options.badges?.()
+    if (badges) {
+      layer.replaceChildren(...segments.map((s) => options.draw.line(s)))
+      badges.replaceChildren(...segments.map(label))
+    } else layer.replaceChildren(...segments.flatMap((s) => [options.draw.line(s), label(s)]))
   }
   addEventListener('scroll', report, { capture: true, passive: true })
   addEventListener('resize', report, { passive: true })
@@ -107,6 +112,7 @@ export function createOverlayGuides(options: {
       last = ''
       drawnKey = ''
       options.layer()?.replaceChildren()
+      options.badges?.()?.replaceChildren()
       report()
       if (hovered) hover(hovered)
     }
