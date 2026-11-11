@@ -167,6 +167,7 @@ const host = compile(
     join(root, 'src/native/PreviewOverlayVerification.swift'),
     join(root, 'src/native/PreviewAgent.swift'),
     join(root, 'src/native/PreviewMarkupModel.swift'),
+    join(root, 'src/native/PreviewMarkupRegion.swift'),
     join(root, 'src/native/PreviewMarkupView.swift'),
     join(root, 'src/native/PreviewMarkup.swift'),
     join(root, 'src/native/PreviewMarkupHost.swift'),

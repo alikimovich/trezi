@@ -7,12 +7,14 @@ import CryptoKit
 /// zoom, responsive width and overlay resizes, and one renderer paints the canvas and the
 /// composite, so the two agree by construction.
 enum MarkupTool: String, CaseIterable {
-    case pen, rectangle, circle, arrow, text
-    var label: String { rawValue.capitalized }
+    /// LKM-646: Select region picks part of the snapshot to send; it draws no mark.
+    case select, pen, rectangle, circle, arrow, text
+    var label: String { self == .select ? "Select region" : rawValue.capitalized }
     /// The plain key that picks it.
     var key: String { String(rawValue.prefix(1)) }
     var symbol: String {
         switch self {
+        case .select: "rectangle.dashed"
         case .pen: "pencil"
         case .rectangle: "rectangle"
         case .circle: "circle"
@@ -81,7 +83,7 @@ struct MarkupDocument {
         CGPoint(x: min(size.width, max(0, point.x)), y: min(size.height, max(0, point.y)))
     }
     mutating func begin(_ tool: MarkupTool, at point: CGPoint, ink: MarkupInk = .red) {
-        guard tool != .text else { return }
+        guard tool != .text, tool != .select else { return }
         stroke = MarkupMark(tool: tool, points: [clamped(point)], ink: ink)
     }
     mutating func extend(to point: CGPoint) {
@@ -161,7 +163,7 @@ enum MarkupRenderer {
         guard let first = points.first, let last = points.last else { return path }
         let box = CGRect(x: min(first.x, last.x), y: min(first.y, last.y), width: abs(last.x - first.x), height: abs(last.y - first.y))
         switch mark.tool {
-        case .text: break
+        case .text, .select: break
         case .pen:
             path.addLines(between: points.count == 1 ? [first, first] : points)
         case .rectangle:
@@ -203,16 +205,26 @@ enum MarkupRenderer {
         }
     }
     /// The snapshot scaled to at most `maxPixels` with the marks drawn at that scale, not over
-    /// a scaled bitmap of them, so they stay crisp.
-    static func composite(_ image: CGImage, marks: [MarkupMark], maxPixels: CGFloat) -> CGImage? {
-        let captured = CGSize(width: image.width, height: image.height), longest = max(captured.width, captured.height)
-        let scale = min(1, maxPixels / max(longest, 1))
-        let width = max(1, Int((captured.width * scale).rounded())), height = max(1, Int((captured.height * scale).rounded()))
+    /// a scaled bitmap of them, so they stay crisp. LKM-646: with `crop` (captured pixels, top-left)
+    /// only that part of the snapshot and of the marks, at the marks' full-snapshot line width; a
+    /// crop that is empty or outside the image is nil, never the whole image.
+    static func composite(_ image: CGImage, marks: [MarkupMark], maxPixels: CGFloat, crop: CGRect? = nil) -> CGImage? {
+        let captured = CGSize(width: image.width, height: image.height)
+        var area = CGRect(origin: .zero, size: captured), source = image
+        if let crop {
+            let bounded = crop.integral.intersection(area)
+            guard !bounded.isNull, bounded.width >= 1, bounded.height >= 1, let part = image.cropping(to: bounded),
+                  part.width == Int(bounded.width), part.height == Int(bounded.height) else { return nil }
+            area = bounded; source = part
+        }
+        let scale = min(1, maxPixels / max(area.width, area.height, 1))
+        let width = max(1, Int((area.width * scale).rounded())), height = max(1, Int((area.height * scale).rounded()))
         guard let space = CGColorSpace(name: CGColorSpace.sRGB),
               let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
         context.interpolationQuality = .high
-        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        context.draw(source, in: CGRect(x: 0, y: 0, width: width, height: height))
         context.translateBy(x: 0, y: CGFloat(height)); context.scaleBy(x: scale, y: -scale)
+        context.translateBy(x: -area.minX, y: -area.minY)
         draw(marks, in: context, size: captured)
         return context.makeImage()
     }
@@ -251,9 +263,9 @@ enum MarkupEncoder {
     private enum Format { case png, jpeg(Double) }
     private static let steps: [(CGFloat, Format)] = [(2048, .png), (2048, .jpeg(0.9)), (1536, .jpeg(0.85)), (1024, .jpeg(0.8)), (768, .jpeg(0.8))]
 
-    static func encode(_ image: CGImage, marks: [MarkupMark], budget: Int = budget) -> MarkupEncoded? {
+    static func encode(_ image: CGImage, marks: [MarkupMark], crop: CGRect? = nil, budget: Int = budget) -> MarkupEncoded? {
         for (maxPixels, format) in steps {
-            guard let frame = MarkupRenderer.composite(image, marks: marks, maxPixels: maxPixels) else { return nil }
+            guard let frame = MarkupRenderer.composite(image, marks: marks, maxPixels: maxPixels, crop: crop) else { return nil }
             let rep = NSBitmapImageRep(cgImage: frame)
             switch format {
             case .png:

@@ -188,6 +188,7 @@ export const UNIT = [
   'publish-toolbar',
   'preview-overlay',
   'preview-markup',
+  'preview-markup-region',
   'preview-markup-routing',
   'markup-controller',
   'markup-acceptance-state',

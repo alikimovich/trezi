@@ -13,6 +13,7 @@ if (process.platform !== 'darwin') {
     'test/fixtures/preview-markup/main.swift',
     'src/native/KeyShortcuts.swift',
     'src/native/PreviewMarkupModel.swift',
+    'src/native/PreviewMarkupRegion.swift',
     'src/native/PreviewMarkupView.swift',
     'src/native/PreviewMarkup.swift'
   ])

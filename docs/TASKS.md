@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-646 — Mark up Select region: send a cropped preview screenshot without drawing
+
+- [x] `MarkupTool.select` ("Select region", `rectangle.dashed`, key S) in the island; `MarkupRegion` (captured whole pixels, either drag direction, clamped, move, 8 resize handles, too-small = none) held by the canvas apart from the marks' Undo/Clear history.
+- [x] On-screen guides only (`MarkupRegionChrome`: restrained dimming, outline, handles, crosshair/hand/resize pointer); Escape clears the region before cancelling.
+- [x] Add enabled by a valid region with zero marks; `MarkupRenderer.composite`/`MarkupEncoder.encode` crop the frozen snapshot (marks at the full snapshot's line width); an empty/outside crop is nil, never a whole-image fallback; the capture context carries the region and mark count, and the note says so.
+- [x] Fixture `test/preview-markup-region.mjs` (model, Retina crop pixels, guides absent from the export, overlay, session Add/Cancel/failure); native smoke `smoke-markup-region.ts` inside `preview-markup` (real drags, handle adjust, Escape, cropped composer image, zoomed mapping, Cancel, marked region).
+- [ ] Manager: independent review, exact-head CI (native `preview-markup` group), merge and post-merge native acceptance.
+
 ## LKM-645 — Standard macOS color picker for Mark up ink
 
 - [x] Replace the five-item ink popup with a compact `NSColorWell` that opens the shared standard `NSColorPanel`.

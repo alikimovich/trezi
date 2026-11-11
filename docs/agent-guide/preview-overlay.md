@@ -4,6 +4,8 @@ Mark up (LKM-391) is a separate native overlay, not part of this one: it draws o
 capture of the preview, in `src/native/PreviewMarkup.swift`, and adds the result to the
 composer through `src/native/markup-controller.ts`. It shares no state with pinned notes.
 It opens from the top bar's pen button, the "…" menu and Actions, all one `markup` action.
+Its Select region tool (LKM-646, `src/native/PreviewMarkupRegion.swift`) picks a rectangle of
+that frozen capture; Add then sends only that part (with any marks in it), even with no marks.
 
 LKM-205. A design overlay over the preview, in the style of Squints. The user's project
 DOM and CSS never change: everything is drawn by native views above the web view, and

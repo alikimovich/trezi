@@ -12,6 +12,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Added
 
+- Mark up has a Select region tool (S): drag over the preview snapshot to choose an area, adjust or move it with its handles, and Add to chat sends just that cropped screenshot, with or without marks drawn on it; Escape clears the region first (LKM-646).
 - Command-Z and Shift-Command-Z undo and redo the last visual Styles change in the preview, one change at a time (a typed value, a slider or spacing-handle drag, a token choice), including from the focused preview or a committed Styles field; text fields, the composer and the code editor keep their own Undo, and Revert still clears the whole draft (LKM-644).
 
 - Up and Down arrows now step a focused numeric inspector field (Width/Height, Padding, Margin, Gap, Radius, Opacity, font sizes, number props and the like) by its step, or by 1, keeping units like px, decimals and each field's limits; the preview follows each press, and the value is staged like a typed one, never applied by itself (LKM-601).

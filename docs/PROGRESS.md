@@ -1,5 +1,28 @@
 # PROGRESS LOG
 
+## 2026-11-11 — LKM-646: Mark up Select region sends a cropped screenshot without drawing
+
+- New first tool in the Mark up island: Select region (`rectangle.dashed`, S). A drag in
+  either direction makes a rectangle of the frozen snapshot in captured whole pixels
+  (`MarkupRegion`, `src/native/PreviewMarkupRegion.swift`), clamped to the image; a press
+  inside moves it, one of eight handles resizes it (a resize too small reverts, a new drag too
+  small or a click outside clears it). It is held by the canvas, not the marks' document, so
+  Undo/Clear never touch it and it is never a mark. Escape clears it first, then cancels.
+- Guides are view-only (`MarkupRegionChrome`): 38 % black outside, a 1 pt white outline with a
+  dark halo just outside the region, handles while the tool is active, and a crosshair / hand /
+  resize pointer set only where the canvas is the hit view (the island keeps the arrow).
+- Add is enabled by a valid region with zero marks (otherwise unchanged: marks or a text draft);
+  `PreviewMarkup.add` crops through the existing renderer/encoder (`crop:`): the region's
+  pixels of the same frozen `CGImage` (`cropping(to:)`, top-left), marks translated and drawn
+  at the full snapshot's line width, then the usual PNG→JPEG budget ladder. An empty or
+  outside crop returns nil and the Add fails on screen; there is no whole-image fallback.
+  The capture context gains `marks` and `region*`/`snapshot*`; `markupNote` says when the
+  image is a selected region and when it carries no marks ("The marks", not "The red marks").
+- Evidence: `test/preview-markup-region.mjs` (new, unit tier) and the existing Mark up
+  fixture pass; the native `preview-markup` smoke now ends with `checkMarkupRegion` (real
+  drags, handle adjust, Escape, composer image size/pixels via the `imageStats` seam,
+  zoomed mapping, Cancel, marked region). Native smoke not run locally (Forge/CI run it).
+
 ## 2026-11-11 — LKM-645: Mark up ink uses the standard macOS color picker
 
 - The Mark up island's five-item ink popup is now a compact `NSColorWell` (`.default` style,
