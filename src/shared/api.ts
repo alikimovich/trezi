@@ -1255,6 +1255,12 @@ export interface StyleReadResult {
     }
   >
   parentDisplay?: string
+  /**
+   * LKM-638: for each requested property Trezi's own preview overrides, the computed value
+   * with those overrides lifted (read and restored in one task, so nothing paints). What
+   * tells a submitted Apply's value is rendered by the page itself.
+   */
+  base?: Record<string, string>
 }
 
 /** Result of applying a StyleEdit (mirrors PropEditResult's shape). */

@@ -61,7 +61,7 @@ export const PREVIEW_HISTORY = 'trezi:preview:history' // → host ('back' | 'fo
 
 // ── Styles tab ─────────────────────────────────────────────────────────────
 export const STYLES_PREVIEW = 'styles:preview' // → preload ({prop, value})
-export const STYLES_CLEAR_PREVIEW = 'styles:clear-preview' // → preload ({prop?})
+export const STYLES_CLEAR_PREVIEW = 'styles:clear-preview' // → preload ({prop?, keep?, adopt?})
 export const STYLES_REPLAY = 'styles:replay' // → preload ({prop, from, to})
 export const STYLES_READ = 'styles:read' // → preload ({id, props})
 export const STYLES_READ_REPLY = 'styles:read-reply' // → main ({id, values|null, …})

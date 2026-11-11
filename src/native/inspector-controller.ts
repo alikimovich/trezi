@@ -20,6 +20,14 @@ import { describeSelectionForPrompt } from '../shared/selection-context'
 import { tokensForProp } from '../shared/token-match'
 import { applySummary } from './inspector-apply'
 import {
+  type ApplyBatch,
+  batchesLabel,
+  composeLayers,
+  draftProps,
+  restoreUnder,
+  type StyleDraft
+} from './inspector-batches'
+import {
   type PreviewFreshness,
   type PreviewRefreshOutcome,
   refreshRefusal
@@ -32,20 +40,11 @@ type Binding = {
   token?(value: string): Promise<any>
   tokenValue?(value: string): string
 }
-type StyleDraft = {
-  field: string
-  value: string
-  file: string
-  hash: string
-  tokenChoice?: string
-}
 type HeldDraft = {
   drafts: Map<string, StyleDraft>
   history: Map<string, StyleDraft>[]
   conflict: boolean
-  submittedTurn?: string
-  completed?: boolean
-  /** Why a held Apply did not land, shown once its element is selected again. */
+  /** Why a submitted batch came back, shown once its element is selected again. */
   reason?: string
 }
 /**
@@ -113,22 +112,75 @@ export class NativeInspectorController {
   classRule: { file: string; className: string } | null = null
   readonly bindings = new Map<string, Binding>()
   private draftTarget = ''
+  /** LKM-638: the editable draft (B). Submitted batches never share this map. */
   private drafts = new Map<string, StyleDraft>()
   private draftHistory: Map<string, StyleDraft>[] = []
-  private submitted = false
-  private submittedTurn: string | undefined
-  private submitting = false
   private draftConflict = false
   private previewAvailable = false
   private readonly heldDrafts = new Map<string, HeldDraft>()
+  /** LKM-638: submitted Apply batches (A), oldest first, across elements and projects. */
+  private readonly batches: ApplyBatch[] = []
+  private batchKey = 0
+  /**
+   * LKM-638: a file hash a landed batch moved to, by `root\0file\0hash` it was staged on.
+   * Drafts staged on the old hash describe the same intent over the landed change.
+   */
+  private readonly rebased = new Map<string, string>()
+  private follow(root: string, file: string, hash: string) {
+    // A file that returns to an earlier version would make a cycle: stop before repeating.
+    const seen = new Set([hash])
+    for (;;) {
+      const next = this.rebased.get(`${root}\0${file}\0${hash}`)
+      if (!next || seen.has(next)) return hash
+      seen.add(next)
+      hash = next
+    }
+  }
+  /** Every draft not yet sent: the editable one, held ones and queued batches. */
+  private unsentDrafts() {
+    return [
+      ...this.drafts.values(),
+      ...[...this.heldDrafts.values()].flatMap((held) => [...held.drafts.values()]),
+      ...this.batches
+        .filter((batch) => batch.status === 'queued')
+        .flatMap((batch) => [...batch.drafts.values()])
+    ]
+  }
+  /** An unreported batch on this file: its source may move under the drafts at any time. */
+  private waitingOn(root: string, file: string) {
+    return this.batches.some(
+      (batch) =>
+        batch.root === root &&
+        batch.status !== 'landed' &&
+        [...batch.drafts.values()].some((draft) => draft.file === file)
+    )
+  }
+  /** Whether `drafts` are still current: same source, or waiting on a batch over that file. */
+  private async draftsCurrent(root: string, drafts: Iterable<StyleDraft>) {
+    const checks = await Promise.all(
+      [...drafts].map(
+        async (draft) =>
+          this.waitingOn(root, draft.file) ||
+          (await sourceOwner().read(root, draft.file)).hash ===
+            this.follow(root, draft.file, draft.hash)
+      )
+    ).catch(() => [false])
+    return checks.every(Boolean)
+  }
+  /** The selected element's submitted batches, oldest first. */
+  private targetBatches() {
+    const target = this.target()
+    return target
+      ? this.batches.filter((batch) => batch.root === this.state.root && batch.target === target)
+      : []
+  }
   private holdDraft() {
     if (!this.draftTarget) return
     if (this.drafts.size)
       this.heldDrafts.set(this.draftTarget, {
         drafts: new Map(this.drafts),
         history: this.draftHistory.map((step) => new Map(step)),
-        conflict: this.draftConflict,
-        submittedTurn: this.submittedTurn
+        conflict: this.draftConflict
       })
     else this.heldDrafts.delete(this.draftTarget)
   }
@@ -138,13 +190,9 @@ export class NativeInspectorController {
     if (!held) return
     const root = this.state.root
     const generation = this.state.generation
-    // A turn can finish while another project is active. Its source and
-    // rendered result must be checked again before a restored draft can Apply.
-    const hashes = await Promise.all(
-      [...held.drafts.values()].map(
-        async (draft) => (await sourceOwner().read(root, draft.file)).hash === draft.hash
-      )
-    ).catch(() => [false])
+    // A batch can come back while another project is active. Its source must be
+    // checked again before a restored draft can Apply.
+    const current = await this.draftsCurrent(root, held.drafts.values())
     if (
       this.state.root !== root ||
       this.state.generation !== generation ||
@@ -155,12 +203,8 @@ export class NativeInspectorController {
     this.draftTarget = target
     this.drafts = held.drafts
     this.draftHistory = held.history
-    this.submittedTurn = held.submittedTurn
-    this.submitted = !!held.submittedTurn
-    this.draftConflict = held.conflict || (!held.submittedTurn && !hashes.every(Boolean))
-    await this.projectDrafts()
-    if (held.completed !== undefined)
-      await this.settleDraftTurn(held.completed, held.submittedTurn, held.reason)
+    this.draftConflict = held.conflict || !current
+    if (held.reason) this.state.error = held.reason
   }
   private target() {
     const e = this.element
@@ -176,88 +220,369 @@ export class NativeInspectorController {
     return origin?.kind === 'inline' ? source : (this.classRule?.file ?? source)
   }
   private publishDraft() {
-    this.state.draft = this.drafts.size
-      ? {
-          count: this.drafts.size,
-          submitted: this.submitted,
-          conflict: this.draftConflict,
-          preview: this.previewAvailable
-        }
-      : undefined
+    const batches = this.targetBatches()
+    this.state.draft =
+      this.drafts.size || batches.length
+        ? {
+            count: this.drafts.size,
+            submitted: batches.some((batch) => batch.status !== 'landed'),
+            conflict: this.draftConflict,
+            preview: this.previewAvailable,
+            applying: batchesLabel(batches),
+            landed: batches.some((batch) => batch.status === 'landed')
+          }
+        : undefined
     this.publish()
   }
-  private async projectDrafts() {
-    await this.send('styles:clear-preview', {})
-    // Rebuild from the last source read before overlaying the current draft.
-    // Otherwise Undo, Revert and a restored held draft can leave the controls
-    // displaying values from a draft that is no longer present.
-    this.build()
-    for (const draft of this.drafts.values()) {
-      const field = this.state.fields.find((item) => item.id === draft.field)
-      if (field) field.value = draft.value
-    }
-    try {
-      for (const draft of this.drafts.values()) {
-        const binding = this.bindings.get(draft.field)
-        if (!binding?.preview || this.styleSourceFile(draft.field) !== draft.file)
-          throw new Error('The selected style binding changed.')
-        await binding.preview(draft.value)
+  /** Submitted batches, then the editable draft, shown in the fields (later wins). */
+  private overlay() {
+    const layers = [...this.targetBatches().map((batch) => batch.drafts), this.drafts]
+    for (const layer of layers)
+      for (const draft of layer.values()) {
+        const field = this.state.fields.find((item) => item.id === draft.field)
+        if (field) field.value = draft.value
       }
-      this.previewAvailable = this.drafts.size > 0
-    } catch (error) {
-      await this.send('styles:clear-preview', {}).catch(() => {})
-      this.previewAvailable = false
-      this.state.error = `Live preview is unavailable: ${String(error)}`
+  }
+  /**
+   * LKM-638: the preview shows every submitted batch of this element, then the editable
+   * draft above them. Only overrides no layer drives any more are removed, so a value that
+   * stays never flashes through the authored style on the way.
+   */
+  private async projectDrafts() {
+    // Rebuild from the last source read before overlaying the current layers. Otherwise
+    // Undo, Revert and a restored held draft can leave the controls displaying values
+    // from a draft that is no longer present.
+    this.build()
+    this.overlay()
+    let unavailable = ''
+    for (const draft of this.drafts.values()) {
+      const binding = this.bindings.get(draft.field)
+      if (
+        (this.state.tab === 'styles' && !binding?.preview) ||
+        this.styleSourceFile(draft.field) !== draft.file
+      ) {
+        unavailable = 'Error: The selected style binding changed.'
+        break
+      }
     }
+    const layers = this.targetBatches().map((batch) => batch.drafts)
+    if (!unavailable) layers.push(this.drafts)
+    try {
+      await this.showLayers(composeLayers(layers))
+    } catch (error) {
+      unavailable = String(error)
+      await this.send('styles:clear-preview', {}).catch(() => {})
+    }
+    this.previewAvailable = !unavailable && this.drafts.size > 0
+    if (unavailable) this.state.error = `Live preview is unavailable: ${unavailable}`
     this.publishDraft()
   }
+  /** Overrides other than `composed` are restored; each composed value is (re)applied. */
+  private async showLayers(composed: Map<string, string>) {
+    const adopt = [...this.adopting].filter((prop) => !composed.has(prop))
+    this.adopting.clear()
+    await this.send('styles:clear-preview', {
+      ...(composed.size ? { keep: [...composed.keys()] } : {}),
+      ...(adopt.length ? { adopt } : {})
+    })
+    for (const [prop, value] of composed) await this.send('styles:preview', { prop, value })
+  }
+  /**
+   * LKM-638: a landed batch retires once the preview renders its values without the
+   * override (`base`: the computed value with Trezi's overrides lifted, read in one task so
+   * nothing paints). A property a later batch also drives is that batch's to confirm.
+   * Worker completion or a new document alone is not proof. Returns whether one retired.
+   */
+  private confirmLanded() {
+    const styles = this.styles
+    if (!styles?.values) return false
+    const list = this.targetBatches()
+    const shown = composeLayers([...list.map((batch) => batch.drafts), this.drafts])
+    let retired = false
+    list.forEach((batch, index) => {
+      if (batch.status !== 'landed') return
+      const adopt = new Set<string>()
+      const later = composeLayers(list.slice(index + 1).map((other) => other.drafts))
+      for (const [prop, value] of composeLayers([batch.drafts])) {
+        if (later.has(prop)) continue
+        const lifted = styles.base?.[prop]
+        const base = lifted ?? styles.values[prop]
+        if (base === undefined) return
+        const specified = styles.specified?.[prop]
+        const rendered =
+          sameCssValue(prop, base, value) ||
+          // The override's own computed value (e.g. 1rem as 16px) equals the lifted one.
+          (lifted !== undefined && shown.get(prop) === value && styles.values[prop] === lifted) ||
+          (specified !== undefined && sameCssValue(prop, specified, value))
+        if (rendered) continue
+        // A JSX `style={}` value shares the override's inline slot: a page re-render that
+        // writes the same value leaves no trace to read. Once the page updated after the
+        // landing, the inline value is the source's own; it is adopted, never restored to
+        // the value stashed before (which would snap back).
+        if (
+          styles.origins?.[prop]?.kind === 'inline' &&
+          batch.landedAt !== undefined &&
+          this.invalidations > batch.landedAt &&
+          shown.get(prop) === value
+        ) {
+          adopt.add(prop)
+          continue
+        }
+        return
+      }
+      for (const prop of adopt) this.adopting.add(prop)
+      this.batches.splice(this.batches.indexOf(batch), 1)
+      retired = true
+    })
+    return retired
+  }
+  /** Page updates seen (`invalidated` calls), to order them after a landing. */
+  private invalidations = 0
+  /** Inline properties whose override the next projection drops without restoring. */
+  private readonly adopting = new Set<string>()
   /** LKM-599: a background Apply that finished before its dispatch was recorded. */
   private readonly early = new Map<string, { success: boolean; reason?: string }>()
+  /** Batches whose reported success is being checked against their source. */
+  private readonly settling = new Map<ApplyBatch, string>()
   /**
    * The Apply operation `turn` (a chat turn, or a background Apply's id) finished.
-   * Only the draft that operation was dispatched for settles: a result for an id that no
-   * draft holds changes nothing, so a late result never clears a newer draft.
+   * Only the batch dispatched under that id settles: a result for an id no batch holds
+   * changes nothing, so a late result never clears, replaces or completes a newer draft.
    * `reason` is shown when it did not land. `dispatched` marks an id this inspector sent
    * whose result may arrive before the dispatch is recorded.
    */
   async settleDraftTurn(success: boolean, turn?: string, reason?: string, dispatched = false) {
-    if (!this.submitted || (turn && this.submittedTurn !== turn)) {
-      for (const held of this.heldDrafts.values()) {
-        if (held.submittedTurn && (!turn || held.submittedTurn === turn)) {
-          held.completed = success
-          held.reason = reason
-          return
-        }
-      }
+    const running = (batch: ApplyBatch) => batch.status === 'running'
+    const batch = turn
+      ? this.batches.find((item) => item.id === turn)
+      : (this.targetBatches().filter(running).at(-1) ?? this.batches.filter(running).at(-1))
+    if (!batch) {
       if (turn && dispatched) this.early.set(turn, { success, reason })
       return
     }
-    const generation = this.state.generation,
-      target = this.draftTarget,
-      submittedTurn = this.submittedTurn
-    if (success) await this.invalidated()
-    if (generation !== this.state.generation) {
-      // LKM-581: the selection changed while confirming; the draft was held for its
-      // element and settles when that element is selected again.
-      const held = this.heldDrafts.get(target)
-      if (held && held.submittedTurn === submittedTurn) {
-        held.completed = success
-        held.reason = reason
-      }
-      // Already restored (selected away and back): confirm it again on the current reads.
-      else if (submittedTurn && this.submitted && this.submittedTurn === submittedTurn)
-        await this.settleDraftTurn(success, submittedTurn, reason)
+    if (batch.status !== 'running') return
+    if (this.settling.has(batch)) {
+      // A failure reported while its success is being checked wins once the check ends.
+      if (!success)
+        this.settling.set(batch, reason ?? 'Apply failed. The preview draft is still pending.')
       return
     }
-    if (!this.submitted) return
-    // A landed turn is not proof that it edited the requested source. Release
-    // the submitted lock if source plus rendered preview did not confirm it.
-    this.submitted = false
-    this.submittedTurn = undefined
-    this.state.error = success
-      ? 'Apply did not confirm source and rendered preview. The draft is still pending.'
-      : (reason ?? 'Apply failed. The preview draft is still pending.')
+    if (!success) {
+      await this.failBatch(batch, reason ?? 'Apply failed. The preview draft is still pending.')
+      return
+    }
+    // A reported success is not proof that it edited the requested source: the file must
+    // have moved off the staged version. The new version is where drafts staged on the
+    // old one now sit (LKM-638 rebase); the preview confirms the values later.
+    const files = new Map<string, string>()
+    for (const draft of batch.drafts.values())
+      if (!files.has(draft.file)) files.set(draft.file, draft.hash)
+    this.settling.set(batch, '')
+    const moved = await Promise.all(
+      [...files].map(async ([file, hash]) => {
+        const staged = this.follow(batch.root, file, hash)
+        const now = (await sourceOwner().read(batch.root, file)).hash
+        if (now && now !== staged) {
+          this.rebased.set(`${batch.root}\0${file}\0${staged}`, now)
+          // Drafts staged on an intermediate version while this batch was writing.
+          for (const draft of this.unsentDrafts())
+            if (draft.file === file && draft.during?.has(batch.key)) {
+              const at = this.follow(batch.root, file, draft.hash)
+              if (at !== now) this.rebased.set(`${batch.root}\0${file}\0${at}`, now)
+            }
+        }
+        return !!now && now !== staged
+      })
+    ).catch(() => [false])
+    const failure = this.settling.get(batch)
+    this.settling.delete(batch)
+    if (!this.batches.includes(batch)) return
+    if (failure) {
+      await this.failBatch(batch, failure)
+      return
+    }
+    if (!moved.every(Boolean)) {
+      await this.failBatch(
+        batch,
+        'Apply did not confirm source and rendered preview. The draft is still pending.'
+      )
+      return
+    }
+    batch.status = 'landed'
+    batch.landedAt = this.invalidations
+    await this.pump()
+    if (batch.root === this.state.root && batch.target === this.target())
+      await this.reconcileLayers()
+    else this.publishDraft()
+  }
+  /**
+   * Re-reads the selected element and retires what its preview now renders. Never clears
+   * the preview first: a layer that stays is re-applied, a retired one is already shown.
+   */
+  private async reconcileLayers() {
+    const root = this.state.root,
+      target = this.target()
+    await this.refresh(true)
+    if (root !== this.state.root || target !== this.target()) return
+    this.confirmLanded()
     await this.projectDrafts()
+  }
+  /**
+   * LKM-638: a batch that did not land (failed, cancelled, refused before dispatch, source
+   * conflict) returns beneath the newer draft of its element, with its reason; nothing is
+   * re-sent. Its element shows it now, or when it is selected again.
+   */
+  private async failBatch(batch: ApplyBatch, reason: string, conflict = false) {
+    const at = this.batches.indexOf(batch)
+    if (at < 0) return
+    this.batches.splice(at, 1)
+    const later = this.batches
+      .slice(at)
+      .filter((other) => other.root === batch.root && other.target === batch.target)
+      .map((other) => other.drafts)
+    if (batch.root === this.state.root && batch.target === this.target()) {
+      this.drafts = restoreUnder(batch.drafts, this.drafts, later)
+      this.draftHistory = this.returnedHistory(batch, this.draftHistory, later)
+      this.draftTarget = batch.target
+      this.draftConflict ||= conflict
+      this.state.error = reason
+      await this.projectDrafts()
+    } else {
+      const held: HeldDraft = this.heldDrafts.get(batch.target) ?? {
+        drafts: new Map(),
+        history: [],
+        conflict: false
+      }
+      held.drafts = restoreUnder(batch.drafts, held.drafts, later)
+      held.history = this.returnedHistory(batch, held.history, later)
+      held.conflict ||= conflict
+      held.reason = reason
+      this.heldDrafts.set(batch.target, held)
+    }
+    await this.pump()
+  }
+  /** Undo after a batch came back: the newer draft's steps (over it), then its own steps. */
+  private returnedHistory(
+    batch: ApplyBatch,
+    history: Map<string, StyleDraft>[],
+    later: ReadonlyMap<string, StyleDraft>[]
+  ) {
+    return [
+      ...batch.history.map((step) => restoreUnder(step, new Map(), later)),
+      ...history.map((step) => restoreUnder(batch.drafts, step, later))
+    ]
+  }
+  /**
+   * Starts every queued batch whose files no earlier unreported batch is writing. Source
+   * mutation stays ordered per file: B starts only after A reported its result.
+   */
+  private async pump() {
+    for (const batch of [...this.batches]) {
+      if (batch.status !== 'queued') continue
+      const at = this.batches.indexOf(batch)
+      const files = new Set([...batch.drafts.values()].map((draft) => draft.file))
+      const blocked = this.batches
+        .slice(0, at)
+        .some(
+          (other) =>
+            other.root === batch.root &&
+            (other.status === 'starting' || other.status === 'running') &&
+            [...other.drafts.values()].some((draft) => files.has(draft.file))
+        )
+      const away =
+        batch.needsElement && (batch.root !== this.state.root || batch.target !== this.target())
+      if (!blocked && !away) await this.startBatch(batch)
+    }
+  }
+  /**
+   * LKM-599/600/638: preflight and dispatch of one batch. Its drafts are the ones captured
+   * at Apply; staging the next draft meanwhile cannot change them. A source change refuses
+   * it as a conflict; an out-of-date preview is refreshed once while its element is
+   * selected. Anything that stops it returns the batch beneath the newer draft.
+   */
+  private async startBatch(batch: ApplyBatch) {
+    batch.status = 'starting'
+    this.publishDraft()
+    const root = batch.root
+    const drafts = [...batch.drafts.values()]
+    const anchored = () => root === this.state.root && this.target() === batch.target
+    // LKM-581: a selection change during the reads holds this batch for its own element;
+    // never flag, or submit against, the new selection.
+    const selected = anchored()
+    const moved = () => selected && !anchored()
+    let conflict = false
+    const verify = async () => {
+      for (const draft of drafts) {
+        if (anchored() && draft.file !== this.styleSourceFile(draft.field))
+          throw new Error('The selected source file changed. Review or revert the preview draft.')
+        const current = await sourceOwner().read(root, draft.file)
+        if (moved())
+          throw new Error('The selected element changed. The preview draft is still pending.')
+        if (current.hash !== this.follow(root, draft.file, draft.hash)) {
+          conflict = true
+          throw new Error(
+            'Source changed while the preview draft was pending. Review or revert it.'
+          )
+        }
+      }
+    }
+    try {
+      await verify()
+      // LKM-600: the app, not the agent, brings an out-of-date preview current: one bounded
+      // reload that re-resolves this element, then the same source checks.
+      const files = [...new Set(drafts.map((draft) => projectRelative(draft.file, root)))]
+      if ((await this.previewFreshness(root, files)) === 'stale') {
+        if (!selected && !moved()) {
+          // LKM-638: a queued batch whose element is not selected cannot refresh it; it
+          // waits, still queued, and continues when that element is selected again.
+          batch.status = 'queued'
+          batch.needsElement = true
+          this.publishDraft()
+          return
+        }
+        if (moved() || !anchored() || !this.element) throw new Error(refreshRefusal('moved'))
+        const identity = (e: SelectedElement | null) =>
+          e ? JSON.stringify([e.source, e.tag, e.id ?? null]) : ''
+        const original = identity(this.element)
+        const kept = () =>
+          this.batches.includes(batch) && anchored() && identity(this.element) === original
+        const outcome = await this.refreshPreview(root, this.element, kept)
+        if (outcome !== 'ok' || !kept())
+          throw new Error(refreshRefusal(outcome === 'ok' ? 'moved' : outcome))
+        // The reloaded document has no overrides: show the layers again.
+        await this.projectDrafts()
+        if (!kept()) throw new Error(refreshRefusal('moved'))
+        await verify()
+        if ((await this.previewFreshness(root, files)) === 'stale')
+          throw new Error(refreshRefusal('timeout'))
+        if (!kept()) throw new Error(refreshRefusal('moved'))
+      }
+      if (anchored() && this.element) batch.element = this.element
+      const element = batch.element
+      const changes = drafts.map((draft) => ({ prop: draft.field.slice(6), value: draft.value }))
+      const edits = drafts.map((draft) => {
+        const token = batch.tokens.get(draft.field)
+        return `${projectRelative(draft.file, root)} (staged against SHA-256 ${this.follow(root, draft.file, draft.hash)}): set ${draft.field.slice(6)} to ${draft.value}${token ? ` using token ${token}` : ''}`
+      })
+      const turn = await this.agent(root, applyDraftsPrompt(element, root, edits), true, {
+        kind: 'inspector-apply',
+        summary: applySummary(element, changes)
+      })
+      if (!this.batches.includes(batch)) return
+      const id = turn || `draft-${Date.now()}-${batch.key}`
+      batch.id = id
+      batch.status = 'running'
+      this.state.edits = (this.state.edits ?? 0) + 1
+      const early = this.early.get(id)
+      this.early.delete(id)
+      this.publishDraft()
+      if (early)
+        queueMicrotask(() => {
+          void this.settleDraftTurn(early.success, id, early.reason).catch(() => {})
+        })
+    } catch (error) {
+      await this.failBatch(batch, String(error), conflict)
+    }
   }
   private sequence = 0
   private readonly saved = new Map<
@@ -373,11 +698,9 @@ export class NativeInspectorController {
     this.state.visible = false
     this.state.busy = false
     this.state.error = ''
-    this.drafts.clear()
+    this.drafts = new Map()
     this.draftHistory = []
     this.draftTarget = ''
-    this.submitted = false
-    this.submittedTurn = undefined
     this.draftConflict = false
     this.previewAvailable = false
     this.state.draft = undefined
@@ -389,9 +712,12 @@ export class NativeInspectorController {
     const nextTarget = element
       ? JSON.stringify([this.state.root, element.source, element.tag, element.id, element.selector])
       : ''
-    if (nextTarget !== this.target()) this.holdDraft()
+    // LKM-638: the same element picked again keeps its overrides; projecting below only
+    // removes what no layer drives, so nothing flashes through the authored style.
+    const retarget = nextTarget !== this.target()
+    if (retarget) this.holdDraft()
     this.clearReconciles()
-    await this.send('styles:clear-preview', {})
+    if (retarget) await this.send('styles:clear-preview', {})
     this.state.busy = false
     this.element = element
     this.onElement(element)
@@ -403,11 +729,9 @@ export class NativeInspectorController {
     this.controls = []
     this.state.error = ''
     if (this.target() !== this.draftTarget) {
-      this.drafts.clear()
+      this.drafts = new Map()
       this.draftHistory = []
       this.draftTarget = ''
-      this.submitted = false
-      this.submittedTurn = undefined
       this.draftConflict = false
       this.state.draft = undefined
       this.previewAvailable = false
@@ -415,9 +739,16 @@ export class NativeInspectorController {
     this.build()
     this.publish()
     if (element) {
+      const generation = this.state.generation
       await this.refresh()
-      if (this.drafts.size) await this.projectDrafts()
-      else await this.resumeDraft()
+      if (generation !== this.state.generation) return
+      if (!this.drafts.size) await this.resumeDraft()
+      if (generation !== this.state.generation) return
+      this.confirmLanded()
+      if (this.drafts.size || this.targetBatches().length) await this.projectDrafts()
+      else this.publishDraft()
+      // A batch that waited for this element to refresh its preview continues now.
+      if (this.targetBatches().some((batch) => batch.needsElement)) await this.pump()
     }
   }
   /**
@@ -427,6 +758,7 @@ export class NativeInspectorController {
    * preview override) is left alone: it re-reads when it settles.
    */
   async invalidated() {
+    this.invalidations++
     if (!this.state.root || this.state.busy || this.reconciles.size) return
     const root = this.state.root,
       generation = this.state.generation,
@@ -435,46 +767,18 @@ export class NativeInspectorController {
     // with its own drafts; the old reads must not clear or flag them.
     const moved = () =>
       root !== this.state.root || generation !== this.state.generation || this.target() !== target
-    if (this.submitted && this.drafts.size) {
-      await this.send('styles:clear-preview', {})
-      await this.refresh(true)
-      const sourced = await Promise.all(
-        [...this.drafts.values()].map(async (draft) => {
-          const current = await sourceOwner().read(this.state.root, draft.file)
-          const rendered = this.styles?.values[draft.field.slice(6)]
-          return (
-            current.hash !== draft.hash &&
-            rendered !== undefined &&
-            sameCssValue(draft.field.slice(6), rendered, draft.value)
-          )
-        })
-      ).catch(() => [false])
-      if (moved()) return
-      if (sourced.every(Boolean)) {
-        this.drafts.clear()
-        this.draftHistory = []
-        this.submitted = false
-        this.submittedTurn = undefined
-        this.draftConflict = false
-        this.publishDraft()
-        return
-      }
-      this.state.error = 'Apply is waiting for source and rendered preview confirmation.'
-      await this.projectDrafts()
-      return
-    }
     await this.refresh(true)
+    if (moved()) return
     if (this.drafts.size) {
-      const current = await Promise.all(
-        [...this.drafts.values()].map(
-          async (draft) =>
-            (await sourceOwner().read(this.state.root, draft.file)).hash === draft.hash
-        )
-      ).catch(() => [false])
+      // LKM-638: a file an unreported batch is writing is waiting on that batch, not a
+      // conflict; once it lands, drafts staged on the old version follow it.
+      const current = await this.draftsCurrent(root, this.drafts.values())
       if (moved()) return
-      this.draftConflict = !current.every(Boolean)
-      await this.projectDrafts()
+      this.draftConflict = !current
     }
+    this.confirmLanded()
+    if (this.drafts.size || this.targetBatches().length) await this.projectDrafts()
+    else if (this.state.draft) this.publishDraft()
   }
   /** The same element, picked again in a new document (a reload); false when it is another one. */
   async reattach(element: SelectedElement): Promise<boolean> {
@@ -488,14 +792,27 @@ export class NativeInspectorController {
       return false
     // LKM-600: the same element (tag, source stamp, id, matched uniquely by the caller) may
     // sit at a new structural selector after a reload; its draft follows it.
-    const draft = this.draftTarget && this.draftTarget === this.target()
+    const before = this.target()
+    const draft = this.draftTarget && this.draftTarget === before
     this.element = element
+    // LKM-638: submitted batches follow the same element too, and only it.
+    for (const batch of this.batches)
+      if (batch.root === this.state.root && batch.target === before) {
+        batch.target = this.target()
+        batch.element = element
+      }
     if (draft) {
       this.draftTarget = this.target()
       this.publishDraft()
     }
     this.onElement(element)
     await this.refresh(true)
+    // A new document has none of the overrides: retire what it renders, show the rest.
+    if (this.element === element && (this.drafts.size || this.targetBatches().length)) {
+      this.confirmLanded()
+      await this.projectDrafts()
+      if (this.targetBatches().some((batch) => batch.needsElement)) await this.pump()
+    }
     return true
   }
   async refresh(changed = false) {
@@ -527,10 +844,8 @@ export class NativeInspectorController {
     if (!changed || styles?.values) this.styles = styles
     this.classRule = results[4].status === 'fulfilled' ? results[4].value : null
     if (this.drafts.size && this.target() !== this.draftTarget) {
-      this.drafts.clear()
+      this.drafts = new Map()
       this.draftHistory = []
-      this.submitted = false
-      this.submittedTurn = undefined
       this.draftConflict = false
       this.state.draft = undefined
     }
@@ -546,10 +861,7 @@ export class NativeInspectorController {
     this.controls = controls
     const before = changed ? JSON.stringify(this.state.fields) : ''
     this.build()
-    for (const draft of this.drafts.values()) {
-      const field = this.state.fields.find((f) => f.id === draft.field)
-      if (field) field.value = draft.value
-    }
+    this.overlay()
     if (changed && JSON.stringify(this.state.fields) !== before)
       this.state.updated = (this.state.updated ?? 0) + 1
     this.publish()
@@ -900,7 +1212,7 @@ export class NativeInspectorController {
       return true
     }
     await this.send('styles:clear-preview', { prop })
-    if (this.drafts.size) await this.projectDrafts()
+    if (this.drafts.size || this.targetBatches().length) await this.projectDrafts()
     if (!this.state.error)
       this.state.error = target
         ? `${prop} has no source-backed preview here. Edit it in Styles or ask the agent.`
@@ -933,154 +1245,70 @@ export class NativeInspectorController {
       if (action.action === 'close') {
         this.state.visible = false
         this.clearReconciles()
-        await this.send('styles:clear-preview', {})
+        // LKM-638: a submitted batch keeps showing until its source renders; only the
+        // editable draft's preview goes with the island.
+        await this.showLayers(composeLayers(this.targetBatches().map((batch) => batch.drafts)))
         this.previewAvailable = false
         this.publishDraft()
         this.publish()
         return
       }
       if (action.action === 'undo-draft' || action.action === 'revert-draft') {
-        if (this.submitted || this.submitting) return
-        this.drafts =
-          action.action === 'undo-draft' ? (this.draftHistory.pop() ?? new Map()) : new Map()
+        // LKM-638: Undo and Revert act on the editable draft only. A submitted batch is the
+        // worker's; it is never rewritten or undone in source from here. Revert with nothing
+        // staged dismisses the display of batches whose source already landed but whose
+        // preview never rendered them (no source change).
+        if (!this.drafts.size) {
+          if (action.action !== 'revert-draft') return
+          const landed = this.targetBatches().filter((batch) => batch.status === 'landed')
+          if (!landed.length) return
+          for (const batch of landed) this.batches.splice(this.batches.indexOf(batch), 1)
+        } else {
+          this.drafts =
+            action.action === 'undo-draft' ? (this.draftHistory.pop() ?? new Map()) : new Map()
+          if (action.action === 'revert-draft') this.draftHistory = []
+        }
         if (!this.drafts.size) {
           this.draftTarget = ''
           this.draftConflict = false
         }
+        this.state.error = ''
         await this.refresh(true)
         await this.projectDrafts()
         return
       }
       if (action.action === 'apply-drafts') {
-        // LKM-599: one Apply per draft at a time; a repeated press is not an error.
-        if (this.submitted || this.submitting) return
-        if (
-          !this.drafts.size ||
-          this.submitted ||
-          this.submitting ||
-          this.draftConflict ||
-          this.target() !== this.draftTarget
-        )
+        // LKM-638: Apply captures the editable draft as its own immutable batch and the
+        // fields stay usable for the next one. A press with nothing new staged (a repeated
+        // press) is not an error and starts nothing.
+        if (!this.drafts.size) return
+        if (this.draftConflict || this.target() !== this.draftTarget || !this.element)
           throw new Error('The selected element changed. Review or revert the preview draft.')
-        let target = this.draftTarget
-        let element = this.element
-        const drafts = [...this.drafts.values()]
-        this.submitting = true
-        this.state.busy = true
-        this.publish()
-        try {
-          // LKM-581: a selection change during the reads holds this draft for its own
-          // element; never flag, or submit an empty batch against, the new selection.
-          // LKM-600: a refreshed preview re-attaches the same element (tag, source stamp and
-          // id; possibly a new selector or generation), so after it the draft itself must
-          // still be the one captured here, on that element.
-          const identity = (e: SelectedElement | null) =>
-            e ? JSON.stringify([e.source, e.tag, e.id ?? null]) : ''
-          const original = identity(element)
-          const moved = () =>
-            root !== this.state.root ||
-            generation !== this.state.generation ||
-            this.target() !== target
-          const draftKept = () =>
-            root === this.state.root &&
-            this.target() === this.draftTarget &&
-            identity(this.element) === original &&
-            !this.submitted &&
-            this.drafts.size === drafts.length &&
-            drafts.every((draft) => this.drafts.get(draft.field) === draft)
-          const verify = async (changed: () => boolean) => {
-            for (const draft of drafts) {
-              const selectedFile = this.styleSourceFile(draft.field)
-              if (draft.file !== selectedFile)
-                throw new Error(
-                  'The selected source file changed. Review or revert the preview draft.'
-                )
-              const current = await sourceOwner().read(root, draft.file)
-              if (changed())
-                throw new Error('The selected element changed. The preview draft is still pending.')
-              if (current.hash !== draft.hash) {
-                this.draftConflict = true
-                this.publishDraft()
-                throw new Error(
-                  'Source changed while the preview draft was pending. Review or revert it.'
-                )
-              }
-            }
-          }
-          await verify(moved)
-          // LKM-600: the app, not the agent, brings an out-of-date preview current: one
-          // bounded reload that re-resolves this element, then the same source checks.
-          const files = [...new Set(drafts.map((draft) => projectRelative(draft.file, root)))]
-          if (element && (await this.previewFreshness(root, files)) === 'stale') {
-            if (moved())
-              throw new Error('The selected element changed. The preview draft is still pending.')
-            const outcome = await this.refreshPreview(root, element, draftKept)
-            // The same draft, re-picked under a new generation, still owns this inspector:
-            // its outcome is shown there. A draft held for another selection is not.
-            if (draftKept()) {
-              generation = this.state.generation
-              target = this.draftTarget
-            }
-            if (outcome !== 'ok' || !draftKept())
-              throw new Error(refreshRefusal(outcome === 'ok' ? 'moved' : outcome))
-            element = this.element
-            await this.projectDrafts()
-            this.state.busy = true
-            this.publish()
-            if (!draftKept() || moved()) throw new Error(refreshRefusal('moved'))
-            await verify(moved)
-            if ((await this.previewFreshness(root, files)) === 'stale')
-              throw new Error(refreshRefusal('timeout'))
-            if (moved()) throw new Error(refreshRefusal('moved'))
-          }
-          const changes = drafts.map((draft) => ({
-            prop: draft.field.slice(6),
-            value: draft.value
-          }))
-          const edits = drafts.map((draft) => {
-            const token = draft.tokenChoice
-              ? this.state.fields
-                  .find((field) => field.id === draft.field)
-                  ?.tokens?.find((item) => item.id === draft.tokenChoice)?.label
-              : undefined
-            return `${projectRelative(draft.file, root)} (staged against SHA-256 ${draft.hash}): set ${draft.field.slice(6)} to ${draft.value}${token ? ` using token ${token}` : ''}`
-          })
-          const turn = await this.agent(root, applyDraftsPrompt(element, root, edits), true, {
-            kind: 'inspector-apply',
-            summary: applySummary(element, changes)
-          })
-          const submittedTurn = turn || `draft-${Date.now()}`
-          const early = this.early.get(submittedTurn)
-          this.early.delete(submittedTurn)
-          if (root !== this.state.root || generation !== this.state.generation) {
-            const held = this.heldDrafts.get(target)
-            if (held) {
-              held.submittedTurn = submittedTurn
-              if (early) {
-                held.completed = early.success
-                held.reason = early.reason
-              }
-              this.state.edits = (this.state.edits ?? 0) + 1
-              return
-            }
-            if (this.target() !== target || this.draftTarget !== target || !this.drafts.size) return
-          }
-          this.submittedTurn = submittedTurn
-          this.submitted = true
-          this.state.error = ''
-          this.state.edits = (this.state.edits ?? 0) + 1
-          this.publishDraft()
-          if (early) {
-            // Settled outside the try below: its confirmation reads must not hold `busy`.
-            queueMicrotask(() => {
-              void this.settleDraftTurn(early.success, submittedTurn, early.reason).catch(() => {})
-            })
-          }
-        } finally {
-          this.submitting = false
-          this.state.busy = false
-          this.publish()
+        const tokens = new Map<string, string>()
+        for (const draft of this.drafts.values()) {
+          const label = draft.tokenChoice
+            ? this.state.fields
+                .find((field) => field.id === draft.field)
+                ?.tokens?.find((item) => item.id === draft.tokenChoice)?.label
+            : undefined
+          if (label) tokens.set(draft.field, label)
         }
+        this.batches.push({
+          key: ++this.batchKey,
+          root,
+          target: this.draftTarget,
+          element: this.element,
+          drafts: new Map(this.drafts),
+          history: this.draftHistory.map((step) => new Map(step)),
+          tokens,
+          status: 'queued'
+        })
+        this.drafts = new Map()
+        this.draftHistory = []
+        this.draftTarget = ''
+        this.state.error = ''
+        this.publishDraft()
+        await this.pump()
         return
       }
       if (action.action === 'refresh') {
@@ -1136,11 +1364,14 @@ export class NativeInspectorController {
         return
       }
       if (action.action === 'cancel-preview') {
-        await this.send('styles:clear-preview', {})
+        // LKM-638: the scrub's override goes; the layers' own overrides stay put.
+        await this.showLayers(
+          composeLayers([...this.targetBatches().map((batch) => batch.drafts), this.drafts])
+        )
         // A style-watch read may have cached the temporary inline value. Re-read
         // the authored declaration after cancel so a var() stays visible.
         await this.refresh(true)
-        if (this.drafts.size) await this.projectDrafts()
+        if (this.drafts.size || this.targetBatches().length) await this.projectDrafts()
         return
       }
       let draftOwner: ReturnType<typeof sourceOwner> | null = null
@@ -1159,8 +1390,10 @@ export class NativeInspectorController {
         return
       }
       if (draftOwner && action.action === 'apply' && action.field?.startsWith('style:')) {
-        if (this.submitted || this.submitting || this.draftConflict)
-          throw new Error('Wait for Apply to finish or revert the stale draft.')
+        // LKM-638: a submitted Apply never locks the fields; only a real source conflict
+        // of this draft does, and it says so.
+        if (this.draftConflict)
+          throw new Error('Source changed outside this draft. Revert the draft to keep editing.')
         const field = this.state.fields.find((f) => f.id === action.field)
         if (!field || field.disabled || !binding.preview || !this.element)
           throw new Error('This style has no safe live preview. Ask the agent to edit it.')
@@ -1182,7 +1415,11 @@ export class NativeInspectorController {
         const prior = this.drafts.get(action.field)
         if ([...this.drafts.values()].some((draft) => draft.file !== file))
           throw new Error('The selected source file changed. Review or revert the preview draft.')
-        if (prior && prior.hash !== current.hash)
+        if (
+          prior &&
+          this.follow(root, file, prior.hash) !== current.hash &&
+          !this.waitingOn(root, file)
+        )
           throw new Error('Source changed while the preview draft was pending.')
         this.draftTarget = target
         this.draftHistory.push(new Map(this.drafts))
@@ -1192,11 +1429,21 @@ export class NativeInspectorController {
           field.kind === 'number' && /^-?\d+(\.\d+)?$/.test(input.trim())
             ? toCssText(prop, finite(input))
             : input
+        const during = this.batches
+          .filter(
+            (batch) =>
+              batch.root === root &&
+              batch.status !== 'landed' &&
+              batch.status !== 'queued' &&
+              [...batch.drafts.values()].some((draft) => draft.file === file)
+          )
+          .map((batch) => batch.key)
         this.drafts.set(action.field, {
           field: action.field,
           value,
           file,
-          hash: current.hash
+          hash: current.hash,
+          ...(during.length ? { during: new Set(during) } : {})
         })
         await this.projectDrafts()
         return

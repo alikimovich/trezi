@@ -401,10 +401,13 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
     if (!fromMainWindow(e)) return
     toPreview(STYLES_PREVIEW, p)
   })
-  ipcMain.on('styles:clear-preview', (e, p?: { prop?: string }) => {
-    if (!fromMainWindow(e)) return
-    toPreview(STYLES_CLEAR_PREVIEW, p)
-  })
+  ipcMain.on(
+    'styles:clear-preview',
+    (e, p?: { prop?: string; keep?: string[]; adopt?: string[] }) => {
+      if (!fromMainWindow(e)) return
+      toPreview(STYLES_CLEAR_PREVIEW, p)
+    }
+  )
   ipcMain.on('preview:animation-replay', (e, component: unknown) => {
     if (!fromMainWindow(e) || typeof component !== 'string' || component.length > 80) return
     toPreview(ANIMATION_REPLAY, component)
@@ -473,11 +476,16 @@ export function registerPreviewIpc(host: PreviewIpcHost): void {
           layer: source.layer
         }
       }
+      const rawBase = record(p.base)
+      const base: Record<string, string> = {}
+      for (const prop of props)
+        if (typeof rawBase[prop] === 'string') base[prop] = rawBase[prop].slice(0, 256)
       return {
         values,
         declaredVars,
         specified,
         origins,
+        ...(Object.keys(base).length ? { base } : {}),
         parentDisplay: typeof p.parentDisplay === 'string' ? p.parentDisplay.slice(0, 64) : ''
       }
     }

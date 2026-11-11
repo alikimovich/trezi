@@ -3,6 +3,16 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-638 — Keep styling editable and the preview steady while inspector Apply runs
+
+- [x] Traced on main: `action('apply')` refused every style edit while `submitted`/`submitting`/`draftConflict` (the screenshot's "Wait for Apply…"); the success path cleared all preview overrides before re-reading (`invalidated`: clear, refresh, re-project), a visible snapback; and A's own landing flagged the next draft as a source conflict.
+- [x] Apply captures the editable draft as an immutable batch (`src/native/inspector-batches.ts`: starting/queued/running/landed, its own operation id); the editable draft is free at once. Batches of the selected element project under it per CSS property; clears keep what still shows (`styles:clear-preview {keep}`).
+- [x] Success = the source moved off the staged hash (rebase recorded for drafts staged on it), then the batch stays on the preview until a read shows the page renders it with Trezi's overrides lifted (`StyleReadResult.base`, preload `liftedValues`, one task, transitions held). Failure/cancel/conflict returns it beneath the newer draft with its reason; nothing re-sent.
+- [x] Same-file batches are serialized (queued until the earlier one reports); Undo/Revert act on the editable draft only; Revert with nothing staged dismisses landed-but-unrendered overrides. Footer: per-batch status line, Apply/Undo/Revert for the next draft.
+- [x] Units `inspector-apply-layers` (fake page logging every displayed value), `preview-apply-layers` (real preload in a real WKWebView), `inspector-footer` (applying cases, fields enabled); existing inspector suites updated where they encoded the lock.
+- [x] Independent review (pre-commit): queued batch off-target with a stale preview, JSX inline values, intermediate hashes, failure during the success check — fixed and covered; concurrent external edits during A are absorbed by the rebase (documented limit).
+- [ ] Manager: native `inspector`/`core` groups with a foreground capture, exact-head CI and merge.
+
 ## LKM-618 — One running-cat loading line instead of repeated sidebar "Loading chat" rows
 
 - [x] Traced: the rows were the project's stored `sessionKeys` (last run's open chats), listed before the select path read the agent's snapshot. `agent:open-project` reopens only the current chat and sends its peers to History, so the extra rows were never going to load.
