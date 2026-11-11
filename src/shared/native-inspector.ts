@@ -54,6 +54,12 @@ export interface NativeInspectorState {
    * of this element is starting, queued or running (LKM-638: it never locks the fields).
    * `applying`: one line on those batches; `landed`: one landed and awaits the preview.
    */
+  /**
+   * LKM-644: whether the selected element's draft has an Undo / Redo step (Edit menu,
+   * ⌘Z / ⇧⌘Z). `restored` counts steps taken: a new value makes every native field show
+   * the restored value, even the focused one.
+   */
+  history?: { undo: boolean; redo: boolean; restored: number }
   draft?: {
     count: number
     submitted: boolean

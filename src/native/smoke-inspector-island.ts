@@ -3,6 +3,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { NativeBridge } from './bridge'
 import { hoverProbeScript, hoverRecorderScript } from './smoke-hover-probe'
+import { checkUndoKeys } from './smoke-inspector-undo'
 import { waitFor } from './smoke-wait'
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -172,6 +173,9 @@ async function checkPointer(
       `pointer: the ${name}'s center hits the ${name} inside the island ${JSON.stringify(control)}`
     )
   }
+  const originalPaddingTop = String(
+    await page.evaluate(`getComputedStyle(document.querySelector('#native-title')).paddingTop`)
+  )
   // Before select mode: turning it off drops the page's selection, which a Styles edit previews on.
   const edit = await island({ pointer: true, step: 'edit', value: '12' })
   evidence.pointerEdit = edit
@@ -184,6 +188,11 @@ async function checkPointer(
       ] === '12',
     'the real Vertical padding field stages exactly 12'
   )
+  // LKM-644: ⌘Z / ⇧⌘Z over the real field, page and composer; ends with 12 staged again.
+  await checkUndoKeys(host, island, page, evidence, captureExpanded, {
+    field: inspector.values['style:padding-vertical'],
+    computed: originalPaddingTop
+  })
   await page.applyDraft('style:padding-vertical', '12')
   await waitFor(
     () => /padding(Top|-top)["']?\s*:\s*["']?12/.test(page.source()),

@@ -51,6 +51,7 @@ if (process.platform !== 'darwin') {
     'test/fixtures/slider-ticks/main.swift',
     ...[
       'EditingInspector',
+      'EditUndo',
       'InspectorNumberStep',
       'FloatingIsland',
       'IslandLayout',

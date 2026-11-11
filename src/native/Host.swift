@@ -525,6 +525,8 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         // ⌘← / ⌘→ the page left unhandled outside its fields (`src/preview/history-keys.ts`).
         if name == "preview", body["channel"] as? String == "trezi:preview:history" {
             if let step = (body["args"] as? [Any])?.first as? String, ["back", "forward"].contains(step) { previewHistory.go(step == "back") }
+            // LKM-644: ⌘Z / ⇧⌘Z the page left unhandled outside its fields.
+            else if let step = (body["args"] as? [Any])?.first as? String, ["undo", "redo"].contains(step), window.attachedSheet == nil { editUndo(step == "undo", fromPage: true) }
             return
         }
         // Source identity is supplied by the host, never by page-controlled JSON.

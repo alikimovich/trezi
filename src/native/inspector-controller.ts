@@ -28,6 +28,7 @@ import {
   restoreUnder,
   type StyleDraft
 } from './inspector-batches'
+import { DraftSteps, type HistoryRoute } from './inspector-history'
 import {
   type PreviewFreshness,
   type PreviewRefreshOutcome,
@@ -44,6 +45,8 @@ type Binding = {
 type HeldDraft = {
   drafts: Map<string, StyleDraft>
   history: Map<string, StyleDraft>[]
+  /** LKM-644: the Redo steps, kept while another element is selected. */
+  future?: Map<string, StyleDraft>[]
   conflict: boolean
   /** Why a submitted batch came back, shown once its element is selected again. */
   reason?: string
@@ -115,7 +118,18 @@ export class NativeInspectorController {
   private draftTarget = ''
   /** LKM-638: the editable draft (B). Submitted batches never share this map. */
   private drafts = new Map<string, StyleDraft>()
-  private draftHistory: Map<string, StyleDraft>[] = []
+  /** LKM-644: the editable draft's Undo (`past`) and Redo (`future`) steps. */
+  private steps = new DraftSteps()
+  private get draftHistory() {
+    return this.steps.past
+  }
+  private set draftHistory(past: Map<string, StyleDraft>[]) {
+    this.steps = new DraftSteps(past)
+  }
+  /** Bumped when Undo, Redo or Revert replaced the draft: native fields resync even focused. */
+  private restored = 0
+  /** Undo/Redo steps run one at a time, in key order. */
+  private stepping: Promise<unknown> = Promise.resolve()
   private draftConflict = false
   private previewAvailable = false
   private readonly heldDrafts = new Map<string, HeldDraft>()
@@ -177,13 +191,15 @@ export class NativeInspectorController {
   }
   private holdDraft() {
     if (!this.draftTarget) return
-    if (this.drafts.size)
+    if (this.drafts.size || this.steps.future.length) {
+      const steps = this.steps.copy()
       this.heldDrafts.set(this.draftTarget, {
         drafts: new Map(this.drafts),
-        history: this.draftHistory.map((step) => new Map(step)),
+        history: steps.past,
+        future: steps.future,
         conflict: this.draftConflict
       })
-    else this.heldDrafts.delete(this.draftTarget)
+    } else this.heldDrafts.delete(this.draftTarget)
   }
   private async resumeDraft() {
     const target = this.target()
@@ -203,7 +219,7 @@ export class NativeInspectorController {
     this.heldDrafts.delete(target)
     this.draftTarget = target
     this.drafts = held.drafts
-    this.draftHistory = held.history
+    this.steps = new DraftSteps(held.history, held.future ?? [])
     this.draftConflict = held.conflict || !current
     if (held.reason) this.state.error = held.reason
   }
@@ -223,7 +239,7 @@ export class NativeInspectorController {
   private publishDraft() {
     const batches = this.targetBatches()
     this.state.draft =
-      this.drafts.size || batches.length
+      this.drafts.size || batches.length || this.historyState().redo
         ? {
             count: this.drafts.size,
             submitted: batches.some((batch) => batch.status !== 'landed'),
@@ -234,6 +250,94 @@ export class NativeInspectorController {
           }
         : undefined
     this.publish()
+  }
+  /**
+   * LKM-644: Edit → Undo (⌘Z) / Redo (⇧⌘Z) and the island's Undo draft. Steps the selected
+   * element's editable draft one logical edit, updating the preview and the fields at once.
+   * Submitted batches keep their layers: undoing B shows A again where it still applies.
+   * `none` lets the project's source history answer; it is never returned while a draft
+   * is unsent or an Apply is unreported, so a source undo cannot run under them.
+   */
+  historyStep(undo: boolean): Promise<HistoryRoute> {
+    const run = this.stepping.then(() => this.stepDraft(undo))
+    this.stepping = run.catch(() => {})
+    return run
+  }
+  private async stepDraft(undo: boolean): Promise<HistoryRoute> {
+    // A value committed just before the key (Return, then ⌘Z) is staged first: the step
+    // never runs between an edit's source read and its record.
+    while (this.editing.size) await Promise.allSettled([...this.editing])
+    const verb = undo ? 'Undo' : 'Redo'
+    const root = this.state.root,
+      generation = this.state.generation,
+      target = this.target()
+    const own = !!target && this.draftTarget === target
+    const next = own ? this.steps.peek(undo) : undefined
+    if (!next) {
+      // A draft of this project held for another element still owns the key.
+      const held = [...this.heldDrafts].some(
+        ([key, entry]) => JSON.parse(key)[0] === root && entry.drafts.size > 0
+      )
+      const unreported = (batch: ApplyBatch) => batch.root === root && batch.status !== 'landed'
+      // This element's queued or running Apply first: its change is not in any history yet.
+      if (this.targetBatches().some(unreported))
+        return {
+          kind: 'blocked',
+          reason: `${verb} waits for the running Apply: its change is not in the project's history yet.`
+        }
+      // Steps the other way still stand (or a landed layer still shows): a source undo now
+      // would interleave the two histories out of order.
+      if (own && (this.drafts.size || this.steps.peek(!undo)))
+        return {
+          kind: 'blocked',
+          reason: `Nothing more to ${verb.toLowerCase()} in this element's style draft.`
+        }
+      if (this.targetBatches().some((batch) => batch.status === 'landed'))
+        return {
+          kind: 'blocked',
+          reason: `${verb} waits for the applied change to show in the preview, or Revert dismisses it.`
+        }
+      const queued = this.batches.some((batch) => batch.root === root && batch.status === 'queued')
+      if (this.drafts.size || held || queued)
+        return {
+          kind: 'blocked',
+          reason: `${verb}: the style draft belongs to another element. Select it to ${verb.toLowerCase()}, or Revert it.`
+        }
+      if (this.batches.some((batch) => batch.root === root && batch.status !== 'landed'))
+        return {
+          kind: 'blocked',
+          reason: `${verb} waits for the running Apply: its change is not in the project's history yet.`
+        }
+      return { kind: 'none' }
+    }
+    const moved = () =>
+      root !== this.state.root || generation !== this.state.generation || this.target() !== target
+    // A step restores drafts staged on a source version: the same version, or one a
+    // reported batch on that file moved it to. Anything else is not this draft's source.
+    for (const draft of next.values())
+      if (this.styleSourceFile(draft.field) !== draft.file)
+        return {
+          kind: 'blocked',
+          reason: `${verb} stopped: this element's style source changed since that step. Revert the draft to keep editing.`
+        }
+    if (next.size && !(await this.draftsCurrent(root, next.values())))
+      return {
+        kind: 'blocked',
+        reason: `${verb} stopped: the source file changed since that step. Revert the draft to keep editing.`
+      }
+    if (moved() || this.steps.peek(undo) !== next)
+      return {
+        kind: 'blocked',
+        reason: `The selected element changed. Nothing was ${undo ? 'undone' : 'redone'}.`
+      }
+    this.steps.step(undo, this.drafts)
+    this.drafts = next
+    this.draftTarget = target
+    if (!next.size) this.draftConflict = false
+    this.restored++
+    this.state.error = ''
+    await this.projectDrafts()
+    return { kind: 'stepped' }
   }
   /** Submitted batches, then the editable draft, shown in the fields (later wins). */
   private overlay() {
@@ -459,6 +563,7 @@ export class NativeInspectorController {
       }
       held.drafts = restoreUnder(batch.drafts, held.drafts, later)
       held.history = this.returnedHistory(batch, held.history, later)
+      held.future = []
       held.conflict ||= conflict
       held.reason = reason
       this.heldDrafts.set(batch.target, held)
@@ -652,11 +757,21 @@ export class NativeInspectorController {
     readonly setupReason: (root: string) => string = () =>
       'This element may come from a library or generated markup.'
   ) {}
+  /** LKM-644: what Edit → Undo / Redo would step now (the native menu's titles and state). */
+  private historyState() {
+    const own = !!this.element && !!this.draftTarget && this.draftTarget === this.target()
+    return {
+      undo: own && this.steps.past.length > 0,
+      redo: own && this.steps.future.length > 0,
+      restored: this.restored
+    }
+  }
   publish() {
     if (this.state.tab !== 'props' && this.state.tab !== 'styles') {
       this.state.tab = 'styles'
       this.build()
     }
+    this.state.history = this.historyState()
     this.render({ ...this.state, fields: [...this.state.fields], actions: [...this.state.actions] })
   }
   async activate(root: string) {
@@ -960,7 +1075,13 @@ export class NativeInspectorController {
           )
         }
     } else if (this.state.tab === 'styles' && element) {
-      const values = this.styles?.values ?? element.styles ?? {}
+      // LKM-644: the page's own values. A read taken while a preview override is on the
+      // element computes the override; `base` is the same read with Trezi's overrides lifted.
+      // Without it a field whose draft was undone kept showing the undone value (the override
+      // is gone, the read is not), and a later read could not fix it while the draft stood.
+      const values = this.styles?.values
+        ? { ...this.styles.values, ...this.styles.base }
+        : (element.styles ?? {})
       const paired = (group: 'padding' | 'margin', axis: 'horizontal' | 'vertical') => {
         const sides = axis === 'horizontal' ? ['left', 'right'] : ['top', 'bottom']
         const props = sides.map((side) => `${group}-${side}`)
@@ -1226,7 +1347,20 @@ export class NativeInspectorController {
     this.publish()
     return false
   }
+  /** LKM-644: draft edits in flight; an Undo/Redo step waits for them. */
+  private readonly editing = new Set<Promise<void>>()
   async action(action: NativeInspectorAction) {
+    if (!['apply', 'token', 'apply-drafts', 'revert-draft'].includes(action.action))
+      return this.perform(action)
+    const run = this.perform(action)
+    this.editing.add(run)
+    try {
+      await run
+    } finally {
+      this.editing.delete(run)
+    }
+  }
+  private async perform(action: NativeInspectorAction) {
     if (action.root !== this.state.root || action.generation !== this.state.generation) return
     const root = this.state.root
     const generation = this.state.generation
@@ -1258,27 +1392,34 @@ export class NativeInspectorController {
         this.publish()
         return
       }
-      if (action.action === 'undo-draft' || action.action === 'revert-draft') {
-        // LKM-638: Undo and Revert act on the editable draft only. A submitted batch is the
+      if (action.action === 'undo-draft' || action.action === 'redo-draft') {
+        // LKM-644: one step of the editable draft, the same as Edit → Undo / Redo.
+        const step = await this.historyStep(action.action === 'undo-draft')
+        if (step.kind === 'blocked' && generation === this.state.generation) {
+          this.state.error = step.reason
+          this.publish()
+        }
+        return
+      }
+      if (action.action === 'revert-draft') {
+        // LKM-638: Revert acts on the editable draft only. A submitted batch is the
         // worker's; it is never rewritten or undone in source from here. Revert with nothing
         // staged dismisses the display of batches whose source already landed but whose
-        // preview never rendered them (no source change).
+        // preview never rendered them (no source change). LKM-644: Revert drops every
+        // Undo/Redo step too; it is not a step itself.
         if (!this.drafts.size) {
-          if (action.action !== 'revert-draft') return
           const landed = this.targetBatches().filter((batch) => batch.status === 'landed')
-          if (!landed.length) return
+          if (!landed.length && !this.steps.future.length) return
           for (const batch of landed) this.batches.splice(this.batches.indexOf(batch), 1)
-        } else {
-          this.drafts =
-            action.action === 'undo-draft' ? (this.draftHistory.pop() ?? new Map()) : new Map()
-          if (action.action === 'revert-draft') this.draftHistory = []
         }
-        if (!this.drafts.size) {
-          this.draftTarget = ''
-          this.draftConflict = false
-        }
+        this.drafts = new Map()
+        this.steps = new DraftSteps()
+        this.draftTarget = ''
+        this.draftConflict = false
         this.state.error = ''
         await this.refresh(true)
+        // Bumped with the rebuilt fields (projectDrafts publishes both at once).
+        this.restored++
         await this.projectDrafts()
         return
       }
@@ -1428,13 +1569,16 @@ export class NativeInspectorController {
         )
           throw new Error('Source changed while the preview draft was pending.')
         this.draftTarget = target
-        this.draftHistory.push(new Map(this.drafts))
         const prop = action.field.slice(6)
         const input = action.value ?? ''
         const value =
           field.kind === 'number' && /^-?\d+(\.\d+)?$/.test(input.trim())
             ? toCssText(prop, finite(input))
             : input
+        // LKM-644: one committed value is one Undo step; committing the same value again
+        // (Return, then leaving the field) is not another.
+        if (!prior || prior.value !== value || prior.tokenChoice !== undefined)
+          this.steps.record(this.drafts)
         const during = this.batches
           .filter(
             (batch) =>

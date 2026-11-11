@@ -114,6 +114,23 @@ extension Host {
             editor.selectAll(nil); editor.insertText(value, replacementRange: editor.selectedRange())
             editor.doCommand(by: #selector(NSResponder.insertNewline(_:)))
             return ["focused":true]
+        case "key":
+            // LKM-644: a real ⌘Z / ⇧⌘Z through the app's event queue (key monitors, the
+            // window's key equivalents, the Edit menu, WebKit), with the focus left on the
+            // field, or moved to the composer or the preview page first.
+            switch c["focus"] as? String {
+            case "composer": window.makeFirstResponder(composer.text)
+            case "preview": window.makeFirstResponder(preview)
+            default: break
+            }
+            let shift = c["shift"] as? Bool == true, characters = shift ? "Z" : "z"
+            guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: shift ? [.command, .shift] : .command, timestamp: ProcessInfo.processInfo.systemUptime,
+                                               windowNumber: window.windowNumber, context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: 6)
+            else { throw NSError(domain: "InspectorIsland", code: 5, userInfo: [NSLocalizedDescriptionKey: "No key event"]) }
+            NSApp.postEvent(event, atStart: false)
+            try await settle()
+            return fieldText(field)
+        case "field": return fieldText(field)
         default:
             func probe(_ view: NSView?) -> [String: Any] {
                 guard let view else { return ["found":false] }
@@ -124,6 +141,14 @@ extension Host {
             }
             return ["tab":state.tab, "error":state.error, "busy":state.busy, "generation":state.generation, "fields":state.fields.count, "island":rect(island), "controls":["field":probe(field), "slider":probe(slider), "tabs":probe(tabs)]]
         }
+    }
+    /// LKM-644: what the padding Vertical field shows: its field editor's text while it is
+    /// being edited (what the user sees), else its own value; and who has the focus.
+    func fieldText(_ field: NSTextField?) -> [String: Any] {
+        let editor = field?.currentEditor() as? NSTextView, edit = NSApp.mainMenu?.items.first { $0.title == "Edit" }?.submenu
+        edit?.update()
+        return ["found":field != nil, "shown":editor?.string ?? field?.stringValue ?? "", "value":field?.stringValue ?? "", "editing":editor != nil,
+                "responder":window.firstResponder.map { String(describing: type(of: $0)) } ?? "none", "undoTitle":edit?.items.first?.title ?? ""]
     }
     /// The page point `x`,`y` (CSS pixels, default 20,20) in window coordinates.
     func previewWindowPoint(_ preview: WKWebView, _ c: [String: Any]) -> NSPoint {

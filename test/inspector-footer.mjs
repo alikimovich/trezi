@@ -16,6 +16,7 @@ const binary = swiftBuild('inspector-footer', [
   'test/fixtures/inspector-footer/main.swift',
   ...[
     'EditingInspector',
+    'EditUndo',
     'InspectorNumberStep',
     'FloatingIsland',
     'IslandLayout',

@@ -10,7 +10,12 @@ import AppKit
 // What SourceEditor.swift and SourceWrap.swift reach outside the files compiled here.
 func emit(_ value: [String: Any]) {}
 func captureVisibleRegion(window: NSWindow, view: NSView, region: NSRect, recognize: Bool = true, corrected: Bool = false) async throws -> [String: Any] { [:] }
-final class Host: NSObject { var dockedSource: NativeSourceEditor?, sourceEditors: [String: NativeSourceEditor] = [:], sourceRoot = "" }
+final class Host: NSObject {
+    var dockedSource: NativeSourceEditor?, sourceEditors: [String: NativeSourceEditor] = [:], sourceRoot = ""
+    // Host's Edit → Undo / Redo, validated beside Wrap Lines (LKM-644; not exercised here).
+    @objc func menuAction(_ item: NSMenuItem) {}
+    func validateEditUndo(_ item: NSMenuItem) -> Bool { true }
+}
 
 @MainActor func run() -> [String: Any] {
     _ = NSApplication.shared

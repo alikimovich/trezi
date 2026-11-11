@@ -15,6 +15,7 @@ const binary = swiftBuild('inspector-number-step', [
   'test/fixtures/inspector-number-step/main.swift',
   ...[
     'EditingInspector',
+    'EditUndo',
     'InspectorNumberStep',
     'FloatingIsland',
     'IslandLayout',

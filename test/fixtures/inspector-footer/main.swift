@@ -29,7 +29,9 @@ func state(count: Int, submitted: Bool) -> InspectorState {
         "fields": fields, "actions": [], "error": "", "busy": false,
         // LKM-638: a running Apply batch is reported beside the editable draft, never as a lock.
         "draft": ["count": count, "submitted": submitted, "conflict": false, "preview": true,
-                  "applying": submitted ? "Applying 1 value in the background" : ""] as [String: Any]
+                  "applying": submitted ? "Applying 1 value in the background" : ""] as [String: Any],
+        // LKM-644: Undo draft is enabled when the draft has an Undo step.
+        "history": ["undo": count > 0, "redo": false, "restored": 0] as [String: Any]
     ]
     return try! JSONDecoder().decode(InspectorState.self, from: JSONSerialization.data(withJSONObject: raw))
 }
