@@ -4,19 +4,27 @@ import { join } from 'node:path'
 import type { UpdateStatus } from '../shared/api'
 import type { NativeSheetController } from './sheets-runtime'
 
+/**
+ * One read-only git query, retried a few times: a spawn can fail transiently under
+ * load (seen once in CI), and a valid build must not be refused for that. Only a
+ * failed spawn retries; a wrong answer still fails the checks below.
+ */
+function gitRead(root: string, args: string[]): string {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const result = spawnSync('git', ['-C', root, ...args], { encoding: 'utf8' })
+    if (result.status === 0) return result.stdout.trim()
+  }
+  return ''
+}
+
 /** Match the built application and its service to the source we just updated. */
 export function verifyUpdatedArtifact(root: string): string | null {
-  const git = spawnSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' })
-  const sha = git.status === 0 ? git.stdout.trim() : ''
+  const sha = gitRead(root, ['rev-parse', 'HEAD'])
   if (!/^[0-9a-f]{40}$/.test(sha)) return 'Could not prove the updated source revision.'
-  const abbreviated = spawnSync('git', ['-C', root, 'rev-parse', '--short=7', 'HEAD'], {
-    encoding: 'utf8'
-  })
-  const commit = abbreviated.status === 0 ? abbreviated.stdout.trim() : ''
+  const commit = gitRead(root, ['rev-parse', '--short=7', 'HEAD'])
   if (!/^[0-9a-f]{7,40}$/.test(commit) || !sha.startsWith(commit))
     return 'Could not prove the updated commit stamp.'
-  const count = spawnSync('git', ['-C', root, 'rev-list', '--count', 'HEAD'], { encoding: 'utf8' })
-  const build = count.status === 0 ? count.stdout.trim() : ''
+  const build = gitRead(root, ['rev-list', '--count', 'HEAD'])
   if (!/^\d+$/.test(build)) return 'Could not prove the updated build number.'
   let version: string
   try {

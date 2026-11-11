@@ -1,5 +1,14 @@
 # PROGRESS LOG
 
+## 2026-11-10 — LKM-639 CI follow-up: retry transient git reads in the update verifier
+
+PR #460's unit shard 2/3 failed once in `native-updates`: `verifyUpdatedArtifact` reported
+"Could not prove the updated commit stamp." on its third call although the same git reads
+had just succeeded twice in that test, and it passes repeatedly locally. That is a
+transient `git` spawn failure, unrelated to the Apply timing change. The verifier now
+retries a failed read-only git query up to three times; a wrong answer still fails
+the checks, so no stamp mismatch is accepted.
+
 ## 2026-11-10 — LKM-639 measure inspector Apply / comment agent latency; prestart the private dev server
 
 Source revision: origin/main 8637fddc (LKM-638 merged). Measured before editing, on synthetic fixtures only (no user project, no real provider, no transcript read). The installed app's product log (`~/Library/Logs/Trezi`) had only app-start lines for Nov 2–8 and no spawn/landing phase lines, so the owner's 4–5 minute padding 2rem → 0.75rem Apply cannot be attributed from existing data: no matching operation is identifiable, and model-stage time is **unmeasured**.
