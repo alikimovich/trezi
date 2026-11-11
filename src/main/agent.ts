@@ -137,6 +137,17 @@ import { incidents } from './self-heal/incidents'
 import { releaseSessionSkills } from './session-skills'
 import { createSessionStore, type SessionStore } from './sessions-store'
 import { landSpawn, MAX_SPAWN_CONTINUATIONS } from './spawn-landing'
+import {
+  beginSpawnPhases,
+  continueSpawn,
+  dropSpawnPhases,
+  finishSpawnPhases,
+  markSpawn,
+  noteSpawnChecks,
+  spawnCheckDurations,
+  timeLandingStep
+} from './spawn-phases'
+import { prewarmSpawnRuntime, releaseSpawnRuntime } from './spawn-prewarm'
 import { keepStoppedTurn, revertStoppedTurn, undoStoppedRevert } from './stopped-turn'
 import { TEXT_EDIT_MAX, textEditLanded, textEditMismatch } from './text-edit-check'
 import { logTurnEvent, logTurnNotSent, logTurnStart } from './turn-log'
@@ -886,13 +897,17 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
     })
     .catch(() => {})
   let continued = false
+  markSpawn(id, 'landing-queued', true)
   await enqueueRepoWrite(parentRoot, async () => {
+    markSpawn(id, 'lease', true)
+    noteSpawnChecks(id, spawnCheckDurations(parentSessionKey, wt.path))
     let closed = false
     // finalize + persist the record (removed below if we auto-apply)
     const close = () => {
       if (closed) return
       closed = true
       closeSession(session, parentSessionKey)
+      void releaseSpawnRuntime(parentSessionKey, wt.path)
       dropGateEvidence(parentSessionKey, wt.path)
     }
     try {
@@ -920,6 +935,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
         // and its next finish lands here again. The rail row keeps running.
         spawn.continuations = (spawn.continuations ?? 0) + 1
         spawn.resolution = landing.resolution
+        continueSpawn(id)
         spawn.finalizing = false
         observePeer(
           id,
@@ -948,10 +964,12 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
           recordEdit(parentRoot, e.file, e.before, e.after, undefined, group)
         // …and as one commit on the live checkout, like an interactive chat's turn, so
         // the spawn shows up in `git log` and can be reverted on its own.
-        const commit = await commitLiveTurn(parentRoot, files, {
-          title: firstLine(text),
-          body: origin === 'text-edit' ? 'Trezi background text edit.' : 'Trezi comment spawn.'
-        })
+        const commit = await timeLandingStep(id, 'liveCommit', () =>
+          commitLiveTurn(parentRoot, files, {
+            title: firstLine(text),
+            body: origin === 'text-edit' ? 'Trezi background text edit.' : 'Trezi comment spawn.'
+          })
+        )
         notePeerLanded(id, files, commit.sha)
         // LKM-405: combined overlapping work that passed its checks on this tree and landed.
         const lesson =
@@ -967,13 +985,16 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
               )
             : null
         if (lesson) saveLesson(parentRoot, lesson)
-        await removeWorktree(parentRoot, wt, { keepBranch: false, intent: 'landed' })
+        await timeLandingStep(id, 'removeWorktree', () =>
+          removeWorktree(parentRoot, wt, { keepBranch: false, intent: 'landed' })
+        )
         try {
           removeRecord(session.record.id, session)
         } catch {
           /* history is non-critical */
         }
         // LKM-352: a text edit that landed without the full text is reported, not kept silently.
+        finishSpawnPhases(id, 'applied')
         const mismatch =
           spawn.expectText != null &&
           !textEditLanded(
@@ -1006,6 +1027,14 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
           keepBranch: committed,
           intent: committed ? 'release' : 'abandon'
         })
+        const outcome = spawn.cancelled
+          ? 'cancelled'
+          : status === 'error'
+            ? 'failed'
+            : committed
+              ? 'review'
+              : 'no-change'
+        finishSpawnPhases(id, outcome)
         safeSend(getWindow_, 'agent:event', {
           type: 'spawn-finished',
           projectKey: parentSessionKey,
@@ -1016,13 +1045,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
           ...label,
           ...(landing.gate ? { gate: landing.gate } : {}),
           ...(landing.decision ? { decision: landing.decision } : {}),
-          outcome: spawn.cancelled
-            ? 'cancelled'
-            : status === 'error'
-              ? 'failed'
-              : committed
-                ? 'review'
-                : 'no-change',
+          outcome: outcome as 'cancelled' | 'failed' | 'review' | 'no-change',
           files: committed ? files.map((f) => basename(f)) : []
         } satisfies AgentEvent)
       }
@@ -1030,6 +1053,7 @@ async function finalizeSpawn(id: string, status: 'done' | 'error'): Promise<void
       // Keep the checkout for recovery, but always retire the running card.
       console.error('Background agent finalization failed:', error)
       close()
+      finishSpawnPhases(id, 'failed')
       safeSend(getWindow_, 'agent:event', {
         type: 'spawn-finished',
         projectKey: parentSessionKey,
@@ -1080,11 +1104,17 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
   const releaseSlot = () => startingSpawns.delete(q.id)
   let wt: Worktree
   try {
-    wt = await enqueueRepoWrite(q.root, () =>
-      createWorktree(q.root, worktreesDir(), { label: q.text, id: q.id })
-    )
+    wt = await enqueueRepoWrite(q.root, () => {
+      markSpawn(q.id, 'lane')
+      return createWorktree(q.root, worktreesDir(), { label: q.text, id: q.id })
+    })
+    markSpawn(q.id, 'worktree')
+    // LKM-639: its landing check needs this worktree's private dev server; start it now,
+    // alongside the provider and the model, instead of after the agent's edit.
+    void prewarmSpawnRuntime(q.id, q.parentSessionKey, wt.path)
   } catch {
     releaseSlot()
+    finishSpawnPhases(q.id, 'failed')
     safeSend(getWindow_, 'agent:event', {
       type: 'spawn-finished',
       projectKey: q.parentSessionKey,
@@ -1112,11 +1142,15 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
           if (e.type === 'status') {
             noteAgentStep(spawnWatchKey(wt.id), e.text)
             const running = spawns.get(wt.id)
+            if (running?.session.record.filesTouched.length) markSpawn(wt.id, 'first-edit')
             if (running)
               void peerObservedFiles(wt.path, running.session.record.filesTouched, wt.id).then(
                 (paths) => observePeer(wt.id, paths, wt.path)
               )
           }
+          // A repeated finish while landing does not move the model's end past it.
+          if ((e.type === 'done' || e.type === 'error') && !spawns.get(wt.id)?.finalizing)
+            markSpawn(wt.id, 'model-done', true)
           if (e.type === 'done') void finalizeSpawn(wt.id, 'done')
           else if (e.type === 'error') {
             const spawn = spawns.get(wt.id)
@@ -1126,6 +1160,7 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
         }
       })
     )
+    markSpawn(wt.id, 'provider')
     s.record.kind = 'comment'
     s.record.branch = wt.branch
     // The spawn's cwd is its worktree, so createRecordCapture keyed the record to
@@ -1188,6 +1223,7 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
       await finalizeSpawn(wt.id, 'done')
       return null
     }
+    markSpawn(wt.id, 'sent')
     s.send(context + q.text)
     return wt.branch
   } catch {
@@ -1198,6 +1234,8 @@ async function startSpawn(q: QueuedSpawn): Promise<string | null> {
     spawns.delete(wt.id)
     forgetLiveWatch(spawnWatchKey(wt.id))
     releaseSlot()
+    finishSpawnPhases(q.id, 'failed')
+    await releaseSpawnRuntime(q.parentSessionKey, wt.path)
     await removeWorktree(q.root, wt, { keepBranch: false, intent: 'abandon' })
     safeSend(getWindow_, 'agent:event', {
       type: 'spawn-finished',
@@ -1227,6 +1265,7 @@ async function admitNext(id: string): Promise<void> {
       void admitNext(nextId)
       continue
     }
+    markSpawn(q.id, 'admitted')
     const branch = await startSpawn(q)
     if (branch) {
       safeSend(getWindow_, 'agent:event', {
@@ -2438,6 +2477,7 @@ export function registerAgentIpc(
       }
       // Held before the owner answers, so a slot freed meanwhile can start it.
       queuedSpawns.set(id, q)
+      beginSpawnPhases(id, origin)
       if (
         !(await conversation()
           .spawn(id, parentKey)
@@ -2448,9 +2488,11 @@ export function registerAgentIpc(
       }
       // Cancelled while the owner admitted it: give the slot back.
       if (!queuedSpawns.delete(id)) {
+        dropSpawnPhases(id)
         void admitNext(id)
         return { ok: false, reason: 'Cancelled.' }
       }
+      markSpawn(id, 'admitted')
       const branch = await startSpawn(q)
       if (!branch) return { ok: false, reason: 'Could not start the agent (is it logged in?).' }
       return { ok: true, spawnId: id, branch }
@@ -2470,6 +2512,7 @@ export function registerAgentIpc(
     ) {
       const q = waiting
       queuedSpawns.delete(id)
+      finishSpawnPhases(id, 'cancelled')
       safeSend(getWindow, 'agent:event', {
         type: 'spawn-finished',
         projectKey: q.parentSessionKey,

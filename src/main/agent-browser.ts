@@ -115,7 +115,7 @@ const LOADED_EVENT_MS = 1000
  * exact source (`./agent-identity`). Otherwise it loads the live server, as before.
  */
 async function webkitBrowser(key: string, root: string, isolated = false): Promise<AgentBrowser> {
-  const id = sessionId(isolated ? `${key}\0${root}` : key)
+  const id = isolated ? privatePageId(key, root) : sessionId(key)
   const viewName = `agent:${id}`
   await bridge().request('agentBrowserCreate', { session: id })
   const wc = new NativeView(viewName).webContents
@@ -461,6 +461,11 @@ export function openAgentBrowser(key: string, root: string, liveRoot: string): A
 
 export function agentBrowserCount(): number {
   return browsers.size + opening.size
+}
+
+/** The id of the private WebKit page for `key` in the worktree `root`; its dev server runs under it. */
+export function privatePageId(key: string, root: string): string {
+  return sessionId(`${key}\0${root}`)
 }
 
 /** The registry name of the private WebKit page for `key` in the worktree `root`. */

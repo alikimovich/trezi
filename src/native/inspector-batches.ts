@@ -41,6 +41,8 @@ export type ApplyBatch = {
   needsElement?: boolean
   /** The inspector's page-update count when it landed (later updates may render it). */
   landedAt?: number
+  /** LKM-639: wall-clock stages for the Apply timeline (`inspector-apply-timing.ts`). */
+  readonly times: { applied: number; dispatched?: number; landed?: number }
 }
 
 const PAIR = /^style:(padding|margin)-(horizontal|vertical)$/

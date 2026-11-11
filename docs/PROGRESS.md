@@ -1,5 +1,63 @@
 # PROGRESS LOG
 
+## 2026-11-10 — LKM-639: landing breakdown; prestart assertion measures only what the prestart moves
+
+- Correction: the entry below said `node test/run.mjs unit --changed=origin/main` passed with
+  0 FAIL. The next required run failed in `spawn-phases` (this branch's test): its prestart
+  assertion compared full `totalMs` (6761 → 16302 ms) and the prestarted case's `landingMs` was
+  12233 ms under the parallel suite.
+- Checked whether the prestarted server waits on the landing path: `finalizeSpawn` stops it
+  with `void releaseSpawnRuntime(…)` (not awaited), the gate only reads the runtime's
+  generation, and nothing in the lease waits on a stop. To show it, the landing span is now
+  broken into steps (`timeLandingStep` in `src/main/spawn-phases.ts`, used by
+  `spawn-landing.ts` and `finalizeSpawn`): commit, peers, gate, apply, reconcile, live
+  commit, worktree removal, logged as `landing<Step>Ms` parts of `landingMs`.
+- Measured: alone, serial vs prestarted landing 510 vs 504 ms with the same steps (commit
+  ≈100, gate ≈36, apply ≈190, live commit ≈80, worktree removal ≈70). Under
+  `node test/run.mjs unit --changed=origin/main`: 544 vs 750 ms (1.4x), the extra spread
+  over commit (+92), gate (+32), apply (+47) and live commit (+31), git/owner work, not a
+  wait. The 12 s landing was not reproduced; that run had no step breakdown, so it cannot be
+  attributed after the fact, but no step waits on the server and the reproduction under the
+  same suite shows load only. No product change to landing was needed.
+- `test/spawn-phases.mjs` now asserts `serverWaitMs < 700` and that the pre-landing critical
+  path (`totalMs - landingMs - leaseWaitMs`) is at least 1000 ms shorter with the prestart
+  (alone 5258 → 3772, under the suite 5310 → 3761 ms); landing steps must sum within
+  `landingMs`. Full `totalMs` is no longer compared.
+- Checks: `bun run lint` exit 0; `bun run typecheck && node test/run.mjs unit --changed=origin/main`
+  exit 0 (343 PASS, 3 SKIP, 0 FAIL, `spawn-phases` PASS).
+
+## 2026-11-10 — LKM-639: deflake the preview-apply-layers fixture
+
+- The changed-unit check failed once on `preview-apply-layers` (LKM-638's WebKit fixture, not
+  touched by this branch): with ~340 tests running in parallel, the off-screen view's
+  `setTimeout` sampler produced no task-boundary sample within the fixed 0.6 s settle, so
+  `pending.frames > 0` failed. The same test passed in a sibling run. The fixture now waits
+  (bounded by `until`'s 20 s) for at least one sample after the lifted read and after the
+  retire. The assertions themselves are unchanged.
+
+## 2026-11-10 — LKM-639 CI follow-up: retry transient git reads in the update verifier
+
+PR #460's unit shard 2/3 failed once in `native-updates`: `verifyUpdatedArtifact` reported
+"Could not prove the updated commit stamp." on its third call although the same git reads
+had just succeeded twice in that test, and it passes repeatedly locally. That is a
+transient `git` spawn failure, unrelated to the Apply timing change. The verifier now
+retries a failed read-only git query up to three times; a wrong answer still fails
+the checks, so no stamp mismatch is accepted.
+
+## 2026-11-10 — LKM-639 measure inspector Apply / comment agent latency; prestart the private dev server
+
+Source revision: origin/main 8637fddc (LKM-638 merged). Measured before editing, on synthetic fixtures only (no user project, no real provider, no transcript read). The installed app's product log (`~/Library/Logs/Trezi`) had only app-start lines for Nov 2–8 and no spawn/landing phase lines, so the owner's 4–5 minute padding 2rem → 0.75rem Apply cannot be attributed from existing data: no matching operation is identifiable, and model-stage time is **unmeasured**.
+
+Path traced: the local Styles preview (`action('preview')`) is one direct `styles:preview` send, no source read, IPC to an owner or queue behind `this.operation` (LKM-638 already keeps fields editable). Apply = preflight (hash read, preview freshness) → `agent:spawn-comment` (`text-edit`, inherits the parent chat's provider/model/effort; `comment` alone gets the focused model) → owner admission → worktree in the repository lane (snapshot + setup helpers + dependency clone, awaited) → memory + provider start → peer registration/context → model → the agent must pass `preview_verify` on its exact tree for a web project (`rules.ts`, `integration-gate.ts`), which starts that new worktree's **private dev server cold, only when the agent first checks, after its edit** → done → live-change/peer read → repository lease → gate, apply, commit, worktree removal → `spawn-finished` → inspector source check → preview HMR → batch retires.
+
+Instrumentation (bounded: ids, origin, outcome, counts, ms; never prompt, values, paths or output): `src/main/spawn-phases.ts` marks requested/admitted/lane/worktree/provider/sent/first-edit/model-done/landing-queued/lease/finished per spawn id and logs one `spawn` `Background agent phases` line of consecutive non-overlapping spans (queue vs lane wait vs setup vs provider vs peer vs model vs lease wait vs landing), with the agent's checks (`checkMs`, from its receipts) reported as a part of `modelMs`, not added; a continuation resets the landing marks. `src/native/inspector-apply-timing.ts` logs `Inspector Apply dispatched|landed|visible|returned` with `preflightMs`, `workerMs`, `previewMs` under the same `op` (the batch's spawn id).
+
+Baseline, unit `spawn-phases` (real agent.ts spawn path, real Swift conversation/repository/source/editing owners, fake provider; tiny repo, `src/card.css` padding 2rem → 0.75rem, M-series Mac): Trezi's own work around the model ≈ 0.6 s — cold total 596 ms (worktree 105, provider 5, peer 19, lease wait 8, landing 398), warm 576 ms (worktree 100). Cold vs warm differ by < 30 ms. With another operation holding the repository lease 400 ms, `laneWaitMs` 395 and setup stays 153: queue is not misattributed. A 600 ms fixture "model" shows up as 303 + 388 ms in the model spans only. None of this explains minutes. Separately measured (`/tmp`, synthetic apps, fresh `git worktree` + APFS-cloned node_modules, 3 runs each): Next 15 minimal app "Ready" ≈ 1.9–2.0 s plus first compile ≈ 1.1 s (first 200 at 3.5–3.7 s); Vite 6 ready ≈ 0.4 s (first 200 0.5–0.9 s). Every Apply pays this cold, serially, after its edit; a real app's cold compile is larger (not measured here).
+
+Change (`src/main/spawn-prewarm.ts`, wired in `startSpawn`): as soon as the spawn's worktree exists, a web project's private dev server starts under the agent's private page id (`privatePageId`, now exported from `agent-browser.ts`), in parallel with provider startup and the model. The page's own `ensureAgentRuntime` finds it running or shares the start in flight; the check, its receipt (exact source, server generation) and the gate are unchanged; non-web projects and failures are left to the check as before. The spawn stops it when it closes (`releaseSpawnRuntime` in `finalizeSpawn`'s close and the start-failure path), including a start still in flight. Candidate on the same fixture with a 2 s fake cold start and a 1.5 s + 1.5 s fake model: check's wait for its server 2003 → 479 ms, total 5692 → 4188 ms; one start per Apply, every server stopped, none outliving a spawn that finished during its prestart. No model/provider/effort, concurrency, gate, worktree or Apply-contract change.
+
+Not done / open: the inherited parent model for `text-edit` is unchanged (owner's choice); if the new phase lines show `modelMs` dominating, a scoped option is an explicit "Apply model" setting (like comments' focused model), for the owner to decide. Whether Apply agents also run broad command checks (`next build`, tests) the gate does not need is now visible as `checks`/`checkMs` but was not observed. Checks: `bun run lint` exit 0; `bun run typecheck` pass; `node test/run.mjs unit --changed=origin/main` (FULL): 343 PASS, 3 SKIP (platform/no build), 0 FAIL; after a last guard (a repeated `done` during landing no longer moves `model-done`; an admission-time cancel drops its timeline) `spawn-phases`, `comment-agents`, `comment-reconcile`, `inspector-apply-layers`, `inspector-background-apply` PASS. Not run: real provider, native groups, an installed-build Apply, and a measurement on the owner's project. Source only: not a loaded app update.
+
 ## 2026-11-10 — LKM-638 styling stays editable and the preview steady while inspector Apply runs
 
 Traced on main first. Three things made the screenshot: `action('apply')` refused every style edit while `submitted`/`submitting`/`draftConflict` ("Wait for Apply to finish or revert the stale draft."); on success `invalidated()` sent `styles:clear-preview {}`, re-read and re-projected, so the element painted its old authored style in between (the snapback/layout shift); and A's own landing moved the file hash, so the next draft was flagged as a source conflict, which then locked the fields with the same message.
