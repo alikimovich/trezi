@@ -122,6 +122,8 @@ extension Host: NSMenuItemValidation {
     var wrapTarget: NativeSourceEditor? { dockedSource ?? sourceEditors[sourceRoot] ?? sourceEditors.values.first }
     @objc func toggleWrapLines(_ sender: Any?) { wrapTarget?.toggleWrapLines(sender) }
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        // LKM-644: Edit → Undo / Redo (`HostMenus.swift`).
+        if item.action == #selector(menuAction(_:)) { return validateEditUndo(item) }
         guard item.action == #selector(toggleWrapLines(_:)) else { return true }
         guard let editor = wrapTarget else { item.state = .off; return false }
         return editor.validateMenuItem(item)

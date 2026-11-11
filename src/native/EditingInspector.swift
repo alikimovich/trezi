@@ -23,7 +23,10 @@ struct InspectorDraftState: Decodable {
         return "Draft pending · live preview unavailable"
     }
 }
-struct InspectorState: Decodable { let root: String; let generation: Int; let visible: Bool; let title: String; let tab: String; let fields: [InspectorField]; let actions: [InspectorAction]; let error: String; let busy: Bool; let notice: InspectorNotice?; let updated: Int?; let edits: Int?; let draft: InspectorDraftState? }
+/// LKM-644: what Edit → Undo / Redo can step in the selected element's draft; a new
+/// `restored` makes every field show its restored value, the focused one included.
+struct InspectorHistory: Decodable { let undo: Bool; let redo: Bool; let restored: Int }
+struct InspectorState: Decodable { let root: String; let generation: Int; let visible: Bool; let title: String; let tab: String; let fields: [InspectorField]; let actions: [InspectorAction]; let error: String; let busy: Bool; let notice: InspectorNotice?; let updated: Int?; let edits: Int?; let draft: InspectorDraftState?; let history: InspectorHistory? }
 final class InspectorModel: ObservableObject {
     @Published var state: InspectorState?
     /// LKM-216: a re-read after a source/CSS change altered the same selection's values;
@@ -52,7 +55,7 @@ struct InspectorFieldView: View {
     @FocusState var focused: Bool
     /// An arrow step previewed a value Return has not staged yet (LKM-601).
     @State var stepped = false
-    func apply() { stepped = false; model.send("apply", field: field.id, value: value) }
+    func apply() { stepped = false; InspectorTyping.dirty = false; model.send("apply", field: field.id, value: value) }
     /// Up/Down on a focused number: preview each step like the slider; Return stages it, and
     /// for a style (a draft, never a source write) so does leaving the field.
     func step(_ direction: Double) -> String? {
@@ -91,7 +94,9 @@ struct InspectorFieldView: View {
                         .onChange(of: focused) { now in
                             if !now && stepped && field.id.hasPrefix("style:") && value != field.value { apply() }
                             if !now { stepped = false }
+                            InspectorTyping.dirty = false
                         }
+                        .onChange(of: value) { next in if focused { InspectorTyping.dirty = next != field.value } }
                     if field.kind == "color" {
                         ColorPicker("Color", selection: Binding(get: { Color(nsColor: editorColor(value)) }, set: { color in let c = NSColor(color).usingColorSpace(.deviceRGB) ?? .black; value = String(format: "rgba(%d, %d, %d, %.3f)", Int(c.redComponent * 255), Int(c.greenComponent * 255), Int(c.blueComponent * 255), c.alphaComponent); model.send("preview", field: field.id, value: value) })).labelsHidden()
                     }
@@ -106,6 +111,8 @@ struct InspectorFieldView: View {
         }.disabled(field.disabled == true || model.state?.busy == true)
             .onAppear { value = field.value }
             .onChange(of: field.value) { next in if !focused { value = next } }
+            // LKM-644: Undo, Redo or Revert replaced the draft: show its value even while focused.
+            .onChange(of: model.state?.history?.restored) { _ in stepped = false; value = field.value; if focused { InspectorTyping.dirty = false } }
     }
 }
 private func editorColor(_ value: String) -> NSColor {
@@ -186,6 +193,7 @@ private struct CompactLayoutValue: View {
             model.send("cancel-preview", field: field.id)
             return
         }
+        InspectorTyping.dirty = false
         guard draft != field.value, draft != submitted else { return }
         submitted = draft
         model.send("apply", field: field.id, value: draft)
@@ -214,9 +222,10 @@ private struct CompactLayoutValue: View {
             TextField(title, text: $draft, prompt: Text(field.mixed == true ? "Mixed" : title))
                 .textFieldStyle(.roundedBorder).controlSize(.small).font(.system(size: 11))
                 .focused($focused).onSubmit(commit)
-                .onChange(of: focused) { next in if !next && !cancelling { commit() }; if next { cancelling = false } }
+                .onChange(of: focused) { next in if !next && !cancelling { commit() }; if next { cancelling = false }; InspectorTyping.dirty = false }
                 .onChange(of: draft) { next in
                     let step = next == stepped; stepped = nil
+                    if focused { InspectorTyping.dirty = next != submitted && next != field.value }
                     if focused && !cancelling && (step || (bareNumber && next != field.value)) {
                         model.send("preview", field: field.id, value: next)
                     }
@@ -243,6 +252,9 @@ private struct CompactLayoutValue: View {
         .disabled(field.disabled == true || model.state?.busy == true)
         .onAppear { draft = field.value; submitted = field.value }
         .onChange(of: field.value) { next in if !focused { draft = next; submitted = next } }
+        // LKM-644: Undo, Redo or Revert replaced the draft: the field shows the restored value
+        // even while focused, and leaving it afterwards commits nothing stale.
+        .onChange(of: model.state?.history?.restored) { _ in submitted = field.value; stepped = nil; draft = field.value; if focused { InspectorTyping.dirty = false } }
     }
 }
 
@@ -365,8 +377,8 @@ struct InspectorDraftFooter: View {
     private var buttons: some View {
         Group {
             Button("Apply") { model.send("apply-drafts") }.disabled(busy || draft.count == 0 || draft.conflict)
-            Button("Undo draft") { model.send("undo-draft") }.disabled(busy || draft.count == 0)
-            Button("Revert draft") { model.send("revert-draft") }.disabled(busy || (draft.count == 0 && draft.landed != true))
+            Button("Undo draft") { model.send("undo-draft") }.disabled(busy || model.state?.history?.undo != true)
+            Button("Revert draft") { model.send("revert-draft") }.disabled(busy || (draft.count == 0 && draft.landed != true && model.state?.history?.redo != true))
         }
     }
     var body: some View {

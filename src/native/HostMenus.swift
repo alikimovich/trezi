@@ -27,7 +27,8 @@ extension Host {
         file.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         let edit = submenu("Edit")
         let undo = NSMenuItem(title: "Undo", action: #selector(menuAction(_:)), keyEquivalent: "z"); undo.target = self; undo.representedObject = "undo"; edit.addItem(undo)
-        let redo = NSMenuItem(title: "Redo", action: #selector(menuAction(_:)), keyEquivalent: "z"); redo.target = self; redo.representedObject = "redo"; redo.keyEquivalentModifierMask = [.command, .shift]; edit.addItem(redo)
+        // LKM-644: "Z" (Shift implied), the form a ⇧⌘Z event matches; "z" with ⇧ does not.
+        let redo = NSMenuItem(title: "Redo", action: #selector(menuAction(_:)), keyEquivalent: "Z"); redo.target = self; redo.representedObject = "redo"; redo.keyEquivalentModifierMask = [.command]; edit.addItem(redo)
         for (label, key, selector) in [("Cut", "x", "cut:"), ("Copy", "c", "copy:"), ("Paste", "v", "paste:"), ("Select All", "a", "selectAll:")] {
             edit.addItem(withTitle: label, action: Selector(selector), keyEquivalent: key)
         }
@@ -77,11 +78,27 @@ extension Host {
     }
     @objc func menuAction(_ item: NSMenuItem) {
         let action = item.representedObject as? String ?? ""
-        if ["undo", "redo"].contains(action), let text = NSApp.keyWindow?.firstResponder as? NSTextView {
-            if action == "undo" { text.undoManager?.undo() } else { text.undoManager?.redo() }; return
-        }
-        if action == "undo", markup?.undo() == true { return }
+        if ["undo", "redo"].contains(action) { editUndo(action == "undo"); return }
         emit(["event":"menu", "action":action])
+    }
+    /// LKM-644: Edit → Undo / Redo (⌘Z / ⇧⌘Z), from the menu, its key equivalent or the
+    /// preview page (`fromPage`: the page found no field of its own focused). A text view
+    /// that is editing keeps its typing Undo; else Mark up, else Bun steps the visual draft
+    /// and only falls back to the project's source history when no visual edit is in play.
+    func editUndo(_ undo: Bool, fromPage: Bool = false) {
+        let responder = NSApp.keyWindow?.firstResponder
+        if !fromPage, let responder {
+            switch EditUndo.route(responder, island: editingInspector, preview: views["preview"], key: NSApp.currentEvent?.type == .keyDown) {
+            case .text, .page: EditUndo.perform(responder, undo: undo); return
+            case .visual: break
+            }
+        }
+        if undo, markup?.undo() == true { return }
+        // The field shows the restored value at once; nothing typed is pending in it.
+        InspectorTyping.dirty = false
+        // From the page, only the visual draft may answer: a page with its own ⌘Z never
+        // also reverts a project source edit.
+        emit(["event":"menu", "action":undo ? "undo" : "redo", "visualOnly":fromPage])
     }
     @objc func recentAction(_ item: NSMenuItem) { emit(["event":"recent", "root":item.representedObject as? String ?? ""]) }
     /// File → Open Recent, rebuilt from the backend's `recents` command.
@@ -91,5 +108,17 @@ extension Host {
             guard let root = entry["root"], let title = entry["name"] else { continue }
             let item = NSMenuItem(title: title, action: #selector(recentAction(_:)), keyEquivalent: ""); item.representedObject = root; item.target = self; recentMenu.addItem(item)
         }
+    }
+}
+
+/// LKM-644: Edit → Undo / Redo name what they would undo, and a text view's own state
+/// decides while it is editing. Host's other menu items stay enabled as before.
+extension Host {
+    /// Called from Host's `validateMenuItem` (`SourceWrap.swift`).
+    func validateEditUndo(_ item: NSMenuItem) -> Bool {
+        guard item.action == #selector(menuAction(_:)), let action = item.representedObject as? String, ["undo", "redo"].contains(action) else { return true }
+        let undo = action == "undo", history = editingInspector.model.state?.history
+        return EditUndo.validate(item, undo: undo, responder: NSApp.keyWindow?.firstResponder, island: editingInspector,
+                                 visual: (undo ? history?.undo : history?.redo) == true)
     }
 }

@@ -12,6 +12,8 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Added
 
+- Command-Z and Shift-Command-Z undo and redo the last visual Styles change in the preview, one change at a time (a typed value, a slider or spacing-handle drag, a token choice), including from the focused preview or a committed Styles field; text fields, the composer and the code editor keep their own Undo, and Revert still clears the whole draft (LKM-644).
+
 - Up and Down arrows now step a focused numeric inspector field (Width/Height, Padding, Margin, Gap, Radius, Opacity, font sizes, number props and the like) by its step, or by 1, keeping units like px, decimals and each field's limits; the preview follows each press, and the value is staged like a typed one, never applied by itself (LKM-601).
 - Select text in an agent's reply and choose Reply (the button over the selection or the right-click menu) to quote it in the composer with your comment; collect several quoted comments and send them together, with or without a message.
 - When you ask the agent to remember a rule or guide, it now saves it to the project's memory (shown in Project memory, with Undo) and only says so once the save succeeded.
@@ -26,6 +28,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 
+- Undo draft in the Styles panel now also puts the field back to its earlier value, even while that field is focused, instead of reverting only the preview; leaving the field afterwards no longer re-applies the undone value (LKM-644).
 - The red spacing numbers in the preview (Option distances, guide distances and the spacing-grip drag value) now always show above the blue element title chips and the dark selection toolbar instead of being hidden under them; the toolbar under a number still takes clicks (LKM-637).
 - The Reply button for selected chat text now floats over the conversation next to the selection, clear of the text, instead of sitting inline after the last word of a short message; it follows scrolling and stays out of the composer (LKM-627).
 - A held change whose check failed no longer shows a Problem card while the next turn is already working on it and will check it again; recovery cards show one copy place (Copy details sits in More beside Copy support report).

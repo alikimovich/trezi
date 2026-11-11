@@ -834,15 +834,25 @@ async function main() {
     (text, kind) => activityController.append(text, kind),
     () => workspaceController.active?.root ?? null
   )
-  host.on('menu', ({ action }) => {
+  host.on('menu', ({ action, visualOnly }) => {
     const root = workspaceController.active?.root
     if (action === 'toggle-chat') void shellController!.action({ action: 'expand' })
     else if (action === 'reload' && workspaceController.active?.url)
       host!.send('reload', { view: 'preview' })
     else if (['undo', 'redo'].includes(action) && root)
-      void workspaceController.services
-        .invoke(`edit:${action}`, root)
-        .then((result) => {
+      // LKM-644: the selected element's visual draft first, one step. The project's source
+      // history answers only when no visual edit is in play (no unsent draft, no unreported
+      // Apply): an Undo meant for a preview draft never reverts a source edit.
+      void inspectorController
+        .historyStep(action === 'undo')
+        .then(async (step) => {
+          if (step.kind === 'stepped') return
+          if (step.kind === 'blocked') {
+            sheetController.toast(step.reason)
+            return
+          }
+          if (visualOnly || root !== workspaceController.active?.root) return
+          const result = await workspaceController.services.invoke(`edit:${action}`, root)
           if (result.conflict)
             activityController.append(
               'The file changed on disk; undo/redo refused to overwrite it.',

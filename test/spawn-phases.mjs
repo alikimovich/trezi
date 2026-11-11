@@ -260,12 +260,14 @@ try {
   setSpawnPrewarm(true)
   const prestarted = await apply('web, server prestarted with the worktree')
   assert.ok(prestarted.serverWaitMs < 700, 'the check finds the server started or nearly so')
-  // What the prestart moves is the path up to landing; landing itself (git and owner work
-  // under the lease) varies with machine load and is reported, not compared.
-  const preLanding = (s) => s.totalMs - s.landingMs - s.leaseWaitMs
+  // What the prestart moves is the agent's run up to its check (the model spans hold the
+  // check's server wait). Landing and the hand-off to it (git and owner work, queueing)
+  // vary with machine load, so they are reported, not compared: a loaded parallel unit run
+  // once stalled the hand-off alone for 1.8 s.
+  const toCheck = (s) => s.toFirstEditMs + s.modelMs
   assert.ok(
-    preLanding(prestarted) <= preLanding(serial) - 1000,
-    `the cold start is off the critical path before landing (${preLanding(serial)} → ${preLanding(prestarted)} ms)`
+    toCheck(prestarted) <= toCheck(serial) - 1000,
+    `the cold start is off the critical path before landing (${toCheck(serial)} → ${toCheck(prestarted)} ms)`
   )
   // One start per Apply, never a second server for the same page, and it stops with the spawn.
   const starts = runtimeCalls.filter(([kind]) => kind === 'start')
@@ -282,9 +284,9 @@ try {
   await new Promise((r) => setTimeout(r, SERVER_START_MS + 200))
   assert.equal(agentRuntimes().length, 0, 'no private server outlives its spawn')
   console.log(
-    'serial vs prestarted pre-landing ms:',
-    preLanding(serial),
-    preLanding(prestarted),
+    'serial vs prestarted to-check ms:',
+    toCheck(serial),
+    toCheck(prestarted),
     'landingMs:',
     serial.landingMs,
     prestarted.landingMs

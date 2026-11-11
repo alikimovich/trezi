@@ -1,5 +1,72 @@
 # PROGRESS LOG
 
+## 2026-11-11 — LKM-644: sidebar-marquee's selection step waits for the title's frame
+
+- CI shard 2/3 failed `sidebar-marquee` ("selected at the end: label frame: 304, expected
+  316"). Selection calls `restyled()`, which only schedules the title's 1/60 s step timer;
+  when a loaded runner is behind the fixture's plan, `pump(max(0, …))` is 0 and the next
+  sample ran with no run-loop turn, reading the pre-selection frame. The fixture's `select`
+  step now pumps until the label frame changes (1 s bound). No assertion changed; passed 3/3
+  locally with 2× ncpu busy `yes` processes. Undo/Redo code untouched.
+
+## 2026-11-11 — LKM-644: native-chat-reply-float's synthetic click survives CI load
+
+- CI shard 2/3 failed `native-chat-reply-float` ("One click, one Reply: 0") twice on
+  33d6e2a3; in this branch's shard layout it runs beside the swift-preview-build compile.
+  `press()` pumped the queue for one fixed 0.2 s window, which could end before both posted
+  mouse events were handed over. It now orders the window front and key, counts both events
+  as dequeued with a local monitor (the button's tracking loop takes the release), pumps
+  until both arrived and exactly one Reply fired (5 s bound), then drains the rest so a
+  duplicate Reply still fails. No assertion weakened; it also asserts both events arrive.
+  Passed 4/4 locally with 12 busy `yes` processes. Undo/Redo code untouched.
+
+## 2026-11-11 — LKM-644: ⌘Z / ⇧⌘Z step the visual Styles draft; Undo draft updates the field
+
+- Owner bug reproduced at the controller (`test/inspector-undo-redo.mjs`, first case fails
+  without the fix): a page-update read taken while a preview override was on returned the
+  override as the computed value, and an unauthored field (margin) was built from it, so
+  Undo draft removed the override but the field kept the undone value. Separately, every
+  native field ignored `field.value` while focused (`if !focused`), the case after typing a
+  value and pressing Return. Fields now build from the read with Trezi's overrides lifted
+  (`styles.base`, LKM-638), and each Undo/Redo/Revert bumps `state.history.restored`, on
+  which `CompactLayoutValue` / `InspectorFieldView` take the restored value even focused and
+  reset `submitted`, so leaving the field commits nothing stale.
+- History: `src/native/inspector-history.ts` (`DraftSteps`, past/future snapshots of the
+  editable draft, 100 steps, memory only). A step per committed field value, finished
+  slider/spacing-handle drag or token choice; previews are not steps; re-committing the same
+  value is not one; a new edit drops redo; Revert clears and is not a step. Held per element
+  with the draft (redo-only state too), per project; submitted batches are never in it, so
+  undoing B shows A's pending layer again and A's landing keeps B and its redo. A step whose
+  drafts' file or style binding no longer matches stops with a reason.
+- Routing: Bun's `menu` undo/redo now calls `inspector.historyStep` first; source history
+  (`edit:undo`) answers only on `none` (no unsent draft, held draft or unreported Apply in the
+  project), otherwise a toast says why. Native: `src/native/EditUndo.swift` decides from the
+  first responder (editing text views and uncommitted inspector typing keep their Undo;
+  committed inspector field / nothing / a menu click are visual). Measured with real key
+  dispatch (`test/edit-undo-keys.mjs`): unlike ⌘., WebKit re-sends a ⌘Z the page left
+  unhandled to the menu (as the current key event), so the preview script now takes ⌘Z
+  outside page fields itself (preventDefault, one `undo`/`redo` on the history channel) and a
+  ⌘Z that reaches the menu by key with the page focused is the page field's own Undo. Also
+  measured: the old Redo item (`"z"` + ⇧) never matched a ⇧⌘Z event; it is `"Z"` now.
+- Edit menu reads "Undo/Redo Style Change" when the draft can step; a text view's own state
+  decides its items. Native smoke: `smoke-inspector-undo.ts` (inside the island pointer
+  check) posts real ⌘Z/⇧⌘Z and checks the Vertical field's shown text, the staged value and
+  the computed padding together, focused field, preview focus and composer focus, with
+  before/undo/redo captures. Not run here (native groups are Forge/CI's).
+- Independent review follow-ups: a step now waits for draft edits in flight (Return then
+  ⌘Z undid the wrong step); a step sent by the page never falls through to source undo (a
+  page with its own ⌘Z handler would also have reverted a source edit); no source fallthrough
+  while this element's draft still has Redo steps, a queued/running Apply or a landed layer
+  not yet rendered; Revert is enabled for a redo-only draft and bumps `restored` with the
+  rebuilt fields. Not done: undo snapshots are not rebased when a multi-write batch lands
+  (a later Redo may be refused as "source changed"; Revert recovers); with focus inside a
+  page iframe ⌘Z is the page's (as ⌘←/⌘→).
+- Checks: `bun run lint` exit 0; `bun run typecheck` pass; `bun run build` compiles;
+  `node test/run.mjs unit --changed=origin/main` (FULL) 347 PASS, 1 SKIP, 0 FAIL before the
+  review fixes; after them the affected tests (`inspector-undo-redo`, `edit-undo-keys`,
+  `native-inspector`, `inspector-*`, `spacing-handles`, `source-popout-acceptance`) PASS.
+  Not run: native groups (incl. the new smoke step), an installed build.
+
 ## 2026-11-10 — LKM-639: landing breakdown; prestart assertion measures only what the prestart moves
 
 - Correction: the entry below said `node test/run.mjs unit --changed=origin/main` passed with

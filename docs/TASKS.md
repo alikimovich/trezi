@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-644 — Command-Z / Shift-Command-Z incremental visual edit Undo and Redo
+
+- [x] Reproduced the owner's bug at the controller: a page-update read taken with the preview override on fed the override into an unauthored field, so Undo draft reverted the preview but the field kept the undone value; the native fields also skipped any update while focused. Fields now build from the read with overrides lifted (`base`), and every Undo/Redo/Revert bumps `history.restored`, which resyncs the native fields even focused (no stale blur commit).
+- [x] Draft steps with a redo branch (`src/native/inspector-history.ts`, bounded, memory only): one commit / drag / token choice per step, repeated commit not a step, new edit drops redo, Revert separate; per element (held with the element), per project; pending Apply batches untouched; stale source or binding stops with a reason.
+- [x] Routing (`src/native/EditUndo.swift`, `Host.editUndo`): editing text views and uncommitted inspector typing keep their Undo; committed inspector field, no focus and menu clicks are visual; a focused preview takes ⌘Z outside page fields (`history-keys.ts`, sends one step) and a page field's ⌘Z re-sent by WebKit goes to the page's own undo. Bun steps the visual draft first and falls back to source history only with no unsent draft or unreported Apply. Redo key equivalent fixed to "Z" (⇧ implied).
+- [x] Unit: `inspector-undo-redo` (controller + page keys), `edit-undo-keys` (real AppKit/WebKit key dispatch fixture); native smoke step in `smoke-inspector-island` (real ⌘Z/⇧⌘Z, field text, computed padding, captures).
+- [ ] Native groups / exact-head CI and an installed-build check by the owner.
+
 ## LKM-639 — Measure and reduce inspector edit and subagent Apply latency
 
 - [x] Traced the Apply path and checked existing logs: no phase data for the owner's operation; model time unmeasured.
