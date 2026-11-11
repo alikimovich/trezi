@@ -282,6 +282,9 @@ const host = compile(
     join(root, 'src/native/MenuShortcutAudit.swift'),
     join(root, 'src/native/ToggleUIVerification.swift'),
     join(root, 'src/native/PreviewHistory.swift'),
+    join(root, 'src/native/LocalFileLinks.swift'),
+    join(root, 'src/native/ArtifactPreview.swift'),
+    join(root, 'src/native/HostFileLinks.swift'),
     '-o',
     join(contents, 'MacOS/TreziHost'),
     '-framework',
@@ -295,7 +298,9 @@ const host = compile(
     '-framework',
     'AVKit',
     '-framework',
-    'Carbon'
+    'Carbon',
+    '-framework',
+    'Quartz'
   ]
 )
 // The Keychain helper is its own small executable (src/native/Secrets.swift) so that it

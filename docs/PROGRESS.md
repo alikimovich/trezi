@@ -1,5 +1,41 @@
 # PROGRESS LOG
 
+## 2026-11-11 — LKM-657: chat links reach native destinations; local artifacts are not "source"
+
+- Reproduced the screenshot case: an absolute path link ("the report and before/after
+  screenshots") hit `parseCodeLink`'s absolute-path refusal ("Only project-relative files open
+  from chat…"). Web links were not broken: `ChatTextView` hands HTTP(S)/mailto to AppKit, and
+  the preview already emits `external` only for a clicked HTTP(S) link to another origin.
+- `parseChatLink` (`src/shared/code-link.ts`) parses once: `web`, `project` (the LKM-364 forms),
+  `local` (`/…`, `~/…`, `trezi-code:/…`, `file:` with no host or `localhost`; the URL parser
+  removes dot segments, `%2F` decodes after) or `refused` (remote file hosts, `//`/UNC, drive
+  letters, control characters, every other scheme). `parseCodeLink` is now a view of it and
+  still refuses absolute forms for the provider tools.
+- `chatLinkRoute` (`src/main/chat-links.ts`): lexical containment first (outside paths are
+  never `stat`ed: `/net` would automount), then `realpath` containment in the canonical
+  project root (symlink escape = refused). Inside: folders reveal, images/PDF/movies Quick
+  Look, likely secrets (`.env*`, keys, `.ssh/`…) and files the editor refuses become a notice,
+  everything else is `codeTarget` (editor, lines, freshness unchanged). Local HTML opens as
+  source text, never executed. Only the active project is a content root; chat worktrees
+  and other folders are notices (a deliberate limit: no operation-owned artifact root
+  is registered today).
+- The notice is one chat card ("Link not opened", replacing the generic error) with Reveal
+  in Finder (not for `/Volumes`, `/net`, `/Network`, `/home`, `/afs`), Copy Path and Dismiss;
+  the actions use the path Bun resolved, never the card's value. Effects `quick-look`,
+  `reveal`, `copy-path` go to the host, which re-checks the path (`LocalFileLinks.swift`:
+  absolute, normalized, no control characters, not remote, regular non-link file of a
+  Quick Look type) before an in-app `QLPreviewView` panel (`ArtifactPreview.swift`) or
+  `activateFileViewerSelecting`; a test profile records reveals instead of raising Finder.
+- Preview: `PreviewOrigin.same` adds default ports and case-insensitive scheme/host;
+  `opensExternally` keeps the existing rule (only a clicked HTTP(S) link; scripted redirects
+  and form posts are cancelled without a browser). One interceptor, unchanged ownership.
+- Evidence: unit `chat-links` (synthetic report, before/after PNGs, PDF, zip, `.env`,
+  symlink escapes, encoded traversal, remote/executable schemes, card actions, no writes),
+  `local-file-links` (Swift fixture: host checks, origin rule, Quick Look panel never
+  ordered in), `code-links` updated; native smoke `code-link` gains the absolute-path notice,
+  screenshot Quick Look, folder reveal and report source steps. `bun run build:native`
+  passes; native smoke not run locally (Forge/CI run it).
+
 ## 2026-11-11 — LKM-647: Mark up toolbar is compact, contextual, bottom-anchored, with a trailing Close
 
 - The island (`PreviewMarkupOverlay`, now its own file) shows only what applies. Idle (no marks,

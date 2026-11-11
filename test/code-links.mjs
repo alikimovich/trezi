@@ -183,16 +183,18 @@ try {
     }
   ])
   assert.equal(chat.error, undefined)
-  for (const value of [
-    'trezi-code:../outside.css#L1',
-    'trezi-code:src/Escape.tsx#L1',
-    'file:///etc/hosts'
-  ]) {
+  for (const value of ['trezi-code:../outside.css#L1', 'trezi-code:src/Escape.tsx#L1']) {
     await click(value)
     assert.equal(effects.length, 1, `${value} opened nothing`)
     assert.match(chat.error, /^Not opened in the editor: /)
     chat.error = undefined
   }
+  // LKM-657: an absolute path outside the project opens nothing either; it is a notice
+  // naming the destination (test/chat-links.mjs covers its Reveal/Copy actions).
+  await click('file:///etc/hosts')
+  assert.equal(effects.length, 1, 'file:///etc/hosts opened nothing')
+  assert.match(chat.linkNotice.detail, /outside this project.*\/etc\/hosts/)
+  chat.linkNotice = undefined
   // Another project's chat resolves inside its own root only.
   const other = { root: outside, chat: 'chat-2', error: undefined }
   await cardAction(controller, other, {
@@ -201,7 +203,7 @@ try {
     value: 'src/Card.module.css:1'
   })
   assert.equal(effects.length, 1)
-  assert.match(other.error, /Not opened in the editor/)
+  assert.match(other.linkNotice.detail, /does not exist/)
 
   // --- The effect opens the editor through LKM-363's path; a dirty draft is kept ------------
   const calls = []

@@ -74,6 +74,9 @@ export type NativeChatEffect =
   /** LKM-364: a code link in chat, checked like `open_code`; opens Trezi's editor at its
    *  range when `root` is still the active project. */
   | { type: 'code'; root: string; source: string; range?: import('./native-editor').SourceRange }
+  /** LKM-657: a project image/PDF/movie in Quick Look, a folder (or, on the owner's
+   *  click, any notice's path) selected in Finder, or a notice's path on the pasteboard. */
+  | { type: 'quick-look' | 'reveal' | 'copy-path'; path: string }
   /** Bring the active project's preview into view: the docked editor steps aside (LKM-210). */
   | { type: 'preview' }
   | { type: 'focus' | 'history' }

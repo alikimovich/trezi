@@ -400,6 +400,7 @@ const TEMP_WALKERS = [
   'dreamer-acceptance',
   'code-navigation',
   'code-links',
+  'chat-links',
   'branch-diff',
   'operation-ledger',
   'memory-owner',

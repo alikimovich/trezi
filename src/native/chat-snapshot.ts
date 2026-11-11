@@ -154,6 +154,17 @@ export function snapshot(
       detail: chat.error,
       actions: [{ label: 'Dismiss', action: 'error-dismiss' }]
     })
+  if (chat.linkNotice)
+    cards.push({
+      id: 'link',
+      title: 'Link not opened',
+      detail: chat.linkNotice.detail,
+      actions: [
+        ...(chat.linkNotice.reveal ? [{ label: 'Reveal in Finder', action: 'link-reveal' }] : []),
+        { label: 'Copy Path', action: 'link-copy' },
+        { label: 'Dismiss', action: 'link-dismiss' }
+      ]
+    })
   const login = loginCard(chat)
   if (login) cards.push(login)
   if (readiness) {
