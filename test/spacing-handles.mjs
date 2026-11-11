@@ -185,9 +185,14 @@ assert.equal(agent.length, 1)
 assert.match(agent[0][1], /set padding-top to 24px/)
 assert.doesNotMatch(agent[0][1], /column-gap/)
 
-// A drag while Apply is running is refused, not silently merged.
-assert.equal(await inspector.gesture('padding-left', '30'), false)
-assert.match(inspector.state.error, /Wait for Apply/)
+// LKM-638: a drag while Apply is running stages the next draft; it never merges into the
+// submitted batch or rewrites its instruction.
+assert.equal(await inspector.gesture('padding-left', '30'), true)
+assert.equal(inspector.state.error, '')
+assert.equal(inspector.state.draft.count, 1, 'the drag is the next draft')
+assert.equal(inspector.state.draft.submitted, true, 'the first Apply still runs')
+assert.equal(agent.length, 1)
+assert.doesNotMatch(agent[0][1], /padding-left/)
 setSourceOwner(null)
 
 // Cancel mid-drag restores the exact inline value and commits no draft. A small DOM model

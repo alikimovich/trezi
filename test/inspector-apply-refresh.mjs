@@ -93,7 +93,9 @@ test('a stale preview is refreshed once, the same element re-picked, then Apply 
   const calls = []
   c.refreshPreview = async (root, element, still) => {
     calls.push({ root, element })
-    assert.equal(c.state.busy, true, 'the footer is busy while refreshing')
+    // LKM-638: the batch shows as applying; the fields are not locked while it refreshes.
+    assert.equal(c.state.draft?.submitted, true, 'the footer shows the Apply starting')
+    assert.equal(c.state.busy, false, 'the inspector stays editable while refreshing')
     // The reload re-picks the same element: a new generation, the same target.
     await c.select({ ...A, rect: { x: 1, y: 1, width: 10, height: 10 } })
     assert.equal(still(), true)

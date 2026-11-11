@@ -19,7 +19,7 @@ func r(_ rect: NSRect) -> [Double] { [rect.minX, rect.minY, rect.width, rect.hei
 _ = NSApplication.shared
 NSApp.setActivationPolicy(.accessory)
 
-func state(submitted: Bool) -> InspectorState {
+func state(count: Int, submitted: Bool) -> InspectorState {
     var fields: [[String: Any]] = []
     for i in 0..<40 {
         fields.append(["id": "style:prop-\(i)", "label": "prop-\(i)", "group": i < 20 ? "typography" : "appearance", "kind": "text", "value": "\(i)px"])
@@ -27,7 +27,9 @@ func state(submitted: Bool) -> InspectorState {
     let raw: [String: Any] = [
         "root": "/fixture", "generation": 1, "visible": true, "title": "span", "tab": "styles",
         "fields": fields, "actions": [], "error": "", "busy": false,
-        "draft": ["count": 1, "submitted": submitted, "conflict": false, "preview": true]
+        // LKM-638: a running Apply batch is reported beside the editable draft, never as a lock.
+        "draft": ["count": count, "submitted": submitted, "conflict": false, "preview": true,
+                  "applying": submitted ? "Applying 1 value in the background" : ""] as [String: Any]
     ]
     return try! JSONDecoder().decode(InspectorState.self, from: JSONSerialization.data(withJSONObject: raw))
 }
@@ -46,15 +48,18 @@ func click(_ window: NSWindow, _ frame: NSRect) -> String {
 }
 var results: [[String: Any]] = []
 // The island's default width (300) and its narrowest (220, WorkspaceLayout).
-for (name, width, height, submitted) in [("normal", 300.0, 720.0, false), ("short", 300.0, 300.0, false),
-                                         ("narrow-short", 220.0, 300.0, false), ("short-applying", 300.0, 300.0, true)] {
+// "short-applying": an Apply runs and nothing new is staged; "short-applying-next": the next
+// draft was staged while it runs (LKM-638), so its actions and the fields are live.
+for (name, width, height, count, submitted) in [("normal", 300.0, 720.0, 1, false), ("short", 300.0, 300.0, 1, false),
+                                                ("narrow-short", 220.0, 300.0, 1, false), ("short-applying", 300.0, 300.0, 0, true),
+                                                ("short-applying-next", 300.0, 300.0, 1, true)] {
     let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: width + 40, height: height + 40), styleMask: [.titled], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     window.orderFront(nil) // off-screen (x: -4000): events reach it, the user never sees it
     let island = NativeEditingInspector()
     window.contentView!.addSubview(island)
     island.frame = NSRect(x: 20, y: 20, width: width, height: height)
-    island.model.show(state(submitted: submitted)); island.isHidden = false
+    island.model.show(state(count: count, submitted: submitted)); island.isHidden = false
     pump(0.3); island.layoutSubtreeIfNeeded(); pump(0.2)
     let face = island.face.convert(island.face.bounds, to: nil)
     let content = window.contentView!
@@ -94,10 +99,21 @@ for (name, width, height, submitted) in [("normal", 300.0, 720.0, false), ("shor
         "belowFields": (before + after).allSatisfy { $0.maxY <= lastVisible.minY + 0.5 },
         "hittable": hits(before) && hits(after),
         "offset": Double(offset),
+        "fieldsEnabled": descendants(island).compactMap { $0 as? NSTextField }.filter { $0.isEditable && $0.isEnabled }.count,
         "clicked": after.map { click(window, $0) },
         // Where Apply is drawn when enabled (the "short" case's frame), for a disabled row.
-        "pressDisabled": submitted ? click(window, NSRect(x: 34, y: 34, width: 50, height: 20)) : ""
+        "pressDisabled": count == 0 ? click(window, NSRect(x: 34, y: 34, width: 50, height: 20)) : ""
     ])
+    if name.hasPrefix("short-applying") {
+        // For review (gitignored): the footer while an Apply runs. Offscreen: no Liquid Glass.
+        let dir = URL(fileURLWithPath: "test/artifacts/inspector-footer", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let view = window.contentView!
+        if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+            view.cacheDisplay(in: view.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("\(name).png"))
+        }
+    }
     window.close()
 }
 let data = try! JSONSerialization.data(withJSONObject: results)

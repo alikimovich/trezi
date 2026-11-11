@@ -9,13 +9,17 @@ struct InspectorField: Decodable, Identifiable {
 }
 struct InspectorAction: Decodable, Identifiable { let id: String; let label: String }
 struct InspectorNotice: Decodable { let title: String; let reason: String; let editable: Bool }
+/// `count`/`conflict`/`preview` describe the editable draft; `submitted`, `applying` and
+/// `landed` the Apply batches already handed to their background worker (LKM-638), which
+/// never lock the fields or the next draft.
 struct InspectorDraftState: Decodable {
     let count: Int; let submitted: Bool; let conflict: Bool; let preview: Bool
+    let applying: String?; let landed: Bool?
     /// If/else rather than a nested ternary: four chained string ternaries are slow to type-check.
-    var draftLabel: String {
+    var draftLabel: String? {
         if conflict { return "Draft pending · source changed" }
-        if submitted { return "Applying in the background · waiting for source and preview" }
-        if preview { return "Preview draft pending · \(count) values" }
+        if count == 0 { return nil }
+        if preview { return "Preview draft pending · \(count) value\(count == 1 ? "" : "s")" }
         return "Draft pending · live preview unavailable"
     }
 }
@@ -351,25 +355,33 @@ private struct CompactLayoutFields: View {
     }
 }
 /// Apply, Undo draft and Revert draft, always in view at the island's foot (LKM-599).
-/// Apply runs as its own background agent, so it is never gated on the chat; it is
-/// disabled only while that Apply is in flight or the draft is stale.
+/// Apply runs as its own background agent, so it is never gated on the chat. LKM-638: a
+/// submitted Apply is its own batch; these act on the next draft, so they are disabled
+/// only when there is nothing staged or the draft's source really changed.
 struct InspectorDraftFooter: View {
     let draft: InspectorDraftState
     let busy: Bool
     @ObservedObject var model: InspectorModel
     private var buttons: some View {
         Group {
-            Button("Apply") { model.send("apply-drafts") }.disabled(busy || draft.submitted || draft.conflict)
-            Button("Undo draft") { model.send("undo-draft") }.disabled(busy || draft.submitted)
-            Button("Revert draft") { model.send("revert-draft") }.disabled(busy || draft.submitted)
+            Button("Apply") { model.send("apply-drafts") }.disabled(busy || draft.count == 0 || draft.conflict)
+            Button("Undo draft") { model.send("undo-draft") }.disabled(busy || draft.count == 0)
+            Button("Revert draft") { model.send("revert-draft") }.disabled(busy || (draft.count == 0 && draft.landed != true))
         }
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Divider()
-            HStack(spacing: 6) {
-                if draft.submitted { ProgressView().controlSize(.mini) }
-                Text(draft.draftLabel)
+            if let applying = draft.applying, !applying.isEmpty {
+                HStack(spacing: 6) {
+                    if draft.submitted { ProgressView().controlSize(.mini) }
+                    Text(applying)
+                        .font(.caption).foregroundStyle(Color.secondary)
+                        .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if let label = draft.draftLabel {
+                Text(label)
                     .font(.caption).foregroundStyle(draft.conflict ? Color.orange : Color.secondary)
                     .lineLimit(2).fixedSize(horizontal: false, vertical: true)
             }

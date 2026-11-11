@@ -172,8 +172,10 @@ test('a double press dispatches once; Undo and Revert cannot rewrite the running
   assert.equal(inspector.state.error, '', 'a repeated press is not reported as a stale draft')
   await act('undo-draft')
   await act('revert-draft')
-  assert.equal(inspector.state.draft?.count, 1, 'the in-flight draft is kept')
-  assert.equal(inspector.state.draft?.submitted, true)
+  // LKM-638: the in-flight batch is the worker's; the editable draft above it is empty.
+  assert.equal(inspector.state.draft?.count, 0, 'nothing editable was left behind')
+  assert.equal(inspector.state.draft?.submitted, true, 'the in-flight batch is kept')
+  assert.equal(inspector.state.draft?.applying, 'Applying 1 value in the background')
 })
 
 test('a cancelled or failed Apply keeps the draft and says why; Apply again works', async () => {

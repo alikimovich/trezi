@@ -1211,6 +1211,24 @@ function setLayersWatch(on: boolean): void {
 // fresh page has no overrides left to revert.
 const styleOriginals = new Map<string, { value: string; priority: string }>()
 let styleStashEl: HTMLElement | null = null
+/** LKM-638: the value each override last wrote, to notice the page rewriting it. */
+const styleApplied = new Map<string, string>()
+
+/**
+ * LKM-638: a page that rewrote an overridden inline property (React re-rendering a JSX
+ * `style={}` after a hot reload) owns that value now: it becomes the original, so a lifted
+ * read and a later restore use the page's current value, never the one stashed before.
+ */
+function adoptPageRewrites(el: HTMLElement): void {
+  if (styleStashEl !== el) return
+  for (const prop of styleOriginals.keys()) {
+    const now = el.style.getPropertyValue(prop)
+    if (styleApplied.has(prop) && now !== styleApplied.get(prop)) {
+      styleOriginals.set(prop, { value: now, priority: el.style.getPropertyPriority(prop) })
+      styleApplied.set(prop, now)
+    }
+  }
+}
 
 /**
  * The element style ops target: the current selection, re-resolved through its
@@ -1248,6 +1266,7 @@ function retargetStash(el: HTMLElement): void {
     }
   }
   styleOriginals.clear()
+  styleApplied.clear()
   styleStashEl = el
 }
 
@@ -1267,6 +1286,7 @@ function restoreOriginal(prop: string): void {
   if (!styleOriginals.has(prop)) return
   const orig = styleOriginals.get(prop)!
   styleOriginals.delete(prop)
+  styleApplied.delete(prop)
   const el = styleStashEl
   if (!styleOriginals.size) styleStashEl = null
   if (!el?.isConnected) return
@@ -1279,12 +1299,70 @@ function previewStyle(prop: string, value: string): void {
   const el = resolveStyleTarget()
   if (!el) return
   stashOriginal(el, prop)
+  adoptPageRewrites(el)
   el.style.setProperty(prop, value)
+  styleApplied.set(prop, el.style.getPropertyValue(prop))
 }
 
-function clearStylePreview(prop?: string): void {
+/** One property, or every override except `keep` (LKM-638: layers that stay are untouched). */
+function clearStylePreview(
+  prop?: string,
+  keep?: ReadonlySet<string>,
+  adopt?: ReadonlySet<string>
+): void {
+  if (styleStashEl?.isConnected) adoptPageRewrites(styleStashEl)
+  // LKM-638: the page's own inline value now (a JSX style the source landed): keep it as is.
+  for (const p of adopt ?? []) {
+    styleOriginals.delete(p)
+    styleApplied.delete(p)
+  }
+  if (adopt?.size && !styleOriginals.size) styleStashEl = null
   if (prop) restoreOriginal(prop)
-  else for (const p of Array.from(styleOriginals.keys())) restoreOriginal(p)
+  else for (const p of Array.from(styleOriginals.keys())) if (!keep?.has(p)) restoreOriginal(p)
+}
+
+/**
+ * LKM-638: what `props` compute to without Trezi's preview overrides, for the overridden
+ * ones. The overrides are lifted and put back within this one task, so no frame paints in
+ * between; transitions are held off meanwhile so neither change animates.
+ */
+function liftedValues(el: HTMLElement, props: string[]): Record<string, string> | undefined {
+  if (styleStashEl !== el) return undefined
+  adoptPageRewrites(el)
+  const lifted = props.filter((p) => styleOriginals.has(p))
+  if (!lifted.length) return undefined
+  const style = el.style
+  const transition = {
+    value: style.getPropertyValue('transition-property'),
+    priority: style.getPropertyPriority('transition-property')
+  }
+  const overrides = lifted.map((p) => ({
+    p,
+    value: style.getPropertyValue(p),
+    priority: style.getPropertyPriority(p)
+  }))
+  const flush = () => getComputedStyle(el).getPropertyValue(lifted[0])
+  const base: Record<string, string> = {}
+  style.setProperty('transition-property', 'none', 'important')
+  flush()
+  try {
+    for (const p of lifted) {
+      const orig = styleOriginals.get(p)!
+      if (orig.value) style.setProperty(p, orig.value, orig.priority)
+      else style.removeProperty(p)
+    }
+    const cs = getComputedStyle(el)
+    for (const p of lifted) base[p] = cs.getPropertyValue(p).trim().slice(0, 256)
+  } finally {
+    for (const { p, value, priority } of overrides)
+      if (value) style.setProperty(p, value, priority)
+      else style.removeProperty(p)
+    flush()
+    if (transition.value)
+      style.setProperty('transition-property', transition.value, transition.priority)
+    else style.removeProperty('transition-property')
+  }
+  return base
 }
 
 /**
@@ -1310,6 +1388,7 @@ function readStyles(id: unknown, props: string[]): void {
     ipcRenderer.send(STYLES_READ_REPLY, { id, values: null, declaredVars: null, specified: null })
     return
   }
+  adoptPageRewrites(el)
   const cs = getComputedStyle(el)
   const values: Record<string, string> = {}
   // Same cap discipline as describe(): the page is only semi-trusted, so bound
@@ -1358,6 +1437,7 @@ function readStyles(id: unknown, props: string[]): void {
     declaredVars,
     specified,
     origins: boundedOrigins,
+    base: liftedValues(el, bounded),
     parentDisplay: el.parentElement ? getComputedStyle(el.parentElement).display.slice(0, 64) : ''
   })
 }
@@ -2306,9 +2386,18 @@ if (!IS_SIM_BRIDGE) {
   ipcRenderer.on(STYLES_PREVIEW, (_e, p: { prop?: unknown; value?: unknown }) => {
     if (typeof p?.prop === 'string' && typeof p?.value === 'string') previewStyle(p.prop, p.value)
   })
-  ipcRenderer.on(STYLES_CLEAR_PREVIEW, (_e, p: { prop?: unknown } | undefined) => {
-    clearStylePreview(typeof p?.prop === 'string' ? p.prop : undefined)
-  })
+  ipcRenderer.on(
+    STYLES_CLEAR_PREVIEW,
+    (_e, p: { prop?: unknown; keep?: unknown; adopt?: unknown } | undefined) => {
+      const keep = Array.isArray(p?.keep)
+        ? new Set(p.keep.filter((k): k is string => typeof k === 'string').slice(0, 240))
+        : undefined
+      const adopt = Array.isArray(p?.adopt)
+        ? new Set(p.adopt.filter((k): k is string => typeof k === 'string').slice(0, 240))
+        : undefined
+      clearStylePreview(typeof p?.prop === 'string' ? p.prop : undefined, keep, adopt)
+    }
+  )
   ipcRenderer.on(STYLES_READ, (_e, p: { id?: unknown; props?: unknown }) => {
     readStyles(p?.id, Array.isArray(p?.props) ? (p.props as string[]) : [])
   })
