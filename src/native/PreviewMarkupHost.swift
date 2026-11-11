@@ -65,7 +65,8 @@ extension Host {
     }
     func previewMarkupInspect() -> [String: Any] {
         guard let overlay = markup?.overlay else {
-            return ["open":false, "session":markup?.session ?? NSNull(), "cover":previewCoverRects().count, "geometry":previewMarkupGeometry()]
+            return ["open":false, "session":markup?.session ?? NSNull(), "cover":previewCoverRects().count, "geometry":previewMarkupGeometry(),
+                    "colorPanelVisible":NSColorPanel.sharedColorPanelExists && NSColorPanel.shared.isVisible]
         }
         let canvas = overlay.canvas, mapping = canvas.mapping
         let bitmap = NSBitmapImageRep(cgImage: canvas.image)
@@ -93,7 +94,7 @@ extension Host {
             "hitBesideDetail":beside.map(name)
         ]
         let marks: [[String: Any]] = canvas.document.marks.map { mark in
-            ["tool":mark.tool.rawValue, "ink":mark.ink.rawValue, "text":mark.text, "points":mark.points.map { [$0.x, $0.y] }, "view":mark.points.map { point -> [CGFloat] in let p = mapping.toView(point); return [p.x, p.y] }]
+            ["tool":mark.tool.rawValue, "ink":mark.ink.hex, "text":mark.text, "points":mark.points.map { [$0.x, $0.y] }, "view":mark.points.map { point -> [CGFloat] in let p = mapping.toView(point); return [p.x, p.y] }]
         }
         return ["open":!overlay.isHidden, "suspended":overlay.isHidden, "session":markup?.session ?? NSNull(), "frame":rect(overlay.frame), "canvas":rect(canvas.frame), "bar":rect(overlay.barFrame), "shown":rect(mapping.frame),
                 "image":["width":canvas.image.width, "height":canvas.image.height], "frozen":MarkupDigest.hex(canvas.image),
@@ -101,7 +102,15 @@ extension Host {
                 "adding":overlay.adding, "status":overlay.statusText, "error":overlay.errorShown, "animates":overlay.animates, "focused":overlay.ownsFocus,
                 "topmost":canvasTopmost(overlay), "cover":previewCoverRects().count, "context":markup?.context ?? [:], "magenta":magentaPixels(bitmap),
                 "controls":overlay.controls.map { ["label":$0.cell?.accessibilityLabel() ?? "", "enabled":$0.isEnabled, "frame":rect($0.convert($0.bounds, to: overlay))] as [String: Any] },
-                "island":islandState, "geometry":previewMarkupGeometry()]
+                "island":islandState, "geometry":previewMarkupGeometry(), "colorWell":markupColorWellState(overlay)]
+    }
+    /// LKM-645: the ink well and the shared standard colour panel it binds.
+    private func markupColorWellState(_ overlay: PreviewMarkupOverlay) -> [String: Any] {
+        let well = overlay.colorWell
+        let panel = NSColorPanel.sharedColorPanelExists ? NSColorPanel.shared : nil
+        return ["ink":overlay.canvas.ink.hex, "color":MarkupInk(well.color)?.hex ?? "", "active":well.isActive, "enabled":well.isEnabled,
+                "label":well.accessibilityLabel() ?? "", "role":well.accessibilityRole()?.rawValue ?? "",
+                "panelVisible":panel?.isVisible ?? false, "panelColor":panel.flatMap { MarkupInk($0.color)?.hex } ?? ""]
     }
     private func canvasTopmost(_ view: NSView) -> Bool { canvas.subviews.last === view }
     /// The smoke's marker colour for Trezi's in-page chrome, sampled every few pixels.
@@ -129,33 +138,47 @@ extension Host {
             markup?.place(area: NSRect(x: frame.minX, y: frame.minY, width: width, height: height))
             markup?.overlay?.layoutSubtreeIfNeeded()
             return ["ok":true]
+        case "annotationColorChoose":
+            // LKM-645: a choice made in the standard panel the well opened, given in Display P3 the
+            // way the panel's own pickers hand colours over. The panel updates its active well,
+            // which sends the overlay its action; nothing here sets the ink directly.
+            guard let overlay = markup?.overlay, let hex = c["color"] as? String, let ink = MarkupInk(hex: hex) else { return ["error":"Color unavailable"] }
+            guard overlay.colorWell.isActive, NSColorPanel.sharedColorPanelExists, NSColorPanel.shared.isVisible else { return ["error":"Color panel is not open for the well"] }
+            NSColorPanel.shared.color = ink.nsColor.usingColorSpace(.displayP3) ?? ink.nsColor
+            return ["ink":overlay.canvas.ink.hex, "well":MarkupInk(overlay.colorWell.color)?.hex ?? "", "panelSpace":NSColorPanel.shared.color.colorSpace.localizedName ?? ""]
         case "annotationColorFocus":
-            guard let overlay = markup?.overlay, let name = c["color"] as? String,
-                  let popup = overlay.island.face.subviews.compactMap({ $0 as? NSPopUpButton }).first,
-                  popup.item(withTitle: name) != nil else { return ["error":"Color unavailable"] }
-            popup.selectItem(withTitle: name)
-            _ = NSApp.sendAction(popup.action!, to: popup.target, from: popup)
-            guard window.makeFirstResponder(popup) else { return ["error":"Color focus unavailable"] }
+            guard let overlay = markup?.overlay else { return ["error":"No overlay"] }
+            let well = overlay.colorWell
+            guard window.makeFirstResponder(well) else { return ["error":"Color focus unavailable"] }
             let text = overlay.controls.first { $0.cell?.accessibilityLabel() == "Text" }
-            return ["color":popup.accessibilityValue() as? String ?? "", "focused":window.firstResponder === popup,
+            return ["color":overlay.canvas.ink.hex, "focused":window.firstResponder === well,
                     "tool":overlay.tool.rawValue, "textSelected":text?.state == .on,
                     "textAccessible":text?.cell?.accessibilityValue() as? String ?? "",
                     "textTinted":text?.contentTintColor == .controlAccentColor,
                     "peersOff":overlay.controls.filter { ["Pen", "Rectangle", "Circle", "Arrow"].contains($0.cell?.accessibilityLabel() ?? "") }
                         .allSatisfy { $0.state == .off && $0.contentTintColor == nil }]
+        case "colorPanelClose":
+            // Cleanup seam only: the panel the smoke opened, whoever it is bound to now.
+            if NSColorPanel.sharedColorPanelExists { NSColorPanel.shared.orderOut(nil) }
+            return ["ok":true]
         case "annotationComposite":
             guard let canvas = markup?.overlay?.canvas,
                   let image = MarkupRenderer.composite(canvas.image, marks: canvas.document.marks, maxPixels: 2048),
                   let encoded = MarkupEncoder.encode(canvas.image, marks: canvas.document.marks) else { return ["error":"Composite unavailable"] }
             let bitmap = NSBitmapImageRep(cgImage: image)
-            let green = stride(from: 0, to: bitmap.pixelsHigh, by: 3).reduce(0) { count, y in
-                count + stride(from: 0, to: bitmap.pixelsWide, by: 3).filter { x in
-                    guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return false }
-                    return color.greenComponent > color.redComponent * 1.4 && color.greenComponent > color.blueComponent * 1.2
-                }.count
+            // Pixels within a few steps of each ink the marks were drawn in, keyed by its hex.
+            let inks = Set(canvas.document.marks.map(\.ink.hex))
+            var counts = Dictionary(uniqueKeysWithValues: inks.map { ($0, 0) })
+            let wanted = canvas.document.marks.reduce(into: [String: MarkupInk]()) { $0[$1.ink.hex] = $1.ink }
+            for y in stride(from: 0, to: bitmap.pixelsHigh, by: 3) {
+                for x in stride(from: 0, to: bitmap.pixelsWide, by: 3) {
+                    guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                    for (hex, ink) in wanted where abs(Double(color.redComponent) - ink.red) < 0.03 && abs(Double(color.greenComponent) - ink.green) < 0.03
+                        && abs(Double(color.blueComponent) - ink.blue) < 0.03 { counts[hex, default: 0] += 1 }
+                }
             }
             return ["data":encoded.data.base64EncodedString(), "type":encoded.type,
-                    "width":image.width, "height":image.height, "greenPixels":green]
+                    "width":image.width, "height":image.height, "inkPixels":counts]
         default: return ["error":"Unknown Mark up test action"]
         }
     }
@@ -206,6 +229,17 @@ extension Host {
                   mouse(.leftMouseDown, point), mouse(.leftMouseUp, point) else { return ["error":"Button is not hit-testable"] }
             await settle()
             return ["route":"real event route", "hit":"\(type(of: hit))", "label":label]
+        case "colorWell":
+            // LKM-645: a real click on the ink well, which opens the standard colour panel.
+            guard let overlay = markup?.overlay, overlay.colorWell.isEnabled else { return ["error":"Color well unavailable"] }
+            let well = overlay.colorWell
+            let point = well.convert(NSPoint(x: well.bounds.midX, y: well.bounds.midY), to: nil)
+            guard let hit = window.contentView?.superview?.hitTest(point), hit === well || hit.isDescendant(of: well),
+                  mouse(.leftMouseDown, point), mouse(.leftMouseUp, point) else { return ["error":"Color well is not hit-testable"] }
+            for _ in 0..<20 where !(NSColorPanel.sharedColorPanelExists && NSColorPanel.shared.isVisible) { await settle() }
+            return ["route":"real event route", "hit":"\(type(of: hit))", "active":well.isActive,
+                    "panelVisible":NSColorPanel.sharedColorPanelExists && NSColorPanel.shared.isVisible,
+                    "panelAbove":NSColorPanel.sharedColorPanelExists && NSColorPanel.shared.level.rawValue >= window.level.rawValue]
         case "sendButton":
             let button = composer.sendButton
             guard markup?.overlay == nil, !composer.isHidden, button.isEnabled else { return ["error":"Send button unavailable"] }

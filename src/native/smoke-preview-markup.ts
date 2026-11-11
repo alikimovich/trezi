@@ -55,11 +55,24 @@ export async function checkAnnotationCompositeSend(
   )
   await record('capture')
   await event({ action: 'button', label: 'Text' })
-  const chosen = await host.request('previewMarkupTest', {
-    action: 'annotationColorFocus',
-    color: 'Green'
+  // LKM-645: the ink well opens the standard colour panel; the choice is outside the old presets.
+  const well = await event({ action: 'colorWell' })
+  assert.deepEqual(
+    [well.active, well.panelVisible, well.panelAbove],
+    [true, true, true],
+    'the well opens the standard color panel'
+  )
+  const picked = await host.request('previewMarkupTest', {
+    action: 'annotationColorChoose',
+    color: ORANGE
   })
+  assert.equal(picked.error, undefined)
+  assert.ok(sameInk(picked.ink, ORANGE), `the panel's P3 choice is the ink: ${picked.ink}`)
+  assert.ok(sameInk(picked.well, ORANGE), `the well shows the choice: ${picked.well}`)
+  await record('color-panel')
+  const chosen = await host.request('previewMarkupTest', { action: 'annotationColorFocus' })
   assert.equal(chosen.error, undefined)
+  const ink = chosen.color
   assert.deepEqual(
     [
       chosen.color,
@@ -70,7 +83,7 @@ export async function checkAnnotationCompositeSend(
       chosen.textTinted,
       chosen.peersOff
     ],
-    ['Green', true, 'text', true, 'selected', true, true],
+    [ink, true, 'text', true, 'selected', true, true],
     'Text stays selected after color focus'
   )
   const x = opened.image.width * 0.15,
@@ -94,7 +107,7 @@ export async function checkAnnotationCompositeSend(
   const beforeSelect = await record('edited')
   assert.deepEqual(
     beforeSelect.marks.map((mark: State) => [mark.tool, mark.ink, mark.text]),
-    [['text', 'green', 'Revised note']]
+    [['text', ink, 'Revised note']]
   )
   await event({ action: 'toolbarSegment', segment: 'select-object' })
   const suspended = await record('select')
@@ -111,9 +124,59 @@ export async function checkAnnotationCompositeSend(
   assert.equal(markupShell.markupSegmentProminent, true, 'Annotation owns the toolbar')
   assert.deepEqual(resumed.marks, beforeSelect.marks, 'resume retains the exact edit')
   assert.equal(resumed.frozen, opened.frozen, 'resume uses the captured pixels')
+  // A stroke in the orange, then a second choice: the orange marks keep their colour, the
+  // next stroke takes the new one, and Undo removes only that stroke.
+  await event({ action: 'button', label: 'Pen' })
+  const w = opened.image.width,
+    h = opened.image.height
+  await event({
+    action: 'pointer',
+    points: [
+      [w * 0.2, h * 0.7],
+      [w * 0.4, h * 0.72],
+      [w * 0.5, h * 0.7]
+    ]
+  })
+  await event({ action: 'colorWell' })
+  const second = await host.request('previewMarkupTest', {
+    action: 'annotationColorChoose',
+    color: TEAL
+  })
+  assert.equal(second.error, undefined)
+  await event({
+    action: 'pointer',
+    points: [
+      [w * 0.2, h * 0.8],
+      [w * 0.5, h * 0.82]
+    ]
+  })
+  const recolored = await record('second-color')
+  assert.deepEqual(
+    recolored.marks.map((mark: State) => [
+      mark.tool,
+      sameInk(mark.ink, ORANGE),
+      sameInk(mark.ink, TEAL)
+    ]),
+    [
+      ['text', true, false],
+      ['pen', true, false],
+      ['pen', false, true]
+    ],
+    'a new choice colours only the next mark'
+  )
+  assert.ok(sameInk(recolored.colorWell.color, TEAL), 'the well shows the second choice')
+  await event({ action: 'button', label: 'Undo' })
+  const undone = await record('second-undo')
+  assert.deepEqual(undone.marks, recolored.marks.slice(0, 2), 'Undo keeps the earlier colours')
   const nativeComposite = await host.request('previewMarkupTest', { action: 'annotationComposite' })
   assert.equal(nativeComposite.error, undefined)
-  assert.ok(nativeComposite.greenPixels > 20, 'native composite paints the chosen green')
+  assert.ok(
+    nativeComposite.inkPixels[ink] > 20,
+    `native composite paints the chosen orange: ${JSON.stringify(nativeComposite.inkPixels)}`
+  )
+  // Add with the panel still open: Add releases this overlay's binding and puts the panel away.
+  const reopened = await event({ action: 'colorWell' })
+  assert.equal(reopened.panelVisible, true)
   const expectedHash = createHash('sha256')
     .update(Buffer.from(nativeComposite.data, 'base64'))
     .digest('hex')
@@ -123,19 +186,36 @@ export async function checkAnnotationCompositeSend(
     return state.attachments.length === 2 && state
   }, 'composite attached')
   assert.equal(attached.text, DRAFT, 'Add keeps the draft')
+  const closed = await inspect()
+  assert.deepEqual(
+    [closed.open, closed.colorPanelVisible],
+    [false, false],
+    'closing Mark up releases its color panel'
+  )
   const added = nativeChat.get(chat).attachments[1]
   assert.equal(
     createHash('sha256').update(Buffer.from(added.data, 'base64')).digest('hex'),
     expectedHash,
     'Add attaches the native composite bytes'
   )
-  const retained = retainComposite(folder, added, opened.context, ['text'])
+  const retained = retainComposite(folder, added, opened.context, ['text', 'pen'])
   assert.equal(retained.sha256, expectedHash)
   await event({ action: 'typeInstruction', text: INSTRUCTION })
   await sendThroughComposer(host, folder, chat, retained, messages, () =>
     event({ action: 'sendButton' })
   )
 }
+
+/** LKM-645: two inks the old five-colour menu never offered. */
+const ORANGE = '#e07b10'
+const TEAL = '#14a3a0'
+/** Equal within one 8-bit step a channel: the panel hands colours over in Display P3. */
+const sameInk = (a: string, b: string) =>
+  typeof a === 'string' &&
+  [1, 3, 5].every(
+    (i) =>
+      Math.abs(Number.parseInt(a.slice(i, i + 2), 16) - Number.parseInt(b.slice(i, i + 2), 16)) <= 1
+  )
 
 const PIXEL =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='

@@ -22,16 +22,37 @@ enum MarkupTool: String, CaseIterable {
     }
 }
 
-enum MarkupInk: String, CaseIterable {
-    case red, blue, green, purple, black
-    var color: CGColor {
-        switch self {
-        case .red: CGColor(srgbRed: 0.71, green: 0.14, blue: 0.09, alpha: 1)
-        case .blue: CGColor(srgbRed: 0.09, green: 0.36, blue: 0.83, alpha: 1)
-        case .green: CGColor(srgbRed: 0.02, green: 0.46, blue: 0.28, alpha: 1)
-        case .purple: CGColor(srgbRed: 0.41, green: 0.25, blue: 0.78, alpha: 1)
-        case .black: CGColor(srgbRed: 0.06, green: 0.09, blue: 0.16, alpha: 1)
-        }
+/// LKM-645: a mark's colour, any colour the standard macOS picker gives, stored as opaque
+/// sRGB: what the canvas and the composite (an sRGB bitmap) both draw. Each mark keeps its own
+/// value, so a later choice never recolours history. The old presets stay as named values.
+struct MarkupInk: Equatable {
+    let red: Double, green: Double, blue: Double
+    init(red: Double, green: Double, blue: Double) {
+        func unit(_ value: Double) -> Double { value.isFinite ? min(1, max(0, value)) : 0 }
+        self.red = unit(red); self.green = unit(green); self.blue = unit(blue)
+    }
+    /// A picked colour in any space (Display P3, generic RGB, grey, a catalog colour) as sRGB,
+    /// clamped to its gamut; alpha is dropped, ink stays opaque. Nil for a pattern colour.
+    init?(_ color: NSColor) {
+        guard let srgb = color.usingColorSpace(.sRGB) else { return nil }
+        self.init(red: Double(srgb.redComponent), green: Double(srgb.greenComponent), blue: Double(srgb.blueComponent))
+    }
+    /// `#rrggbb` (the smoke's way of naming a colour).
+    init?(hex: String) {
+        let digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        guard digits.count == 6, let value = UInt32(digits, radix: 16) else { return nil }
+        self.init(red: Double(value >> 16 & 0xff) / 255, green: Double(value >> 8 & 0xff) / 255, blue: Double(value & 0xff) / 255)
+    }
+    static let red = MarkupInk(red: 0.71, green: 0.14, blue: 0.09)
+    static let blue = MarkupInk(red: 0.09, green: 0.36, blue: 0.83)
+    static let green = MarkupInk(red: 0.02, green: 0.46, blue: 0.28)
+    static let purple = MarkupInk(red: 0.41, green: 0.25, blue: 0.78)
+    static let black = MarkupInk(red: 0.06, green: 0.09, blue: 0.16)
+    var color: CGColor { CGColor(srgbRed: red, green: green, blue: blue, alpha: 1) }
+    var nsColor: NSColor { NSColor(srgbRed: red, green: green, blue: blue, alpha: 1) }
+    /// `#rrggbb`, for the smoke and VoiceOver.
+    var hex: String {
+        String(format: "#%02x%02x%02x", Int((red * 255).rounded()), Int((green * 255).rounded()), Int((blue * 255).rounded()))
     }
 }
 

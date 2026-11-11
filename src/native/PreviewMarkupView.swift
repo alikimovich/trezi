@@ -99,6 +99,19 @@ private final class MarkupButton: NSButton {
     }
 }
 
+/// LKM-645: the ink swatch, a real AppKit colour well: a click (or Space/Return) opens the
+/// shared standard colour panel bound to it. Like `MarkupButton`, Tab reaches it, and keys it
+/// does not use go up to the overlay.
+final class MarkupColorWell: NSColorWell {
+    override var canBecomeKeyView: Bool { isEnabled && !isHidden }
+    override var acceptsFirstResponder: Bool { isEnabled }
+    override func keyDown(with event: NSEvent) {
+        guard [36, 49, 76].contains(event.keyCode) else { nextResponder?.keyDown(with: event); return }
+        guard isEnabled else { return }
+        activate(true); NSApp.orderFrontColorPanel(nil)
+    }
+}
+
 /// LKM-448: the Mark up controls as an island floating at the top of the preview, over the
 /// snapshot, in the look of the other islands there (`FloatingIsland`): a Liquid Glass edge
 /// from macOS 26 and an opaque face, so no mark or page pixel shows through a control. Its own
@@ -202,13 +215,15 @@ final class PreviewMarkupOverlay: NSView {
     var onCancel: (() -> Void)?
     var onAdd: (() -> Void)?
     /// Bun has the image and has not answered yet.
-    var adding = false { didSet { refresh() } }
+    var adding = false { didSet { if adding { releaseColorPanel() }; refresh() } }
     let animates = false
     /// The live page's frame in the superview's coordinates; the snapshot takes exactly that.
     /// Nil: the whole overlay.
     var page: NSRect? { didSet { if page != oldValue { needsLayout = true } } }
     private var toolButtons: [(MarkupTool, NSButton)] = []
-    private let colorButton = NSPopUpButton(frame: .zero, pullsDown: false)
+    /// LKM-645: the ink. Each overlay owns its well; only an active well is bound to the shared
+    /// `NSColorPanel`, so releasing it here never touches another control's binding.
+    let colorWell = MarkupColorWell(style: .default)
     private let undoButton = MarkupButton(), clearButton = MarkupButton(), cancelButton = MarkupButton(), addButton = MarkupButton()
     private let statusLabel = NSTextField(labelWithString: PreviewMarkupOverlay.status)
     private let errorLabel = NSTextField(wrappingLabelWithString: "")
@@ -252,15 +267,11 @@ final class PreviewMarkupOverlay: NSView {
             button.tag = toolButtons.count; button.action = #selector(pick(_:))
             toolButtons.append((tool, button))
         }
-        colorButton.target = self; colorButton.action = #selector(pickColor(_:))
-        colorButton.toolTip = "Color for new marks and text"
-        colorButton.setAccessibilityLabel("Annotation color")
-        for ink in MarkupInk.allCases {
-            colorButton.addItem(withTitle: ink.rawValue.capitalized)
-            colorButton.lastItem?.representedObject = ink.rawValue
-        }
-        colorButton.selectItem(at: 0)
-        island.face.addSubview(colorButton)
+        colorWell.color = canvas.ink.nsColor
+        colorWell.target = self; colorWell.action = #selector(pickColor(_:))
+        colorWell.toolTip = "Color for new marks and text"
+        colorWell.setAccessibilityLabel("Annotation color")
+        island.face.addSubview(colorWell)
         configure(undoButton, label: "Undo", symbol: "arrow.uturn.backward", hint: "Undo (⌘Z)"); undoButton.action = #selector(undo)
         configure(clearButton, label: "Clear", symbol: "trash", hint: "Clear all marks"); clearButton.action = #selector(clear)
         configure(cancelButton, label: "Cancel", symbol: nil, hint: "Discard this mark up (Esc)"); cancelButton.action = #selector(cancel)
@@ -273,7 +284,7 @@ final class PreviewMarkupOverlay: NSView {
         // Tab walks the bar and comes back: it never reaches the views under the overlay.
         var previous: NSView = self
         for control in toolButtons.map(\.1) { previous.nextKeyView = control; previous = control }
-        previous.nextKeyView = colorButton; previous = colorButton
+        previous.nextKeyView = colorWell; previous = colorWell
         for control in [undoButton, clearButton, cancelButton, addButton] { previous.nextKeyView = control; previous = control }
         previous.nextKeyView = self
         updateColors(); refresh()
@@ -311,7 +322,7 @@ final class PreviewMarkupOverlay: NSView {
         let room = max(0, shown.width - Self.inset * 2)
         let buttons = toolButtons.map(\.1) + [undoButton, clearButton]
         let count = CGFloat(buttons.count)
-        let colorWidth: CGFloat = 76
+        let colorWidth: CGFloat = 44
         let tools = count * Self.toolWidth + (count - 1) * gap + gap + colorWidth, actions = Self.cancelWidth + gap + Self.addWidth
         let status = ceil(statusLabel.intrinsicContentSize.width) + padding
         let bare = padding + tools + padding + actions + padding
@@ -322,11 +333,11 @@ final class PreviewMarkupOverlay: NSView {
         for (index, button) in buttons.enumerated() {
             button.frame = NSRect(x: padding + CGFloat(index) * (side + gap), y: padding, width: side, height: row)
         }
-        colorButton.frame = NSRect(x: padding + count * (side + gap), y: padding, width: colorWidth, height: row)
+        colorWell.frame = NSRect(x: padding + count * (side + gap), y: padding, width: colorWidth, height: row)
         let top = oneRow ? padding : padding * 1.5 + row
         addButton.frame = NSRect(x: width - padding - Self.addWidth, y: top, width: Self.addWidth, height: row)
         cancelButton.frame = NSRect(x: addButton.frame.minX - gap - Self.cancelWidth, y: top, width: Self.cancelWidth, height: row)
-        let left = oneRow ? colorButton.frame.maxX + padding : padding
+        let left = oneRow ? colorWell.frame.maxX + padding : padding
         let space = cancelButton.frame.minX - padding - left
         statusLabel.frame = NSRect(x: left, y: top + 6, width: max(0, space), height: 16)
         statusLabel.isHidden = space < 120
@@ -346,6 +357,7 @@ final class PreviewMarkupOverlay: NSView {
             button.contentTintColor = candidate == tool ? .controlAccentColor : nil
             button.cell?.setAccessibilityValue(candidate == tool ? "selected" : "")
         }
+        colorWell.isEnabled = !adding
         undoButton.isEnabled = !adding && canvas.document.canUndo
         clearButton.isEnabled = !adding && marks > 0
         // Only a marked image can leave: an unmarked original is never added.
@@ -360,12 +372,25 @@ final class PreviewMarkupOverlay: NSView {
     }
     func select(_ tool: MarkupTool) { canvas.commitText(); self.tool = tool; canvas.tool = tool; refresh() }
     @objc private func pick(_ sender: NSButton) { select(MarkupTool.allCases[sender.tag]) }
-    @objc private func pickColor(_ sender: NSPopUpButton) {
+    /// The panel's choice, live while it is dragged: the ink of the next marks only. A text
+    /// draft commits in the colour it was typed in first.
+    @objc private func pickColor(_ sender: NSColorWell) {
+        guard sender === colorWell, !adding, !isHidden, window != nil, let ink = MarkupInk(sender.color) else { return }
         canvas.commitText()
-        guard let raw = sender.selectedItem?.representedObject as? String, let ink = MarkupInk(rawValue: raw) else { return }
         canvas.ink = ink
-        sender.setAccessibilityValue(ink.rawValue.capitalized)
     }
+    /// Unbind the shared panel from this overlay's well, and put the panel away, only when it is
+    /// this well's: another control's active well and its panel are left as they are.
+    func releaseColorPanel() {
+        guard colorWell.isActive else { return }
+        colorWell.deactivate()
+        if NSColorPanel.sharedColorPanelExists { NSColorPanel.shared.orderOut(nil) }
+    }
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil { releaseColorPanel() }
+        super.viewWillMove(toWindow: newWindow)
+    }
+    override func viewDidHide() { releaseColorPanel(); super.viewDidHide() }
     @objc func undo() { if !adding { canvas.commitText(); canvas.undo() } }
     @objc func clear() { if !adding { canvas.commitText(); canvas.clear() } }
     @objc func cancel() { onCancel?() }

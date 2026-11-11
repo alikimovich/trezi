@@ -1,5 +1,26 @@
 # PROGRESS LOG
 
+## 2026-11-11 — LKM-645: Mark up ink uses the standard macOS color picker
+
+- The Mark up island's five-item ink popup is now a compact `NSColorWell` (`.default` style,
+  44 pt, `MarkupColorWell`: Tab-reachable, Space/Return opens the panel, other keys go to the
+  overlay like `MarkupButton`). A click opens the shared `NSColorPanel` with all its modes.
+- `MarkupInk` is a struct of clamped opaque sRGB components, built from the panel's colour via
+  `usingColorSpace(.sRGB)` (P3 converted, out-of-gamut clamped, alpha dropped: ink stays
+  opaque as before). The five old values remain as statics for fixtures. Every mark stores its
+  own ink, so a new choice only colours later marks; a choice while a text draft is open
+  commits the draft in its own colour first (unchanged semantics).
+- Shared panel lifecycle: only an active well is bound, and activation is exclusive in AppKit.
+  The overlay deactivates its own well (and orders the panel out) only when that well is
+  active: on removal (Cancel/Add/close), on hide (Select) and when Add starts committing; the
+  well is disabled while adding, and the action ignores a hidden/detached/adding overlay. A
+  removed `NSColorWell` does not deactivate itself (checked), hence the explicit release.
+- Smoke seams: `colorWell` posts a real click on the well; `annotationColorChoose` sets the
+  open panel's colour in Display P3 so the panel drives the well's action;
+  `annotationComposite` reports pixel counts per mark ink. The opt-in composite/Send smoke
+  picks two colours outside the old palette, checks history colours and Undo, and that Add with
+  the panel open puts it away. Native smoke not run locally (Forge/CI run it).
+
 ## 2026-11-11 — LKM-644: sidebar-marquee's selection step waits for the title's frame
 
 - CI shard 2/3 failed `sidebar-marquee` ("selected at the end: label frame: 304, expected
