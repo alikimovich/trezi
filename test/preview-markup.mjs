@@ -27,11 +27,13 @@ if (process.platform !== 'darwin') {
     'data-trezi-hover',
     'data-trezi-measure',
     'data-trezi-measure-label',
+    // LKM-637: the top layer the spacing/distance number badges paint in.
+    'data-trezi-measure-badges',
     'data-trezi-selbadge',
     'data-trezi-selbox',
     'data-trezi-size',
     'data-trezi-source',
-    // LKM-541 spacing grips and their readout sit in the overlay's grips layer.
+    // LKM-541 spacing grips sit in the overlay's grips layer, their readout in the badge layer (LKM-637).
     'data-trezi-spacing-handle',
     'data-trezi-spacing-readout',
     'data-trezi-toolbar',

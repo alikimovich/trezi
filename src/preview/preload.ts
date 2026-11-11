@@ -163,6 +163,7 @@ const overlayGuides = createOverlayGuides({
   send: (geometry) => ipcRenderer.send(PREVIEW_OVERLAY_GEOMETRY, geometry),
   selection: () => selEls.find((el) => el.isConnected) ?? null,
   layer: () => guideLayer,
+  badges: () => guideBadgeLayer,
   draw: { line: (s) => measureLine(s, false), label: measureLabel }
 })
 let overlayBox: HTMLDivElement | null = null
@@ -238,6 +239,13 @@ let selEls: Element[] = []
 let measureLayer: HTMLDivElement | null = null
 // Hover distances to the native guides and layout grid (LKM-205, `overlay-guides.ts`).
 let guideLayer: HTMLDivElement | null = null
+// LKM-637: the NUMBER badges of every spacing/distance drawing (Option measure, guide
+// distances, the spacing-grip drag readout) go in one layer painted last in the overlay
+// shadow, above the title chips and the selection toolbar. Lines, caps and grips stay
+// in their own layers below; the badge layer never takes the pointer.
+let measureBadgeLayer: HTMLDivElement | null = null
+let guideBadgeLayer: HTMLDivElement | null = null
+let spacingBadgeLayer: HTMLDivElement | null = null
 let measureTarget: Element | null = null
 let measureKey = ''
 let altHeld = false
@@ -278,6 +286,24 @@ function ensureOverlay(): void {
   meas.style.cssText = 'position:fixed;inset:0;pointer-events:none;'
   const guideMeas = document.createElement('div')
   guideMeas.style.cssText = 'position:fixed;inset:0;pointer-events:none;'
+
+  // LKM-637: the stacking rule. Spacing/distance number badges paint above all other
+  // overlay UI: appended after the toolbar and above its z-index:2, inside the same
+  // fixed shadow host, so they stay within the preview's own web view (native islands
+  // and menus above the web view still cover them). pointer-events:none on the layer
+  // and every badge: the toolbar under a badge keeps its clicks and hover.
+  const badges = document.createElement('div')
+  badges.setAttribute('data-trezi-measure-badges', '')
+  badges.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:3;'
+  const badgeLayer = (): HTMLDivElement => {
+    const d = document.createElement('div')
+    d.style.cssText = 'position:fixed;inset:0;pointer-events:none;'
+    badges.appendChild(d)
+    return d
+  }
+  const spacingBadges = badgeLayer()
+  const guideBadges = badgeLayer()
+  const measBadges = badgeLayer()
 
   // Whole-page mode hint chip (top-center) while C/Y is armed.
   const hint = document.createElement('div')
@@ -420,7 +446,7 @@ function ensureOverlay(): void {
   // discoverable form of the double-click-to-edit gesture.
   toolbar.append(commentBtn, inputWrap, editBtn, propsBtn, threeDBtn, codeBtn, separator, deleteBtn)
 
-  shadow.append(sel, grips, box, guideMeas, meas, label, pins, hint, toolbar, style)
+  shadow.append(sel, grips, box, guideMeas, meas, label, pins, hint, toolbar, badges, style)
   document.documentElement.appendChild(host)
   overlayHost = host
   overlayBox = box
@@ -430,6 +456,9 @@ function ensureOverlay(): void {
   spacingLayer = grips
   measureLayer = meas
   guideLayer = guideMeas
+  measureBadgeLayer = measBadges
+  guideBadgeLayer = guideBadges
+  spacingBadgeLayer = spacingBadges
   hintEl = hint
   toolbarEl = toolbar
   inputWrapEl = inputWrap
@@ -516,6 +545,7 @@ let spacingLayer: HTMLDivElement | null = null
 const gestureFresh = new Set<string>()
 const spacing = createSpacingHandles({
   layer: () => spacingLayer,
+  badges: () => spacingBadgeLayer,
   enabled: () => active && !editing && !commenting && !threeD.active(),
   preview: (el, prop, value) => {
     if (!(styleStashEl === el && styleOriginals.has(prop))) gestureFresh.add(prop)
@@ -923,6 +953,7 @@ function clearMeasure(): void {
   measureTarget = null
   measureKey = ''
   if (measureLayer) measureLayer.textContent = ''
+  if (measureBadgeLayer) measureBadgeLayer.textContent = ''
 }
 
 /**
@@ -950,7 +981,7 @@ function drawMeasure(target: Element | null): void {
     return
   }
   ensureOverlay()
-  if (!measureLayer) return
+  if (!measureLayer || !measureBadgeLayer) return
   const a = rectOf(anchor)
   const b = rectOf(target)
   const key = [a.left, a.top, a.right, a.bottom, b.left, b.top, b.right, b.bottom]
@@ -960,13 +991,14 @@ function drawMeasure(target: Element | null): void {
   measureTarget = target
   measureKey = key
   measureLayer.textContent = ''
+  measureBadgeLayer.textContent = ''
   const { segments, guides } = measureRects(a, b)
   for (const g of guides) measureLayer.appendChild(measureLine(g, true))
   for (const s of segments) {
     measureLayer.appendChild(measureLine(s, false))
     measureLayer.appendChild(measureCap(s.x1, s.y1, s.axis))
     measureLayer.appendChild(measureCap(s.x2, s.y2, s.axis))
-    measureLayer.appendChild(
+    measureBadgeLayer.appendChild(
       measureLabel(formatDistance(s.distance), (s.x1 + s.x2) / 2, (s.y1 + s.y2) / 2)
     )
   }

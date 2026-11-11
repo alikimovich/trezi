@@ -173,6 +173,9 @@ export function dragValue(start: number, delta: number, sign: 1 | -1, scale: num
 
 export interface SpacingHandleDeps {
   layer: () => HTMLElement | null
+  /** LKM-637: where the drag's value readout goes (the overlay's top badge layer, above the
+   *  title chips and toolbar); `layer` when absent. */
+  badges?: () => HTMLElement | null
   /** Selection mode is on and no inline editor, composer or 3D view owns the pointer. */
   enabled: () => boolean
   preview: (el: HTMLElement, prop: SpacingDraftProp, value: string) => void
@@ -228,7 +231,7 @@ export function createSpacingHandles(deps: SpacingHandleDeps) {
   }
 
   const label = (prop: SpacingDraftProp, value: number) => {
-    const layer = deps.layer()
+    const layer = (deps.badges ?? deps.layer)()
     if (!layer) return
     if (!readout) {
       readout = document.createElement('div')

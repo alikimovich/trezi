@@ -136,6 +136,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Unit `test/chat-quotes.mjs`; native `chat-reply` smoke (two selections, comments, menu Reply, remove, streaming, chat switch, one stubbed native send).
 - [ ] Manager: foreground native `chat`/`composer` acceptance with captures, independent review, exact-head CI and merge.
 
+## LKM-637 — Spacing value badges above preview title chips and the selection toolbar
+
+- [x] One stacking rule in the preview overlay shadow (`src/preview/preload.ts`): every spacing/distance number badge (Option measure, guide distances, spacing-grip drag readout) goes in the `data-trezi-measure-badges` layer, painted last and above the toolbar's `z-index:2`; lines, caps and grips stay below; the layer and badges are `pointer-events:none`.
+- [x] `overlay-guides.ts` and `spacing-handles.ts` take the badge layer (`badges`); clears empty it with their own layer.
+- [x] Unit `preview-measure-stacking`: real `preview.js` in a WKWebView, real mouse events; WebKit snapshot pixels show red and white glyphs (no toolbar/chip colour) where badges cross the toolbar and both title chips, fractional values; a real click under a badge runs the toolbar's action; scroll and resize redraw on top; Option release empties the layer.
+- [ ] Manager: foreground native capture, independent review, exact-head CI and merge.
+
 ## LKM-627 — Keep the selected-text Reply action above chat text without overlap
 
 - [x] Reply floats over the transcript (one `ChatReplyButton` per chat, a sibling above `NativeChat` like the latest button), no longer a subview clamped into the tight text view (`src/native/ChatTextReply.swift`).
