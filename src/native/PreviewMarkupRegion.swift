@@ -121,7 +121,7 @@ enum MarkupRegionChrome {
         if let rect = region.rect, rect.contains(image) { return .openHand }
         return .crosshair
     }
-    private static func resize(_ x: MarkupRegion.Edge, _ y: MarkupRegion.Edge) -> NSCursor {
+    static func resize(_ x: MarkupRegion.Edge, _ y: MarkupRegion.Edge) -> NSCursor {
         if #available(macOS 15.0, *) {
             let position: NSCursor.FrameResizePosition
             switch (x, y) {

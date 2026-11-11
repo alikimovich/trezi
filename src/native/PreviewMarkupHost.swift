@@ -94,14 +94,17 @@ extension Host {
             "hitBesideDetail":beside.map(name)
         ]
         let marks: [[String: Any]] = canvas.document.marks.map { mark in
-            ["tool":mark.tool.rawValue, "ink":mark.ink.hex, "text":mark.text, "points":mark.points.map { [$0.x, $0.y] }, "view":mark.points.map { point -> [CGFloat] in let p = mapping.toView(point); return [p.x, p.y] }]
+            ["tool":mark.tool.rawValue, "ink":mark.ink.hex, "stroke":mark.stroke.rawValue, "text":mark.text, "points":mark.points.map { [$0.x, $0.y] }, "view":mark.points.map { point -> [CGFloat] in let p = mapping.toView(point); return [p.x, p.y] }]
         }
         return ["open":!overlay.isHidden, "suspended":overlay.isHidden, "session":markup?.session ?? NSNull(), "frame":rect(overlay.frame), "canvas":rect(canvas.frame), "bar":rect(overlay.barFrame), "shown":rect(mapping.frame),
                 "image":["width":canvas.image.width, "height":canvas.image.height], "frozen":MarkupDigest.hex(canvas.image),
                 "backing":window.backingScaleFactor, "tool":overlay.tool.rawValue, "marks":marks, "addEnabled":overlay.addEnabled, "undoEnabled":overlay.undoEnabled,
+                "redoEnabled":overlay.redoEnabled, "deleteEnabled":overlay.deleteEnabled, "selected":canvas.selection ?? NSNull(), "shape":overlay.shape.rawValue,
+                "strokeShown":!overlay.strokePopUp.isHidden, "stroke":overlay.strokePopUp.selectedItem?.representedObject as? String ?? "",
                 "adding":overlay.adding, "status":overlay.statusText, "error":overlay.errorShown, "animates":overlay.animates, "focused":overlay.ownsFocus,
                 "topmost":canvasTopmost(overlay), "cover":previewCoverRects().count, "context":markup?.context ?? [:], "magenta":magentaPixels(bitmap),
-                "controls":overlay.controls.map { ["label":$0.cell?.accessibilityLabel() ?? "", "enabled":$0.isEnabled, "frame":rect($0.convert($0.bounds, to: overlay))] as [String: Any] },
+                "controls":overlay.controls.map { ["label":$0.cell?.accessibilityLabel() ?? $0.accessibilityLabel() ?? "", "enabled":$0.isEnabled, "hidden":$0.isHidden,
+                                                   "tooltip":$0.toolTip ?? "", "frame":rect($0.convert($0.bounds, to: overlay))] as [String: Any] },
                 "island":islandState, "geometry":previewMarkupGeometry(), "colorWell":markupColorWellState(overlay),
                 "region":canvas.region.valid.map { rect($0) } ?? NSNull(), "regionDragging":canvas.region.isDragging,
                 "regionView":canvas.region.valid.map { rect(MarkupRegionChrome.viewRect($0, mapping)) } ?? NSNull()]
@@ -110,7 +113,7 @@ extension Host {
     private func markupColorWellState(_ overlay: PreviewMarkupOverlay) -> [String: Any] {
         let well = overlay.colorWell
         let panel = NSColorPanel.sharedColorPanelExists ? NSColorPanel.shared : nil
-        return ["ink":overlay.canvas.ink.hex, "color":MarkupInk(well.color)?.hex ?? "", "active":well.isActive, "enabled":well.isEnabled,
+        return ["ink":overlay.canvas.ink.hex, "color":MarkupInk(well.color)?.hex ?? "", "active":well.isActive, "enabled":well.isEnabled, "hidden":well.isHidden,
                 "label":well.accessibilityLabel() ?? "", "role":well.accessibilityRole()?.rawValue ?? "",
                 "panelVisible":panel?.isVisible ?? false, "panelColor":panel.flatMap { MarkupInk($0.color)?.hex } ?? ""]
     }
@@ -135,6 +138,17 @@ extension Host {
             emit(["event":"shell-action", "action":"markup"])
             return ["ok":true]
         case "cancel": markup?.overlay?.cancel(); return ["ok":true] // cleanup seam only
+        case "clearAll":
+            // LKM-647: the canvas context menu's Clear All Marks (seam: a context menu tracks modally).
+            guard let canvas = markup?.overlay?.canvas else { return ["error":"No overlay"] }
+            canvas.clearFromMenu(); return ["ok":true, "marks":canvas.document.marks.count]
+        case "stroke":
+            // LKM-647: a choice in the stroke width menu (seam: a popup menu tracks modally).
+            guard let overlay = markup?.overlay, !overlay.strokePopUp.isHidden, overlay.strokePopUp.isEnabled,
+                  let index = MarkupStroke.allCases.firstIndex(where: { $0.rawValue == c["stroke"] as? String }) else { return ["error":"Stroke width unavailable"] }
+            overlay.strokePopUp.selectItem(at: index)
+            _ = overlay.strokePopUp.sendAction(overlay.strokePopUp.action, to: overlay.strokePopUp.target)
+            return ["ok":true]
         case "resize":
             guard let width = c["width"] as? Double, let height = c["height"] as? Double, let frame = markup?.overlay?.frame else { return ["error":"No overlay"] }
             markup?.place(area: NSRect(x: frame.minX, y: frame.minY, width: width, height: height))
@@ -157,7 +171,7 @@ extension Host {
                     "tool":overlay.tool.rawValue, "textSelected":text?.state == .on,
                     "textAccessible":text?.cell?.accessibilityValue() as? String ?? "",
                     "textTinted":text?.contentTintColor == .controlAccentColor,
-                    "peersOff":overlay.controls.filter { ["Select region", "Pen", "Rectangle", "Circle", "Arrow"].contains($0.cell?.accessibilityLabel() ?? "") }
+                    "peersOff":overlay.controls.filter { $0 !== text && $0.cell?.accessibilityRole() == .radioButton }
                         .allSatisfy { $0.state == .off && $0.contentTintColor == nil }]
         case "colorPanelClose":
             // Cleanup seam only: the panel the smoke opened, whoever it is bound to now.
@@ -222,14 +236,15 @@ extension Host {
         switch action {
         case "key":
             let chars = c["key"] as? String ?? "", code = UInt16(c["code"] as? Int ?? 0)
-            let flags: NSEvent.ModifierFlags = c["command"] as? Bool == true ?
+            var flags: NSEvent.ModifierFlags = c["command"] as? Bool == true ?
                 ([123, 124].contains(code) ? [.command, .numericPad, .function] : .command) : []
+            if c["shift"] as? Bool == true { flags.insert(.shift) }
             guard key(.keyDown, chars, code, flags), key(.keyUp, chars, code, flags) else { return ["error":"Cannot post key"] }
             await settle()
             return ["route":"real event route", "focused":markup?.overlay?.ownsFocus ?? false]
         case "button":
             guard let overlay = markup?.overlay, let label = c["label"] as? String,
-                  let button = overlay.controls.first(where: { $0.cell?.accessibilityLabel() == label }), button.isEnabled else { return ["error":"Button unavailable"] }
+                  let button = overlay.controls.first(where: { $0.cell?.accessibilityLabel() == label }), button.isEnabled, !button.isHidden else { return ["error":"Button unavailable"] }
             let point = button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
             guard let hit = window.contentView?.superview?.hitTest(point), hit === button || hit.isDescendant(of: button),
                   mouse(.leftMouseDown, point), mouse(.leftMouseUp, point) else { return ["error":"Button is not hit-testable"] }

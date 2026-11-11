@@ -1,6 +1,6 @@
 import AppKit
 
-/// LKM-391: one Mark up session, from the capture to Add or Cancel. Bun issues the session
+/// LKM-391: one Mark up session, from the capture to Add or Close (Cancel). Bun issues the session
 /// token, bound to a chat and project, and ends it when they change; a capture or answer for
 /// any other token is dropped. The snapshot exists only in memory, inside the overlay: Cancel
 /// releases it and leaves no file, and only the composite ever leaves this class.
@@ -208,6 +208,12 @@ final class PreviewMarkup {
     func undo() -> Bool {
         guard let overlay, !overlay.isHidden else { return false }
         overlay.undo()
+        return true
+    }
+    /// LKM-647: the menu's Redo, the same way: the marks' own history, never the project's.
+    func redo() -> Bool {
+        guard let overlay, !overlay.isHidden else { return false }
+        overlay.redo()
         return true
     }
     /// `area` is what the overlay covers; `page` the live page's frame, both in the parent's

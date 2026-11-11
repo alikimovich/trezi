@@ -548,7 +548,7 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
     await test({ action: 'button', label: 'Pen' })
     await test({
       action: 'pointer',
-      // Below the floating island at the top of the snapshot (LKM-448).
+      // Well clear of the floating island at the bottom of the snapshot (LKM-647).
       points: [
         [60, 200],
         [140, 240],
@@ -556,8 +556,8 @@ export async function checkToolbarActions(host: NativeBridge, artifacts: string)
       ]
     })
     assert.equal((await markup()).undoEnabled, true, 'the generated stroke is a mark')
-    await test({ action: 'button', label: 'Cancel' })
-    await waitFor(async () => !(await markup()).open, 'Cancel closes Mark up')
+    await test({ action: 'button', label: 'Close annotation tools' })
+    await waitFor(async () => !(await markup()).open, 'Close closes Mark up')
     await waitFor(async () => !(await shell()).markupActive, 'the button returns to rest')
     assert.equal((await shell()).markupProminent, false, 'the glyph returns to rest')
     assert.equal((await markup()).cover, cover, 'the page is uncovered again')

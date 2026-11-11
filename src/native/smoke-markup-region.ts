@@ -70,7 +70,7 @@ export async function checkMarkupRegion(host: NativeBridge, page: Page, folder: 
 
   const opened = await open('region')
   assert.equal(opened.addEnabled, false, 'nothing to add before a region or a mark')
-  assert.ok(opened.controls.some((control: State) => control.label === 'Select region'))
+  assert.ok(opened.controls.some((control: State) => control.label === 'Select'))
   const card = JSON.parse(
     String(
       await page(
@@ -87,7 +87,7 @@ export async function checkMarkupRegion(host: NativeBridge, page: Page, folder: 
     (card.right - inset) * scale,
     (card.bottom - inset) * scale
   ].map(Math.round)
-  await button('Select region')
+  await button('Select')
   assert.equal((await inspect()).tool, 'select')
 
   // A click-sized drag is no region.
@@ -166,7 +166,7 @@ export async function checkMarkupRegion(host: NativeBridge, page: Page, folder: 
   await waitFor(async () => Number(await page('innerWidth')) === 2000, 'zoomed: the page widens')
   const zoomed = await open('region zoomed')
   assert.ok(zoomed.context.zoom < 1, 'zoomed: the zoom is captured')
-  await button('Select region')
+  await button('Select')
   const { width, height } = zoomed.image
   const at = [
     [width * 0.6, height * 0.7],
@@ -178,15 +178,15 @@ export async function checkMarkupRegion(host: NativeBridge, page: Page, folder: 
   near(picked.region.width, Math.round(at[0][0]) - Math.round(at[1][0]), 'zoomed: width')
   const shown = picked.shown
   near(picked.regionView.x, shown.x + shown.width * 0.3, 'zoomed: the region sits on the image', 1)
-  await button('Cancel')
+  await button('Close annotation tools')
   await closed('region cancel')
   await host.request('previewViewport', {})
-  assert.equal(attachments(), before + 1, 'Cancel with a region attaches nothing')
+  assert.equal(attachments(), before + 1, 'Close with a region attaches nothing')
 
   // A marked region: its mark, cropped with it.
   await waitFor(async () => Number(await page('innerWidth')) !== 2000, 'the page width returns')
   await open('marked region')
-  await button('Select region')
+  await button('Select')
   const fresh = await drag([
     [x1, y1],
     [x0, y0]
