@@ -104,7 +104,7 @@ extension Host {
                 "adding":overlay.adding, "status":overlay.statusText, "error":overlay.errorShown, "animates":overlay.animates, "focused":overlay.ownsFocus,
                 "topmost":canvasTopmost(overlay), "cover":previewCoverRects().count, "context":markup?.context ?? [:], "magenta":magentaPixels(bitmap),
                 "controls":overlay.controls.map { ["label":$0.cell?.accessibilityLabel() ?? $0.accessibilityLabel() ?? "", "enabled":$0.isEnabled, "hidden":$0.isHidden,
-                                                   "tooltip":$0.toolTip ?? "", "frame":rect($0.convert($0.bounds, to: overlay))] as [String: Any] },
+                                                   "selected":($0 as? MarkupButton)?.selectedTool == true, "on":$0.state == .on, "tooltip":$0.toolTip ?? "", "frame":rect($0.convert($0.bounds, to: overlay))] as [String: Any] },
                 "island":islandState, "geometry":previewMarkupGeometry(), "colorWell":markupColorWellState(overlay),
                 "region":canvas.region.valid.map { rect($0) } ?? NSNull(), "regionDragging":canvas.region.isDragging,
                 "regionView":canvas.region.valid.map { rect(MarkupRegionChrome.viewRect($0, mapping)) } ?? NSNull()]
@@ -170,9 +170,9 @@ extension Host {
             return ["color":overlay.canvas.ink.hex, "focused":window.firstResponder === well,
                     "tool":overlay.tool.rawValue, "textSelected":text?.state == .on,
                     "textAccessible":text?.cell?.accessibilityValue() as? String ?? "",
-                    "textTinted":text?.contentTintColor == .controlAccentColor,
+                    "textTinted":(text as? MarkupButton)?.selectedTool == true,
                     "peersOff":overlay.controls.filter { $0 !== text && $0.cell?.accessibilityRole() == .radioButton }
-                        .allSatisfy { $0.state == .off && $0.contentTintColor == nil }]
+                        .allSatisfy { $0.state == .off && ($0 as? MarkupButton)?.selectedTool != true }]
         case "colorPanelClose":
             // Cleanup seam only: the panel the smoke opened, whoever it is bound to now.
             if NSColorPanel.sharedColorPanelExists { NSColorPanel.shared.orderOut(nil) }

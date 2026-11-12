@@ -339,10 +339,10 @@ check(overlay.shapeButton.cell?.accessibilityLabel() == "Arrow", "the shapes slo
 let focusedColor = overlay.colorWell
 check(focusedColor.canBecomeKeyView && overlay.controls.last(where: { $0.cell?.accessibilityLabel() == "Text" })?.nextKeyView === focusedColor, "Tab reaches the color well after the tools")
 check(window.makeFirstResponder(focusedColor) && window.firstResponder === focusedColor, "focus moves to the color well")
-check(textButton.state == .on && textButton.contentTintColor == .controlAccentColor &&
+check(textButton.state == .on && (textButton as? MarkupButton)?.selectedTool == true &&
       textButton.cell?.accessibilityValue() as? String == "selected", "Text stays tinted and accessibly selected after focus moves")
 for peer in overlay.controls where peer !== textButton && peer.cell?.accessibilityRole() == .radioButton {
-    check(peer.state == .off && peer.contentTintColor == nil && peer.cell?.accessibilityValue() as? String != "selected", "\(peer.cell?.accessibilityLabel() ?? "") stays unselected after Text loses focus")
+    check(peer.state == .off && (peer as? MarkupButton)?.selectedTool == false && peer.cell?.accessibilityValue() as? String != "selected", "\(peer.cell?.accessibilityLabel() ?? "") stays unselected after Text loses focus")
 }
 overlay.keyDown(with: key("p", 35, window: window))
 overlay.keyDown(with: key("x", 7, window: window)); check(overlay.tool == .pen, "another key does nothing and goes nowhere")
@@ -386,8 +386,8 @@ func noOverlap(_ label: String) {
         for b in frames[(i + 1)...] { check(!a.intersects(b), "\(label): controls overlap") }
     }
     check(shown.contains(island), "\(label): the island floats inside the snapshot")
-    // LKM-647: at its bottom, with Close at the right edge of the first row.
-    check(near(island.maxY, shown.maxY - PreviewMarkupOverlay.inset, 1), "\(label): at its bottom")
+    // LKM-671: at its top, with Close at the right edge of the first row.
+    check(near(island.minY, shown.minY + PreviewMarkupOverlay.inset, 1), "\(label): at its top")
     let close = overlay.controls.last!.convert(overlay.controls.last!.bounds, to: overlay)
     check(overlay.controls.last?.cell?.accessibilityLabel() == "Close annotation tools" && !overlay.controls.last!.isHidden && near(close.maxX, island.maxX - 8, 1), "\(label): Close at the right edge")
     check(frames.allSatisfy { $0.minY >= close.minY - 0.5 } && frames.filter { abs($0.minY - close.minY) < 0.5 }.allSatisfy { $0.maxX <= close.maxX }, "\(label): Close ends the first row")

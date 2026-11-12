@@ -178,11 +178,11 @@ let overlay = PreviewMarkupOverlay(image: retina)
 overlay.frame = NSRect(x: 0, y: 0, width: 1000, height: 700)
 window.contentView!.addSubview(overlay)
 overlay.layoutSubtreeIfNeeded(); overlay.layout()
-// LKM-647: Select (the pointer) picks a mark or drags a region; it is the tool Mark up opens with.
+// LKM-647/671: Select (the viewfinder) picks a mark or drags a region; it is the tool Mark up opens with.
 let selectButton = overlay.controls.first { $0.cell?.accessibilityLabel() == "Select" }
 check(selectButton != nil && selectButton?.cell?.accessibilityRole() == .radioButton, "Select is a labelled tool")
 check(selectButton?.image?.accessibilityDescription == "Select" && selectButton?.toolTip?.hasSuffix("(S)") == true && selectButton?.toolTip?.contains("drag") == true, "with a system symbol, what it does and its key")
-check(MarkupTool.select.symbol == "cursorarrow" && NSImage(systemSymbolName: MarkupTool.select.symbol, accessibilityDescription: nil) != nil, "a real SF Symbol")
+check(MarkupTool.select.symbol == "viewfinder" && NSImage(systemSymbolName: MarkupTool.select.symbol, accessibilityDescription: nil) != nil, "a real SF Symbol")
 check(overlay.tool == .select && overlay.canvas.tool == .select, "Mark up opens on Select")
 window.makeFirstResponder(overlay)
 overlay.keyDown(with: key("p", 35, window: window)); check(overlay.tool == .pen, "P picks the pen")

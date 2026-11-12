@@ -229,6 +229,58 @@ final class MarkupButton: NSButton {
     override func keyDown(with event: NSEvent) {
         if [36, 49, 76].contains(event.keyCode) { performClick(nil) } else { nextResponder?.keyDown(with: event) }
     }
+    /// LKM-671: the current tool. Its on state shows as a filled accent capsule (`pill`, a view
+    /// of its own just below the button) with a white glyph that stays after the press ends:
+    /// the rounded bezel's own on state is too faint to read (light or dark), and the press
+    /// highlight and focus ring stay distinct from it.
+    var selectedTool = false {
+        didSet {
+            guard selectedTool != oldValue else { return }
+            isBordered = !selectedTool
+            contentTintColor = selectedTool ? .white : nil
+            placePill(); needsDisplay = true
+        }
+    }
+    /// The fill under the selected tool. From macOS 26 a borderless NSButton renders through its
+    /// layer and paints over whatever its superview drew there, so the fill is a sibling view,
+    /// kept directly beneath the button and moved, sized and shown with it.
+    let pill = MarkupSelectionPill()
+    /// The bezel's own rect in the 28 pt row, so the fill matches the other buttons.
+    var selectedFrame: NSRect { bounds.insetBy(dx: 0, dy: 2) }
+    override var isHidden: Bool { didSet { placePill() } }
+    override func setFrameOrigin(_ newOrigin: NSPoint) { super.setFrameOrigin(newOrigin); placePill() }
+    override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); placePill() }
+    override func viewDidMoveToSuperview() { super.viewDidMoveToSuperview(); placePill() }
+    private func placePill() {
+        guard let superview, selectedTool || pill.superview != nil else { pill.removeFromSuperview(); return }
+        if pill.superview !== superview { superview.addSubview(pill, positioned: .below, relativeTo: self) }
+        pill.frame = selectedFrame.offsetBy(dx: frame.minX, dy: frame.minY)
+        pill.isHidden = !selectedTool || isHidden
+        pill.needsDisplay = true
+    }
+    /// LKM-671: the island is a capsule, so its buttons are too: the native capsule border
+    /// shape (macOS 26) for the resting, hover and pressed bezels, at the same size and
+    /// spacing. Older systems keep the rounded bezel; the selected fill is a capsule on both.
+    static func round(_ button: NSButton) {
+        if #available(macOS 26.0, *) { button.borderShape = .capsule }
+    }
+}
+
+/// LKM-671: the selected tool's accent capsule, with an outline under Increase Contrast. It
+/// draws itself (no layer of its own), beneath its button in the island face.
+final class MarkupSelectionPill: NSView {
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+    override func draw(_ dirtyRect: NSRect) {
+        let radius = min(bounds.width, bounds.height) / 2
+        let path = NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius)
+        NSColor.controlAccentColor.setFill(); path.fill()
+        if NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast {
+            let outline = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: radius - 0.5, yRadius: radius - 0.5)
+            NSColor.labelColor.setStroke(); outline.lineWidth = 1; outline.stroke()
+        }
+    }
 }
 
 /// LKM-645: the ink swatch, a real AppKit colour well: a click (or Space/Return) opens the
@@ -254,7 +306,7 @@ final class MarkupPopUp: NSPopUpButton {
     }
 }
 
-/// LKM-448/647: the Mark up controls as an island floating at the bottom of the preview, over the
+/// LKM-448/647/671: the Mark up controls as an island floating at the top of the preview, over the
 /// snapshot, in the look of the other islands there (`FloatingIsland`): a Liquid Glass edge
 /// from macOS 26 and an opaque face, so no mark or page pixel shows through a control. Its own
 /// frame takes the pointer; everywhere else the snapshot takes the pen.

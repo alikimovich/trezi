@@ -62,8 +62,11 @@ export async function checkMarkupToolbar(host: NativeBridge, folder: string) {
   assert.deepEqual(shown(idle), IDLE, 'idle: compact')
   assert.equal(idle.status, '', 'idle: no filler text')
   const { frame, snapshot } = idle.island
-  // Window points run up: the island sits 10 pt over the page's bottom edge, inside it.
-  assert.ok(Math.abs(frame.y - (snapshot.y + 10)) <= 1, 'idle: at the bottom of the page')
+  // Window points run up: the island sits 10 pt under the page's top edge, inside it.
+  assert.ok(
+    Math.abs(frame.y + frame.height - (snapshot.y + snapshot.height - 10)) <= 1,
+    'idle: at the top of the page'
+  )
   const close = idle.controls.find((control: State) => control.label === 'Close annotation tools')
   assert.ok(
     Math.abs(
@@ -78,6 +81,10 @@ export async function checkMarkupToolbar(host: NativeBridge, folder: string) {
     'idle: Close is the rightmost control'
   )
   assert.equal(close.tooltip, 'Close annotation tools (Esc)')
+  // LKM-671: the current tool alone shows selected (fill and on state), after the press ends.
+  const current = (state: State) =>
+    state.controls.filter((c: State) => c.selected && c.on).map((c: State) => c.label)
+  assert.deepEqual(current(idle), ['Select'], 'idle: Select is the selected tool')
   await shot('toolbar-idle')
 
   // A rectangle: history, Delete and Add appear; nothing is selected yet.
@@ -93,6 +100,7 @@ export async function checkMarkupToolbar(host: NativeBridge, folder: string) {
     ]
   })
   assert.equal(drawn.marks.length, 1)
+  assert.deepEqual(current(drawn), ['Rectangle'], 'R: the shapes slot shows selected')
   assert.deepEqual(
     [drawn.addEnabled, drawn.undoEnabled, drawn.redoEnabled, drawn.deleteEnabled],
     [true, true, false, false],
@@ -115,6 +123,7 @@ export async function checkMarkupToolbar(host: NativeBridge, folder: string) {
     ]
   })
   assert.equal(picked.selected, 0, 'a click on the stroke selects the rectangle')
+  assert.deepEqual(current(picked), ['Select'], 'a click on Select: it stays selected')
   assert.deepEqual(
     [picked.colorWell.hidden, picked.strokeShown, picked.deleteEnabled],
     [false, true, true]
@@ -150,7 +159,7 @@ export async function checkMarkupToolbar(host: NativeBridge, folder: string) {
   const region = await event({
     action: 'pointer',
     points: [
-      [Math.round(w * 0.1), Math.round(h * 0.1)],
+      [Math.round(w * 0.1), Math.round(h * 0.15)],
       [Math.round(w * 0.6), Math.round(h * 0.6)]
     ]
   })

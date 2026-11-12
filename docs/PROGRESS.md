@@ -1,5 +1,91 @@
 # PROGRESS LOG
 
+## 2026-11-12 — LKM-671 CI fix 4: the capture sentinel sits inside the island face
+
+- CI still failed at Select (line 133): the overlay-level magenta sentinel painted, but the
+  island face (inside `NSGlassEffectView` on macOS 26) still captured white, so the pixel
+  probe ran on a capture whose glass subtree was blank. The sentinel now lives in the
+  island face's left padding, beside the tools row, the same subtree as the selected fill,
+  so the pixel and capsule-corner checks run only where that subtree really paints; the
+  view-level selected-look checks still run everywhere. No product code changed.
+- Evidence: `preview-markup*` fixtures pass locally with pixel checks active (no blank
+  note); the shape-selected shot shows the top island, viewfinder and Circle filled.
+
+## 2026-11-12 — LKM-671 CI fix 3: the toolbar fixture survives a blank offscreen capture
+
+- The CI diagnostics showed the runner's `cacheDisplay` capture is blank everywhere (the
+  opaque face and the snapshot read pure white too, with the pill shown and placed right),
+  so the pixel probe could not judge the selected look there. The fixture now asserts the
+  selected look through its views on every host (the fill view shown, directly beneath the
+  current tool at its bezel rect, borderless with a white glyph; hidden for the others),
+  and adds the pixel and capsule-corner checks only when the capture actually painted
+  (the face reads `windowBackgroundColor` in the overlay's own appearance). A blank capture
+  is noted on stderr. The temporary `DIAG` output, the face draw counter and the CI
+  screenshot env are removed.
+
+## 2026-11-11 — LKM-671 CI fix 2: the selected fill is a view of its own
+
+- CI (macOS 26) still read white where the face-painted fill should be at Select (line 100);
+  macOS 27 locally passes. Rather than paint under a button that may paint over it, each
+  `MarkupButton` now keeps a `MarkupSelectionPill` (non-layer-backed, `draw()` fills an
+  accent capsule, labelColor outline under Increase Contrast) as a sibling directly below
+  itself in the face, moved/sized/shown with the button and its `selectedTool`. The face no
+  longer paints fills. Top placement, viewfinder, capsule bezels, on state and the
+  accessibility value are unchanged.
+- Temporary until the macOS 26 runner is green: the toolbar fixture prints `DIAG` lines
+  (face background, probes at the button's centre and edges, isBordered, borderShape, layer
+  backing, face subview order and draw count) before a failed selected-look check exits, and
+  CI sets `TREZI_MARKUP_TOOLBAR_SHOTS` so the PNGs ride in the uploaded test logs. The
+  fixture reads that variable itself: Bun's `spawnSync` did not pass on a `process.env`
+  change made at runtime, so no shots were ever written that way.
+- Evidence: toolbar/region/markup fixtures pass locally; a forced diagnostic run printed the
+  expected lines; the fresh shape-selected capture shows the pill at the top.
+
+## 2026-11-11 — LKM-671 CI fix: the selected fill is painted by the island face
+
+- CI (macOS 26 runner) failed `preview-markup-toolbar`: the selected tool's accent fill was
+  missing (probe read white); macOS 27 locally passed. A borderless `NSButton` on macOS 26
+  renders through its layer and never calls a `draw(_:)` override, so the fill drawn there
+  was skipped. `MarkupIslandFace.draw` now paints it beneath each selected `MarkupButton`
+  (`drawSelectedFill`); the face redraws on selection change and after island layout.
+- Evidence: toolbar/region/markup fixtures and `--changed` unit selection pass; fresh
+  idle/shape/Aqua/Dark Aqua captures show the fill and viewfinder at the top.
+
+## 2026-11-11 — LKM-671 follow-up: capsule buttons in the capsule island
+
+- Owner: square-ish button bezels looked wrong inside the rounded island. Every island
+  button (tools, shapes slot, Text, stroke menu, Undo/Redo/Delete, Add, Close) now uses
+  AppKit's own `borderShape = .capsule` (macOS 26; `MarkupButton.round`), so resting, hover
+  and pressed bezels are native capsules at the same size, spacing and hit area. The
+  borderless chevron and the system colour well are untouched. Older systems keep the
+  rounded bezel (no native capsule shape there).
+- The selected tool's accent fill is drawn as a capsule (radius = half its height) to match.
+- Evidence: `preview-markup-toolbar` asserts the capsule shape on every bordered control and
+  samples a selected-fill corner that a 7 pt radius would paint; Aqua/Dark Aqua shots checked.
+
+## 2026-11-11 — LKM-671: Mark up toolbar back at the top, a persistent selected tool, viewfinder
+
+- Three corrections to LKM-647, nothing else replayed. The island is anchored `inset` (10 pt)
+  under the page's top edge (`PreviewMarkupOverlay.layout`); the tools row is laid out first,
+  so wrapped rows and the error row grow downward and the controls under the pointer stay put
+  as the context widens. The snapshot frame still never changes with the toolbar.
+- Why a custom fill: the rounded bezel's own on state (`.toggle` or `.pushOnPushOff`, even
+  with `bezelColor`) renders almost the same as off, light or dark; the old accent
+  `contentTintColor` only tinted the glyph and read as unselected in the screenshot.
+  `MarkupButton.selectedTool` keeps `state = .on`, goes borderless and fills the bezel's rect
+  (bounds inset 2 pt vertically, a capsule since the follow-up below) with `controlAccentColor` and a white glyph; a
+  `labelColor` outline is added under Increase Contrast. Press highlight and focus ring stay
+  AppKit's. The shapes slot carries it for Rectangle/Circle/Arrow; the chevron menu never does.
+- Select's symbol is `viewfinder` (tooltip: "…drag to capture a region of the preview (S)").
+  The top bar's element picker keeps `cursorarrow`; it is a different tool.
+- Evidence: `preview-markup-toolbar` fixture now asserts top placement and samples pixels for
+  the accent fill on exactly the current tool after a key, the shapes menu, a click and a
+  repeat click, in Aqua and Dark Aqua (`TREZI_MARKUP_TOOLBAR_SHOTS` writes `1b`/`1c` shots);
+  `preview-markup`/`preview-markup-region` fixtures updated. Native smokes assert the top
+  anchor and the `selected` control state (host inspect gained `selected`/`on` per control);
+  native smoke not run locally (Forge/CI run it). `bun run build:native` passes. Increase
+  Contrast not exercised (tests never change system settings).
+
 ## 2026-11-11 — LKM-657: chat links reach native destinations; local artifacts are not "source"
 
 - Reproduced the screenshot case: an absolute path link ("the report and before/after

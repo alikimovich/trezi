@@ -6,10 +6,11 @@ composer through `src/native/markup-controller.ts`. It shares no state with pinn
 It opens from the top bar's pen button, the "…" menu and Actions, all one `markup` action.
 Its Select region tool (LKM-646, `src/native/PreviewMarkupRegion.swift`) picks a rectangle of
 that frozen capture; Add then sends only that part (with any marks in it), even with no marks.
-LKM-647 folded it into one Select tool (`cursorarrow`): a press on a drawn mark selects it
+LKM-647 folded it into one Select tool (`viewfinder` since LKM-671): a press on a drawn mark selects it
 (`src/native/PreviewMarkupSelection.swift`: colour, stroke, move, box/end handles, Delete),
 anywhere else it drags the region. The island (`src/native/PreviewMarkupOverlay.swift`) is
-contextual and sits at the bottom of the page with a trailing Close.
+contextual and sits at the top of the page (LKM-671) with a trailing Close; the current
+tool keeps an accent fill (`MarkupButton.selectedTool`) with its on state.
 
 LKM-205. A design overlay over the preview, in the style of Squints. The user's project
 DOM and CSS never change: everything is drawn by native views above the web view, and

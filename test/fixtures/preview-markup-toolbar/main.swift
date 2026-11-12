@@ -41,7 +41,7 @@ func key(_ characters: String, _ code: UInt16, _ modifiers: NSEvent.ModifierFlag
 }
 
 _ = NSApplication.shared
-let shots = ProcessInfo.processInfo.environment["MARKUP_TOOLBAR_SHOTS"]
+let shots = ProcessInfo.processInfo.environment["MARKUP_TOOLBAR_SHOTS"] ?? ProcessInfo.processInfo.environment["TREZI_MARKUP_TOOLBAR_SHOTS"]
 let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 800), styleMask: [.titled], backing: .buffered, defer: true)
 window.isReleasedWhenClosed = false
 let white = CGColor(srgbRed: 0.98, green: 0.98, blue: 0.98, alpha: 1)
@@ -51,6 +51,21 @@ overlay.frame = NSRect(x: 0, y: 0, width: 800, height: 500)
 window.contentView!.addSubview(overlay)
 overlay.layoutSubtreeIfNeeded(); overlay.layout()
 window.makeFirstResponder(overlay)
+/// A fixture-only magenta swatch in the island face's left padding, beside the tools row: the
+/// same subtree as the selected fill (inside the Liquid Glass view from macOS 26). capture()
+/// trusts a bitmap only when this pixel reads magenta, so a host whose offscreen capture leaves
+/// the glass subtree blank (the headless macOS 26 CI runner) is never mistaken for a painted one.
+final class Sentinel: NSView {
+    override func draw(_ dirtyRect: NSRect) { NSColor(srgbRed: 1, green: 0, blue: 1, alpha: 1).setFill(); bounds.fill() }
+}
+let sentinel = Sentinel(frame: .zero)
+func placeSentinel() {
+    let face = overlay.island.face
+    if sentinel.superview !== face { face.addSubview(sentinel) }
+    // Left padding (buttons start 8 pt in), at the tools row's middle, clear of the capsule corner.
+    sentinel.frame = NSRect(x: 2, y: 8 + 14 - 2, width: 4, height: 4)
+}
+placeSentinel()
 let canvas = overlay.canvas
 let pageFrame = canvas.frame
 func control(_ label: String) -> NSButton { overlay.controls.first { $0.cell?.accessibilityLabel() == label }! }
@@ -61,17 +76,18 @@ func shown() -> [String] {
 }
 func shot(_ name: String) {
     guard let shots else { return }
+    sentinel.isHidden = true; defer { sentinel.isHidden = false }
     overlay.layoutSubtreeIfNeeded(); overlay.display()
     let rep = overlay.bitmapImageRepForCachingDisplay(in: overlay.bounds)!
     overlay.cacheDisplay(in: overlay.bounds, to: rep)
     try? rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: shots).appendingPathComponent("\(name).png"))
 }
-/// The island stays inside the page at its bottom, Close at its right edge, nothing overlaps,
+/// The island stays inside the page at its top (LKM-671), Close at its right edge, nothing overlaps,
 /// and the snapshot never moves.
 func placed(_ label: String) {
     let island = overlay.barFrame, page = canvas.frame
     check(canvas.frame == pageFrame || label.hasPrefix("narrow"), "\(label): the snapshot never moves for the toolbar")
-    check(page.contains(island) && near(island.maxY, page.maxY - PreviewMarkupOverlay.inset, 1), "\(label): at the bottom, inside the page: \(island) in \(page)")
+    check(page.contains(island) && near(island.minY, page.minY + PreviewMarkupOverlay.inset, 1), "\(label): at the top, inside the page: \(island) in \(page)")
     let close = control("Close annotation tools").convert(control("Close annotation tools").bounds, to: overlay)
     check(!control("Close annotation tools").isHidden && near(close.maxX, island.maxX - 8, 1), "\(label): Close at the right edge")
     let views: [NSView] = overlay.controls.filter { !$0.isHidden } + (overlay.colorWell.isHidden ? [] : [overlay.colorWell])
@@ -82,18 +98,81 @@ func placed(_ label: String) {
     }
 }
 
+/// The overlay as a bitmap, or nil when this host's offscreen capture paints nothing (the
+/// headless CI runner returns a blank image even for the opaque face): pixel checks then
+/// fall back to the views that draw the selected look.
+func capture() -> (pixels: Pixels, scale: CGFloat)? {
+    overlay.layoutSubtreeIfNeeded(); placeSentinel(); overlay.display()
+    let rep = overlay.bitmapImageRepForCachingDisplay(in: overlay.bounds)!
+    overlay.cacheDisplay(in: overlay.bounds, to: rep)
+    let pixels = Pixels(rep.cgImage!), scale = CGFloat(pixels.width) / overlay.bounds.width
+    let mark = sentinel.convert(sentinel.bounds, to: overlay)
+    let probe = pixels.rgb(Int(mark.midX * scale), Int(mark.midY * scale))
+    let painted = abs(probe.r - 255) <= 40 && probe.g <= 40 && abs(probe.b - 255) <= 40
+    return painted ? (pixels, scale) : nil
+}
+var reportedBlank = false
+func noteBlank() {
+    if !reportedBlank { FileHandle.standardError.write(Data("NOTE offscreen capture painted nothing on this host: selected-look pixels checked through the views only\n".utf8)); reportedBlank = true }
+}
+
+/// LKM-671: the current tool, and only it, is painted with the accent fill and keeps its on
+/// state, after a click, a key or a menu choice; other tools show their plain bezel.
+func selectedLook(_ label: String, _ current: String) {
+    let captured = capture()
+    if captured == nil { noteBlank() }
+    let accent = NSColor.controlAccentColor.usingColorSpace(.sRGB)!
+    for name in ["Select", "Pen", "Text", overlay.shape.label] {
+        let button = control(name) as! MarkupButton
+        let on = name == current
+        // The fill is its own view, directly beneath the button, at the bezel's rect.
+        let pill = button.pill
+        let below = pill.superview.map { parent in parent.subviews.firstIndex(of: pill).map { $0 < parent.subviews.firstIndex(of: button)! } ?? false } ?? false
+        let placedRight = pill.superview === button.superview && pill.frame == button.selectedFrame.offsetBy(dx: button.frame.minX, dy: button.frame.minY)
+        check(on ? (!pill.isHidden && below && placedRight && !button.isBordered && button.contentTintColor == .white) : (pill.superview == nil || pill.isHidden) && button.isBordered,
+              "\(label): \(name)'s fill view \(on ? "shows beneath it" : "is hidden")")
+        if let (pixels, scale) = captured {
+            let frame = button.convert(button.selectedFrame, to: overlay)
+            // Beside the glyph, inside the bezel: the fill (or not) shows there.
+            let probe = pixels.rgb(Int((frame.minX + 4) * scale), Int(frame.midY * scale))
+            let filled = abs(probe.r - Int(accent.redComponent * 255)) < 40 && abs(probe.g - Int(accent.greenComponent * 255)) < 40 && abs(probe.b - Int(accent.blueComponent * 255)) < 40
+            check(filled == on, "\(label): \(name) \(on ? "shows" : "does not show") as selected: \(probe)")
+        }
+        check((button.state == .on) == on && button.selectedTool == on, "\(label): \(name) keeps its \(on ? "on" : "off") state")
+        check((button.cell?.accessibilityValue() as? String) == (on ? "selected" : ""), "\(label): \(name) says whether it is selected")
+    }
+}
+
 // MARK: idle: compact, no filler, Close at the right
 check(shown() == ["Select", "Pen", "Rectangle", "Shapes", "Text", "Close annotation tools"], "idle is compact: \(shown())")
 check(overlay.statusText.isEmpty && !overlay.addEnabled && !overlay.undoEnabled, "no filler text, no disabled Add or Undo on show")
 let close = control("Close annotation tools")
 check(close.image?.accessibilityDescription == "Close annotation tools" && close.title.isEmpty && close.toolTip == "Close annotation tools (Esc)", "an icon-only X with its label and tooltip")
 placed("idle"); let idleWidth = overlay.barFrame.width
+check(control("Select").image != nil && MarkupTool.select.symbol == "viewfinder" && NSImage(systemSymbolName: "viewfinder", accessibilityDescription: nil) != nil, "Select shows the viewfinder")
+check(control("Select").toolTip?.contains("drag to capture a region") == true, "its tooltip says it selects a region")
+selectedLook("idle", "Select")
+// LKM-671: capsule buttons in the capsule island, resting and selected alike.
+if #available(macOS 26.0, *) {
+    for button in overlay.controls where button !== overlay.shapeMenuButton {
+        check(button.borderShape == .capsule, "\(button.cell?.accessibilityLabel() ?? "?") has a capsule bezel")
+    }
+}
+if let (pixels, scale) = capture() {
+    let button = control("Select") as! MarkupButton
+    let frame = button.convert(button.selectedFrame, to: overlay)
+    // A 7 pt corner radius would paint this point; the capsule's 12 pt radius leaves it clear.
+    let corner = pixels.rgb(Int((frame.minX + 2.5) * scale), Int((frame.minY + 2.5) * scale))
+    let accent = NSColor.controlAccentColor.usingColorSpace(.sRGB)!
+    check(abs(corner.b - Int(accent.blueComponent * 255)) > 40 || abs(corner.r - Int(accent.redComponent * 255)) > 40, "the selected fill is a capsule, its corner clear: \(corner)")
+} else { noteBlank() }
 shot("1-idle")
 
 // MARK: a drawing tool: its colour and stroke, nothing else yet
 overlay.keyDown(with: key("p", 35, window: window))
 check(shown() == ["Select", "Pen", "Rectangle", "Shapes", "Text", "Color", "Stroke width", "Close annotation tools"], "the pen adds colour and stroke: \(shown())")
 check(overlay.barFrame.width > idleWidth, "the island widens with the context")
+selectedLook("P key", "Pen")
 placed("pen")
 overlay.keyDown(with: key("t", 17, window: window))
 check(!overlay.colorWell.isHidden && overlay.strokePopUp.isHidden, "Text: colour, no stroke width")
@@ -103,6 +182,20 @@ check(shown().count == 6, "Select with nothing picked: compact again")
 check(overlay.shapeMenu.items.map(\.title) == ["Rectangle", "Circle", "Arrow"], "the shapes menu")
 overlay.shapeMenu.performActionForItem(at: 1)
 check(overlay.tool == .circle && control("Circle").state == .on && overlay.shapeMenu.items[1].state == .on, "a menu choice picks that shape in the slot")
+selectedLook("shapes menu", "Circle")
+// A mouse click, after the press has ended.
+control("Text").performClick(nil)
+check(overlay.tool == .text, "a click picks Text"); selectedLook("Text click", "Text")
+control("Text").performClick(nil)
+check(overlay.tool == .text, "a second click keeps it"); selectedLook("Text again", "Text")
+control("Circle").performClick(nil)
+check(overlay.tool == .circle, "the slot picks its shape"); selectedLook("shape click", "Circle")
+shot("1b-shape-selected")
+for name in [NSAppearance.Name.aqua, .darkAqua] {
+    overlay.appearance = NSAppearance(named: name)
+    selectedLook("\(name.rawValue)", "Circle"); shot("1c-\(name.rawValue)")
+}
+overlay.appearance = nil
 overlay.select(.rectangle)
 check(control("Rectangle").state == .on, "R or the menu: Rectangle")
 
