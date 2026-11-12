@@ -1,5 +1,16 @@
 # PROGRESS LOG
 
+## 2026-11-12 — LKM-671 CI fix 4: the capture sentinel sits inside the island face
+
+- CI still failed at Select (line 133): the overlay-level magenta sentinel painted, but the
+  island face (inside `NSGlassEffectView` on macOS 26) still captured white, so the pixel
+  probe ran on a capture whose glass subtree was blank. The sentinel now lives in the
+  island face's left padding, beside the tools row, the same subtree as the selected fill,
+  so the pixel and capsule-corner checks run only where that subtree really paints; the
+  view-level selected-look checks still run everywhere. No product code changed.
+- Evidence: `preview-markup*` fixtures pass locally with pixel checks active (no blank
+  note); the shape-selected shot shows the top island, viewfinder and Circle filled.
+
 ## 2026-11-12 — LKM-671 CI fix 3: the toolbar fixture survives a blank offscreen capture
 
 - The CI diagnostics showed the runner's `cacheDisplay` capture is blank everywhere (the

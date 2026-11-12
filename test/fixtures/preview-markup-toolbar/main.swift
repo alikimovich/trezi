@@ -51,14 +51,21 @@ overlay.frame = NSRect(x: 0, y: 0, width: 800, height: 500)
 window.contentView!.addSubview(overlay)
 overlay.layoutSubtreeIfNeeded(); overlay.layout()
 window.makeFirstResponder(overlay)
-/// A fixture-only magenta swatch in the overlay's bottom-left corner, clear of the island and
-/// the canvas checks: capture() trusts a bitmap only when this pixel reads magenta, so a blank
-/// white capture (light mode on the headless CI runner) is never mistaken for a painted one.
+/// A fixture-only magenta swatch in the island face's left padding, beside the tools row: the
+/// same subtree as the selected fill (inside the Liquid Glass view from macOS 26). capture()
+/// trusts a bitmap only when this pixel reads magenta, so a host whose offscreen capture leaves
+/// the glass subtree blank (the headless macOS 26 CI runner) is never mistaken for a painted one.
 final class Sentinel: NSView {
     override func draw(_ dirtyRect: NSRect) { NSColor(srgbRed: 1, green: 0, blue: 1, alpha: 1).setFill(); bounds.fill() }
 }
-let sentinel = Sentinel(frame: NSRect(x: 0, y: overlay.bounds.height - 8, width: 8, height: 8))
-overlay.addSubview(sentinel)
+let sentinel = Sentinel(frame: .zero)
+func placeSentinel() {
+    let face = overlay.island.face
+    if sentinel.superview !== face { face.addSubview(sentinel) }
+    // Left padding (buttons start 8 pt in), at the tools row's middle, clear of the capsule corner.
+    sentinel.frame = NSRect(x: 2, y: 8 + 14 - 2, width: 4, height: 4)
+}
+placeSentinel()
 let canvas = overlay.canvas
 let pageFrame = canvas.frame
 func control(_ label: String) -> NSButton { overlay.controls.first { $0.cell?.accessibilityLabel() == label }! }
@@ -95,8 +102,7 @@ func placed(_ label: String) {
 /// headless CI runner returns a blank image even for the opaque face): pixel checks then
 /// fall back to the views that draw the selected look.
 func capture() -> (pixels: Pixels, scale: CGFloat)? {
-    sentinel.frame = NSRect(x: 0, y: overlay.bounds.height - 8, width: 8, height: 8)
-    overlay.layoutSubtreeIfNeeded(); overlay.display()
+    overlay.layoutSubtreeIfNeeded(); placeSentinel(); overlay.display()
     let rep = overlay.bitmapImageRepForCachingDisplay(in: overlay.bounds)!
     overlay.cacheDisplay(in: overlay.bounds, to: rep)
     let pixels = Pixels(rep.cgImage!), scale = CGFloat(pixels.width) / overlay.bounds.width
