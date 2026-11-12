@@ -1,5 +1,28 @@
 # PROGRESS LOG
 
+## 2026-11-11 — LKM-671: Mark up toolbar back at the top, a persistent selected tool, viewfinder
+
+- Three corrections to LKM-647, nothing else replayed. The island is anchored `inset` (10 pt)
+  under the page's top edge (`PreviewMarkupOverlay.layout`); the tools row is laid out first,
+  so wrapped rows and the error row grow downward and the controls under the pointer stay put
+  as the context widens. The snapshot frame still never changes with the toolbar.
+- Why a custom fill: the rounded bezel's own on state (`.toggle` or `.pushOnPushOff`, even
+  with `bezelColor`) renders almost the same as off, light or dark; the old accent
+  `contentTintColor` only tinted the glyph and read as unselected in the screenshot.
+  `MarkupButton.selectedTool` keeps `state = .on`, goes borderless and fills the bezel's rect
+  (bounds inset 2 pt vertically, radius 7) with `controlAccentColor` and a white glyph; a
+  `labelColor` outline is added under Increase Contrast. Press highlight and focus ring stay
+  AppKit's. The shapes slot carries it for Rectangle/Circle/Arrow; the chevron menu never does.
+- Select's symbol is `viewfinder` (tooltip: "…drag to capture a region of the preview (S)").
+  The top bar's element picker keeps `cursorarrow`; it is a different tool.
+- Evidence: `preview-markup-toolbar` fixture now asserts top placement and samples pixels for
+  the accent fill on exactly the current tool after a key, the shapes menu, a click and a
+  repeat click, in Aqua and Dark Aqua (`TREZI_MARKUP_TOOLBAR_SHOTS` writes `1b`/`1c` shots);
+  `preview-markup`/`preview-markup-region` fixtures updated. Native smokes assert the top
+  anchor and the `selected` control state (host inspect gained `selected`/`on` per control);
+  native smoke not run locally (Forge/CI run it). `bun run build:native` passes. Increase
+  Contrast not exercised (tests never change system settings).
+
 ## 2026-11-11 — LKM-657: chat links reach native destinations; local artifacts are not "source"
 
 - Reproduced the screenshot case: an absolute path link ("the report and before/after

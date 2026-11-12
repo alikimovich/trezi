@@ -9,7 +9,7 @@ import AppKit
 /// shapes, Text and a trailing Close. A drawing tool or a selected mark adds its colour (the
 /// standard panel, LKM-645) and, for stroked marks, its weight; content adds Undo, Redo,
 /// Delete and Add to chat. No filler text: only a failure or "Adding…" is ever written there.
-/// It sits at the bottom of the page; its width follows the context, the snapshot never moves.
+/// It sits at the top of the page (LKM-671); its width follows the context, the snapshot never moves.
 final class PreviewMarkupOverlay: NSView {
     private static let padding: CGFloat = 8, gap: CGFloat = 4, rowHeight: CGFloat = 28, toolWidth: CGFloat = 32
     private static let chevronWidth: CGFloat = 16, colorWidth: CGFloat = 44, strokeWidth: CGFloat = 58, addWidth: CGFloat = 104
@@ -90,7 +90,7 @@ final class PreviewMarkupOverlay: NSView {
         canvas.changed = { [weak self] in self?.refresh() }
         for tool in [MarkupTool.select, .pen, .text] {
             let button = MarkupButton()
-            let hint = tool == .select ? "Select a mark to edit it, or drag to send part of the preview (S)" : "\(tool.label) (\(tool.key.uppercased()))"
+            let hint = tool == .select ? "Select a mark to edit it, or drag to capture a region of the preview (S)" : "\(tool.label) (\(tool.key.uppercased()))"
             configure(button, label: tool.label, symbol: tool.symbol, hint: hint, role: .radioButton)
             button.setButtonType(.toggle); button.action = #selector(pick(_:))
             toolButtons.append((tool, button))
@@ -208,12 +208,9 @@ final class PreviewMarkupOverlay: NSView {
         let first = span(rows[0]) + (rows[0].isEmpty ? 0 : gap) + Self.toolWidth
         var width = min(room, padding * 2 + max(first, rows.dropFirst().map(span).max() ?? 0))
         if errorShown { width = max(width, min(room, Self.errorWidth)) }
+        // LKM-671: the tools row is the first thing in the island, so it never moves when an
+        // error or a wrapped row is added below it.
         var top = padding
-        if errorShown {
-            let text = errorLabel.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: width - padding * 2, height: 200)).height ?? 16
-            errorLabel.frame = NSRect(x: padding, y: top, width: width - padding * 2, height: text)
-            top = errorLabel.frame.maxY + padding / 2
-        }
         for (index, line) in rows.enumerated() {
             var x = padding
             for (offset, (view, itemWidth)) in line.enumerated() {
@@ -224,10 +221,15 @@ final class PreviewMarkupOverlay: NSView {
             if index == 0 { closeButton.frame = NSRect(x: width - padding - Self.toolWidth, y: top, width: Self.toolWidth, height: row) }
             top += row + (index == rows.count - 1 ? 0 : gap)
         }
-        // Anchored to the bottom of the page, inside it, over the snapshot: a taller island (an
-        // error, a wrapped row) grows upward and the controls under the pointer stay put.
+        if errorShown {
+            let text = errorLabel.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: width - padding * 2, height: 200)).height ?? 16
+            errorLabel.frame = NSRect(x: padding, y: top + padding / 2, width: width - padding * 2, height: text)
+            top = errorLabel.frame.maxY
+        }
+        // LKM-671: anchored to the top of the page, inside it, over the snapshot: a taller island
+        // (a wrapped row, an error) grows downward and the controls under the pointer stay put.
         let height = top + padding
-        island.frame = backingAlignedRect(NSRect(x: shown.midX - width / 2, y: shown.maxY - Self.inset - height, width: width, height: height), options: .alignAllEdgesNearest)
+        island.frame = backingAlignedRect(NSRect(x: shown.midX - width / 2, y: shown.minY + Self.inset, width: width, height: height), options: .alignAllEdgesNearest)
     }
     /// The tools divider always shows (in the idle island it sets Close apart); the style
     /// divider only between colour/stroke and the history controls.
@@ -282,9 +284,11 @@ final class PreviewMarkupOverlay: NSView {
             }
         }
     }
-    private func mark(_ button: NSButton, on: Bool) {
+    /// LKM-671: the current tool keeps its on state and a filled accent bezel
+    /// (`MarkupButton.selectedTool`) after the press ends, for a click, a key or the menu alike.
+    private func mark(_ button: MarkupButton, on: Bool) {
         button.state = on ? .on : .off
-        button.contentTintColor = on ? .controlAccentColor : nil
+        button.selectedTool = on
         button.cell?.setAccessibilityValue(on ? "selected" : "")
     }
     /// A failure stays on screen, in its own row, until the next attempt.

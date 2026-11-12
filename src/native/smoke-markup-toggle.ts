@@ -42,7 +42,7 @@ export function markupToggleChecks(
     assert.deepEqual(now, was, `${label}: the preview keeps its frames, viewport and scroll`)
   const near = (a: number, b: number, label: string) =>
     assert.ok(Math.abs(a - b) <= 1, `${label}: ${a} vs ${b}`)
-  /** The island floats at the bottom of the snapshot (LKM-647), which lies exactly on the live page. */
+  /** The island floats at the top of the snapshot (LKM-671), which lies exactly on the live page. */
   const island = (open: State, frames: State, label: string) => {
     const { frame, snapshot, hitIsland, hitBeside, hitBesideDetail } = open.island as {
       frame: Rect
@@ -54,8 +54,8 @@ export function markupToggleChecks(
     const web = frames.webView as Rect
     for (const key of ['x', 'y', 'width', 'height'] as const)
       near(snapshot[key], web[key], `${label}: the snapshot's ${key} is the page's`)
-    // Window points run up: the island's bottom edge sits 10 pt over the page's.
-    near(frame.y, snapshot.y + 10, `${label}: island at the bottom`)
+    // Window points run up: the island's top edge sits 10 pt under the page's.
+    near(frame.y + frame.height, snapshot.y + snapshot.height - 10, `${label}: island at the top`)
     near(frame.x + frame.width / 2, snapshot.x + snapshot.width / 2, `${label}: island centred`)
     assert.ok(frame.x >= snapshot.x && frame.x + frame.width <= snapshot.x + snapshot.width)
     assert.equal(hitIsland, true, `${label}: the island takes its own clicks`)

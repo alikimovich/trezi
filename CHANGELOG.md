@@ -21,6 +21,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Changed
 
+- The Mark up toolbar is back at the top of the preview, the current tool (including the shape in the shapes button) stays visibly selected with an accent fill, and the Select tool's icon is now a viewfinder (LKM-671).
 - Links in chat to files on this Mac now go somewhere useful: project source (relative, absolute or `file:` paths) opens in Trezi's editor at its lines, project screenshots and PDFs open in Quick Look, and folders show in Finder; a link outside the project, missing or unsupported says where it points and offers Reveal in Finder or Copy Path instead of a generic editor error. Other link schemes stay blocked (LKM-657).
 - The Mark up toolbar is compact and contextual at the bottom of the preview: Select, Pen, a shapes menu, Text and a trailing close button (X) when idle; colour and stroke width appear for drawing tools or a selected mark, and Undo, Redo, Delete and Add to chat once there is something to send. The "Snapshot of the preview" text and the Cancel button are gone. Select picks a drawn mark to recolour, restroke, move, resize or delete it, or drags a region to send (LKM-647).
 

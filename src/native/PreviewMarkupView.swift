@@ -229,6 +229,29 @@ final class MarkupButton: NSButton {
     override func keyDown(with event: NSEvent) {
         if [36, 49, 76].contains(event.keyCode) { performClick(nil) } else { nextResponder?.keyDown(with: event) }
     }
+    /// LKM-671: the current tool. Its on state shows as a filled accent bezel with a white
+    /// glyph that stays after the press ends: the rounded bezel's own on state is too faint
+    /// to read (light or dark), and the press highlight and focus ring stay distinct from it.
+    var selectedTool = false {
+        didSet {
+            guard selectedTool != oldValue else { return }
+            isBordered = !selectedTool
+            contentTintColor = selectedTool ? .white : nil
+            needsDisplay = true
+        }
+    }
+    /// The rounded bezel's own rect in the 28 pt row, so the fill matches the other buttons.
+    var selectedFrame: NSRect { bounds.insetBy(dx: 0, dy: 2) }
+    override func draw(_ dirtyRect: NSRect) {
+        if selectedTool {
+            let path = NSBezierPath(roundedRect: selectedFrame, xRadius: 7, yRadius: 7)
+            NSColor.controlAccentColor.setFill(); path.fill()
+            if NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast {
+                NSColor.labelColor.setStroke(); path.lineWidth = 1; path.stroke()
+            }
+        }
+        super.draw(dirtyRect)
+    }
 }
 
 /// LKM-645: the ink swatch, a real AppKit colour well: a click (or Space/Return) opens the
@@ -254,7 +277,7 @@ final class MarkupPopUp: NSPopUpButton {
     }
 }
 
-/// LKM-448/647: the Mark up controls as an island floating at the bottom of the preview, over the
+/// LKM-448/647/671: the Mark up controls as an island floating at the top of the preview, over the
 /// snapshot, in the look of the other islands there (`FloatingIsland`): a Liquid Glass edge
 /// from macOS 26 and an opaque face, so no mark or page pixel shows through a control. Its own
 /// frame takes the pointer; everywhere else the snapshot takes the pen.

@@ -8,14 +8,15 @@ import CryptoKit
 /// composite, so the two agree by construction.
 enum MarkupTool: String, CaseIterable {
     /// LKM-646/647: Select picks a drawn mark to edit, or drags a region of the snapshot to
-    /// send; it draws no mark itself.
+    /// send; it draws no mark itself. LKM-671: its glyph is the viewfinder (region capture),
+    /// not the pointer arrow.
     case select, pen, rectangle, circle, arrow, text
     var label: String { rawValue.capitalized }
     /// The plain key that picks it.
     var key: String { String(rawValue.prefix(1)) }
     var symbol: String {
         switch self {
-        case .select: "cursorarrow"
+        case .select: "viewfinder"
         case .pen: "pencil"
         case .rectangle: "rectangle"
         case .circle: "circle"

@@ -66,12 +66,12 @@ func shot(_ name: String) {
     overlay.cacheDisplay(in: overlay.bounds, to: rep)
     try? rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: shots).appendingPathComponent("\(name).png"))
 }
-/// The island stays inside the page at its bottom, Close at its right edge, nothing overlaps,
+/// The island stays inside the page at its top (LKM-671), Close at its right edge, nothing overlaps,
 /// and the snapshot never moves.
 func placed(_ label: String) {
     let island = overlay.barFrame, page = canvas.frame
     check(canvas.frame == pageFrame || label.hasPrefix("narrow"), "\(label): the snapshot never moves for the toolbar")
-    check(page.contains(island) && near(island.maxY, page.maxY - PreviewMarkupOverlay.inset, 1), "\(label): at the bottom, inside the page: \(island) in \(page)")
+    check(page.contains(island) && near(island.minY, page.minY + PreviewMarkupOverlay.inset, 1), "\(label): at the top, inside the page: \(island) in \(page)")
     let close = control("Close annotation tools").convert(control("Close annotation tools").bounds, to: overlay)
     check(!control("Close annotation tools").isHidden && near(close.maxX, island.maxX - 8, 1), "\(label): Close at the right edge")
     let views: [NSView] = overlay.controls.filter { !$0.isHidden } + (overlay.colorWell.isHidden ? [] : [overlay.colorWell])
@@ -82,18 +82,42 @@ func placed(_ label: String) {
     }
 }
 
+/// LKM-671: the current tool, and only it, is painted with the accent fill and keeps its on
+/// state, after a click, a key or a menu choice; other tools show their plain bezel.
+func selectedLook(_ label: String, _ current: String) {
+    overlay.layoutSubtreeIfNeeded(); overlay.display()
+    let rep = overlay.bitmapImageRepForCachingDisplay(in: overlay.bounds)!
+    overlay.cacheDisplay(in: overlay.bounds, to: rep)
+    let pixels = Pixels(rep.cgImage!), scale = CGFloat(pixels.width) / overlay.bounds.width
+    let accent = NSColor.controlAccentColor.usingColorSpace(.sRGB)!
+    for name in ["Select", "Pen", "Text", overlay.shape.label] {
+        let button = control(name) as! MarkupButton
+        let frame = button.convert(button.selectedFrame, to: overlay)
+        // Beside the glyph, inside the bezel: the fill (or not) shows there.
+        let probe = pixels.rgb(Int((frame.minX + 4) * scale), Int(frame.midY * scale))
+        let filled = abs(probe.r - Int(accent.redComponent * 255)) < 40 && abs(probe.g - Int(accent.greenComponent * 255)) < 40 && abs(probe.b - Int(accent.blueComponent * 255)) < 40
+        let on = name == current
+        check(filled == on && (button.state == .on) == on && button.selectedTool == on, "\(label): \(name) \(on ? "shows" : "does not show") as selected: \(probe)")
+        check((button.cell?.accessibilityValue() as? String) == (on ? "selected" : ""), "\(label): \(name) says whether it is selected")
+    }
+}
+
 // MARK: idle: compact, no filler, Close at the right
 check(shown() == ["Select", "Pen", "Rectangle", "Shapes", "Text", "Close annotation tools"], "idle is compact: \(shown())")
 check(overlay.statusText.isEmpty && !overlay.addEnabled && !overlay.undoEnabled, "no filler text, no disabled Add or Undo on show")
 let close = control("Close annotation tools")
 check(close.image?.accessibilityDescription == "Close annotation tools" && close.title.isEmpty && close.toolTip == "Close annotation tools (Esc)", "an icon-only X with its label and tooltip")
 placed("idle"); let idleWidth = overlay.barFrame.width
+check(control("Select").image != nil && MarkupTool.select.symbol == "viewfinder" && NSImage(systemSymbolName: "viewfinder", accessibilityDescription: nil) != nil, "Select shows the viewfinder")
+check(control("Select").toolTip?.contains("drag to capture a region") == true, "its tooltip says it selects a region")
+selectedLook("idle", "Select")
 shot("1-idle")
 
 // MARK: a drawing tool: its colour and stroke, nothing else yet
 overlay.keyDown(with: key("p", 35, window: window))
 check(shown() == ["Select", "Pen", "Rectangle", "Shapes", "Text", "Color", "Stroke width", "Close annotation tools"], "the pen adds colour and stroke: \(shown())")
 check(overlay.barFrame.width > idleWidth, "the island widens with the context")
+selectedLook("P key", "Pen")
 placed("pen")
 overlay.keyDown(with: key("t", 17, window: window))
 check(!overlay.colorWell.isHidden && overlay.strokePopUp.isHidden, "Text: colour, no stroke width")
@@ -103,6 +127,20 @@ check(shown().count == 6, "Select with nothing picked: compact again")
 check(overlay.shapeMenu.items.map(\.title) == ["Rectangle", "Circle", "Arrow"], "the shapes menu")
 overlay.shapeMenu.performActionForItem(at: 1)
 check(overlay.tool == .circle && control("Circle").state == .on && overlay.shapeMenu.items[1].state == .on, "a menu choice picks that shape in the slot")
+selectedLook("shapes menu", "Circle")
+// A mouse click, after the press has ended.
+control("Text").performClick(nil)
+check(overlay.tool == .text, "a click picks Text"); selectedLook("Text click", "Text")
+control("Text").performClick(nil)
+check(overlay.tool == .text, "a second click keeps it"); selectedLook("Text again", "Text")
+control("Circle").performClick(nil)
+check(overlay.tool == .circle, "the slot picks its shape"); selectedLook("shape click", "Circle")
+shot("1b-shape-selected")
+for name in [NSAppearance.Name.aqua, .darkAqua] {
+    overlay.appearance = NSAppearance(named: name)
+    selectedLook("\(name.rawValue)", "Circle"); shot("1c-\(name.rawValue)")
+}
+overlay.appearance = nil
 overlay.select(.rectangle)
 check(control("Rectangle").state == .on, "R or the menu: Rectangle")
 
