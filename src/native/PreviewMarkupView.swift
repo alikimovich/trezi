@@ -354,12 +354,9 @@ final class PreviewMarkupIsland: NSView {
 /// The island's opaque face, drawn in the current appearance.
 final class MarkupIslandFace: NSView {
     override var isFlipped: Bool { true }
-    /// How often the face painted (the toolbar fixture's diagnostics read it).
-    private(set) var drawCount = 0
     override func draw(_ dirtyRect: NSRect) {
         NSColor.windowBackgroundColor.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: PreviewMarkupIsland.cornerRadius, yRadius: PreviewMarkupIsland.cornerRadius).fill()
-        drawCount += 1
     }
 }
 

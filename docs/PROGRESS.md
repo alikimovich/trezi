@@ -1,5 +1,17 @@
 # PROGRESS LOG
 
+## 2026-11-12 — LKM-671 CI fix 3: the toolbar fixture survives a blank offscreen capture
+
+- The CI diagnostics showed the runner's `cacheDisplay` capture is blank everywhere (the
+  opaque face and the snapshot read pure white too, with the pill shown and placed right),
+  so the pixel probe could not judge the selected look there. The fixture now asserts the
+  selected look through its views on every host (the fill view shown, directly beneath the
+  current tool at its bezel rect, borderless with a white glyph; hidden for the others),
+  and adds the pixel and capsule-corner checks only when the capture actually painted
+  (the face reads `windowBackgroundColor` in the overlay's own appearance). A blank capture
+  is noted on stderr. The temporary `DIAG` output, the face draw counter and the CI
+  screenshot env are removed.
+
 ## 2026-11-11 — LKM-671 CI fix 2: the selected fill is a view of its own
 
 - CI (macOS 26) still read white where the face-painted fill should be at Select (line 100);
