@@ -222,6 +222,8 @@ export const UNIT = [
   'code-reveal',
   'code-navigation',
   'code-links',
+  'chat-links',
+  'local-file-links',
   'branch-diff',
   'preview-open',
   'preview-cache-fence',

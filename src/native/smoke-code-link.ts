@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { codeLinkHref, codeLinkMarkdown } from '../shared/code-link'
 import type { NativeBridge } from './bridge'
 import { nativeChat } from './chat-runtime'
@@ -13,9 +14,16 @@ const FILTER = codeLinkHref('filter.html', 8, 10)
 const INDEX = codeLinkHref('index.html', 3)
 const ESCAPES = {
   outside: 'trezi-code:../outside.css#L1',
-  symlink: 'trezi-code:code-link-escape.css#L1',
-  absolute: 'trezi-code:/etc/hosts#L1'
+  symlink: 'trezi-code:code-link-escape.css#L1'
 }
+/** LKM-657: an absolute path outside the project is a notice naming it, not an error. */
+const ABSOLUTE = 'trezi-code:/etc/hosts#L1'
+/** LKM-657: a synthetic agent report with before/after screenshots inside the project. */
+const REPORT = 'code-link-report'
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64'
+)
 const OTHER = '../Code Link Other'
 const DRAFT = '\n<!-- code link draft -->'
 /** The project and conversation the check started in, and the conversation step's extra
@@ -93,6 +101,16 @@ export async function checkCodeLinkClick(host: NativeBridge, fixture: string, ar
   }
 
   writeFileSync(outside, '.outside { color: red; }\n')
+  const report = join(realpathSync(fixture), REPORT)
+  mkdirSync(report, { recursive: true })
+  writeFileSync(join(report, 'report.md'), '# Synthetic report\n\nNo real checks ran.\n')
+  writeFileSync(join(report, 'before.png'), PNG)
+  writeFileSync(join(report, 'after.png'), PNG)
+  const artifactLinks = {
+    image: pathToFileURL(join(report, 'before.png')).href,
+    folder: report,
+    source: `${join(report, 'report.md')}#L1`
+  }
   rmSync(join(fixture, 'code-link-escape.css'), { force: true })
   symlinkSync('../outside.css', join(fixture, 'code-link-escape.css'))
   const text = [
@@ -101,7 +119,9 @@ export async function checkCodeLinkClick(host: NativeBridge, fixture: string, ar
     `- ${codeLinkMarkdown({ file: 'filter.html', startLine: 8, endLine: 10 })} (class rule)`,
     `- ${codeLinkMarkdown({ file: 'index.html', startLine: 3, endLine: 3 })} (element)`,
     '',
-    `Not project files: [outside](${ESCAPES.outside}), [symlink](${ESCAPES.symlink}), [absolute](${ESCAPES.absolute}).`
+    `Not project files: [outside](${ESCAPES.outside}), [symlink](${ESCAPES.symlink}), [absolute](${ABSOLUTE}).`,
+    '',
+    `Saved [the report](${artifactLinks.source}), [before](${artifactLinks.image}) and [the folder](${artifactLinks.folder}).`
   ].join('\n')
   chat.messages.push({
     id: MESSAGE,
@@ -192,6 +212,40 @@ export async function checkCodeLinkClick(host: NativeBridge, fixture: string, ar
     }
     writeFileSync(join(artifacts, 'code-link-refused.json'), JSON.stringify(refused, null, 2))
     evidence['code-link-refused'] = refused
+
+    // 4b. LKM-657: an absolute path outside the project names its destination and offers
+    //     Reveal in Finder / Copy Path; the report's screenshot opens in Quick Look inside
+    //     Trezi, its folder reveals (recorded, not performed, in a test profile) and its
+    //     Markdown opens in the editor. Nothing reaches AppKit's link handling.
+    {
+      const before = await editor()
+      const clicked = await click(ABSOLUTE)
+      const card = await waitFor(
+        async () => (await cards()).find((c) => c.id === 'link'),
+        'absolute link notice'
+      )
+      assert.match(card.detail, /outside this project/, card.detail)
+      assert.deepEqual(card.actions, ['Reveal in Finder', 'Copy Path', 'Dismiss'])
+      assert.equal((await editor()).source, before.source, 'absolute: the editor kept its file')
+      await host.request('chatPerform', { action: 'link-dismiss', card: 'link' })
+      await waitFor(async () => !(await cards()).some((c) => c.id === 'link'), 'notice dismissed')
+      const shown = (await host.request('artifactPreviewInspect')).shown
+      await click(artifactLinks.image)
+      const preview = await waitFor(async () => {
+        const state = await host.request('artifactPreviewInspect')
+        return state.shown > shown && state.visible && state
+      }, 'screenshot in Quick Look')
+      assert.equal(preview.item, join(report, 'before.png'))
+      await capture('code-link-artifact', 'window', { clicked, card, preview })
+      await host.request('artifactPreviewInspect', { close: true })
+      await click(artifactLinks.folder)
+      await waitFor(
+        async () => (await host.request('artifactPreviewInspect')).revealed.includes(report),
+        'report folder revealed'
+      )
+      const source = await reveal(artifactLinks.source, /^code-link-report\/report\.md/, 1, 1)
+      evidence['code-link-artifact'] = { notice: card, preview, source: source.state.source }
+    }
     await delay(600)
     const front = await host.request('chatText', { frontmost: true })
     if (process.env.TREZI_NATIVE_BACKGROUND_TEST !== '1')
@@ -265,7 +319,7 @@ export async function checkCodeLinkClick(host: NativeBridge, fixture: string, ar
     evidence.draft = { dirty: draft.dirty, kept: true, written: false, front }
     writeFileSync(join(artifacts, 'code-link-click.json'), JSON.stringify(evidence, null, 2))
     console.log(
-      'Code link click: candidates open the exact range in Trezi’s editor, never AppKit/NSWorkspace; .., symlink and absolute links refused in chat; repeat and alternate clicks re-reveal; stale links from another conversation or project reveal nothing; draft kept, no file written.'
+      'Code link click: candidates open the exact range in Trezi’s editor, never AppKit/NSWorkspace; .. and symlink links refused in chat, an absolute outside path named with Reveal/Copy; a report screenshot in Quick Look, its folder revealed, its Markdown in the editor; repeat and alternate clicks re-reveal; stale links from another conversation or project reveal nothing; draft kept, no file written.'
     )
   } finally {
     await restoreCodeLinkClick(host, fixture)
@@ -315,4 +369,7 @@ export async function restoreCodeLinkClick(host: NativeBridge, fixture: string) 
   rmSync(join(fixture, 'code-link-escape.css'), { force: true })
   rmSync(join(fixture, '../outside.css'), { force: true })
   rmSync(join(fixture, OTHER), { recursive: true, force: true })
+  rmSync(join(fixture, REPORT), { recursive: true, force: true })
+  await host.request('chatPerform', { action: 'link-dismiss', card: 'link' })
+  await host.request('artifactPreviewInspect', { close: true }).catch(() => {})
 }

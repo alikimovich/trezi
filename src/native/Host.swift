@@ -494,7 +494,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         case "quit":
             if let status = c["status"] as? Int, status != 0 { exitStatus = 1 }
             terminateHost()
-        default: if !logCommand(c, id: id) && !notifyCommand(c) && !testBroker(c, id: id) && !quitCommand(c, id: id) { reply(id, error: "Unsupported native host command") }
+        default: if !logCommand(c, id: id) && !fileLinkCommand(c, id: id) && !notifyCommand(c) && !testBroker(c, id: id) && !quitCommand(c, id: id) { reply(id, error: "Unsupported native host command") }
         }
     }
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -561,7 +561,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
     }
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let name = views.first(where: { $0.value === webView })?.key, let target = targets[name], let url = action.request.url else { decisionHandler(.cancel); return }
-        let sameOrigin = url.scheme == target.scheme && url.host == target.host && url.port == target.port
+        let sameOrigin = PreviewOrigin.same(url, target)
         if name.hasPrefix("agent:") { decisionHandler(agentPolicy(name, action, url: url, sameOrigin: sameOrigin)); return }
         // The app shell stays on its own URL. The preview's main frame stays on
         // its exact assigned origin; subframes never receive a privileged bridge.
@@ -571,7 +571,9 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         if allowed && action.shouldPerformDownload { decisionHandler(.download) }
         else if allowed && action.targetFrame != nil { decisionHandler(.allow) }
         else {
-            if name == "preview", action.navigationType == .linkActivated && ["https", "http"].contains(url.scheme ?? "") { emit(["event":"external", "url":url.absoluteString]) }
+            // LKM-657: only a deliberate link click leaves for the browser (another origin, or a
+            // new window); a scripted redirect or form post is just refused.
+            if name == "preview", PreviewOrigin.opensExternally(url, linkActivated: action.navigationType == .linkActivated) { emit(["event":"external", "url":url.absoluteString]) }
             decisionHandler(.cancel)
         }
     }

@@ -714,6 +714,14 @@ async function main() {
     else if (effect.type === 'code') {
       if (effect.root === workspaceController.active?.root)
         void editorController.open(effect.root, effect.source, undefined, false, effect.range)
+    } else if (effect.type === 'quick-look' || effect.type === 'reveal') {
+      // LKM-657: the host re-checks the path and only previews or selects it in Finder.
+      const method = effect.type === 'reveal' ? 'revealFile' : 'quickLookFile'
+      void host
+        ?.request(method, { path: effect.path })
+        .catch((error) => workspaceController.reportError(error))
+    } else if (effect.type === 'copy-path') {
+      void host?.request('copyText', { text: effect.path }).catch(console.error)
     } else if (effect.type === 'preview') {
       // The preview sits under the docked editor; a popped-out editor leaves it in view.
       const root = workspaceController.active?.root

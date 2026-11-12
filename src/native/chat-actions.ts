@@ -1,4 +1,4 @@
-import { codeLinkTarget } from '../main/code-tools'
+import { chatLinkRoute } from '../main/chat-links'
 import { setLandingProblem } from '../main/landing-context'
 import type { ChatUiRecord } from '../shared/chat-ui'
 import type { NativeChatAction } from '../shared/native-chat'
@@ -289,13 +289,35 @@ export async function cardAction(
       break
     }
     // LKM-364: a code link in an answer (an open_code candidate) opens only in Trezi's
-    // editor, through open_code's project checks; a refused one says why.
+    // editor, through open_code's project checks; a refused one says why. LKM-657: a
+    // project image/PDF opens in Quick Look, a folder in Finder; anything else says where
+    // it points and offers Reveal in Finder / Copy Path for the owner to choose.
     case 'code-link': {
-      const target = await codeLinkTarget(chat.root, action.value)
-      if ('error' in target) chat.error = `Not opened in the editor: ${target.error}`
-      else effect({ type: 'code', ...target })
+      const route = await chatLinkRoute(chat.root, action.value)
+      chat.linkNotice = undefined
+      if ('error' in route) chat.error = `Not opened in the editor: ${route.error}`
+      else {
+        if (chat.error?.startsWith('Not opened in the editor: ')) chat.error = undefined
+        if (route.type === 'notice')
+          chat.linkNotice = { detail: route.detail, path: route.path, reveal: route.reveal }
+        else effect(route)
+      }
       break
     }
+    // The owner's choice on a link notice; the path is the one Trezi resolved, never
+    // the card's value.
+    case 'link-reveal':
+    case 'link-copy': {
+      const notice = chat.linkNotice
+      chat.linkNotice = undefined
+      if (!notice) break
+      if (action.action === 'link-copy') effect({ type: 'copy-path', path: notice.path })
+      else if (notice.reveal) effect({ type: 'reveal', path: notice.path })
+      break
+    }
+    case 'link-dismiss':
+      chat.linkNotice = undefined
+      break
     case 'queue-remove':
       for (const q of chat.queue)
         if (`queued-${q.id}` === action.id && q.chatUiId)

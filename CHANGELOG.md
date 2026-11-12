@@ -21,6 +21,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Changed
 
+- Links in chat to files on this Mac now go somewhere useful: project source (relative, absolute or `file:` paths) opens in Trezi's editor at its lines, project screenshots and PDFs open in Quick Look, and folders show in Finder; a link outside the project, missing or unsupported says where it points and offers Reveal in Finder or Copy Path instead of a generic editor error. Other link schemes stay blocked (LKM-657).
 - The Mark up toolbar is compact and contextual at the bottom of the preview: Select, Pen, a shapes menu, Text and a trailing close button (X) when idle; colour and stroke width appear for drawing tools or a selected mark, and Undo, Redo, Delete and Add to chat once there is something to send. The "Snapshot of the preview" text and the Cancel button are gone. Select picks a drawn mark to recolour, restroke, move, resize or delete it, or drags a region to send (LKM-647).
 
 - Mark up ink is chosen with the standard macOS color picker (a compact color well in the Mark up toolbar) instead of a five-color menu; any color works, and each mark keeps the color it was drawn in (LKM-645).

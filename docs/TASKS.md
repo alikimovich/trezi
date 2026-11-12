@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-657 — Route chat web links, project source and local artifacts to native destinations
+
+- [x] One chat-link parser (`parseChatLink`): web, project-relative, absolute/`~`/`file:` local paths with line ranges; remote file hosts, UNC/Windows paths, control characters and other schemes refused.
+- [x] Router (`src/main/chat-links.ts`): canonical containment in the chat's project; text source to the editor at its lines, images/PDF/movies to an in-app Quick Look panel, folders revealed in Finder; outside/missing/secret/unsupported paths get a "Link not opened" card with owner-initiated Reveal in Finder / Copy Path.
+- [x] Host re-checks paths (`LocalFileLinks.swift`), Quick Look panel (`ArtifactPreview.swift`), `revealFile`/`quickLookFile` (`HostFileLinks.swift`); preview origin includes the default port; only a clicked HTTP(S) link opens the browser.
+- [x] Unit `chat-links`, `local-file-links`; `code-links` and the native `code-link` smoke updated (synthetic report + screenshots).
+- [ ] Manager: independent review, exact-head CI (native code-link group), merge and post-merge native acceptance.
+
 ## LKM-647 — Compact, contextual Mark up toolbar with a trailing Close
 
 - [x] Remove the "Snapshot of the preview" filler; errors and "Adding…" stay visible.

@@ -70,6 +70,8 @@ export interface Chat extends NativeChatMirror {
   pendingModel?: ChatAgentSettings
   switching: boolean
   error?: string
+  /** LKM-657: a chat link Trezi did not open: where it points and what the owner may do. */
+  linkNotice?: { detail: string; path: string; reveal: boolean }
   queue: Submission[]
   paused: boolean
   sending: boolean
