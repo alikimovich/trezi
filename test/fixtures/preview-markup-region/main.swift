@@ -200,10 +200,24 @@ check(overlay.statusText.isEmpty, "no filler text: \(overlay.statusText)")
 check(overlay.controls.first { $0.cell?.accessibilityLabel() == "Add to chat" }?.toolTip?.contains("200 × 120 px") == true, "Add says what it will send")
 check(overlay.deleteEnabled, "Delete removes the region")
 check(!overlay.undoEnabled, "and leaves Undo off: it is no mark")
+// LKM-672: one Escape closes (the X's Close) even with a region; Delete still clears it alone.
 overlay.keyDown(with: key("\u{1b}", 53, window: window))
-check(cancelled == 0 && overlay.canvas.region.rect == nil && !overlay.addEnabled, "Escape clears the region first")
+check(cancelled == 1 && overlay.canvas.region.rect != nil, "one Escape with a region closes, no region-only step")
+overlay.deleteSelection(); check(overlay.canvas.region.rect == nil && !overlay.addEnabled, "Delete clears the region alone")
+// Escape mid-drag: the drag ends, the session closes and the late drag and release land nowhere.
+func mouse(_ type: NSEvent.EventType, _ point: CGPoint) -> NSEvent {
+    NSEvent.mouseEvent(with: type, location: overlay.canvas.convert(view.toView(point), to: nil), modifierFlags: [], timestamp: 0,
+                       windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)!
+}
+overlay.canvas.pointerDown(view.toView(CGPoint(x: 400, y: 300)), tool: .select)
+overlay.canvas.pointerDragged(view.toView(CGPoint(x: 600, y: 420)))
 overlay.keyDown(with: key("\u{1b}", 53, window: window))
-check(cancelled == 1, "then cancels")
+check(cancelled == 2 && !overlay.canvas.region.isDragging, "Escape mid-drag closes and ends the drag")
+let afterEscape = overlay.canvas.region.rect
+overlay.canvas.mouseDragged(with: mouse(.leftMouseDragged, CGPoint(x: 900, y: 600)))
+overlay.canvas.mouseUp(with: mouse(.leftMouseUp, CGPoint(x: 900, y: 600)))
+check(overlay.canvas.region.rect == afterEscape && !overlay.canvas.region.isDragging, "the late drag and release change nothing")
+overlay.deleteSelection(); check(overlay.canvas.region.rect == nil, "region cleared for the next steps")
 overlay.canvas.pointerDown(view.toView(CGPoint(x: 400, y: 300)), tool: .select)
 overlay.canvas.pointerDragged(view.toView(CGPoint(x: 402, y: 302))); overlay.canvas.pointerUp()
 check(!overlay.addEnabled, "a zero-area drag adds nothing")
@@ -220,7 +234,7 @@ overlay.undo(); check(overlay.canvas.region.valid == picked, "and never the regi
 overlay.canvas.pointerDown(view.toView(CGPoint(x: 500, y: 400)), tool: .pen)
 overlay.canvas.pointerDragged(view.toView(CGPoint(x: 700, y: 400))); overlay.canvas.pointerUp()
 overlay.clear(); check(overlay.canvas.document.marks.isEmpty && overlay.canvas.region.valid == picked && overlay.addEnabled, "Clear takes the marks, the region still sends")
-overlay.cancelOperation(nil); check(overlay.canvas.region.rect == nil && cancelled == 1, "cancelOperation clears the region first too")
+overlay.cancelOperation(nil); check(overlay.canvas.region.valid == picked && cancelled == 3, "cancelOperation closes in one step too")
 overlay.removeFromSuperview()
 
 // MARK: the session: Add sends the region; nothing on cancel, empty or failed crops

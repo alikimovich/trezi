@@ -345,11 +345,14 @@ final class PreviewMarkupOverlay: NSView {
     @objc func clear() { if !adding { canvas.commitText(); canvas.clear() } }
     /// Close: the session goes, unsent marks with it, as Escape and the top bar button do. It never adds.
     @objc func cancel() { onCancel?() }
-    /// Escape: a selected mark is let go first, then a selected region, as in other macOS
-    /// selections; then the session.
+    /// LKM-672: Escape leaves Mark up in one press, the same Close as the X, even with a mark
+    /// or a region selected. Only the text being typed on the canvas, an inner editor, takes
+    /// it first: the text is kept and the keys come back here. A drag in flight is dropped.
     func escape() {
-        if adding { cancel(); return }
-        if canvas.deselect() || canvas.clearRegion() { return }
+        if !adding, canvas.editingText {
+            canvas.commitText(); window?.makeFirstResponder(self); return
+        }
+        canvas.cancelPointer()
         cancel()
     }
     @objc func add() { canvas.commitText(); onAdd?() }

@@ -99,15 +99,17 @@ final class PreviewMarkupCanvas: NSView, NSTextFieldDelegate {
         if markDrag != nil { markDrag = nil; document.endEdit() } else if region.isDragging { region.finish() } else { document.finish() }
         edited()
     }
-    /// Escape's first step: the region goes and the session stays. False with no region.
+    /// LKM-672: Escape mid-gesture. The drag in flight ends where it is, and the rest of this
+    /// press (drags, the release) is ignored, so nothing late lands after Mark up has closed.
+    func cancelPointer() {
+        guard !pointerCancelled, markDrag != nil || region.isDragging || document.isDrawing else { return }
+        pointerUp(); pointerCancelled = true
+    }
+    private var pointerCancelled = false
+    /// Delete's fallback: the region goes and the session stays. False with no region.
     func clearRegion() -> Bool {
         guard region.clear() else { return false }
         edited(); return true
-    }
-    /// Escape's very first step: the mark is let go, nothing changes. False with none selected.
-    func deselect() -> Bool {
-        guard selection != nil, markDrag == nil else { return false }
-        selection = nil; edited(); return true
     }
     /// LKM-647: Delete takes the selected mark (one Undo step) or else the selected region,
     /// never everything. False with neither.
@@ -178,14 +180,15 @@ final class PreviewMarkupCanvas: NSView, NSTextFieldDelegate {
     @objc func clearFromMenu() { guard !locked else { return }; commitText(); clear() }
 
     override func mouseDown(with event: NSEvent) {
+        pointerCancelled = false
         if tool != .text, let overlay = superview { window?.makeFirstResponder(overlay) }
         let point = convert(event.locationInWindow, from: nil)
         let grabbing = tool == .select && pointer(at: point) == .openHand
         pointerDown(point, tool: tool)
         if grabbing { NSCursor.closedHand.set(); selectCursorShown = true }
     }
-    override func mouseDragged(with event: NSEvent) { pointerDragged(convert(event.locationInWindow, from: nil)) }
-    override func mouseUp(with event: NSEvent) { pointerUp() }
+    override func mouseDragged(with event: NSEvent) { if !pointerCancelled { pointerDragged(convert(event.locationInWindow, from: nil)) } }
+    override func mouseUp(with event: NSEvent) { if !pointerCancelled { pointerUp() } }
 
     // LKM-646/647: the pointer tells what a press will do while Select is the tool. Set only
     // where the canvas is what the pointer is over, so the island's buttons keep the arrow.

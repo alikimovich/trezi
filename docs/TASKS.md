@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-672 — Escape exits the active preview selection or annotation mode
+
+- [x] One host Escape stop for the preview modes (`src/native/PreviewEscape.swift`, after 3D's own): bare Escape only; Mark up first when its overlay holds the keys, then Select when nothing in the window does (the toolbar's own Select toggle, so toolbar, Bun state and page mode change together). Sheets, menus and the colour panel keep it (not this window's keys).
+- [x] Mark up: one Escape closes it like the X even with a mark or region selected; canvas text being typed takes the first Escape (kept); a drag in flight is dropped and its late events ignored.
+- [x] Select: the inline text edit's Escape cancels only the edit in Selection mode; the next Escape exits the mode (page path in `src/preview/preload.ts`).
+- [x] Unit `preview-edit-lifecycle`, `preview-markup`; native smokes `smoke-input` (page Escape, composer/address focus keeps Select, no focus exits it, real page click after), `smoke-preview-markup` (selected mark, canvas text Escape), `smoke-markup-region` (region, mid-drag, reopen).
+- [ ] Manager: independent review, exact-head CI (native `core` and `preview-markup` groups), merge and post-merge native acceptance.
+
 ## LKM-671 — Mark up toolbar at the top, persistent selected tool, viewfinder icon
 
 - [x] Island anchored 10 pt under the page's top edge; wrapped rows and the error row grow downward, the tools row never moves; snapshot unchanged.

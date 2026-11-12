@@ -12,7 +12,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Added
 
-- Mark up has a Select region tool (S): drag over the preview snapshot to choose an area, adjust or move it with its handles, and Add to chat sends just that cropped screenshot, with or without marks drawn on it; Escape clears the region first (LKM-646).
+- Mark up has a Select region tool (S): drag over the preview snapshot to choose an area, adjust or move it with its handles, and Add to chat sends just that cropped screenshot, with or without marks drawn on it (LKM-646).
 - Command-Z and Shift-Command-Z undo and redo the last visual Styles change in the preview, one change at a time (a typed value, a slider or spacing-handle drag, a token choice), including from the focused preview or a committed Styles field; text fields, the composer and the code editor keep their own Undo, and Revert still clears the whole draft (LKM-644).
 
 - Up and Down arrows now step a focused numeric inspector field (Width/Height, Padding, Margin, Gap, Radius, Opacity, font sizes, number props and the like) by its step, or by 1, keeping units like px, decimals and each field's limits; the preview follows each press, and the value is staged like a typed one, never applied by itself (LKM-601).
@@ -21,6 +21,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Changed
 
+- Escape leaves the current preview mode in one press: in Mark up it closes the annotation tools like the X, even with a mark or region selected (text being typed on the snapshot keeps the first Escape); in Select it leaves Selection mode, after an inline text edit has taken its own Escape. The chat, code editor and Styles fields keep their Escape (LKM-672).
 - The Mark up toolbar is back at the top of the preview, the current tool (including the shape in the shapes button) stays visibly selected with an accent fill, the Select tool's icon is now a viewfinder, and its buttons are rounded to match the island (LKM-671).
 - Links in chat to files on this Mac now go somewhere useful: project source (relative, absolute or `file:` paths) opens in Trezi's editor at its lines, project screenshots and PDFs open in Quick Look, and folders show in Finder; a link outside the project, missing or unsupported says where it points and offers Reveal in Finder or Copy Path instead of a generic editor error. Other link schemes stay blocked (LKM-657).
 - The Mark up toolbar is compact and contextual at the bottom of the preview: Select, Pen, a shapes menu, Text and a trailing close button (X) when idle; colour and stroke width appear for drawing tools or a selected mark, and Undo, Redo, Delete and Add to chat once there is something to send. The "Snapshot of the preview" text and the Cancel button are gone. Select picks a drawn mark to recolour, restroke, move, resize or delete it, or drags a region to send (LKM-647).

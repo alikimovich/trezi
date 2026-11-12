@@ -296,7 +296,10 @@ var cancelled = 0
 overlay.onCancel = { cancelled += 1 }
 canvas.pointerDown(map.toView(CGPoint(x: 400, y: 200)), tool: .select); canvas.pointerUp()
 overlay.keyDown(with: key("\u{1b}", 53, window: window))
-check(canvas.selection == nil && canvas.region.valid != nil && cancelled == 0, "Escape lets go of the mark first")
+// LKM-672: one Escape closes (the X's Close) even with a mark selected; nothing is deleted.
+check(cancelled == 1 && canvas.document.marks.count == count, "one Escape with a selected mark closes")
+canvas.tool = .pen; canvas.tool = .select
+check(canvas.selection == nil && canvas.region.valid != nil, "another tool lets go of the mark, the region stays")
 overlay.deleteSelection()
 check(canvas.region.rect == nil && canvas.document.marks.count == count, "Delete with only a region removes the region, no mark")
 canvas.clearFromMenu()
@@ -308,7 +311,7 @@ while overlay.undoEnabled { overlay.undo() }
 check(canvas.document.marks.isEmpty && shown() == ["Select", "Pen", "Arrow", "Shapes", "Text", "Undo", "Redo", "Close annotation tools"], "undone to nothing: compact, Redo kept: \(shown())")
 check(!overlay.undoEnabled && overlay.redoEnabled, "only Redo is live")
 shot("5-undone")
-overlay.keyDown(with: key("\u{1b}", 53, window: window)); check(cancelled == 1, "then Escape closes")
+overlay.keyDown(with: key("\u{1b}", 53, window: window)); check(cancelled == 2, "Escape closes")
 overlay.redo(); check(canvas.document.marks.count == 1, "Redo replays the first mark")
 // Crop only.
 let region = PreviewMarkupOverlay(image: image)
