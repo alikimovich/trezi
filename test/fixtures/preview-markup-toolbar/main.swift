@@ -41,7 +41,7 @@ func key(_ characters: String, _ code: UInt16, _ modifiers: NSEvent.ModifierFlag
 }
 
 _ = NSApplication.shared
-let shots = ProcessInfo.processInfo.environment["MARKUP_TOOLBAR_SHOTS"]
+let shots = ProcessInfo.processInfo.environment["MARKUP_TOOLBAR_SHOTS"] ?? ProcessInfo.processInfo.environment["TREZI_MARKUP_TOOLBAR_SHOTS"]
 let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 800), styleMask: [.titled], backing: .buffered, defer: true)
 window.isReleasedWhenClosed = false
 let white = CGColor(srgbRed: 0.98, green: 0.98, blue: 0.98, alpha: 1)
@@ -82,6 +82,30 @@ func placed(_ label: String) {
     }
 }
 
+/// LKM-671 (temporary, until the macOS 26 runner is green): what the snapshot holds around a
+/// tool whose selected look is wrong, on stderr before the check exits.
+func diagnose(_ label: String, _ button: MarkupButton, pixels: Pixels, scale: CGFloat) {
+    let face = overlay.island.face, frame = button.convert(button.selectedFrame, to: overlay)
+    let faceFrame = face.convert(face.bounds, to: overlay)
+    func at(_ x: CGFloat, _ y: CGFloat) -> String { "\(pixels.rgb(Int(x * scale), Int(y * scale)))" }
+    let pillFrame = button.pill.superview.map { _ in button.pill.convert(button.pill.bounds, to: overlay) } ?? .null
+    var lines = [
+        "DIAG \(label): \(button.cell?.accessibilityLabel() ?? "?") selectedTool=\(button.selectedTool) state=\(button.state.rawValue) isBordered=\(button.isBordered)",
+        "DIAG face bg (padding left of first tool): \(at(faceFrame.minX + 4, faceFrame.midY)) face frame \(faceFrame) drawCount=\(face.drawCount) wantsLayer=\(face.wantsLayer) layer=\(face.layer.map { String(describing: type(of: $0)) } ?? "nil")",
+        "DIAG button centre \(at(frame.midX, frame.midY)) edge(minX+4) \(at(frame.minX + 4, frame.midY)) edge(minX+1) \(at(frame.minX + 1, frame.midY)) frame \(frame)",
+        "DIAG button wantsLayer=\(button.wantsLayer) layer=\(button.layer.map { String(describing: type(of: $0)) } ?? "nil") bezel=\(button.bezelStyle.rawValue)",
+        "DIAG pill frame \(pillFrame) hidden=\(button.pill.isHidden) wantsLayer=\(button.pill.wantsLayer) layer=\(button.pill.layer.map { String(describing: type(of: $0)) } ?? "nil")",
+        "DIAG overlay snapshot \(pixels.width)x\(pixels.height) bounds \(overlay.bounds) glass=\(overlay.island.glass) face superview=\(face.superview.map { String(describing: type(of: $0)) } ?? "nil")"
+    ]
+    if #available(macOS 26.0, *) { lines.append("DIAG borderShape=\(button.borderShape.rawValue)") }
+    lines.append("DIAG face subviews: " + face.subviews.map { view in
+        let name = (view as? NSControl)?.cell?.accessibilityLabel() ?? String(describing: type(of: view))
+        return view.isHidden ? "(\(name))" : name
+    }.joined(separator: ", "))
+    FileHandle.standardError.write(Data((lines.joined(separator: "\n") + "\n").utf8))
+    shot("diag-\(label.replacingOccurrences(of: " ", with: "-"))")
+}
+
 /// LKM-671: the current tool, and only it, is painted with the accent fill and keeps its on
 /// state, after a click, a key or a menu choice; other tools show their plain bezel.
 func selectedLook(_ label: String, _ current: String) {
@@ -97,6 +121,7 @@ func selectedLook(_ label: String, _ current: String) {
         let probe = pixels.rgb(Int((frame.minX + 4) * scale), Int(frame.midY * scale))
         let filled = abs(probe.r - Int(accent.redComponent * 255)) < 40 && abs(probe.g - Int(accent.greenComponent * 255)) < 40 && abs(probe.b - Int(accent.blueComponent * 255)) < 40
         let on = name == current
+        if filled != on { diagnose(label, button, pixels: pixels, scale: scale) }
         check(filled == on && (button.state == .on) == on && button.selectedTool == on, "\(label): \(name) \(on ? "shows" : "does not show") as selected: \(probe)")
         check((button.cell?.accessibilityValue() as? String) == (on ? "selected" : ""), "\(label): \(name) says whether it is selected")
     }

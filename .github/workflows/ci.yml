@@ -115,6 +115,8 @@ jobs:
         env:
           TREZI_TEST_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
           TREZI_TEST_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+          # LKM-671 (temporary): the Mark up toolbar's states as PNGs, uploaded with the logs.
+          TREZI_MARKUP_TOOLBAR_SHOTS: ${{ github.workspace }}/test/artifacts/runs/markup-toolbar-shots
         run: |
           if [ -n "$TREZI_TEST_BASE" ]; then set -- --changed="$TREZI_TEST_BASE"; fi
           node test/run.mjs unit --report --timeout-ms=120000 --log-tail=150 --shard="$TREZI_TEST_SHARD" "$@"

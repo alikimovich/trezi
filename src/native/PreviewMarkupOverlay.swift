@@ -232,7 +232,6 @@ final class PreviewMarkupOverlay: NSView {
         // (a wrapped row, an error) grows downward and the controls under the pointer stay put.
         let height = top + padding
         island.frame = backingAlignedRect(NSRect(x: shown.midX - width / 2, y: shown.minY + Self.inset, width: width, height: height), options: .alignAllEdgesNearest)
-        island.face.needsDisplay = true  // it paints the selected tool's fill under the moved controls
     }
     /// The tools divider always shows (in the idle island it sets Close apart); the style
     /// divider only between colour/stroke and the history controls.
@@ -288,7 +287,7 @@ final class PreviewMarkupOverlay: NSView {
         }
     }
     /// LKM-671: the current tool keeps its on state and a filled accent bezel
-    /// (`MarkupButton.selectedTool`) after the press ends, for a click, a key or the menu alike.
+    /// (`MarkupButton.selectedTool`, its `pill`) after the press ends, for a click, a key or the menu alike.
     private func mark(_ button: MarkupButton, on: Bool) {
         button.state = on ? .on : .off
         button.selectedTool = on

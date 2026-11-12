@@ -1,5 +1,23 @@
 # PROGRESS LOG
 
+## 2026-11-11 — LKM-671 CI fix 2: the selected fill is a view of its own
+
+- CI (macOS 26) still read white where the face-painted fill should be at Select (line 100);
+  macOS 27 locally passes. Rather than paint under a button that may paint over it, each
+  `MarkupButton` now keeps a `MarkupSelectionPill` (non-layer-backed, `draw()` fills an
+  accent capsule, labelColor outline under Increase Contrast) as a sibling directly below
+  itself in the face, moved/sized/shown with the button and its `selectedTool`. The face no
+  longer paints fills. Top placement, viewfinder, capsule bezels, on state and the
+  accessibility value are unchanged.
+- Temporary until the macOS 26 runner is green: the toolbar fixture prints `DIAG` lines
+  (face background, probes at the button's centre and edges, isBordered, borderShape, layer
+  backing, face subview order and draw count) before a failed selected-look check exits, and
+  CI sets `TREZI_MARKUP_TOOLBAR_SHOTS` so the PNGs ride in the uploaded test logs. The
+  fixture reads that variable itself: Bun's `spawnSync` did not pass on a `process.env`
+  change made at runtime, so no shots were ever written that way.
+- Evidence: toolbar/region/markup fixtures pass locally; a forced diagnostic run printed the
+  expected lines; the fresh shape-selected capture shows the pill at the top.
+
 ## 2026-11-11 — LKM-671 CI fix: the selected fill is painted by the island face
 
 - CI (macOS 26 runner) failed `preview-markup-toolbar`: the selected tool's accent fill was
