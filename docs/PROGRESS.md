@@ -1,5 +1,17 @@
 # PROGRESS LOG
 
+## 2026-11-11 — LKM-671 follow-up: capsule buttons in the capsule island
+
+- Owner: square-ish button bezels looked wrong inside the rounded island. Every island
+  button (tools, shapes slot, Text, stroke menu, Undo/Redo/Delete, Add, Close) now uses
+  AppKit's own `borderShape = .capsule` (macOS 26; `MarkupButton.round`), so resting, hover
+  and pressed bezels are native capsules at the same size, spacing and hit area. The
+  borderless chevron and the system colour well are untouched. Older systems keep the
+  rounded bezel (no native capsule shape there).
+- The selected tool's accent fill is drawn as a capsule (radius = half its height) to match.
+- Evidence: `preview-markup-toolbar` asserts the capsule shape on every bordered control and
+  samples a selected-fill corner that a 7 pt radius would paint; Aqua/Dark Aqua shots checked.
+
 ## 2026-11-11 — LKM-671: Mark up toolbar back at the top, a persistent selected tool, viewfinder
 
 - Three corrections to LKM-647, nothing else replayed. The island is anchored `inset` (10 pt)
@@ -10,7 +22,7 @@
   with `bezelColor`) renders almost the same as off, light or dark; the old accent
   `contentTintColor` only tinted the glyph and read as unselected in the screenshot.
   `MarkupButton.selectedTool` keeps `state = .on`, goes borderless and fills the bezel's rect
-  (bounds inset 2 pt vertically, radius 7) with `controlAccentColor` and a white glyph; a
+  (bounds inset 2 pt vertically, a capsule since the follow-up below) with `controlAccentColor` and a white glyph; a
   `labelColor` outline is added under Increase Contrast. Press highlight and focus ring stay
   AppKit's. The shapes slot carries it for Rectangle/Circle/Arrow; the chevron menu never does.
 - Select's symbol is `viewfinder` (tooltip: "…drag to capture a region of the preview (S)").

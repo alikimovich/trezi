@@ -8,6 +8,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Island anchored 10 pt under the page's top edge; wrapped rows and the error row grow downward, the tools row never moves; snapshot unchanged.
 - [x] Current tool (Select, Pen, Text, or the shapes slot for Rectangle/Circle/Arrow) keeps its on state and an accent fill with a white glyph (`MarkupButton.selectedTool`) for clicks, keys and the shapes menu; accessibility value stays "selected".
 - [x] Select's symbol is `viewfinder`; tooltip says it captures a region.
+- [x] Owner follow-up: capsule buttons in the capsule island (`borderShape = .capsule` on macOS 26 for tools, shapes slot, Text, stroke menu, history, Add, Close; the selected fill is a capsule too); fixture asserts the shape and a clear fill corner.
 - [x] Fixtures (`preview-markup-toolbar`, `preview-markup`, `preview-markup-region`) assert top placement, pixel-level selected fill in light/dark, viewfinder; native smokes (`smoke-markup-toggle`, `smoke-markup-toolbar`) and the host inspect seam updated.
 - [ ] Manager: independent review, exact-head CI (native `preview-markup` group), merge and post-merge native acceptance.
 

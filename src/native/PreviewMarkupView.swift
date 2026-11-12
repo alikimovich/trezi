@@ -240,11 +240,18 @@ final class MarkupButton: NSButton {
             needsDisplay = true
         }
     }
-    /// The rounded bezel's own rect in the 28 pt row, so the fill matches the other buttons.
+    /// The bezel's own rect in the 28 pt row, so the fill matches the other buttons.
     var selectedFrame: NSRect { bounds.insetBy(dx: 0, dy: 2) }
+    /// LKM-671: the island is a capsule, so its buttons are too: the native capsule border
+    /// shape (macOS 26) for the resting, hover and pressed bezels, at the same size and
+    /// spacing. Older systems keep the rounded bezel; the selected fill is a capsule on both.
+    static func round(_ button: NSButton) {
+        if #available(macOS 26.0, *) { button.borderShape = .capsule }
+    }
     override func draw(_ dirtyRect: NSRect) {
         if selectedTool {
-            let path = NSBezierPath(roundedRect: selectedFrame, xRadius: 7, yRadius: 7)
+            let frame = selectedFrame, radius = min(frame.width, frame.height) / 2
+            let path = NSBezierPath(roundedRect: frame, xRadius: radius, yRadius: radius)
             NSColor.controlAccentColor.setFill(); path.fill()
             if NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast {
                 NSColor.labelColor.setStroke(); path.lineWidth = 1; path.stroke()

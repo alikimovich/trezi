@@ -119,6 +119,7 @@ final class PreviewMarkupOverlay: NSView {
         strokePopUp.target = self; strokePopUp.action = #selector(pickStroke(_:))
         strokePopUp.toolTip = "Stroke width"
         strokePopUp.setAccessibilityLabel("Stroke width"); strokePopUp.cell?.setAccessibilityLabel("Stroke width")
+        MarkupButton.round(strokePopUp)
         island.face.addSubview(strokePopUp)
         configure(undoButton, label: "Undo", symbol: "arrow.uturn.backward", hint: "Undo (⌘Z)"); undoButton.action = #selector(undo)
         configure(redoButton, label: "Redo", symbol: "arrow.uturn.forward", hint: "Redo (⇧⌘Z)"); redoButton.action = #selector(redo)
@@ -142,6 +143,7 @@ final class PreviewMarkupOverlay: NSView {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     private func configure(_ button: NSButton, label: String, symbol: String?, hint: String, role: NSAccessibility.Role = .button) {
         button.bezelStyle = .rounded; button.target = self; button.toolTip = hint.isEmpty ? nil : hint
+        MarkupButton.round(button)
         if let symbol { button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label); button.title = "" } else { button.title = label }
         button.cell?.setAccessibilityRole(role); button.cell?.setAccessibilityLabel(label)
         island.face.addSubview(button)

@@ -111,6 +111,24 @@ placed("idle"); let idleWidth = overlay.barFrame.width
 check(control("Select").image != nil && MarkupTool.select.symbol == "viewfinder" && NSImage(systemSymbolName: "viewfinder", accessibilityDescription: nil) != nil, "Select shows the viewfinder")
 check(control("Select").toolTip?.contains("drag to capture a region") == true, "its tooltip says it selects a region")
 selectedLook("idle", "Select")
+// LKM-671: capsule buttons in the capsule island, resting and selected alike.
+if #available(macOS 26.0, *) {
+    for button in overlay.controls where button !== overlay.shapeMenuButton {
+        check(button.borderShape == .capsule, "\(button.cell?.accessibilityLabel() ?? "?") has a capsule bezel")
+    }
+}
+do {
+    overlay.layoutSubtreeIfNeeded(); overlay.display()
+    let rep = overlay.bitmapImageRepForCachingDisplay(in: overlay.bounds)!
+    overlay.cacheDisplay(in: overlay.bounds, to: rep)
+    let pixels = Pixels(rep.cgImage!), scale = CGFloat(pixels.width) / overlay.bounds.width
+    let button = control("Select") as! MarkupButton
+    let frame = button.convert(button.selectedFrame, to: overlay)
+    // A 7 pt corner radius would paint this point; the capsule's 12 pt radius leaves it clear.
+    let corner = pixels.rgb(Int((frame.minX + 2.5) * scale), Int((frame.minY + 2.5) * scale))
+    let accent = NSColor.controlAccentColor.usingColorSpace(.sRGB)!
+    check(abs(corner.b - Int(accent.blueComponent * 255)) > 40 || abs(corner.r - Int(accent.redComponent * 255)) > 40, "the selected fill is a capsule, its corner clear: \(corner)")
+}
 shot("1-idle")
 
 // MARK: a drawing tool: its colour and stroke, nothing else yet
