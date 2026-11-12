@@ -51,6 +51,14 @@ overlay.frame = NSRect(x: 0, y: 0, width: 800, height: 500)
 window.contentView!.addSubview(overlay)
 overlay.layoutSubtreeIfNeeded(); overlay.layout()
 window.makeFirstResponder(overlay)
+/// A fixture-only magenta swatch in the overlay's bottom-left corner, clear of the island and
+/// the canvas checks: capture() trusts a bitmap only when this pixel reads magenta, so a blank
+/// white capture (light mode on the headless CI runner) is never mistaken for a painted one.
+final class Sentinel: NSView {
+    override func draw(_ dirtyRect: NSRect) { NSColor(srgbRed: 1, green: 0, blue: 1, alpha: 1).setFill(); bounds.fill() }
+}
+let sentinel = Sentinel(frame: NSRect(x: 0, y: overlay.bounds.height - 8, width: 8, height: 8))
+overlay.addSubview(sentinel)
 let canvas = overlay.canvas
 let pageFrame = canvas.frame
 func control(_ label: String) -> NSButton { overlay.controls.first { $0.cell?.accessibilityLabel() == label }! }
@@ -61,6 +69,7 @@ func shown() -> [String] {
 }
 func shot(_ name: String) {
     guard let shots else { return }
+    sentinel.isHidden = true; defer { sentinel.isHidden = false }
     overlay.layoutSubtreeIfNeeded(); overlay.display()
     let rep = overlay.bitmapImageRepForCachingDisplay(in: overlay.bounds)!
     overlay.cacheDisplay(in: overlay.bounds, to: rep)
@@ -86,15 +95,14 @@ func placed(_ label: String) {
 /// headless CI runner returns a blank image even for the opaque face): pixel checks then
 /// fall back to the views that draw the selected look.
 func capture() -> (pixels: Pixels, scale: CGFloat)? {
+    sentinel.frame = NSRect(x: 0, y: overlay.bounds.height - 8, width: 8, height: 8)
     overlay.layoutSubtreeIfNeeded(); overlay.display()
     let rep = overlay.bitmapImageRepForCachingDisplay(in: overlay.bounds)!
     overlay.cacheDisplay(in: overlay.bounds, to: rep)
     let pixels = Pixels(rep.cgImage!), scale = CGFloat(pixels.width) / overlay.bounds.width
-    let face = overlay.island.face.convert(overlay.island.face.bounds, to: overlay)
-    let probe = pixels.rgb(Int((face.minX + 4) * scale), Int(face.midY * scale))
-    var expected = NSColor.white
-    overlay.effectiveAppearance.performAsCurrentDrawingAppearance { expected = NSColor.windowBackgroundColor.usingColorSpace(.sRGB)! }
-    let painted = abs(probe.r - Int(expected.redComponent * 255)) < 24 && abs(probe.g - Int(expected.greenComponent * 255)) < 24 && abs(probe.b - Int(expected.blueComponent * 255)) < 24
+    let mark = sentinel.convert(sentinel.bounds, to: overlay)
+    let probe = pixels.rgb(Int(mark.midX * scale), Int(mark.midY * scale))
+    let painted = abs(probe.r - 255) <= 40 && probe.g <= 40 && abs(probe.b - 255) <= 40
     return painted ? (pixels, scale) : nil
 }
 var reportedBlank = false
