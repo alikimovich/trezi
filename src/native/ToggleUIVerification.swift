@@ -42,7 +42,7 @@ extension Host {
                 "keyWindow":NSApp.keyWindow === window, "active":NSApp.isActive, "firstResponder":toggleUIResponder(window.firstResponder),
                 "menu":["title":item?.title ?? "", "key":item?.keyEquivalent ?? "", "command":item?.keyEquivalentModifierMask == .command,
                         "menu":item?.menu?.title ?? "", "enabled":item?.isEnabled ?? false],
-                "shortcuts":MenuShortcutAudit.collect(NSApp.mainMenu)]
+                "shortcuts":MenuShortcutAudit.collect(NSApp.mainMenu), "escape":previewEscapeInspect]
     }
     private func toggleUIResponder(_ responder: NSResponder?) -> String {
         guard let responder else { return "none" }

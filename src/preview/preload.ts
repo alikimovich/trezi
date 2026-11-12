@@ -1676,9 +1676,17 @@ function onEditKey(e: KeyboardEvent): void {
   } else if (e.key === 'Escape') {
     e.preventDefault()
     const el = endEdit()
-    if (el) {
-      el.textContent = editOriginal // restore
-      el.blur()
+    if (!el) return // this Escape already ended the edit
+    el.textContent = editOriginal // restore
+    el.blur()
+    // LKM-672: the edit is the inner owner. In Selection mode its Escape cancels only the
+    // edit and the pick stays; the next Escape leaves the mode (onKey).
+    if (active) {
+      if (selectedEl?.isConnected) {
+        showToolbar(selectedEl)
+        setSelectionHighlight(selectedEl)
+      }
+      return
     }
     setActive(false)
     ipcRenderer.send(CANCELLED)

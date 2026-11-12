@@ -1,5 +1,24 @@
 # PROGRESS LOG
 
+## 2026-11-12 — LKM-672: Escape exits the active preview mode
+
+- Owner request: Escape in the preview should leave the current mode (selection / annotation).
+- One host stop (`Host.previewEscape` in `PreviewEscape.swift`), after 3D's: only a bare
+  Escape, Mark up first (its overlay holds the keys), then Select when nothing in the window
+  holds them (first responder is the window/content/canvas). Select exits through the
+  toolbar's own `select-object` action, so the button, Bun's `selecting` and the page's mode
+  change together; with the preview focused the page's existing Escape (preload `onKey`) does
+  it and the host passes the key on, so no key is handled twice. Chat, source, Styles, the
+  address and Layers keep Escape; sheets, menus and the colour panel are other windows.
+- Mark up: Escape no longer steps through mark, then region, then close. One press closes like
+  the X (same discard, focus restore, toolbar state). Only canvas text being typed takes the
+  first press (text kept, keys back on the overlay). A drag in flight is finished and its late
+  drag/release ignored (`cancelPointer`). Delete still clears a selected region.
+- Select: the inline text edit's Escape restores the text and ends only the edit while
+  Selection mode is on (pick kept); outside the mode it still clears the pick as before.
+- Evidence: `bun run build`, typecheck, lint, `--changed` unit selection. Native smokes updated
+  (real queued key events; the host's Escape count replaces timers) but not run locally here.
+
 ## 2026-11-12 — LKM-671 CI fix 4: the capture sentinel sits inside the island face
 
 - CI still failed at Select (line 133): the overlay-level magenta sentinel painted, but the

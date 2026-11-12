@@ -125,7 +125,8 @@ if (process.platform !== 'darwin') {
   assert.match(source('PreviewCover.swift'), /markup\?\.overlay/, 'the page gets no hover under it')
   // The overlay learns the page's own frame: its snapshot sits exactly on it, the island over it.
   assert.match(source('WorkspaceLayout.swift'), /markup\?\.place\(area: available, page: page\)/)
-  assert.match(source('Host.swift'), /keyCode == 53[^\n]*markup\?\.escape\(\)/)
+  assert.match(source('Host.swift'), /PreviewEscape\.plain\(event\)[^\n]*previewEscape\(\)/)
+  assert.match(source('PreviewEscape.swift'), /markupTakesKeys && markup\?\.escape\(\) == true/)
   assert.match(source('HostMenus.swift'), /markup\?\.undo\(\)/)
   // Preview history shortcuts must not navigate the live page under the overlay (⌘←/⌘→ and
   // the View menu's ⌘[ / ⌘]).

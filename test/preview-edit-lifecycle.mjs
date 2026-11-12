@@ -100,7 +100,7 @@ let editing = null, editOriginal = '', editOutline = '', editAttribute = null;
 let active = true, selectedEl = null, lastHovered = null, pickedElements = [], commentMode = null;
 ${handlers.map(handler).join('\n')}
 globalThis.api = { startTextEdit, commitEdit, onEditKey, onClick, blockPageInput, setActive,
-  editing: () => editing };
+  editing: () => editing, active: () => active };
 `),
   context
 )
@@ -146,13 +146,29 @@ assert.equal(ranges, 0)
 a.blur()
 assert.equal(sent.length, 2, 'later blur cannot commit twice')
 
+// LKM-672: in Selection mode the inline edit owns the first Escape: the text is restored and
+// the edit ends, but the mode and its pick stay; a repeat of the same event does nothing more.
+api.startTextEdit(a)
+a.textContent = 'Cancelled'
+api.onEditKey(event(a, { key: 'Escape' }))
+api.onEditKey(event(a, { key: 'Escape' }))
+assert.equal(a.textContent, 'Changed')
+assert.equal(api.editing(), null)
+assert.equal(api.active(), true, 'Escape in the inline edit keeps Selection mode')
+assert.equal(toolbar, b, 'and the pick')
+assert.equal(highlight, b)
+assert.equal(ranges, 0)
+assert.equal(sent.filter(([kind]) => kind === 'cancel').length, 0, 'nothing is cancelled')
+assert.equal(sent.filter(([kind]) => kind === 'edit').length, 1)
+// Outside Selection mode (a Layers pick) the edit's Escape still clears the pick.
+api.setActive(false)
 api.startTextEdit(a)
 a.textContent = 'Cancelled'
 api.onEditKey(event(a, { key: 'Escape' }))
 assert.equal(a.textContent, 'Changed')
 assert.equal(toolbar, null)
 assert.equal(highlight, null)
-assert.equal(ranges, 0)
+assert.equal(sent.filter(([kind]) => kind === 'cancel').length, 1)
 assert.equal(sent.filter(([kind]) => kind === 'edit').length, 1)
 
 api.setActive(true)

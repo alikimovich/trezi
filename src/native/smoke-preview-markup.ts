@@ -102,10 +102,13 @@ export async function checkAnnotationCompositeSend(
     action: 'canvasText',
     x,
     y,
-    text: 'Revised note'
+    text: 'Revised note',
+    finish: 'escape'
   })
   assert.equal(edited.previous, 'Canvas note', 'canvas reopens the existing text')
   assert.equal(edited.marks, 1, 'editing replaces the mark')
+  assert.equal(edited.text, 'Revised note', 'Escape in the canvas text keeps what was typed')
+  assert.equal((await inspect()).open, true, 'and leaves Mark up open: the inner editor took it')
   const beforeSelect = await record('edited')
   assert.deepEqual(
     beforeSelect.marks.map((mark: State) => [mark.tool, mark.ink, mark.text]),
@@ -451,8 +454,17 @@ export async function checkPreviewMarkup(host: NativeBridge, page: Page, artifac
     })
   }
 
-  // Escape discards the lot and leaves the composer as it was.
+  // LKM-672: with a drawn mark selected, one real Escape leaves Mark up (the X's Close): it
+  // discards the lot, lets go of the top bar button and leaves the composer as it was.
+  await button('Select')
+  const corner = (await inspect()).marks[0].points[0]
+  await event({ action: 'pointer', points: [corner, corner] })
+  assert.equal((await inspect()).selected, 0, 'the rectangle is selected before Escape')
   await event({ action: 'key', key: '\u{1b}', code: 53 })
+  const gone = await inspect()
+  assert.equal(gone.open, false, 'one Escape with a selected mark closes Mark up')
+  assert.equal(gone.session, null, 'and ends its session')
+  assert.equal(gone.markupAccent, false, 'the Mark up button is no longer selected')
   await closed('escape')
   await step('escaped', 'real event route')
   let state = await composer()

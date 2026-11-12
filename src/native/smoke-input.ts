@@ -81,14 +81,27 @@ export async function checkSelectionInput(
   await wait(`document.querySelector('#native-title').textContent === 'Native Trezi fixturex'`)
   if ((await evaluate('window.previewInputs.length')) !== 0)
     throw new Error('Inline editing leaked input to the preview app')
+  // LKM-672: the inline edit owns the first real Escape (text restored, Selection mode kept);
+  // the next one leaves Selection mode completely, toolbar button and page adornments too.
   await input({ key: 'Escape' })
-  await wait(
-    `!document.querySelector('#native-title').isContentEditable && document.documentElement.style.cursor !== 'crosshair'`
-  )
+  await wait(`!document.querySelector('#native-title').isContentEditable`)
   if (
     await evaluate(`document.querySelector('#native-title').textContent !== 'Native Trezi fixture'`)
   )
     throw new Error('Escape did not restore the inline text')
+  if ((await evaluate(`document.documentElement.style.cursor`)) !== 'crosshair')
+    throw new Error('Escape in the inline edit left Selection mode too')
+  await input({ key: 'Escape' })
+  await wait(`document.documentElement.style.cursor !== 'crosshair'`)
+  await wait(async () => (await host.request('shellInspect')).selectSegmentProminent === false)
+  const escaped = await evaluate(`(() => {
+    const root = document.querySelector('[data-trezi-overlay]').shadowRoot;
+    return {boxes:root.querySelectorAll('[data-trezi-selbox]').length,
+      toolbar:root.querySelector('[data-trezi-toolbar]').style.display};
+  })()`)
+  if (escaped.boxes !== 0 || escaped.toolbar !== 'none')
+    throw new Error(`Escape left Selection UI behind: ${JSON.stringify(escaped)}`)
+  // The page has its pointer and keys back: the real click below reaches its listeners.
   await input(point)
   await input({ key: 'ArrowRight' })
   await wait(`window.previewInputs.includes('keydown') && window.previewInputs.includes('click')`)
@@ -249,9 +262,52 @@ export async function checkSelectionInput(
   await wait(`document.querySelector('#native-title').isContentEditable`)
   await input({ key: 'Escape' })
   await wait(`!document.querySelector('#native-title').isContentEditable`)
+  // A second Escape leaves Selection mode, as after the edit at the start.
+  await input({ key: 'Escape' })
+  await wait(`document.documentElement.style.cursor !== 'crosshair'`)
+  await wait(async () => (await host.request('shellInspect')).selectSegmentProminent === false)
+  await checkSelectionNativeEscape(host, wait)
   console.log(
     'Native selection blocks page input; inline caret movement and normal interaction passed.'
   )
+}
+
+/** LKM-672: a real Escape through the app's event queue (the host's key monitor) with the
+ *  focus in native views. A text field (the chat composer, else the address) keeps Escape and
+ *  Selection mode stays; with nothing holding the keys, Escape leaves Selection mode through
+ *  the toolbar's own action, and the page's select mode follows. Waits on the host's Escape
+ *  count, not a timer. */
+async function checkSelectionNativeEscape(
+  host: NativeBridge,
+  wait: (code: string | (() => Promise<boolean>)) => Promise<void>
+): Promise<void> {
+  const trail = async () => (await host.request('toggleUIKey', { inspect: true })).escape
+  const selecting = async () => (await host.request('shellInspect')).selectSegmentProminent
+  const pressEscape = async (focus: string) => {
+    const before = (await trail()).count
+    await preparePreviewInput(host, true)
+    await host.request('toggleUIKey', { focus, key: 'escape' })
+    await wait(async () => (await trail()).count > before)
+    return (await trail()).route
+  }
+  await host.request('shellPerform', { action: 'select-object' })
+  await wait(`document.documentElement.style.cursor === 'crosshair'`)
+  await wait(async () => (await selecting()) === true)
+  // The seam refuses a hidden composer before posting anything; the address is a text field too.
+  let field = 'composer'
+  let kept: string
+  try {
+    kept = await pressEscape(field)
+  } catch {
+    field = 'address'
+    kept = await pressEscape(field)
+  }
+  if (kept !== 'passed' || (await selecting()) !== true)
+    throw new Error(`Escape in the ${field} changed Selection mode (${kept})`)
+  const exited = await pressEscape('none')
+  if (exited !== 'select') throw new Error(`Escape with no focus went to ${exited}`)
+  await wait(async () => (await selecting()) === false)
+  await wait(`document.documentElement.style.cursor !== 'crosshair'`)
 }
 
 /** LKM-218: every element toolbar tool has its own glyph in the shared 24 px, 2 px stroke style. */

@@ -188,7 +188,7 @@ final class Host: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMes
         NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel, .keyDown, .leftMouseDragged, .rightMouseDragged]) { [weak self] event in
             self?.lastUserInteraction = Date()
             if event.type == .keyDown, event.keyCode == 53, self?.closeThreeDOnEscape() == true { return nil }
-            if event.type == .keyDown, event.keyCode == 53, self?.markupTakesKeys == true, self?.markup?.escape() == true { return nil }
+            if PreviewEscape.plain(event), self?.previewEscape() == true { return nil }
             return event
         }
         // LKM-219: shortcuts on any keyboard layout; ⌘← / ⌘→ step the preview's history.

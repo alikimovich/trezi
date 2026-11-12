@@ -23,7 +23,7 @@ const closeColor = (a: string, b: string, tolerance: number) =>
 
 /** LKM-646: Mark up's Select region tool through foreground AppKit input, on the smoke page
  *  `checkPreviewMarkup` set up: a real drag with no marks enables Add, a reverse drag over the
- *  card and an adjusted handle make the region, Escape clears it, and Add puts exactly the
+ *  card and an adjusted handle make the region, one Escape (even mid-drag) closes Mark up, and Add puts exactly the
  *  card's pixels (no outline, dimming, island or neighbouring content) in this chat's composer
  *  beside its draft. A zero-area drag and Cancel attach nothing; a marked region carries
  *  its marks; a zoomed preview maps the region to captured pixels. */
@@ -122,11 +122,32 @@ export async function checkMarkupRegion(host: NativeBridge, page: Page, folder: 
   near(adjusted.region.x, x0, 'and nothing else')
   assert.equal(adjusted.marks.length, 0)
 
-  // Escape clears the region, not the session; then redraw it.
+  // LKM-672: one real Escape with a region selected leaves Mark up, the same Close as the X:
+  // the top bar button lets go, nothing is attached and the draft stays.
   const escaped = await event({ action: 'key', key: '\u{1b}', code: 53 })
-  assert.equal(escaped.open, true, 'Escape with a region keeps Mark up open')
-  assert.equal(escaped.region, null, 'and clears the region')
-  assert.equal(escaped.addEnabled, false)
+  assert.equal(escaped.open, false, 'one Escape with a region closes Mark up')
+  assert.equal(escaped.session, null, 'and ends its session')
+  assert.equal(escaped.markupAccent, false, 'the Mark up button is no longer selected')
+  assert.equal(attachments(), before, 'Escape attaches nothing')
+  assert.equal((await composer()).text, REGION_DRAFT, 'and keeps the draft')
+  // Escape while a region drag is still in flight: the gesture and the session go, and the
+  // late drag and release land nowhere.
+  await open('region escape mid-drag')
+  await button('Select')
+  const midDrag = await test({
+    action: 'pointer',
+    points: [
+      [x1, y1],
+      [x0, y0]
+    ],
+    escapeMidDrag: true
+  })
+  assert.equal(midDrag.open, false, 'Escape mid-drag closes Mark up')
+  await closed('region escape mid-drag')
+  assert.equal(attachments(), before, 'Escape mid-drag attaches nothing')
+  // It opens again normally.
+  await open('region again')
+  await button('Select')
   const region = (
     await drag([
       [x1, y1],

@@ -173,6 +173,7 @@ const host = compile(
     join(root, 'src/native/PreviewMarkupOverlay.swift'),
     join(root, 'src/native/PreviewMarkup.swift'),
     join(root, 'src/native/PreviewMarkupHost.swift'),
+    join(root, 'src/native/PreviewEscape.swift'),
     join(root, 'src/native/ToolbarLayout.swift'),
     join(root, 'src/native/ToolbarAddress.swift'),
     join(root, 'src/native/BranchStatusView.swift'),

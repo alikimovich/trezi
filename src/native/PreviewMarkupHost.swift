@@ -66,7 +66,8 @@ extension Host {
     func previewMarkupInspect() -> [String: Any] {
         guard let overlay = markup?.overlay else {
             return ["open":false, "session":markup?.session ?? NSNull(), "cover":previewCoverRects().count, "geometry":previewMarkupGeometry(),
-                    "colorPanelVisible":NSColorPanel.sharedColorPanelExists && NSColorPanel.shared.isVisible]
+                    "colorPanelVisible":NSColorPanel.sharedColorPanelExists && NSColorPanel.shared.isVisible,
+                    "markupAccent":shell.segmentProminent("markup"), "firstResponder":"\(type(of: window.firstResponder as Any))"]
         }
         let canvas = overlay.canvas, mapping = canvas.mapping
         let bitmap = NSBitmapImageRep(cgImage: canvas.image)
@@ -288,9 +289,14 @@ extension Host {
             guard let hit = window.contentView?.superview?.hitTest(locations[0]), hit === canvas || hit.isDescendant(of: canvas),
                   mouse(.leftMouseDown, locations[0]) else { return ["error":"Canvas is not hit-testable"] }
             for point in locations.dropFirst() { guard mouse(.leftMouseDragged, point) else { return ["error":"Cannot post drag"] } }
+            // LKM-672: a real Escape while the button is still down, then the late drag and release.
+            if c["escapeMidDrag"] as? Bool == true {
+                guard key(.keyDown, "\u{1b}", 53, []), key(.keyUp, "\u{1b}", 53, []),
+                      mouse(.leftMouseDragged, locations[0]) else { return ["error":"Cannot post Escape mid-drag"] }
+            }
             guard mouse(.leftMouseUp, locations.last!) else { return ["error":"Cannot post pointer up"] }
             await settle()
-            return ["route":"real event route", "hit":"\(type(of: hit))", "marks":canvas.document.marks.count]
+            return ["route":"real event route", "hit":"\(type(of: hit))", "marks":canvas.document.marks.count, "open":markup?.overlay != nil]
         case "canvasText":
             guard let overlay = markup?.overlay, overlay.tool == .text,
                   let x = c["x"] as? Double, let y = c["y"] as? Double,
@@ -315,8 +321,14 @@ extension Host {
                 guard key(.keyDown, chars, code, flags), key(.keyUp, chars, code, flags) else { return ["error":"Cannot post canvas text"] }
                 await settle()
             }
-            guard window.makeFirstResponder(overlay) else { return ["error":"Cannot finish canvas text"] }
+            // LKM-672: a real Escape ends the canvas text, the inner editor, and keeps Mark up.
+            if c["finish"] as? String == "escape" {
+                guard key(.keyDown, "\u{1b}", 53, []), key(.keyUp, "\u{1b}", 53, []) else { return ["error":"Cannot post Escape"] }
+            } else {
+                guard window.makeFirstResponder(overlay) else { return ["error":"Cannot finish canvas text"] }
+            }
             await settle()
+            guard markup?.overlay === overlay, window.firstResponder === overlay else { return ["error":"Canvas text did not hand the keys back to Mark up"] }
             return ["route":"real event route", "previous":previous, "text":canvas.document.marks.last?.text ?? "",
                     "marks":canvas.document.marks.count]
         case "typeInstruction":
