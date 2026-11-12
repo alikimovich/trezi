@@ -232,6 +232,7 @@ final class PreviewMarkupOverlay: NSView {
         // (a wrapped row, an error) grows downward and the controls under the pointer stay put.
         let height = top + padding
         island.frame = backingAlignedRect(NSRect(x: shown.midX - width / 2, y: shown.minY + Self.inset, width: width, height: height), options: .alignAllEdgesNearest)
+        island.face.needsDisplay = true  // it paints the selected tool's fill under the moved controls
     }
     /// The tools divider always shows (in the idle island it sets Close apart); the style
     /// divider only between colour/stroke and the history controls.

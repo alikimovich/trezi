@@ -1,5 +1,15 @@
 # PROGRESS LOG
 
+## 2026-11-11 — LKM-671 CI fix: the selected fill is painted by the island face
+
+- CI (macOS 26 runner) failed `preview-markup-toolbar`: the selected tool's accent fill was
+  missing (probe read white); macOS 27 locally passed. A borderless `NSButton` on macOS 26
+  renders through its layer and never calls a `draw(_:)` override, so the fill drawn there
+  was skipped. `MarkupIslandFace.draw` now paints it beneath each selected `MarkupButton`
+  (`drawSelectedFill`); the face redraws on selection change and after island layout.
+- Evidence: toolbar/region/markup fixtures and `--changed` unit selection pass; fresh
+  idle/shape/Aqua/Dark Aqua captures show the fill and viewfinder at the top.
+
 ## 2026-11-11 — LKM-671 follow-up: capsule buttons in the capsule island
 
 - Owner: square-ish button bezels looked wrong inside the rounded island. Every island

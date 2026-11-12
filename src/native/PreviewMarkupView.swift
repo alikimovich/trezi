@@ -229,7 +229,7 @@ final class MarkupButton: NSButton {
     override func keyDown(with event: NSEvent) {
         if [36, 49, 76].contains(event.keyCode) { performClick(nil) } else { nextResponder?.keyDown(with: event) }
     }
-    /// LKM-671: the current tool. Its on state shows as a filled accent bezel with a white
+    /// LKM-671: the current tool. Its on state shows as a filled accent bezel (the face paints it) with a white
     /// glyph that stays after the press ends: the rounded bezel's own on state is too faint
     /// to read (light or dark), and the press highlight and focus ring stay distinct from it.
     var selectedTool = false {
@@ -237,7 +237,7 @@ final class MarkupButton: NSButton {
             guard selectedTool != oldValue else { return }
             isBordered = !selectedTool
             contentTintColor = selectedTool ? .white : nil
-            needsDisplay = true
+            needsDisplay = true; superview?.needsDisplay = true
         }
     }
     /// The bezel's own rect in the 28 pt row, so the fill matches the other buttons.
@@ -248,16 +248,16 @@ final class MarkupButton: NSButton {
     static func round(_ button: NSButton) {
         if #available(macOS 26.0, *) { button.borderShape = .capsule }
     }
-    override func draw(_ dirtyRect: NSRect) {
-        if selectedTool {
-            let frame = selectedFrame, radius = min(frame.width, frame.height) / 2
-            let path = NSBezierPath(roundedRect: frame, xRadius: radius, yRadius: radius)
-            NSColor.controlAccentColor.setFill(); path.fill()
-            if NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast {
-                NSColor.labelColor.setStroke(); path.lineWidth = 1; path.stroke()
-            }
+    /// The selected fill, painted by the face beneath the (then borderless) button: from macOS
+    /// 26 a borderless NSButton renders through its layer and skips a `draw(_:)` override.
+    func drawSelectedFill(in view: NSView) {
+        guard selectedTool, !isHidden else { return }
+        let frame = convert(selectedFrame, to: view), radius = min(frame.width, frame.height) / 2
+        let path = NSBezierPath(roundedRect: frame, xRadius: radius, yRadius: radius)
+        NSColor.controlAccentColor.setFill(); path.fill()
+        if NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast {
+            NSColor.labelColor.setStroke(); path.lineWidth = 1; path.stroke()
         }
-        super.draw(dirtyRect)
     }
 }
 
@@ -335,6 +335,7 @@ final class MarkupIslandFace: NSView {
     override func draw(_ dirtyRect: NSRect) {
         NSColor.windowBackgroundColor.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: PreviewMarkupIsland.cornerRadius, yRadius: PreviewMarkupIsland.cornerRadius).fill()
+        for case let button as MarkupButton in subviews { button.drawSelectedFill(in: self) }
     }
 }
 
