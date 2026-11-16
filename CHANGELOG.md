@@ -35,6 +35,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Fixed
 
+- The sidebar's loading cat now faces the way it runs, turning at each end, instead of running backwards (LKM-705).
 - Undo draft in the Styles panel now also puts the field back to its earlier value, even while that field is focused, instead of reverting only the preview; leaving the field afterwards no longer re-applies the undone value (LKM-644).
 - The red spacing numbers in the preview (Option distances, guide distances and the spacing-grip drag value) now always show above the blue element title chips and the dark selection toolbar instead of being hidden under them; the toolbar under a number still takes clicks (LKM-637).
 - The Reply button for selected chat text now floats over the conversation next to the selection, clear of the text, instead of sitting inline after the last word of a short message; it follows scrolling and stays out of the composer (LKM-627).

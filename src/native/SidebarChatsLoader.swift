@@ -18,8 +18,9 @@ final class SidebarChatsLoaderCell: NSTableCellView {
     /// Test seam; nil reads the system setting.
     static var reduceMotionOverride: Bool?
     static var reduceMotion: Bool { reduceMotionOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
-    /// The run art leans left (its ears sit left of centre), so it is mirrored while running right.
-    static let runsLeft = true
+    /// LKM-705: the run art faces right: its face sits right of the head's centre and its tail
+    /// trails at the lower left. So it is drawn as is while running right and mirrored running left.
+    static let artFacesRight = true
 
     let track = NSView()
     let cat = CAShapeLayer()
@@ -105,8 +106,9 @@ final class SidebarChatsLoaderCell: NSTableCellView {
         move.keyTimes = [0, 0.5, 1]
         move.calculationMode = .linear
         let facing = CAKeyframeAnimation(keyPath: "transform.scale.x")
-        // Discrete: one more key time than values. Running right first.
-        facing.values = Self.runsLeft ? [-1, 1] : [1, -1]
+        // Discrete: one more key time than values, turning on the same key time as the travel.
+        // Running right first, then left.
+        facing.values = Self.artFacesRight ? [1, -1] : [-1, 1]
         facing.keyTimes = [0, 0.5, 1]
         facing.calculationMode = .discrete
         for animation in [move, facing] {
