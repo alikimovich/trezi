@@ -81,6 +81,13 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Independent review (pre-commit): queued batch off-target with a stale preview, JSX inline values, intermediate hashes, failure during the success check — fixed and covered; concurrent external edits during A are absorbed by the rebase (documented limit).
 - [ ] Manager: native `inspector`/`core` groups with a foreground capture, exact-head CI and merge.
 
+## LKM-705 — The sidebar loading cat faces its direction of travel
+
+- [x] Checked the art itself (`run-1.svg`, `run-2.svg`): the face sits right of the head's centre and the tail trails at the lower left, so the bare run art faces right. LKM-618's `runsLeft` assumption was wrong, so the cat was mirrored while running right: backwards on both legs. The travel/facing clock and key times were already in step.
+- [x] `SidebarChatsLoaderCell.artFacesRight`: plain running right, mirrored running left; same artwork, size, row, speed, path, shared clock, Reduce Motion and lifecycle.
+- [x] Unit `sidebar-chats-loader`: the art's orientation read from the SVGs; the real presentation layer sampled live (on the shared clock) and held at known phases on both legs and 10 ms either side of each turn, each shown frame rasterized with its shown mirroring (head must lead the travel); position deltas; rehost keeps place and facing. Fails with the old facing. `TREZI_LOADER_STRIP=<png>` writes the sampled frames.
+- [ ] Manager: independent review, exact-head CI and merge.
+
 ## LKM-618 — One running-cat loading line instead of repeated sidebar "Loading chat" rows
 
 - [x] Traced: the rows were the project's stored `sessionKeys` (last run's open chats), listed before the select path read the agent's snapshot. `agent:open-project` reopens only the current chat and sends its peers to History, so the extra rows were never going to load.

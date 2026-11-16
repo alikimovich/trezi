@@ -18,8 +18,9 @@ final class SidebarChatsLoaderCell: NSTableCellView {
     /// Test seam; nil reads the system setting.
     static var reduceMotionOverride: Bool?
     static var reduceMotion: Bool { reduceMotionOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
-    /// The run art leans left (its ears sit left of centre), so it is mirrored while running right.
-    static let runsLeft = true
+    /// LKM-705: the run art faces right: its face sits right of the head's centre and its tail
+    /// trails at the lower left. So it is drawn as is while running right and mirrored running left.
+    static let artFacesRight = true
 
     let track = NSView()
     let cat = CAShapeLayer()
@@ -96,22 +97,25 @@ final class SidebarChatsLoaderCell: NSTableCellView {
         cat.transform = CATransform3DIdentity
         guard moving, !run.isEmpty else { cat.path = Self.path(rest); return }
         cat.path = Self.path(run[0].pixels)
-        let now = CACurrentMediaTime()
-        // There and back at a steady speed; the phase follows the clock, so a rebuilt row resumes
-        // where the old one was instead of jumping back to the start.
+        // The cat's own clock (its layer time); nothing above it is retimed, so this is the media clock.
+        let now = cat.convertTime(CACurrentMediaTime(), from: nil)
+        // There and back at a steady speed. Each animation's begin is pinned to the last whole cycle
+        // of that clock, so its phase is exactly time mod period, however late the commit lands, and
+        // a rebuilt row resumes where the old one was instead of jumping back to the start.
         let leg = Double(span / Self.speed), period = leg * 2
         let move = CAKeyframeAnimation(keyPath: "position.x")
         move.values = [Self.catSize / 2, Self.catSize / 2 + span, Self.catSize / 2]
         move.keyTimes = [0, 0.5, 1]
         move.calculationMode = .linear
         let facing = CAKeyframeAnimation(keyPath: "transform.scale.x")
-        // Discrete: one more key time than values. Running right first.
-        facing.values = Self.runsLeft ? [-1, 1] : [1, -1]
+        // Discrete: one more key time than values, turning on the same key time as the travel.
+        // Running right first, then left.
+        facing.values = Self.artFacesRight ? [1, -1] : [-1, 1]
         facing.keyTimes = [0, 0.5, 1]
         facing.calculationMode = .discrete
         for animation in [move, facing] {
             animation.duration = period; animation.repeatCount = .infinity
-            animation.timeOffset = now.truncatingRemainder(dividingBy: period)
+            animation.beginTime = now - now.truncatingRemainder(dividingBy: period)
         }
         let total = run.reduce(0) { $0 + max(0.04, $1.duration / 1000) }
         var elapsed = 0.0, times: [NSNumber] = []
@@ -121,7 +125,7 @@ final class SidebarChatsLoaderCell: NSTableCellView {
         frames.keyTimes = times + [1]
         frames.calculationMode = .discrete
         frames.duration = total; frames.repeatCount = .infinity
-        frames.timeOffset = now.truncatingRemainder(dividingBy: total)
+        frames.beginTime = now - now.truncatingRemainder(dividingBy: total)
         cat.add(move, forKey: "travel"); cat.add(facing, forKey: "facing"); cat.add(frames, forKey: "run")
     }
 
@@ -134,7 +138,8 @@ final class SidebarChatsLoaderCell: NSTableCellView {
         return ["mode": mode, "travel": travel, "trackX": origin.x, "trackWidth": track.bounds.width, "cellWidth": bounds.width,
                 "catSize": Self.catSize, "animations": cat.animationKeys() ?? [],
                 "from": (move?.values?.first as? NSNumber)?.doubleValue ?? -1, "to": (move?.values?[1] as? NSNumber)?.doubleValue ?? -1,
-                "period": move?.duration ?? 0, "repeats": move?.repeatCount == .infinity,
+                "period": move?.duration ?? 0, "begin": move?.beginTime ?? -1, "facingBegin": facing?.beginTime ?? -1,
+                "repeats": move?.repeatCount == .infinity,
                 "facing": facing?.values?.compactMap { ($0 as? NSNumber)?.doubleValue } ?? [], "facingKeys": facing?.keyTimes?.map(\.doubleValue) ?? [],
                 "frames": frames?.values?.count ?? 0, "frameKeys": frames?.keyTimes?.map(\.doubleValue) ?? [],
                 "painted": !(cat.path?.boundingBoxOfPath.isEmpty ?? true),

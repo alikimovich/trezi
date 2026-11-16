@@ -1,5 +1,25 @@
 # PROGRESS LOG
 
+## 2026-11-16 — LKM-705: the sidebar loading cat runs forwards
+
+- Owner report: the loading cat under the selected project runs the wrong way. Cause: LKM-618
+  assumed the run art faces left ("ears left of centre") and mirrored it while running right.
+  The SVG run frames actually face right (face right of the head's centre, tail at the lower
+  left), so the cat ran backwards on both legs. The facing and travel already shared one clock
+  and turned on the same key time; only the sign was inverted (`artFacesRight`).
+- Test reads the facing from what is shown, not from the sign: the fixture rasterizes the
+  presentation layer's frame with its mirroring and checks the head leads the travel, live and
+  at held phases on both legs and either side of each turn. Live wall-clock sampling in a
+  background fixture is napped (~70–170 ms late), so turn samples hold the layer's time instead.
+- Evidence: `sidebar-chats-loader` passes and fails with the old sign; a frame strip looked at;
+  typecheck, lint. Native suite not run locally.
+- Review round: the held samples 10 ms past each turn flaked under load (9 of 10 parallel runs
+  failed). `restart()` set only a `timeOffset`, so each animation really began at its commit,
+  some ms after the `now` its phase came from. Each animation now pins `beginTime` to the last
+  whole cycle of the cat layer's clock, so its phase is exactly time mod period. The fixture reads
+  phase from the animation's own begin; the test checks it equals the clock's, and that rebuilt
+  and rehosted rows share it (to 1e-6, not a position tolerance). 10 parallel runs: 10 pass.
+
 ## 2026-11-12 — LKM-672: Escape exits the active preview mode
 
 - Owner request: Escape in the preview should leave the current mode (selection / annotation).
