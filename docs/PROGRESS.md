@@ -13,6 +13,12 @@
   background fixture is napped (~70–170 ms late), so turn samples hold the layer's time instead.
 - Evidence: `sidebar-chats-loader` passes and fails with the old sign; a frame strip looked at;
   typecheck, lint. Native suite not run locally.
+- Review round: the held samples 10 ms past each turn flaked under load (9 of 10 parallel runs
+  failed). `restart()` set only a `timeOffset`, so each animation really began at its commit,
+  some ms after the `now` its phase came from. Each animation now pins `beginTime` to the last
+  whole cycle of the cat layer's clock, so its phase is exactly time mod period. The fixture reads
+  phase from the animation's own begin; the test checks it equals the clock's, and that rebuilt
+  and rehosted rows share it (to 1e-6, not a position tolerance). 10 parallel runs: 10 pass.
 
 ## 2026-11-12 — LKM-672: Escape exits the active preview mode
 

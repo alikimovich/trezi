@@ -59,9 +59,18 @@ report["resized"] = cell.inspect()
 cell.frame.size.width = 20; cell.layoutSubtreeIfNeeded()
 report["cramped"] = cell.inspect()
 cell.frame.size.width = 200; cell.layoutSubtreeIfNeeded()
-let firstOffset = (cell.cat.animation(forKey: "travel") as? CAKeyframeAnimation)?.timeOffset ?? -1
+// The phase each row's own travel animation is at, at one instant: (layer time - its begin) mod period.
+func phase(_ cell: SidebarChatsLoaderCell, at media: CFTimeInterval) -> Double {
+    guard let move = cell.cat.animation(forKey: "travel") else { return -1 }
+    let t = cell.cat.convertTime(media, from: nil)
+    return (t - move.beginTime).truncatingRemainder(dividingBy: move.duration) / move.duration
+}
 let rebuilt = make(width: 200)
-report["offsets"] = [firstOffset, (rebuilt.cat.animation(forKey: "travel") as? CAKeyframeAnimation)?.timeOffset ?? -1]
+let rebuiltAt = CACurrentMediaTime()
+report["rebuiltPhases"] = [phase(cell, at: rebuiltAt), phase(rebuilt, at: rebuiltAt),
+                           // the shared clock itself: time mod period
+                           cell.cat.convertTime(rebuiltAt, from: nil).truncatingRemainder(dividingBy: cell.cat.animation(forKey: "travel")!.duration)
+                               / cell.cat.animation(forKey: "travel")!.duration]
 rebuilt.removeFromSuperview()
 SidebarChatsLoaderCell.reduceMotionOverride = true
 cell.restart(force: true)
@@ -98,9 +107,11 @@ let runMove = runner.cat.animation(forKey: "travel") as! CAKeyframeAnimation
 let period = runMove.duration
 func sample(_ slot: Int? = nil, strip: CGContext? = nil) -> [String: Double]? {
     // The time the cat's layer is at: the media clock while it runs, the scrubbed time while held.
+    // The phase is read against the animation's own begin, not assumed from the clock.
     let t = runner.cat.convertTime(CACurrentMediaTime(), from: nil)
     guard let shown = runner.cat.presentation(), let path = shown.path else { return nil }
-    return ["t": t, "phase": t.truncatingRemainder(dividingBy: period) / period, "x": Double(shown.position.x),
+    return ["t": t, "phase": (t - runMove.beginTime).truncatingRemainder(dividingBy: period) / period,
+            "clockPhase": t.truncatingRemainder(dividingBy: period) / period, "x": Double(shown.position.x),
             "scaleX": Double(shown.transform.m11), "lead": lead(path, scaleX: shown.transform.m11, strip: slot == nil ? nil : strip, at: slot ?? 0)]
 }
 // Live: a few samples as it runs, read at the media clock.
@@ -135,9 +146,12 @@ let artLead = (CatArtwork.frames["run"] ?? []).map { lead(SidebarChatsLoaderCell
 let rehost = make(width: runner.frame.width)
 RunLoop.current.run(until: Date().addingTimeInterval(0.05))
 let pair = [runner.cat.presentation(), rehost.cat.presentation()]
+let rehostAt = CACurrentMediaTime()
+let rehostPhases = [phase(runner, at: rehostAt), phase(rehost, at: rehostAt)]
 report["legs"] = ["period": period, "from": (runMove.values?.first as? NSNumber)?.doubleValue ?? -1, "travel": Double(runner.travel),
                   "samples": samples, "live": live, "artLead": artLead,
-                  "rehost": pair.map { ["x": Double($0?.position.x ?? -1), "scaleX": Double($0?.transform.m11 ?? 0)] }]
+                  "rehost": pair.map { ["x": Double($0?.position.x ?? -1), "scaleX": Double($0?.transform.m11 ?? 0)] },
+                  "rehostPhases": rehostPhases, "begin": runMove.beginTime]
 rehost.removeFromSuperview(); runner.removeFromSuperview()
 
 // The list loaded: the row is discarded. Nothing runs on, nothing keeps the cell.

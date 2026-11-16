@@ -70,7 +70,16 @@ if (process.platform !== 'darwin') {
   assert.ok(resized.travel < wide.travel && resized.period < wide.period, 'at the same speed')
   assert.equal(cramped.mode, 'still', 'no room to run: still, never clipped into controls')
   assert.deepEqual(cramped.animations, [])
-  assert.ok(Math.abs(report.offsets[0] - report.offsets[1]) < 0.5, 'a rebuilt row keeps the phase')
+  // The shared clock: each animation begins on a whole cycle of the layer clock, so its phase is
+  // exactly time mod period however late its commit landed, and a rebuilt row is on the same phase.
+  assert.ok(wide.begin > 0 && wide.begin === wide.facingBegin, 'travel and facing share one begin')
+  assert.ok(
+    Math.abs(wide.begin / wide.period - Math.round(wide.begin / wide.period)) < 1e-6,
+    'begins on a whole cycle of the clock'
+  )
+  const [firstPhase, rebuiltPhase, clockPhase] = report.rebuiltPhases
+  assert.ok(Math.abs(firstPhase - rebuiltPhase) < 1e-6, 'a rebuilt row keeps the phase')
+  assert.ok(Math.abs(firstPhase - clockPhase) < 1e-6, 'the phase is the shared clock')
   assert.deepEqual([reduced.mode, reduced.animations, reduced.painted], ['still', [], true])
   assert.equal(reduced.label, 'Loading chats', 'Reduce Motion keeps the status')
   assert.equal(restored.mode, 'run')
@@ -106,7 +115,16 @@ if (process.platform !== 'darwin') {
   const expected = (phase) => legs.from + legs.travel * (phase < 0.5 ? 2 * phase : 2 - 2 * phase)
   const ahead = { right: 0, left: 0 }
   assert.ok(legs.live.length >= 6, 'live samples')
+  assert.ok(
+    Math.abs(legs.begin / legs.period - Math.round(legs.begin / legs.period)) < 1e-6,
+    'the runner begins on a whole cycle of the clock'
+  )
   for (const sample of [...legs.samples, ...legs.live]) {
+    const wrap = Math.abs(sample.phase - sample.clockPhase)
+    assert.ok(
+      wrap < 1e-6 || Math.abs(wrap - 1) < 1e-6,
+      `the animation's own phase is the clock's at ${sample.phase.toFixed(3)}`
+    )
     assert.ok(
       Math.abs(sample.x - expected(sample.phase)) < 2,
       `on the clock at phase ${sample.phase.toFixed(3)}`
@@ -150,6 +168,10 @@ if (process.platform !== 'darwin') {
     )
   }
   const [old, rehosted] = legs.rehost
+  assert.ok(
+    Math.abs(legs.rehostPhases[0] - legs.rehostPhases[1]) < 1e-6,
+    'a rehosted row is on the same phase of the shared clock'
+  )
   assert.ok(
     Math.abs(old.x - rehosted.x) < 1 && old.scaleX === rehosted.scaleX,
     'a rehosted row shows the same place and facing'
