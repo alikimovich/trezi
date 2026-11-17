@@ -57,7 +57,9 @@ export function queueNote(chat: Chat): { queueNote: string; queueCanSend: boolea
             : 'Answer accepted — queued until current changes finish landing'
           : ''
     return {
-      queueNote: answerQueued ? answerNote : block ? BLOCK_NOTES[block] : '',
+      queueNote: answerQueued
+        ? answerNote
+        : (block ? BLOCK_NOTES[block] : '') || (chat.steerNote ?? ''),
       queueCanSend: !block
     }
   }
@@ -73,7 +75,10 @@ export function queueNote(chat: Chat): { queueNote: string; queueCanSend: boolea
       queueNote: 'Paused after Stop — not sent; Send now continues the held work',
       queueCanSend: true
     }
-  return { queueNote: 'Paused — these won’t send until you choose', queueCanSend: true }
+  return {
+    queueNote: chat.steerNote ?? 'Paused — these won’t send until you choose',
+    queueCanSend: true
+  }
 }
 
 /** "Edit": the queued message goes back into the composer (ahead of any draft) with its

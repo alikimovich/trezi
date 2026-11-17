@@ -11,7 +11,7 @@ import type { ModelProvider, ProviderSession } from './types'
  * it writes against the session's grant. Trezi's tools are reached only as `tool`
  * frames, which the owner authorizes and Bun runs.
  *
- * owner → helper: open, send, interrupt, permission-result, question-result,
+ * owner → helper: open, send, steer (LKM-709), interrupt, permission-result, question-result,
  *   configure, tool-result, tool-error, shutdown; or, alone, diagnose.
  * helper → owner: ready, failed, event, record, permission, question, tool, settled,
  *   phase (cold-start progress, LKM-135); diagnosis (the answer to diagnose, then the
@@ -153,6 +153,18 @@ export function runProviderHelper(
           String(frame.text ?? ''),
           Array.isArray(frame.images) ? frame.images : undefined
         )
+      // LKM-709: a queued message for the running turn. A provider without mid-turn
+      // input says so, as the steer's one outcome.
+      case 'steer': {
+        const id = typeof frame.id === 'string' ? frame.id : ''
+        if (!id) return
+        const images = Array.isArray(frame.images) ? frame.images : undefined
+        if (session?.steer) return session.steer(id, String(frame.text ?? ''), images)
+        return write({
+          type: 'event',
+          event: { type: 'steer', id, state: 'rejected', reason: 'unsupported' }
+        })
+      }
       case 'interrupt': {
         const s = session
         if (!s) return write({ type: 'settled' })

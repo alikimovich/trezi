@@ -67,10 +67,13 @@ export function resumeSummary(
 ): string {
   if (!record) return ''
   const lines: string[] = []
-  const messages = record.transcript.filter((entry) => entry.role !== 'status' && entry.text.trim())
+  // LKM-709: a steered message is the user's words, though stored as a status entry.
+  const messages = record.transcript.filter(
+    (entry) => (entry.role !== 'status' || entry.steer) && entry.text.trim()
+  )
   for (const entry of messages.slice(-LAST_MESSAGES))
     lines.push(
-      `${entry.role === 'user' ? 'User' : 'Assistant'}: ${clip(entry.text.trim(), MESSAGE_LIMIT)}`
+      `${entry.role === 'assistant' ? 'Assistant' : 'User'}: ${clip(entry.text.trim(), MESSAGE_LIMIT)}`
     )
   const files = record.filesTouched.slice(-FILES_LIMIT)
   const text = [

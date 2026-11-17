@@ -53,6 +53,7 @@ import {
   STOPPED_GROUP,
   type Submission
 } from './chat-state'
+import { steerSettled, steersEnded } from './chat-steer'
 import {
   addMarkupToChat,
   type MarkupBinding,
@@ -580,6 +581,9 @@ export class NativeChatController {
     )
       chat.unreadAnswer = true
     reduce(chat, event)
+    // LKM-709: a steer's answer settles its queued message; a turn's end, any unanswered one.
+    if (event.type === 'steer') steerSettled(chat, event)
+    else if (event.type === 'done' || event.type === 'error') steersEnded(chat)
     // Start an eligible resolve before publishing the parked snapshot. The request
     // itself owns the incident until its IPC hands off to a turn or settles.
     if (
@@ -889,6 +893,7 @@ export class NativeChatController {
     chat.streamingId = null
     chat.turn = submission.id
     chat.last = submission
+    chat.steerNote = undefined
     chat.login = undefined
     // A new turn settles a reverted stopped turn for good and supersedes a preview error.
     if (chat.stopped === 'reverted') chat.stopped = undefined
@@ -1010,6 +1015,8 @@ export class NativeChatController {
     // Sends the next queued message once nothing blocks it (`sendBlock`): a stopped
     // turn's hold or a failed landing is no block, a park waiting for Resolve is.
     if (this.chats.get(chat.chat) !== chat || chat.paused || sendBlock(chat)) return
+    // LKM-709: a message on its way into a turn is that turn's, not the next one.
+    if (chat.queue[0]?.steer) return
     const next = chat.queue.shift()
     if (next) await this.run(chat, next)
   }

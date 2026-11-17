@@ -8,11 +8,38 @@ struct QueuedComposerMessage: Decodable, Identifiable {
     let chatUiId: String?
     /// LKM-600: false for a turn Trezi wrote (an inspector Apply); it can be removed, not edited.
     let editable: Bool?
+    /// LKM-709: why "Steer now" cannot take this message now; nil when it can.
+    let steer: String?
+    /// LKM-709: on its way into the running turn; it keeps its place until Claude answers.
+    let steering: Bool?
+    var isSteering: Bool { steering == true }
+    static let steerHelp = "Give this message to the turn that is running now, instead of waiting for it to finish"
     var label: String { text.isEmpty ? "\(attachments) attachment\(attachments == 1 ? "" : "s")" : text }
     var url: URL? {
         guard let url = URL(string: text), ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host != nil,
               !text.contains(where: { $0.isWhitespace }) else { return nil }
         return url
+    }
+}
+
+/// A queued row's overflow menu (LKM-709): what the menu draws and what the host's inspector
+/// reports are this one list. `action` nil is an explanatory line, "-" a divider, "copy" local.
+enum ComposerQueueMenu {
+    struct Item { let label: String; let action: String?; let enabled: Bool; let help: String? }
+    static func items(_ message: QueuedComposerMessage) -> [Item] {
+        // "Steer now": into the running turn, now; the reason it cannot is the line below it.
+        var items = [Item(label: "Steer now", action: "queue-steer", enabled: message.steer == nil && !message.isSteering,
+                          help: message.steer ?? QueuedComposerMessage.steerHelp)]
+        if message.isSteering { items.append(Item(label: "Steering into the running turn…", action: nil, enabled: false, help: nil)) }
+        else if let reason = message.steer { items.append(Item(label: reason, action: nil, enabled: false, help: nil)) }
+        items.append(Item(label: "", action: "-", enabled: false, help: nil))
+        items.append(Item(label: "Edit message", action: "queue-edit", enabled: message.editable != false, help: nil))
+        items.append(Item(label: "Copy message", action: "copy", enabled: !message.text.isEmpty, help: nil))
+        items.append(Item(label: "Remove from queue", action: "queue-remove", enabled: !message.isSteering, help: nil))
+        return items
+    }
+    static func dictionary(_ message: QueuedComposerMessage) -> [[String: Any]] {
+        items(message).filter { $0.action != "-" }.map { ["label": $0.label, "action": $0.action ?? NSNull(), "enabled": $0.enabled, "help": $0.help ?? NSNull()] }
     }
 }
 
@@ -163,7 +190,7 @@ struct ComposerQueue: View {
     }
     private func row(_ message: QueuedComposerMessage, index: Int) -> some View {
         HStack(spacing: 0) {
-            glyph(message.url == nil ? "arrow.turn.down.right" : "globe").queueFrame("glyph-\(index)")
+            glyph(message.isSteering ? "arrow.down.to.line" : message.url == nil ? "arrow.turn.down.right" : "globe").queueFrame("glyph-\(index)")
             HStack(spacing: 8) {
                 if let url = message.url {
                     Link(destination: url) {
@@ -172,7 +199,7 @@ struct ComposerQueue: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }.buttonStyle(.plain)
                 } else {
-                    Text((message.chatUiId == nil ? "" : "Answer queued · ") + message.label.replacingOccurrences(of: "\n", with: " "))
+                    Text((message.isSteering ? "Steering in · " : message.chatUiId == nil ? "" : "Answer queued · ") + message.label.replacingOccurrences(of: "\n", with: " "))
                         .lineLimit(1).truncationMode(.tail).queueFrame("text-\(index)")
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -184,12 +211,19 @@ struct ComposerQueue: View {
                 .buttonStyle(.plain).foregroundStyle(.secondary).queueFrame("edit-\(index)").disabled(message.editable == false)
                 .help("Edit queued message").accessibilityLabel("Edit queued message: \(message.label)")
             Button { action("queue-remove", message.id) } label: { controlLabel("trash") }
-                .buttonStyle(.plain).foregroundStyle(.secondary).queueFrame("remove-\(index)")
+                .buttonStyle(.plain).foregroundStyle(.secondary).queueFrame("remove-\(index)").disabled(message.isSteering)
                 .help("Remove queued message").accessibilityLabel("Remove queued message: \(message.label)")
             Menu {
-                Button("Edit message") { action("queue-edit", message.id) }.disabled(message.editable == false)
-                Button("Copy message") { copyChatText(message.text) }.disabled(message.text.isEmpty)
-                Button("Remove from queue") { action("queue-remove", message.id) }
+                ForEach(Array(ComposerQueueMenu.items(message).enumerated()), id: \.offset) { _, item in
+                    if item.action == "-" { Divider() }
+                    else if item.action == nil { Text(item.label) }
+                    else {
+                        Button(item.label) {
+                            if item.action == "copy" { copyChatText(message.text) } else { action(item.action ?? "", message.id) }
+                        }
+                        .disabled(!item.enabled).help(item.help ?? "").accessibilityHint(item.help ?? "")
+                    }
+                }
             } label: { Image(systemName: "ellipsis") }
                 .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                 .frame(width: Self.control, height: Self.rowHeight).queueFrame("more-\(index)")
@@ -278,6 +312,7 @@ final class ComposerQueueHost: NSHostingView<AnyView> {
         for index in 0..<count {
             guard let row = line("row-\(index)") else { continue }
             var measured: [String: Any] = ["row": row]
+            if index < model.messages.count { measured["menu"] = ComposerQueueMenu.dictionary(model.messages[index]) }
             for part in ["text", "glyph", "edit", "remove", "more", "separator"] { measured[part] = line("\(part)-\(index)") ?? NSNull() }
             rows.append(measured)
         }

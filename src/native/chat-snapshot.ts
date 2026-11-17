@@ -18,6 +18,7 @@ import { queuedText, queueNote, sendBlock } from './chat-queue'
 import { recoveryCards } from './chat-recovery'
 import type { StartFlow } from './chat-start'
 import type { Chat } from './chat-state'
+import { steerBlock } from './chat-steer'
 import { displayContext } from './display-paths'
 import { heldCard } from './held-card'
 export const permissionModes = [
@@ -272,7 +273,9 @@ export function snapshot(
         attachments: q.attachments.length,
         ...(q.chatUiId ? { chatUiId: q.chatUiId } : {}),
         // LKM-600: Trezi's own turn cannot be edited into the user's draft.
-        ...(q.action ? { editable: false } : {})
+        ...(q.action || q.steer ? { editable: false } : {}),
+        steer: steerBlock(chat, q),
+        ...(q.steer ? { steering: true } : {})
       })),
       queuePaused: chat.paused,
       ...queueNote(chat),

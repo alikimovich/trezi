@@ -14,6 +14,7 @@ import type {
   QuestionAnswers,
   SessionRecord,
   SessionTranscriptEntry,
+  SteerReason,
   WorkspaceSnapshot
 } from '../shared/api'
 import { type AppAction, appAction } from '../shared/app-action'
@@ -440,6 +441,29 @@ const reconciliation = new ReconciliationCoordinator({
   }
 })
 
+// LKM-709: steers sent into a running turn and not yet answered: the chat, the turn they
+// were sent into and their text, which only an `admitted` outcome writes to the record.
+const steering = new Map<string, { key: string; turn: string; text: string; at: number }>()
+
+/** A steer's outcome for the record: an admitted one joins the transcript where it landed. */
+function steerOutcome(sessionKey: string, e: Extract<AgentEvent, { type: 'steer' }>): void {
+  const steer = steering.get(e.id)
+  if (!steer || steer.key !== sessionKey) return
+  steering.delete(e.id)
+  productLog.info('chat', 'Steer outcome', {
+    chat: sessionKey,
+    turn: steer.turn,
+    steer: e.id,
+    state: e.state,
+    ...(e.reason ? { reason: e.reason } : {})
+  })
+  if (e.state !== 'admitted') return
+  const session = sessions.get(sessionKey)
+  if (!session) return
+  session.record.transcript.push({ role: 'status', text: steer.text, at: Date.now(), steer: true })
+  scheduleCheckpoint(sessionKey)
+}
+
 /** A throttled checkpoint of a streaming chat's record (tool boundaries flush its text). */
 const checkpointTimers = new Map<string, ReturnType<typeof setTimeout>>()
 function scheduleCheckpoint(sessionKey: string): void {
@@ -592,6 +616,13 @@ const interactiveEvents =
         .catch(() => {})
     const at = e.turn ? null : tracker.attribute(e)
     if (at) e.turn = at.turn
+    if (e.type === 'steer') {
+      steerOutcome(sessionKey, e)
+      return
+    }
+    // A turn's end answers every steer still waiting on it (the provider answers first).
+    if (e.type === 'done' || e.type === 'error')
+      for (const [id, steer] of steering) if (steer.key === sessionKey) steering.delete(id)
     if (e.type === 'model' || e.type === 'status' || e.type === 'delta') logTurnEvent(sessionKey, e)
     if (e.type === 'status') {
       scheduleCheckpoint(sessionKey)
@@ -2850,6 +2881,43 @@ export function registerAgentIpc(
   stuckTimer.unref?.()
   app.on('before-quit', () => clearInterval(stuckTimer))
   ipcMain.handle('agent:interrupt', (_e, requestedKey?: string) => interruptChat(requestedKey))
+  // LKM-709: "Steer now" on a queued message. Only into the turn `turnId` of this chat
+  // while its provider runs it (not a landing, a continuation run or another chat's), and
+  // only through the provider's own mid-turn input. The outcome is the `steer` event.
+  ipcMain.handle(
+    'agent:steer',
+    async (
+      _e,
+      requestedKey: string,
+      turnId: string,
+      id: string,
+      text: string,
+      images?: ImageAttachment[]
+    ): Promise<{ ok: true } | { ok: false; reason: SteerReason }> => {
+      const session = typeof requestedKey === 'string' ? sessions.get(requestedKey) : undefined
+      if (typeof id !== 'string' || !id || id.length > 128 || typeof text !== 'string')
+        return { ok: false, reason: 'unknown' }
+      if (!session) return { ok: false, reason: 'idle' }
+      if (!session.steer) return { ok: false, reason: 'unsupported' }
+      const current = trackers.get(session)?.current
+      // `preparingTurns` spans the whole turn, so it says nothing here; the tracker holds
+      // the run the provider is working on (pushed just before its send).
+      if (
+        !runningKeys.has(requestedKey) ||
+        landingInFlight(requestedKey) ||
+        turnIds.get(requestedKey) !== turnId ||
+        current?.turn !== turnId ||
+        current.run !== 0
+      )
+        return { ok: false, reason: 'idle' }
+      if (steering.has(id)) return { ok: false, reason: 'busy' }
+      const note = images?.length ? `${text} [${images.length} image(s) attached]`.trim() : text
+      steering.set(id, { key: requestedKey, turn: turnId, text: note, at: Date.now() })
+      watchdog.touch(requestedKey)
+      session.steer(id, text, images)
+      return { ok: true }
+    }
+  )
   ipcMain.handle('agent:turn-state', async (_e, key: string) => {
     const owned = await Promise.race([
       conversation()
@@ -3039,18 +3107,26 @@ const stubbedChats = new Set<string>()
 
 /** Native smoke only: replace the provider's send while keeping the real agent:send
  * RPC, turn tracker and provider event hook. No subscription call is made. */
-export function stubAgentSendForSmoke(chat: string, send: ProviderSession['send']) {
+export function stubAgentSendForSmoke(
+  chat: string,
+  send: ProviderSession['send'],
+  /** LKM-709: the provider's steer input; `agent:steer`'s own checks still run first. */
+  steer?: ProviderSession['steer']
+) {
   if (!process.argv.includes('--test'))
     throw new Error('Provider stub is only available in native tests.')
   const session = sessions.get(chat)
   if (!session) throw new Error('Native smoke chat has no provider session.')
   const original = session.send
+  const originalSteer = session.steer
   session.send = send
+  if (steer) session.steer = steer
   stubbedChats.add(chat)
   return {
     emit: (event: AgentEvent) => session.emit(event),
     restore: () => {
       session.send = original
+      session.steer = originalSteer
       stubbedChats.delete(chat)
     }
   }

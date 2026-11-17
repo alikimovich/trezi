@@ -27,6 +27,9 @@ export interface NativeChatMessage {
   /** A comment agent's result (LKM-178): shown collapsed as "<title>: <line>", where
    *  `line` names the comment; `detail` (partial-changes note and summary) on expand. */
   comment?: { title: string; line: string; detail: string }
+  /** LKM-709: the owner's queued message steered into the running turn, where it landed;
+   *  `continued`: the turn's last step had finished and Claude ran straight on with it. */
+  steered?: 'turn' | 'continued'
   /** LKM-600: a user turn Trezi wrote (an inspector Apply): one collapsed app row whose
    *  detail is the exact instruction; `text` keeps it whole for copy. */
   action?: import('./app-action').AppActionRow
@@ -146,7 +149,16 @@ export interface NativeChatState {
   composer: {
     /** The no-project draft (LKM-232): the composer takes input without a chat key. */
     home?: boolean
-    queue: { id: string; text: string; attachments: number; chatUiId?: string }[]
+    queue: {
+      id: string
+      text: string
+      attachments: number
+      chatUiId?: string
+      editable?: boolean
+      /** LKM-709: "Steer now": null when it can, else why not; `steering` while on its way. */
+      steer: string | null
+      steering?: boolean
+    }[]
     queuePaused: boolean
     /** LKM-151: why a paused queue will not send on its own, and whether "Send now" can. */
     queueNote: string

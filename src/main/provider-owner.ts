@@ -132,6 +132,9 @@ export interface ProviderOwner {
   turn(session: string): Promise<void>
   /** A user turn for a helper-hosted session (images keep their bytes and type). */
   send(session: string, text: string, images?: ImageAttachment[]): Promise<void>
+  /** LKM-709: a queued message for the helper's running turn; refused (`unavailable`)
+   *  when no turn is running. Its outcome comes back as one `steer` event with `id`. */
+  steer(session: string, id: string, text: string, images?: ImageAttachment[]): Promise<void>
   /** Stop was pressed: resolves once the graceful stop settled (`escalate: false`) or
    *  the owner's deadline passed (`escalate: true`: kill it; a helper is already killed). */
   cancel(session: string): Promise<{ escalate: boolean }>

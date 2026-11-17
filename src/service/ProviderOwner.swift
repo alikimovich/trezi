@@ -81,6 +81,8 @@ final class ProviderOwner: @unchecked Sendable {
         var alive = false, initialized = false, still = false
         var waiting = Liveness.cli, sentAt = 0.0, launchedAt = 0.0
         var approvals: [String: String] = [:]
+        /// LKM-709: steer requests forwarded to the helper and not yet answered by a `steer` event.
+        var steers: Set<String> = []
         var tools = 0
         var violated = false
         init(id: String, chat: String, provider: String, root: String, liveRoot: String, background: Bool, host: String, spawn: String?) {
@@ -151,6 +153,7 @@ final class ProviderOwner: @unchecked Sendable {
         "openHelper": (["session", "chat", "provider", "root", "liveRoot", "background", "options", "context"], []),
         "permission": (["session", "tool"], ["target"]), "authorize": (["session", "tool", "bytes"], []),
         "turn": (["session"], []), "send": (["session", "text"], ["images"]), "cancel": (["session"], []),
+        "steer": (["session", "id", "text"], ["images"]),
         "settled": (["session"], []), "terminal": (["session", "kind"], []), "resume": (["session", "id", "record"], []),
         "recover": (["record"], []), "answer": (["session", "id", "kind", "value"], []),
         "configure": (["session"], ["model", "mode"]), "close": (["session"], []),
@@ -245,6 +248,22 @@ final class ProviderOwner: @unchecked Sendable {
             session.helper?.write(Self.object(fields).utf8())
             armFirstEvent(session)
             persist()
+            return ok
+        case "steer":
+            // LKM-709: a queued message for the turn that is running now, never a new turn.
+            let session = try helperSession(body)
+            guard session.phase == .running, session.turnOpen, session.helper != nil, session.opening == nil else {
+                throw ProviderRefusal(.unavailable, "No turn is running to steer.")
+            }
+            let id = try body.string("id", max: 128)
+            guard !session.steers.contains(id), session.steers.count < ProviderPolicy.Limits.pendingSteers else {
+                throw ProviderRefusal(.unavailable, "A steer is already on its way.")
+            }
+            let text = try body.string("text", max: ProviderPolicy.Limits.sendText, empty: true)
+            var fields: [(String, JSValue)] = [("type", .string(JSText("steer"))), ("id", .string(JSText(id))), ("text", .string(JSText(text)))]
+            if body.has("images") { fields.append(("images", try Self.images(body.value("images")))) }
+            session.steers.insert(id)
+            session.helper?.write(Self.object(fields).utf8())
             return ok
         case "cancel":
             guard let session = sessions[try body.key("session")], session.phase != .stopped else {

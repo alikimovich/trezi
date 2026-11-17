@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
@@ -68,6 +69,7 @@ import {
   resolveClaudeCli
 } from './claude-login'
 import { failureText, isResumeFailure, RESUME_NOTE, seedPrompt, sessionCwd } from './claude-resume'
+import { createClaudeSteers } from './claude-steer'
 import { interruptWithEscalation } from './interrupt'
 import { managedBrowserEnv, managedBrowserRefusal } from './managed-browser-path'
 import { parseProjectMemoryEvaluation, projectMemoryEvaluationPrompt } from './memory'
@@ -438,7 +440,9 @@ class InputStream implements AsyncIterable<SDKUserMessage> {
   private waiting: ((r: IteratorResult<SDKUserMessage>) => void)[] = []
   private closed = false
 
-  push(text: string, images?: ImageAttachment[]): void {
+  /** `uuid` stamps the message so the CLI's `user_message_uuids` can name it; `steer`
+   *  sends it at `priority: 'next'`, folded into a running turn (LKM-709). */
+  push(text: string, images?: ImageAttachment[], stamp?: { uuid: string; steer?: boolean }): void {
     // Plain string when there are no images; otherwise a content-block array so the
     // Claude Agent SDK sees the text + each pasted/dropped image as a vision block.
     const content =
@@ -453,7 +457,10 @@ class InputStream implements AsyncIterable<SDKUserMessage> {
         : text
     const msg = {
       type: 'user',
-      message: { role: 'user', content }
+      message: { role: 'user', content },
+      parent_tool_use_id: null,
+      ...(stamp ? { uuid: stamp.uuid } : {}),
+      ...(stamp?.steer ? { priority: 'next' } : {})
     } as unknown as SDKUserMessage
     const next = this.waiting.shift()
     if (next) next({ value: msg, done: false })
@@ -1441,7 +1448,7 @@ async function startSession(
   const seed = (text: string, images?: ImageAttachment[]): void => {
     needSeed = false
     emit({ type: 'status', text: RESUME_NOTE })
-    input.push(seedPrompt(ctx?.resumeSummary ?? '', text), images)
+    input.push(seedPrompt(ctx?.resumeSummary ?? '', text), images, { uuid: randomUUID() })
   }
   /** A resume the SDK refused: a new session in the same worktree takes the turn. */
   const recoverResume = (): void => {
@@ -1527,6 +1534,25 @@ async function startSession(
     /* no supportedModels() on this SDK — same outcome, one turn earlier */
   }
 
+  // LKM-709: queued messages steered into the running turn (`claude-steer.ts`).
+  const steers = createClaudeSteers({
+    emit,
+    push: (text, images, uuid) => input.push(text, images, { uuid, steer: true }),
+    cancel: (uuid) => {
+      // The SDK's `cancel_async_message` control request, when this SDK ships it.
+      const cancel = (q as { cancelAsyncMessage?: (uuid: string) => Promise<boolean> })
+        .cancelAsyncMessage
+      return typeof cancel === 'function'
+        ? cancel.call(q, uuid)
+        : Promise.reject(new Error('no cancel'))
+    },
+    expire: () => {
+      if (hardStopped) return
+      cap.finalize()
+      emit({ type: 'done' })
+    }
+  })
+
   // The kill switch Stop escalates to: abort the query the SDK was built with (the
   // same switch shutdown() uses), end the turn exactly once, and let agent.ts rebuild
   // the now-dead session (`hardStopped`).
@@ -1535,6 +1561,7 @@ async function startSession(
     hardStopped = true // stop the reader loop double-emitting on a late result
     abort.abort()
     input.close()
+    steers.abandon()
     emit({
       type: 'error',
       message:
@@ -1561,6 +1588,7 @@ async function startSession(
       try {
         for await (const msg of q) {
           cliStarted()
+          if (msg.type !== 'result') steers.frame(msg)
           switch (msg.type) {
             case 'system': {
               const sys = msg as {
@@ -1659,9 +1687,11 @@ async function startSession(
               resuming = false
               inflight = null
               cap.finalize()
-              emit({ type: 'done' })
               streamedText = false
               authFailed = false
+              // LKM-709: a steer the CLI kept runs on as this turn's continuation.
+              if ((await steers.turnEnded(msg)) === 'carry' || hardStopped) break
+              emit({ type: 'done' })
               break
             }
           }
@@ -1681,6 +1711,7 @@ async function startSession(
           streamedText = false
           continue
         }
+        steers.abandon()
         if (authFailed) emit({ type: 'done' })
         else if (!abort.signal.aborted) {
           emit({ type: 'error', message: err instanceof Error ? err.message : String(err) })
@@ -1703,9 +1734,17 @@ async function startSession(
       }
       const prompt = withSkillReferences(text, availablePortableSkills())
       inflight = { text: prompt, images }
+      steers.turnStarted()
       if (needSeed) seed(prompt, images)
-      else input.push(prompt, images)
+      else input.push(prompt, images, { uuid: randomUUID() })
     },
+    steer: (id, text, images) =>
+      steers.steer(
+        id,
+        withSkillReferences(text, availablePortableSkills()),
+        images,
+        hardStopped || disposed ? 'idle' : resuming || needSeed ? 'starting' : undefined
+      ),
     pending,
     pendingQuestions,
     emit,
@@ -1733,6 +1772,8 @@ async function startSession(
     // provider-sessions.ts when to reach for `forceStop` (S10); started outside that
     // wiring, the adapter bounds it itself.
     interrupt: async () => {
+      // LKM-709: a steer the CLI has not taken yet is withdrawn, never run after Stop.
+      await Promise.race([steers.stop(), new Promise((resolve) => setTimeout(resolve, 1000))])
       if (ctx?.grant) {
         await q.interrupt?.()
         return undefined

@@ -168,6 +168,13 @@ export interface ProviderSession {
   shutdown: () => void
   // Optional live controls — agent.ts optional-chains these and layers the generic
   // bookkeeping (options update, pending release) around them.
+  /**
+   * LKM-709: give `text` to the turn that is running, at the provider's own input
+   * boundary (never Stop + resubmit). The outcome is one `steer` event with this `id`,
+   * emitted in order before the turn's `done`: `admitted`, `returned`, `rejected` or
+   * `uncertain`. Only a provider with real mid-turn input defines it.
+   */
+  steer?: (id: string, text: string, images?: ImageAttachment[]) => void
   setModel?: (model: string) => Promise<void>
   setPermissionMode?: (mode: PermissionMode) => Promise<void>
   /**

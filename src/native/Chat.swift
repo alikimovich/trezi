@@ -16,6 +16,9 @@ struct ChatMessage: Decodable, Identifiable {
     let comment: ChatComment?; let landingCheck: ChatLandingCheck?; let liveChange: ChatLiveChange?; let incident: ChatIncident?
     /// LKM-555: the excerpts and comments a user message replied with (ChatQuotes.swift).
     let quotes: [ChatSentQuote]?
+    /// LKM-709: the owner's queued message steered into the running turn ("turn"), or run
+    /// straight on as the turn's last step finished ("continued").
+    let steered: String?
 }
 /// `role` (LKM-590): "primary" is the card's one recommended action, "destructive" deletes work.
 struct ChatAction: Decodable { let label: String; let action: String; let value: String?; let disabled: Bool?; let role: String? }
@@ -315,7 +318,7 @@ final class NativeChat: NSHostingView<ChatConversation>, ChatReplyHost {
         let tail = model.snapshot?.messages.suffix(3).map { ["id":$0.id, "frame":NSStringFromRect(model.messageFrames[$0.id] ?? .zero)] } ?? []
         let state: [String: Any] = ["scroll":conversationScroll.map(ChatScrollStyleProbe.metrics) ?? [:], "messageBodyEvaluations":model.messageBodyEvaluations, "realizedRows":model.messageFrames.count, "latestSettleAttempts":model.latestSettleAttempts, "latestSettling":model.latestSettling, "tailFrames":tail,
          "followRevision":model.followRevision, "controlInteraction":model.controlInteraction, "visibleMessageIDs":model.messageFrames.filter { $0.value.maxY > 0 && $0.value.minY < bounds.height - model.bottomInset }.map(\.key), "bottomPosition":model.bottomPosition, "composerInset":model.bottomInset, "height":bounds.height, "revealRevision":model.revealRevision, "revealAppliedRevision":model.revealAppliedRevision, "revealAttempt":model.revealAttempt, "islandPositions":model.islandPositions.mapValues { NSStringFromRect($0) }, "catPose":model.cat.pose, "catFrame":model.cat.frame, "catArtwork":!CatArtwork.frames.isEmpty, "frame":NSStringFromRect(frame), "native":true, "visible":!isHidden, "chat":model.snapshot?.chat ?? "", "messageCount":model.snapshot?.messages.count ?? 0,
-         "messages":model.snapshot?.messages.map { ["id":$0.id,"role":$0.role,"text":$0.text] } ?? [],
+         "messages":model.snapshot?.messages.map { ["id":$0.id,"role":$0.role,"text":$0.text,"steered":($0.steered as Any?) ?? NSNull()] as [String: Any] } ?? [],
          "comments":model.snapshot?.messages.compactMap { m in m.comment.map { ["id":m.id, "title":$0.title, "line":$0.line, "expanded":model.expandedComments.contains(m.id)] as [String: Any] } } ?? [],
          "actions":model.snapshot?.messages.compactMap { m in m.action.map { ["id":m.id, "title":$0.title, "line":$0.line, "expanded":model.expandedComments.contains(m.id)] as [String: Any] } } ?? [],
          "landingChecks":model.snapshot?.messages.compactMap { m in m.landingCheck.map { ["id":m.id, "problem":$0.problem, "line":$0.line, "errors":$0.errors] as [String: Any] } } ?? [],
@@ -611,6 +614,11 @@ private struct NativeMessageRow: View {
                 } else if running && message.role == "assistant" {
                     // Reserved, so the caption arriving on completion moves nothing (LKM-145).
                     Text(workedDuration(0)).font(.caption).hidden()
+                }
+                if message.role == "user", let steered = message.steered {
+                    Label(steered == "continued" ? "Steered in as the turn finished its step" : "Steered into the running turn", systemImage: "arrow.down.to.line")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .help(steered == "continued" ? "Claude took this as the turn's last step finished and continued with it before ending the turn." : "Claude took this while it was working on the turn and continued with it.")
                 }
                 if let selection = message.selection { Text(selection.tag + selection.ident).font(.caption.monospaced()).foregroundStyle(.secondary) }
                 if let attachments = message.attachments, !attachments.isEmpty { SentAttachments(attachments: attachments, model: model) }

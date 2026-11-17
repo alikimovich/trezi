@@ -244,6 +244,26 @@ turns in order, preserving the originating chat, file/image attachments, and
 selection context. They do not depend on provider-native steering support; image
 interpretation remains subject to the capability table above.
 
+LKM-709: a queued owner message's More menu has **Steer now**, which gives it to the
+turn that is running instead of waiting for it to end. Only Claude has mid-turn input:
+the adapter pushes the message on the Agent SDK's streaming input with a fresh `uuid`
+and `priority: 'next'`, and the CLI folds it into the running turn between tool rounds,
+naming it in the turn's `user_message_uuids`. That echo is the admission; nothing is
+called steered before it (`src/main/backends/claude-steer.ts`). A turn that ends without
+folding it: the adapter asks the CLI to withdraw it (`cancel_async_message`, the SDK's
+`cancelAsyncMessage`, used only when present), and a withdrawn message goes back to the
+queue as usual; otherwise the CLI is already running it, so the turn carries on with it
+(shown as steered as the turn finished its step) and ends once. Stop withdraws a steer the
+CLI has not taken. A session that has not yet had a uuid echoed, a slash command, Trezi's
+own Apply turns, question answers and project-components turns are not steered. Codex
+(one `codex exec` request per turn), Gemini and custom endpoints have no mid-turn input:
+the menu says so and the message waits in the queue. Steering never answers a question
+or approval, never changes provider, model or permission mode, and uses the same session
+and turn only (`agent:steer` checks the chat's running turn id; the Swift owner forwards
+a steer only into a running helper turn and relays one outcome per steer). An admitted
+steer is recorded as a `status` transcript entry with `steer: true`, so the turn's own
+user entry stays the turn's.
+
 The bundled `surface-controls` skill requires `chat_island` for on-demand tuning
 controls inside the conversation. Claude and Codex/custom endpoints support this
 route; Gemini must explain that native registration is unavailable. Existing

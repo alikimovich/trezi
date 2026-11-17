@@ -12,6 +12,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Added
 
+- Steer now: a message waiting in the queue while Claude works can be given to the running turn from its More menu, instead of waiting for the turn to finish; it shows in the conversation where Claude took it, and other providers say why they cannot (LKM-709).
 - Mark up has a Select region tool (S): drag over the preview snapshot to choose an area, adjust or move it with its handles, and Add to chat sends just that cropped screenshot, with or without marks drawn on it (LKM-646).
 - Command-Z and Shift-Command-Z undo and redo the last visual Styles change in the preview, one change at a time (a typed value, a slider or spacing-handle drag, a token choice), including from the focused preview or a committed Styles field; text fields, the composer and the code editor keep their own Undo, and Revert still clears the whole draft (LKM-644).
 

@@ -41,7 +41,10 @@ extension ProviderOwner {
             case .failure(let refusal): return violation(session, refusal.reason)
             case .success(let relayed):
                 let kind = relayed["type"]?.text?.string
-                if kind == "done" {
+                if kind == "steer" {
+                    // LKM-709: one outcome per forwarded steer; any other is dropped, not relayed.
+                    guard let id = relayed["id"]?.text?.string, session.steers.remove(id) != nil else { return }
+                } else if kind == "done" {
                     session.turnOpen = false
                     if session.phase == .running { session.phase = .idle; persist() }
                 } else if kind == "permission-resolved" || kind == "question-resolved", let id = relayed["id"]?.text?.string {
@@ -193,10 +196,13 @@ extension ProviderOwner {
     static let eventFields: [String: Set<String>] = [
         "delta": ["text"], "status": ["text"], "error": ["message"], "done": [], "usage": ["input", "output", "cached"],
         "commands": ["commands"], "permission-resolved": ["id"], "question-resolved": ["id"], "progress": [],
-        "model": ["model"],
+        "model": ["model"], "steer": ["id", "state"],
     ]
     /// Fields an event may leave out: an error's card code (LKM-119), a progress step (LKM-147).
-    static let optionalEventFields: [String: Set<String>] = ["error": ["code"], "progress": ["step"]]
+    static let optionalEventFields: [String: Set<String>] = ["error": ["code"], "progress": ["step"], "steer": ["reason"]]
+    /// LKM-709: a steer's outcome and why, from closed sets (`SteerState`/`SteerReason` in api.ts).
+    static let steerStates: Set<String> = ["admitted", "returned", "rejected", "uncertain"]
+    static let steerReasons: Set<String> = ["idle", "starting", "unsupported", "unconfirmed", "command", "busy", "turn-ended", "continued", "stopped", "unknown"]
     static let errorCodes: Set<String> = ["auth", "no-response"]
 
     /// A helper's event: a type the protocol relays, its own fields only, bounded, for its own chat.
@@ -222,6 +228,10 @@ extension ProviderOwner {
                 guard let text = field.text, text.count <= ProviderPolicy.Limits.eventText else { return .failure(EventRefusal("an oversized event")) }
             case "step":
                 guard bounded(field, 512) != nil else { return .failure(EventRefusal("a malformed progress event")) }
+            case "state":
+                guard let state = field.text?.string, steerStates.contains(state) else { return .failure(EventRefusal("an unknown steer state")) }
+            case "reason":
+                guard let reason = field.text?.string, steerReasons.contains(reason) else { return .failure(EventRefusal("an unknown steer reason")) }
             case "model":
                 guard bounded(field, 256) != nil else { return .failure(EventRefusal("a malformed model event")) }
             case "input", "output", "cached":
