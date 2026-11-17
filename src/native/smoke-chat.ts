@@ -13,6 +13,7 @@ import { checkProductLog } from './smoke-logs'
 import { checkQueueGeometry, checkQueueInsertion, emptyQueueProblems } from './smoke-queue'
 import { cleanSharedChat } from './smoke-shared-chat'
 import { shimmers } from './smoke-sidebar-shimmer'
+import { checkSteer } from './smoke-steer'
 import { inspectUntil, waitFor } from './smoke-wait'
 import { nativeWorkspace } from './workspace-runtime'
 
@@ -43,9 +44,16 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
   let resolveCalls = 0
   // The actual agent:send RPC and its provider event hook own the log lines.
   // Only the provider's outbound send is stubbed; no paid provider call occurs.
-  const provider = stubAgentSendForSmoke(state.chat, (...args) => {
-    sent.push(args)
-  })
+  const steered: [string, string][] = []
+  const provider = stubAgentSendForSmoke(
+    state.chat,
+    (...args) => {
+      sent.push(args)
+    },
+    (id, text) => {
+      steered.push([id, text])
+    }
+  )
   const send = (event: object) => provider.emit(event as AgentEvent)
   nativeChat.services.invoke = async (channel, ...args) => {
     if (channel === 'agent:retry-landing' && retryResponse) {
@@ -183,6 +191,8 @@ export async function checkNativeChat(host: NativeBridge, screenshot: string) {
     pausing.paused = false
     nativeChat.changed(pausing)
     await checkQueueGeometry(host, screenshot, '3-resumed', 3, false)
+    // LKM-709: Steer now on a queued row, through the host's own queue action.
+    await checkSteer(host, send, steered)
     for (const { id } of queue.queue)
       await host.request('chatPerform', { action: 'queue-remove', card: id })
     for (let i = 0; i < 100 && (await host.request('composerInspect')).queueCount; i++)

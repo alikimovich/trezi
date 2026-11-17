@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-709 — Steer a queued chat message into the current running agent turn
+
+- [x] Claude: mid-turn input on the Agent SDK's streaming input (uuid-stamped, `priority: 'next'`), admission only on the CLI's `user_message_uuids` echo; turn-ended withdraw via `cancel_async_message` or an honest continuation; Stop withdraws (`src/main/backends/claude-steer.ts`). Codex, Gemini and custom endpoints: unsupported, with the reason in the menu.
+- [x] Path: queue row menu (`ComposerQueueMenu`) → `queue-steer` → `src/native/chat-steer.ts` → `agent:steer` (same chat, same running turn) → Swift owner `steer` (running helper turn only, one outcome relayed per forwarded steer) → helper → adapter. Outcome: one `steer` event before the turn's `done`.
+- [x] Queue: the item keeps its place until admitted; rejected/returned keeps it queued with the reason; uncertain pauses the queue; a turn end without an answer leaves it queued; late answers ignored; edit/remove refused while on its way. Transcript: steered user message where it landed, reply continues below; persisted as a `steer` status entry.
+- [x] Units `claude-steer` (stand-in SDK, turn held at a boundary), `chat-steer` (controller), `provider-owner` `steer` section and steer forgeries, `native-chat-controller` row shape; native smoke step `smoke-steer` (not run locally).
+- [ ] Live Claude acceptance (real CLI folding a steer mid-turn) not run: no provider calls here. Manager: native `chat` group, independent review, exact-head CI and merge.
+
 ## LKM-672 — Escape exits the active preview selection or annotation mode
 
 - [x] One host Escape stop for the preview modes (`src/native/PreviewEscape.swift`, after 3D's own): bare Escape only; Mark up first when its overlay holds the keys, then Select when nothing in the window does (the toolbar's own Select toggle, so toolbar, Bun state and page mode change together). Sheets, menus and the colour panel keep it (not this window's keys).

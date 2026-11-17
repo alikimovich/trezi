@@ -288,6 +288,8 @@ export const UNIT = [
   'codex-resume',
   'codex-composer-images',
   'claude-image-transport',
+  'claude-steer',
+  'chat-steer',
   'interrupt-escalation',
   'turn-terminal',
   'chat-title',

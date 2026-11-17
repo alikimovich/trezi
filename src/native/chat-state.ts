@@ -42,6 +42,9 @@ export interface Submission {
   turn: NativeChatContext['turn']
   /** LKM-600: Trezi wrote this turn (an inspector Apply); shown as an app row. */
   action?: AppAction
+  /** LKM-709: a "Steer now" on its way into turn `turn` (request `request`). The message
+   *  stays queued, in its place, until the provider says it took it. */
+  steer?: { request: string; turn: string }
 }
 export interface Chat extends NativeChatMirror {
   /** A live assistant answer arrived since this conversation was last visible. */
@@ -74,6 +77,8 @@ export interface Chat extends NativeChatMirror {
   linkNotice?: { detail: string; path: string; reveal: boolean }
   queue: Submission[]
   paused: boolean
+  /** LKM-709: why the last steer did not reach the turn; the queue's note until the next. */
+  steerNote?: string
   sending: boolean
   cancellation: number
   permissions: PermissionRequest[]
@@ -292,6 +297,19 @@ export function hydrate(chat: Chat, transcript: SessionTranscriptEntry[]) {
           ...(a.type.startsWith('image/') ? { url: `data:${a.type};base64,${a.data}` } : {})
         }))
       })
+    } else if (entry.steer) {
+      // LKM-709: the owner's message steered into this turn, where it landed; the reply
+      // continues below it. It is not a turn of its own (`turn` stays).
+      chat.messages.push({
+        id: crypto.randomUUID(),
+        role: 'user',
+        at: entry.at,
+        text: entry.text,
+        statuses: [],
+        segments: entry.text ? [{ kind: 'text', text: entry.text, at: entry.at }] : [],
+        steered: 'turn'
+      })
+      chat.streamingId = null
     } else {
       if (entry.ui) placeUi(chat, entry.ui)
       else append(chat, entry.text, entry.role === 'status', entry.at)

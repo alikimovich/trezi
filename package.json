@@ -24,6 +24,8 @@
     "test:provider-live": "bun test/provider-live-parity.mjs",
     "test:provider-image-live": "bun test/provider-image-live.mjs",
     "test:claude-image-transport": "bun test/claude-image-transport.mjs",
+    "test:claude-steer": "bun test/claude-steer.mjs",
+    "test:chat-steer": "bun test/chat-steer.mjs",
     "test:codex-composer-images": "bun test/codex-composer-images.mjs",
     "test:native-smoke-runner": "bun test/native-smoke-runner.mjs",
     "test:native-smoke-report": "bun test/native-smoke-report.mjs",

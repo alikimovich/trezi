@@ -465,6 +465,19 @@ export interface ProviderLoginReport {
   detail: string
 }
 
+export type SteerState = 'admitted' | 'returned' | 'rejected' | 'uncertain'
+export type SteerReason =
+  | 'idle'
+  | 'starting'
+  | 'unsupported'
+  | 'unconfirmed'
+  | 'command'
+  | 'busy'
+  | 'turn-ended'
+  | 'continued'
+  | 'stopped'
+  | 'unknown'
+
 export type AgentEvent = (
   | { type: 'delta'; text: string }
   | { type: 'status'; text: string }
@@ -492,6 +505,13 @@ export type AgentEvent = (
    *  turn's first output. */
   | { type: 'progress'; step?: string }
   | { type: 'done'; landingPending?: boolean }
+  /** LKM-709: what became of a queued message steered into the running turn (`id` is
+   *  the steer request). `admitted`: the provider folded it into this turn (`continued`:
+   *  it ran straight on as the turn's last step finished, before `done`); `returned`: the
+   *  turn ended (or stopped) first and the provider withdrew it; `rejected`: never sent;
+   *  `uncertain`: the provider could not say whether it took it. Ids and reasons only:
+   *  the steered text never travels in an event. */
+  | { type: 'steer'; id: string; state: SteerState; reason?: SteerReason }
   /** `code` (LKM-119): `auth` — the provider is not signed in (a login card, not
    *  assistant text); `no-response` — the turn produced nothing within the owner's
    *  first-event deadline and was ended; since LKM-135 its message names the
@@ -754,6 +774,9 @@ export interface SessionTranscriptEntry {
   planningAttachments?: { name: string; type: string; data: string }[]
   /** LKM-600: a user entry Trezi wrote (an inspector Apply), shown as one app row. */
   action?: import('./app-action').AppAction
+  /** LKM-709: a `status` entry that is the owner's message steered into the running turn
+   *  (its text). Kept a status so the turn's own user entry stays the turn's last one. */
+  steer?: true
 }
 
 /**

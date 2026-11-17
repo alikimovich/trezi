@@ -609,9 +609,11 @@ phaseChat.queue = [
   }
 ]
 const stacked = viewState(phaseChat, [])
+// LKM-709: an idle chat has no turn to steer into; each row says so.
+const idle = 'Steer now works while Claude is working on a turn.'
 assert.deepEqual(stacked.composer.queue, [
-  { id: 'queued-one', text: 'First queued message', attachments: 0 },
-  { id: 'queued-two', text: '', attachments: 1 }
+  { id: 'queued-one', text: 'First queued message', attachments: 0, steer: idle },
+  { id: 'queued-two', text: '', attachments: 1, steer: idle }
 ])
 assert.equal(stacked.composer.queuePaused, true)
 assert.ok(

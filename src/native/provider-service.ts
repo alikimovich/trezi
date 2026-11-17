@@ -180,6 +180,19 @@ export function serviceProvider(
         images?.length ? { session, text, images: plain(images) } : { session, text }
       )
     },
+    steer: async (session, id, text, images) => {
+      if (images?.length && !validImages(images))
+        throw new ProviderError(
+          'invalidRequest',
+          'The pasted images are not supported or too large.'
+        )
+      if (text.length > LIMITS.sendText)
+        throw new ProviderError('invalidRequest', 'The message is too long.')
+      await call(
+        'steer',
+        images?.length ? { session, id, text, images: plain(images) } : { session, id, text }
+      )
+    },
     cancel: (session) => call('cancel', { session }),
     settled: async (session) => {
       await call('settled', { session })

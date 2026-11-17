@@ -9,6 +9,8 @@ export interface AttachmentPlan {
   images: { mediaType: string; data: string }[]
   /** The chat's own statement when the provider cannot take images at all (LKM-390). */
   notice: string
+  /** LKM-709: attachments named in the "[Not attached: …]" line (a steer refuses them). */
+  missed: number
 }
 
 type Save = (attachment: Attachment) => Promise<string>
@@ -61,7 +63,8 @@ export async function planAttachments(
       (missed.length ? `[Not attached: ${missed.join('; ')}]\n\n` : '') +
       notes.map((note) => `${note}\n\n`).join(''),
     images: kept.map(({ mediaType, data }) => ({ mediaType, data })),
-    notice: refused.length ? `Not sent as images: ${refused.join(', ')} (${NO_IMAGE_INPUT})` : ''
+    notice: refused.length ? `Not sent as images: ${refused.join(', ')} (${NO_IMAGE_INPUT})` : '',
+    missed: missed.length
   }
 }
 

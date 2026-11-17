@@ -10,6 +10,7 @@ import { editQueued, sendBlock } from './chat-queue'
 import { recoveryAction } from './chat-recovery'
 import { writeRecoveryReport } from './chat-recovery-report'
 import { assistant, begin, type Chat, placeUi, type Submission } from './chat-state'
+import { steerQueued } from './chat-steer'
 import { recoveryBlocked, STILL_HELD } from './held-card'
 import { landingFixPrompt } from './landing-check'
 
@@ -318,13 +319,20 @@ export async function cardAction(
     case 'link-dismiss':
       chat.linkNotice = undefined
       break
+    // LKM-709: into the running turn now. A message on its way stays put until answered.
+    case 'queue-steer':
+      // Not awaited: the row shows it on its way while the provider decides.
+      void steerQueued(chat, action.id, { invoke, changed: () => controller.changed(chat) })
+      break
     case 'queue-remove':
+      if (chat.queue.some((q) => `queued-${q.id}` === action.id && q.steer)) break
       for (const q of chat.queue)
         if (`queued-${q.id}` === action.id && q.chatUiId)
           await invoke('agent:chat-ui-delivery', chat.chat, q.chatUiId, 'cancelled').catch(() => {})
       chat.queue = chat.queue.filter((q) => `queued-${q.id}` !== action.id)
       break
     case 'queue-edit':
+      if (chat.queue.some((q) => `queued-${q.id}` === action.id && q.steer)) break
       for (const q of chat.queue)
         if (`queued-${q.id}` === action.id && q.chatUiId)
           await invoke('agent:chat-ui-delivery', chat.chat, q.chatUiId, 'cancelled').catch(() => {})

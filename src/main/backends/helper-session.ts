@@ -286,6 +286,15 @@ async function startHelperSession(
         .then(() => owner.send(session, back ? withHistory(text) : text, images))
         .catch((error) => refuse(error instanceof Error ? error.message : String(error)))
     },
+    // LKM-709: only into the helper's running turn on the chat's own provider; a refusal
+    // (no turn running, helper gone, a fallback provider) is the steer's one outcome.
+    steer: (id, text, images) => {
+      if (gone || reopening || onFallback())
+        return emit({ type: 'steer', id, state: 'rejected', reason: gone ? 'idle' : 'unsupported' })
+      void owner
+        .steer(session, id, text, images)
+        .catch(() => emit({ type: 'steer', id, state: 'rejected', reason: 'idle' }))
+    },
     pending,
     pendingQuestions,
     emit,

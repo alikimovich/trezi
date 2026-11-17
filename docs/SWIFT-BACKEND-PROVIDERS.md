@@ -204,6 +204,7 @@ Bun ↔ service: private pipe, S01 frames, no revision, empty scope:
 | `authorize` | `{session, tool, bytes}` | `{}` or `unauthorized` / `invalidRequest` |
 | `turn` / `terminal` / `settled` | `{session}` / `{session, kind}` / `{session}` | `{}` |
 | `send` (helper) | `{session, text, images?}` | `{}` |
+| `steer` (helper, LKM-709) | `{session, id, text, images?}`: only while the session's turn runs (else `unavailable`), at most 4 unanswered | `{}`; the outcome is one `steer` event with `id` |
 | `cancel` | `{session}` (answered at settle or deadline) | `{escalate}` |
 | `resume` / `recover` (read) | `{session, id, record}` / `{record}` | `{}` / `{recovered}` |
 | `answer` / `configure` (helper) | `{session, id, kind, value}` / `{session, model?, mode?}` | `{}` |
@@ -218,14 +219,16 @@ For helper sessions the service pushes
 Bun answers a `tool` push with `{"service":"provider-helper","id",result|error}`.
 
 Service ↔ helper (stdin/stdout, one JSON object per line). Service to helper: `open`,
-`send`, `interrupt`, `permission-result`, `question-result`, `configure`, `tool-result`,
+`send`, `steer`, `interrupt`, `permission-result`, `question-result`, `configure`, `tool-result`,
 `tool-error`, `shutdown`. Helper to service: `ready`, `failed`, `event`, `record` (new
 assistant and status entries, files touched, thread id), `permission`, `question`,
 `tool`, `settled`, `phase` (`{phase: auth|cli|init|progress, ms?, cached?, cli?,
 loggedIn?}`, LKM-135; a Claude `open` may carry the owner's cached `cli` choice). A
 helper started for "Check provider login" gets only `diagnose`
 and answers one `diagnosis`. An `error` event may carry `code: "auth" | "no-response"`
-(the chat shows a login card instead of text); any other code is a violation.
+(the chat shows a login card instead of text); any other code is a violation. A `steer`
+event (LKM-709) is `{id, state, reason?}` from closed sets, never text; the owner relays
+one per steer it forwarded and drops any other.
 
 ## Rollback (tightened to this domain; history, removed in LKM-111)
 

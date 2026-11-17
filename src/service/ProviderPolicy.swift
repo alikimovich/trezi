@@ -17,6 +17,8 @@ enum ProviderPolicy {
         static let toolArgs = 256 * 1024
         static let eventText = 1024 * 1024
         static let pendingTools = 8
+        /// LKM-709: steers forwarded to one helper and not yet answered.
+        static let pendingSteers = 4
         static let pendingApprovals = 32
     }
 

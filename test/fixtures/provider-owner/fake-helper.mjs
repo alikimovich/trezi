@@ -18,6 +18,9 @@
 //   login                 probes the stand-in Claude CLIs like the Claude adapter: an
 //                         `auth` error when none is logged in, else "logged in <source>"
 //   hang                  never finishes and emits nothing (Stop or the first-event deadline decides)
+//   hold                  stays open at a safe input boundary (LKM-709): a steer is admitted
+//                         and reported as "steered <text>"; steering "end" then ends the turn.
+//                         Outside a held turn a steer is rejected as idle
 //   crash                 exits mid-turn
 //   forge <json>          writes a raw frame to stdout, bypassing the host
 //   flood <bytes>         writes one line of that many bytes
@@ -49,6 +52,7 @@ const fake = {
     let mode = options.permissionMode ?? 'default'
     let disposed = false
     let counter = 0
+    let held = false
     const emit = (event) => { if (!disposed) ctx.onEvent({ ...event, projectKey: ctx.emitKey, ...(ctx.sessionId ? { sessionId: ctx.sessionId } : {}) }) }
     const say = (text) => { cap.appendAssistant(text); emit({ type: 'delta', text }) }
     const done = () => { cap.finalize(); emit({ type: 'done' }) }
@@ -107,6 +111,7 @@ const fake = {
           return done()
         }
         case 'hang': return
+        case 'hold': held = true; return
         case 'crash': return process.exit(7)
         case 'forge': process.stdout.write(`${arg}\n`); return
         case 'flood': process.stdout.write(`${'x'.repeat(Number(arg))}\n`); return
@@ -116,12 +121,19 @@ const fake = {
     return {
       key: 'fake', root, options, record: cap.record, pending, pendingQuestions, emit, finalize: cap.finalize,
       send: (text, images) => { void run(text, images) },
+      steer: (id, text) => {
+        if (!held) return emit({ type: 'steer', id, state: 'rejected', reason: 'idle' })
+        emit({ type: 'steer', id, state: 'admitted' })
+        say(`steered ${text}`)
+        if (text === 'end') { held = false; done() }
+      },
       dispose: () => { disposed = true },
       shutdown: () => {},
       setModel: async (next) => { model = next },
       setPermissionMode: async (next) => { mode = next },
       interrupt: async () => {
         if (process.env.FAKE_PROVIDER_WEDGE === '1') return new Promise(() => {})
+        held = false
         for (const [id, p] of pending) { pending.delete(id); emit({ type: 'permission-resolved', id }); void p }
         done()
         return undefined

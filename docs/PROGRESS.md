@@ -1,5 +1,36 @@
 # PROGRESS LOG
 
+## 2026-11-16 — LKM-709: Steer now for a queued owner message
+
+- Owner request: a queued message's More menu should give it to the running turn instead
+  of waiting for the turn to end. No steering existed; the queue only ever sent new turns.
+- Real mechanism, Claude only: the bundled Agent SDK/CLI fold a streamed user message with
+  a `uuid` and `priority: 'next'` into the running turn between tool rounds and name it in
+  `user_message_uuids` (documented on the SDK's result/assistant frames). That echo is the
+  admission. Every send is now stamped with a uuid, so a session knows its CLI echoes
+  before it offers to steer. A turn that ends first: `cancel_async_message` withdraws the
+  message (back to Trezi's queue) or, if the CLI already took it as its next step, the turn
+  carries on with it and still ends once (`continued`); no echo within 30 s is `uncertain`
+  and the queue pauses so it never sends twice. Stop withdraws. `cancelAsyncMessage` is the
+  SDK's shipped method for the documented control request; it is feature-detected.
+- Codex runs a turn as one `codex exec`, Gemini one CLI prompt, custom endpoints one
+  request: no mid-turn input, so the menu says why and the queue behaves as before.
+- One outcome per steer, ordered before the turn's `done`, carried as a `steer` event
+  (`id`, `state`, `reason`; never text) through the helper protocol. The Swift owner only
+  forwards a steer into a running helper turn and drops outcomes it did not forward.
+  `agent:steer` checks the chat's running turn id (run 0, no landing). Note:
+  `preparingTurns` spans the whole turn in agent.ts, so it is not a "still starting" signal.
+- The transcript gets a steered user message where Claude took it; the reply continues in
+  a new message below. Persisted as a `status` entry with `steer: true`: the conversation
+  owner treats the last `user` entry as the turn (`completedAt`), so a mid-turn user entry
+  would have broken that.
+- Evidence: units `claude-steer`, `chat-steer`, `provider-owner` (`steer` section, steer
+  forgeries), the changed-unit selection, typecheck, lint, `bun run build`. Native smoke
+  step `smoke-steer` added (menu items from the host's one list, host action, real
+  `agent:steer`, admission, transcript) but not run here. Live Claude acceptance is not run
+  (no provider calls): the fold-and-echo behaviour is from the SDK's documented contract
+  and the stand-in, not a real CLI.
+
 ## 2026-11-16 — LKM-705: the sidebar loading cat runs forwards
 
 - Owner report: the loading cat under the selected project runs the wrong way. Cause: LKM-618
