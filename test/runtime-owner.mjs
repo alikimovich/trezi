@@ -519,11 +519,12 @@ try {
       'deadlineExceeded'
     )
     await dead(await pidIn(join(project, 'slow.pid')))
-    assert.deepEqual(
-      (await fixture.cmd({ cmd: 'journal' })).groups,
-      [],
-      'ended groups leave the journal'
+    // The owner drops the entry once it reaps the group, which can trail the pid's death.
+    const journal = async () => (await fixture.cmd({ cmd: 'journal' })).groups
+    await until(async () => (await journal()).length === 0, 5000, 'the journal to drain').catch(
+      () => {}
     )
+    assert.deepEqual(await journal(), [], 'ended groups leave the journal')
     // Repeated stops during readiness join one cleanup; TERM is ignored, so KILL after the grace.
     const stubborn = runtime.start({
       root: project + '/',
