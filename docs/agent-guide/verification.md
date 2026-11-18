@@ -18,6 +18,7 @@ and fails on an unlisted one; the gate requires 0 Bun-owned rows and no rollback
 
 | Command | What |
 | --- | --- |
+| `bun run setup` | Run `install.sh` on this checkout: install, build, link `trezi` and Applications, open (`docs/INSTALL.md`) |
 | `bun run dev` / `bun run dev:native` | Build and launch the native app (Swift host + Bun services) |
 | `bun run build` / `bun run build:native` | Build `out/native/Trezi.app` (Swift host and service, bundled Bun, backend and preview) |
 | `bun run start` | Launch the existing native build (development launcher) |

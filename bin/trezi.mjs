@@ -7,7 +7,18 @@
 // this with the Bun on PATH or the one bundled into Trezi.app. Any other arguments are
 // handed to bin/trezi, for installs whose `trezi` link still points here.
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { closeSync, mkdirSync, openSync, readSync, realpathSync, statSync, writeSync } from 'node:fs'
+import {
+  closeSync,
+  copyFileSync,
+  existsSync,
+  constants as fsConstants,
+  mkdirSync,
+  openSync,
+  readSync,
+  realpathSync,
+  statSync,
+  writeSync
+} from 'node:fs'
 import { constants, homedir } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -199,8 +210,26 @@ async function update(args) {
   if (status.status === 0) {
     const dirtyLocks = lockfilesToRestore(status.stdout)
     if (dirtyLocks.length > 0) {
+      // A copy of each discarded lockfile stays beside the update logs: no silent loss.
+      const dir = updateLogDirectory()
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const saved = []
+      try {
+        mkdirSync(dir, { recursive: true, mode: 0o700 })
+        for (const lock of dirtyLocks) {
+          if (!existsSync(join(repoRoot, lock))) continue // deleted: HEAD has it
+          const copy = join(dir, `${lock}.${stamp}-${process.pid}`)
+          copyFileSync(join(repoRoot, lock), copy, fsConstants.COPYFILE_EXCL)
+          saved.push(copy)
+        }
+      } catch (error) {
+        console.error(
+          `Could not save a copy of ${dirtyLocks.join(', ')} in ${dir} (${error.code ?? error.message}); left the checkout as it is.`,
+        )
+        process.exit(1)
+      }
       console.log(
-        `Discarding local ${dirtyLocks.join(', ')} changes (regenerated on install)…`,
+        `Discarding local ${dirtyLocks.join(', ')} changes (regenerated on install)${saved.length ? `; a copy is in ${saved.join(', ')}` : ''}`,
       )
       spawnSync('git', ['checkout', 'HEAD', '--', ...dirtyLocks], {
         cwd: repoRoot,

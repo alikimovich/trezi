@@ -18,6 +18,44 @@ effect materials. This migration was verified on macOS 26.4.1, not every support
 OS version. Start through `scripts/start-native.mjs` (via the CLI/dev/start scripts):
 the source-built host requires launch arguments and its bundled XPC service.
 
+## Overview
+
+Trezi has a Swift/AppKit/SwiftUI interface, a separate Swift XPC service supervising
+the retained Bun backend and the provider helpers, and one
+WebKit view for the user's project. The rest of this page has the details.
+
+- **Swift** owns chat, composer, sidebar, toolbar, native dialog windows and inspectors. Settings and project memory
+  save automatically; dialog windows use traffic lights instead of redundant Close buttons.
+- **Bun** runs the controllers behind the native UI, source parsing and the provider
+  adapters (built-in ones inside supervised helpers); it persists nothing itself. The
+  Swift service writes preferences, the workspace (open projects, order,
+  selection) and project memory, runs managed project servers, performs Trezi's Git
+  effects, commits source edits that Bun's parsers propose, and owns chat records,
+  checkpoints and turn transitions (Bun's provider sessions report typed events to it),
+  and holds each provider session's grant: permission answers, Trezi tool
+  authorization, Stop's deadline, resume ids and supervised provider helpers;
+  see [workspace](SWIFT-BACKEND-WORKSPACE.md), [memory](SWIFT-BACKEND-MEMORY.md),
+  [runtime](SWIFT-BACKEND-RUNTIME.md), [repository](SWIFT-BACKEND-REPOSITORY.md),
+  [source](SWIFT-BACKEND-SOURCE.md), [conversation](SWIFT-BACKEND-CONVERSATION.md)
+  and [providers](SWIFT-BACKEND-PROVIDERS.md). Services in `src/main/` are retained
+  backend code; that directory name does not imply an Electron runtime.
+- **Preview** runs in `WKWebView` with an isolated selection/editing script.
+- **Transport** uses authenticated, versioned XPC between the host and Swift service,
+  with private pipes to Bun. Swift holds the exclusive profile lock and supervises
+  Bun and its managed child lifetimes. Preview messages retain their restricted allowlist.
+
+Claude, Codex and Gemini sessions run in provider helpers the Swift service spawns and
+supervises; a connection you added in Settings runs in the backend, so its key never
+leaves it. The backend and the helpers are JavaScript run by the Bun bundled into
+`Trezi.app`. There is no older launch path to fall back to: without its service, Trezi
+does not start. See [service](SWIFT-BACKEND-SERVICE.md) and
+[retirement](SWIFT-BACKEND-RETIREMENT.md).
+
+Electron and the old React application UI have been removed. Browser/Tailscale
+mode (`trezi serve`) is retired; the CLI reports that explicitly. The native
+profile stays separate from old Electron profiles, which are not deleted or
+silently migrated. Existing provider CLI logins remain available.
+
 ### Startup registration diagnostics (LKM-249)
 
 `trezi` and `open -a Trezi` enter through LaunchServices; `bun run dev`

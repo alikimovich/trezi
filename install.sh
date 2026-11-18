@@ -4,6 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/alikimovich/trezi/main/install.sh | bash
 #   curl -fsSL …/install.sh | bash -s -- --channel candidate   (testers)
 #   ./install.sh   or   bun run setup                          (inside a checkout)
+#   … | bash -s -- --non-interactive                           (coding agents; docs/INSTALL.md)
 #
 # Piped, it clones to ~/.trezi (TREZI_HOME) and updates that clone on every re-run.
 # Run from a checkout, it uses that checkout as it is (no clone, branch switch or pull
@@ -16,6 +17,7 @@ REPO_URL="https://github.com/alikimovich/trezi.git"
 usage() {
   cat <<'EOF'
 Usage: install.sh [--channel main|candidate] [--update] [--no-open] [--verbose]
+                  [--non-interactive]
 
   --channel <name>  Branch to install: main (default) or candidate. Also TREZI_CHANNEL.
                     Ignored inside a checkout, which keeps its own branch.
@@ -23,12 +25,23 @@ Usage: install.sh [--channel main|candidate] [--update] [--no-open] [--verbose]
                     A piped install always updates ~/.trezi.
   --no-open         Do not open Trezi at the end.
   --verbose         Show dependency, build and signing output as it runs.
+  --non-interactive Never read the terminal or wait for macOS: skip every question, and
+                    exit 3 with the action the Mac's owner must take (install the
+                    command-line tools) instead of waiting. Also TREZI_NONINTERACTIVE=1.
+                    For coding agents and scripts; see docs/INSTALL.md.
 EOF
 }
 
 die() {
   echo "Error: $*" >&2
   exit 1
+}
+
+# Stops for something only the Mac's owner can do (a macOS approval). Exit 3 tells an
+# agent running --non-interactive that nothing failed: run the installer again afterwards.
+needs_owner() {
+  echo "Action needed: $*" >&2
+  exit 3
 }
 
 # Keep one log per invocation. stdout/stderr are combined for chronological build
@@ -60,8 +73,11 @@ run_phase() {
 
 # Asks on the terminal and stores the reply in $answer. stdin holds this script for
 # curl ... | bash, so read /dev/tty; without one (CI/unattended) return 1, never hang.
+# --non-interactive never opens /dev/tty: an agent's pseudo-terminal has one that no
+# one answers, so the read would block for ever.
 ask() {
   answer=""
+  [ "$non_interactive" = 1 ] && return 1
   if { exec 3<>/dev/tty; } 2>/dev/null; then
     printf "%s" "$1" >&3
     read -r answer <&3 || answer=""
@@ -84,6 +100,12 @@ own_checkout() {
 install_command_line_tools() {
   xcode-select -p >/dev/null 2>&1 && return 0
   echo "==> Installing the Xcode command-line tools"
+  if [ "$non_interactive" = 1 ]; then
+    xcode-select --install >/dev/null 2>&1 || true
+    needs_owner "the Xcode command-line tools are missing. macOS shows a window to install them" \
+      "(if it does not, run 'xcode-select --install'): click Install, wait until it finishes," \
+      "then run this installer again. Nothing else was changed."
+  fi
   xcode-select --install >/dev/null 2>&1 ||
     die "could not start the command-line tools installer. Run 'xcode-select --install', then run this installer again."
   echo "A macOS window asks to install the command-line tools: click Install and wait until it"
@@ -118,9 +140,15 @@ update_user_install() {
     return 0
   fi
   echo "==> Updating existing install at $home"
-  # bun install regenerates the lockfile; that drift must not block the pull.
+  # bun install regenerates the lockfile; that drift must not block the pull. A copy
+  # of the discarded file stays beside the install log, so no edit is lost silently.
   if ! git -C "$home" diff --quiet HEAD -- bun.lock 2>/dev/null; then
-    echo "Discarding local bun.lock changes (regenerated on install)"
+    local saved=""
+    if [ -f "$home/bun.lock" ]; then
+      saved=$(mktemp "$log_dir/bun.lock.XXXXXX") && cp "$home/bun.lock" "$saved" ||
+        die "could not save a copy of the changed bun.lock in $log_dir; left it as it is."
+    fi
+    echo "Discarding local bun.lock changes (regenerated on install)${saved:+; a copy is in $saved}"
     git -C "$home" checkout -q HEAD -- bun.lock
   fi
   if [ -n "$channel" ] && [ "$(git -C "$home" branch --show-current)" != "$channel" ]; then
@@ -138,7 +166,9 @@ update_user_install() {
 }
 
 main() {
-  local channel="${TREZI_CHANNEL:-}" update=0 open_app=1 verbose=0 install_log
+  local channel="${TREZI_CHANNEL:-}" update=0 open_app=1 verbose=0 install_log log_dir
+  non_interactive=0
+  case "${TREZI_NONINTERACTIVE:-}" in 1|true|yes) non_interactive=1 ;; esac
   while [ $# -gt 0 ]; do
     case "$1" in
       --channel)
@@ -151,6 +181,7 @@ main() {
       --update) update=1; shift ;;
       --no-open) open_app=0; shift ;;
       --verbose) verbose=1; shift ;;
+      --non-interactive) non_interactive=1; shift ;;
       -h|--help) usage; return 0 ;;
       *) usage >&2; die "unknown option: $1" ;;
     esac
@@ -160,7 +191,7 @@ main() {
     *) die "unknown channel '$channel' (use main or candidate)." ;;
   esac
 
-  local log_dir="$HOME/Library/Logs/Trezi"
+  log_dir="$HOME/Library/Logs/Trezi"
   mkdir -p "$log_dir" || die "could not create install log directory: $log_dir"
   install_log=$(mktemp "$log_dir/install.XXXXXX") || die "could not create install log in $log_dir"
   echo "Install log: $install_log"
@@ -208,7 +239,7 @@ main() {
 
   # The build signs Trezi with one stable identity, creating the self-signed "Trezi Local"
   # identity in the login keychain once when there is no Apple Development one, so macOS
-  # keeps Keychain and privacy approvals across rebuilds (README "Code signing").
+  # keeps Keychain and privacy approvals across rebuilds (docs/INSTALL.md "Code signing").
   run_phase "Building Trezi" "$PM" run build
 
   echo "==> Linking the trezi command"
@@ -267,9 +298,11 @@ main() {
   if command -v agent-browser >/dev/null 2>&1; then
     echo "agent-browser is already installed."
   else
-    echo "Recommended: agent-browser lets Trezi check pages at phone, tablet, and desktop sizes."
-    echo "This installs the agent-browser CLI globally and downloads its browser."
     local browser_answer=""
+    if [ "$non_interactive" = 0 ]; then
+      echo "Recommended: agent-browser lets Trezi check pages at phone, tablet, and desktop sizes."
+      echo "This installs the agent-browser CLI globally and downloads its browser."
+    fi
     if ask "Install agent-browser now? [y/N] "; then
       browser_answer="$answer"
     fi
@@ -320,6 +353,10 @@ main() {
               *)
                 claude setup-token </dev/tty || echo "claude setup-token did not finish. Run it again later: claude setup-token" ;;
             esac
+          elif [ "$non_interactive" = 1 ]; then
+            # Never run setup-token here: it prints a token into the agent's transcript.
+            echo "Skipped (--non-interactive). Owner action: run 'claude auth login' in Terminal,"
+            echo "or sign in from Trezi's Settings > AI providers > Claude."
           else
             echo "Skipped (no terminal). Authorize later with: claude setup-token"
           fi

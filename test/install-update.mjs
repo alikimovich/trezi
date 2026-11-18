@@ -159,7 +159,7 @@ const env = {
 }
 
 /** Runs a command in its own session (no controlling terminal), bounded. */
-function exec(command, args, { cwd = scratch, extra = {}, input = null } = {}) {
+function exec(command, args, { cwd = scratch, extra = {}, input = null, limit = 90_000 } = {}) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd,
@@ -176,7 +176,13 @@ function exec(command, args, { cwd = scratch, extra = {}, input = null } = {}) {
     child.stderr.on('data', (data) => {
       stderr += data
     })
-    const timer = setTimeout(() => child.kill('SIGKILL'), 90_000)
+    const timer = setTimeout(() => {
+      try {
+        process.kill(-child.pid, 'SIGKILL') // the whole group, including a pty's children
+      } catch {
+        child.kill('SIGKILL')
+      }
+    }, limit)
     child.on('exit', (code, signal) => {
       clearTimeout(timer)
       resolve({ code, signal, stdout, stderr })
@@ -479,6 +485,9 @@ try {
   assert.equal(drift.code, 0, drift.stderr)
   assert.match(drift.stdout, /Discarding local bun\.lock changes/)
   assert.equal(readFileSync(join(trezi, 'bun.lock'), 'utf8'), 'lock 1\n')
+  const driftCopy = drift.stdout.match(/a copy is in (\S+)\n/)?.[1]
+  assert.ok(driftCopy?.startsWith(join(home, 'Library/Logs/Trezi/bun.lock.')), drift.stdout)
+  assert.equal(readFileSync(driftCopy, 'utf8'), 'lock drifted by an install\n', 'the drift is kept')
 
   // Running the installer again updates in place and rebuilds; nothing is reinstalled and
   // --no-open opens nothing.
@@ -489,6 +498,9 @@ try {
   assert.equal(again.code, 0, `${again.stdout}\n${again.stderr}`)
   assert.match(again.stdout, /Updating existing install/)
   assert.match(again.stdout, /Discarding local bun\.lock changes/)
+  const againCopy = again.stdout.match(/a copy is in (\S+)\n/)?.[1]
+  assert.ok(againCopy, again.stdout)
+  assert.equal(readFileSync(againCopy, 'utf8'), 'lock drifted by an install\n')
   assert.match(again.stdout, /Channel: main/)
   assert.equal(head(), tip('main'))
   assert.equal(branch(), 'main')
@@ -609,8 +621,93 @@ try {
   console.log(
     'install-update: ./install.sh in a checkout (no clone, branch switch or pull), --update, links follow the last install'
   )
+
+  // --non-interactive (docs/INSTALL.md, for coding agents). The blocker it exists for: an
+  // agent host that runs commands in a pseudo-terminal it never answers. There /dev/tty
+  // opens, and the browser question waits for ever without the flag.
+  rmSync(join(state, 'claude-authorized'))
+  const noBrowser = join(scratch, 'shims-no-browser')
+  mkdirSync(noBrowser)
+  for (const name of ['curl', 'xcode-select', 'git', 'claude', 'open', 'lsregister'])
+    symlinkSync(join(shims, name), join(noBrowser, name))
+  const agentPath = { PATH: `${noBrowser}:${bunDir}:${system}` }
+  const script = join(scratch, 'install.sh') // outside a checkout: installs ~/.trezi, like the one-liner
+  writeFileSync(script, installer)
+  // `script` gives the installer a pseudo-terminal; its input is a pipe that stays open
+  // and silent (sleep), like an agent's terminal that no one types into.
+  const inPty = (args, limit) =>
+    exec(
+      'sh',
+      [
+        '-c',
+        'sleep 300 | { script -q /dev/null bash "$@"; status=$?; pkill -P $$ sleep; exit $status; }',
+        'sh',
+        script,
+        ...args
+      ],
+      { extra: agentPath, limit }
+    )
+  const hung = await inPty(['--no-open'], 8000)
+  assert.equal(
+    hung.signal,
+    'SIGKILL',
+    `the prompt blocks in an unanswered terminal: ${hung.code} ${hung.stdout} ${hung.stderr}`
+  )
+  assert.match(hung.stdout, /Install agent-browser now\? \[y\/N\]/)
+
+  // Existing install with the owner's uncommitted edit: a non-interactive re-run in that
+  // terminal finishes, keeps the edit and channel, asks nothing and never runs setup-token.
+  release('eight')
+  writeFileSync(join(trezi, 'notes.txt'), 'owner notes\n')
+  writeFileSync(
+    join(trezi, 'install.sh'),
+    `${readFileSync(join(trezi, 'install.sh'), 'utf8')}# mine\n`
+  )
+  const claudeFrom = lines('claude.log').length
+  const agent = await inPty(['--non-interactive', '--no-open'], 60_000)
+  assert.equal(agent.code, 0, `${agent.stdout}\n${agent.stderr}`)
+  assert.doesNotMatch(agent.stdout, /Install agent-browser now|\[Y\/n\]/, 'no question')
+  assert.match(agent.stdout, /Skipped\. Install later with: bun install --global agent-browser/)
+  assert.match(
+    agent.stdout,
+    /Claude Code is not authorized yet\.\r?\nSkipped \(--non-interactive\)\. Owner action: run 'claude auth login'/
+  )
+  assert.deepEqual(lines('claude.log').slice(claudeFrom), ['auth --help', 'auth status'])
+  assert.match(agent.stdout, /Channel: main/)
+  assert.equal(head(), tip('main'))
+  assert.equal(readFileSync(join(trezi, 'notes.txt'), 'utf8'), 'owner notes\n')
+  assert.match(readFileSync(join(trezi, 'install.sh'), 'utf8'), /# mine\n$/, 'the edit is kept')
+  assert.match(agent.stdout, /installed successfully/)
+
+  // Missing command-line tools: start Apple's installer and stop with exit 3 and the owner's
+  // action instead of waiting; nothing is cloned or built. TREZI_NONINTERACTIVE=1 is the same.
+  writeFileSync(join(state, 'clt-missing'), '')
+  const ownerFrom = {
+    git: lines('git.log').length,
+    calls: log().length,
+    tools: lines('xcode-select.log').length
+  }
+  const needsOwner = await piped([], {
+    ...agentPath,
+    TREZI_HOME: join(scratch, 'agent install'),
+    TREZI_NONINTERACTIVE: '1'
+  })
+  assert.equal(needsOwner.code, 3, `${needsOwner.stdout}\n${needsOwner.stderr}`)
+  assert.match(
+    needsOwner.stderr,
+    /Action needed: the Xcode command-line tools are missing[\s\S]*run this installer again/
+  )
+  assert.deepEqual(lines('xcode-select.log').slice(ownerFrom.tools), ['--install'])
+  assert.deepEqual(moves(ownerFrom.git), [], 'nothing cloned')
+  assert.equal(log().length, ownerFrom.calls, 'nothing built')
+  assert.ok(!existsSync(join(scratch, 'agent install')))
+  assert.ok(!existsSync(join(state, 'opened')))
+  for (const name of ['clt-missing', 'clt-installing']) rmSync(join(state, name), { force: true })
   console.log(
-    'INSTALL-UPDATE OK — one-liner install with Bun and command-line tools, channels, in-checkout dev install, idempotent re-run, --no-open, setup-token offer skipped unattended, launch, update and interrupted-update resume (build, clone and installers are scripted; no real Xcode build, installer run or app launch)'
+    'install-update: --non-interactive (unanswered terminal reproduced, re-run keeps edits and channel, no setup-token, tools stop with exit 3)'
+  )
+  console.log(
+    'INSTALL-UPDATE OK — one-liner install with Bun and command-line tools, channels, in-checkout dev install, idempotent re-run, --no-open, --non-interactive, setup-token offer skipped unattended, launch, update and interrupted-update resume (build, clone and installers are scripted; no real Xcode build, installer run or app launch)'
   )
 } finally {
   rmSync(scratch, { recursive: true, force: true })

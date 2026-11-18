@@ -101,7 +101,7 @@ export function createLocalIdentity({ keychain = loginKeychain(), run = exec } =
 
 /** The one warning line printed whenever a build signs ad hoc instead of with an identity. */
 export const adhocWarning = reason =>
-  `warning: signing Trezi ad hoc (${reason}); macOS will ask again for Keychain and privacy access after each rebuild. See README "Code signing".`
+  `warning: signing Trezi ad hoc (${reason}); macOS will ask again for Keychain and privacy access after each rebuild. See docs/INSTALL.md, "Code signing".`
 
 /**
  * The signer for this build. `create: false` uses an existing identity but never makes
