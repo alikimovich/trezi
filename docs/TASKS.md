@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-721 — Short README with a copy-prompt install, verified agent install path
+
+- [x] README cut to what Trezi is, a reserved spot for the supplied demo video (HTML comment, no media yet on main), the copyable agent prompt plus a four-step sequence, a manual one-liner, real requirements and first steps.
+- [x] `docs/INSTALL.md`: the agent procedure (inspect, install or update in place, exit codes, boundary-by-boundary verification, report) plus requirements, manual install/options, start, sign-in, update, agent-browser, code signing, troubleshooting, earlier versions, developing. Feature list moved to `docs/FEATURES.md`, architecture overview to `docs/NATIVE.md`, `bun run setup` row to the verification table.
+- [x] `install.sh --non-interactive` (`TREZI_NONINTERACTIVE=1`): no `/dev/tty`, missing command-line tools start Apple's installer and exit 3 with `Action needed:`, never runs `claude setup-token`. Lockfile drift is copied to `~/Library/Logs/Trezi/` before `install.sh` or `trezi --update` discards it.
+- [x] `test/install-update.mjs`: unanswered pseudo-terminal hang reproduced without the flag; non-interactive re-run keeps an uncommitted edit, untracked file and channel, asks nothing; missing tools exit 3 with nothing cloned or built; lockfile copies. Real `install.sh --non-interactive --no-open` in this checkout with a scratch HOME (ad hoc signing) built, linked, `trezi --version` and `codesign --verify --strict` passed.
+- [ ] Not run: a clean Mac, the command-line tools window, real Bun download, provider sign-in, app launch from the installed link (own profile), the published raw URL (live only after merge). Manager: independent review, CI, merge.
+
 ## LKM-709 — Steer a queued chat message into the current running agent turn
 
 - [x] Claude: mid-turn input on the Agent SDK's streaming input (uuid-stamped, `priority: 'next'`), admission only on the CLI's `user_message_uuids` echo; turn-ended withdraw via `cancel_async_message` or an honest continuation; Stop withdraws (`src/main/backends/claude-steer.ts`). Codex, Gemini and custom endpoints: unsupported, with the reason in the menu.

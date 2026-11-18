@@ -920,7 +920,7 @@ master key, and once a "Trezi would like to access your Photos" prompt appeared 
 helper's cwd `/Users/<user>`.
 
 **Keychain and privacy grants.** The build signed everything ad hoc, so every rebuild was
-a new app to macOS. It now signs with one stable identity (`scripts/signing.mjs`; README
+a new app to macOS. It now signs with one stable identity (`scripts/signing.mjs`; `docs/INSTALL.md`
 "Code signing"). In the login keychain an item made by a binary without an Apple team ID
 is tied to that binary's code hash, which even a stable self-signed identity changes on
 every rebuild. So the Keychain work moved out of TreziHost into its own small executable,

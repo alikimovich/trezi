@@ -112,7 +112,7 @@ function world({ rows = [], fail = null, imports = true } = {}) {
 }
 const choose = (w, extra = {}) => signingIdentity({ ...w.options, ...extra })
 const adhocWarning =
-  /^warning: signing Trezi ad hoc \(.+\); macOS will ask again for Keychain and privacy access after each rebuild\. See README "Code signing"\.$/
+  /^warning: signing Trezi ad hoc \(.+\); macOS will ask again for Keychain and privacy access after each rebuild\. See docs\/INSTALL\.md, "Code signing"\.$/
 
 {
   // An existing identity is used as is; nothing is created.

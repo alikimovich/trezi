@@ -1,5 +1,48 @@
 # PROGRESS LOG
 
+## 2026-11-17 — LKM-721: short README, copy-prompt install, non-interactive installer
+
+- Owner request: a radically shorter README and a prompt-led install like ui-sdk.dev's
+  Copy Prompt. We kept only the prompt-led idea: no framework selector, because Trezi is
+  one native Mac app built from source, not a package added to each project. The README
+  prompt points an on-Mac coding agent at `docs/INSTALL.md` (raw GitHub URL, live once
+  merged). That page tells the agent to inspect first, update an existing install in
+  place (`TREZI_HOME=<checkout>`, its own channel), verify each boundary on its own
+  (version line, links, codesign, launch, provider state by exit code only) and stop for
+  owner actions.
+- Why `--non-interactive`: reproduced. Under a pseudo-terminal whose input stays open
+  and silent, which is how some agent hosts run commands, `ask()` opens `/dev/tty` and
+  the agent-browser question blocks for ever (the test now shows the hang). Claude
+  Code's Bash tool has no tty, so it already skipped questions. But the command-line
+  tools wait loop never ends without the owner, and `claude setup-token` would print a
+  token into a transcript. The flag skips `/dev/tty`, starts Apple's installer, then
+  exits 3 with `Action needed:`, and never runs setup-token. Without the flag nothing
+  changed (the no-tty wait is still tested).
+- Install seam: `update_user_install` and `trezi --update` restored a changed lockfile
+  with `git checkout`, which silently lost a deliberate edit. Both now copy it to
+  `~/Library/Logs/Trezi/` first and print the path, and they stop if the copy fails. A
+  deleted lockfile needs no copy. Other local changes were already kept by
+  `git pull --ff-only`, which stops on conflict. Links still follow the last install;
+  the guide makes the agent detect an existing checkout rather than create a second one.
+- README sections moved, not dropped: features, Gen UI and chat motion to
+  `docs/FEATURES.md`; install, update, signing, agent-browser and earlier-version data to
+  `docs/INSTALL.md`; architecture to `docs/NATIVE.md` "Overview"; `bun run setup` to the
+  verification table. `docs/INSTALL.md` replaces README "Code signing" in
+  `scripts/signing.mjs`, `install.sh`, PROVIDERS and the legacy-names row (it now
+  carries the old Keychain cleanup command). Requirements are as checked by
+  `scripts/requirements.mjs`: running needs macOS 13.3; building needs the 26 SDK and
+  Bun 1.3. Node is only for the test runner: the old "Node 22 to build" claim was wrong.
+- Video: no media block or video branch exists on main. The README keeps an HTML
+  comment under the intro for the video task's supplied media, with no placeholder link.
+- Evidence: `install-update` (fixtures: pty hang, non-interactive re-run on a dirty
+  existing install, exit 3, lockfile copies), `signing-identity`, `docs-links`,
+  `legacy-names-audit`, link/anchor check of the changed docs. Real run of
+  `install.sh --non-interactive --no-open` on this checkout with a scratch HOME,
+  `TREZI_SIGN_IDENTITY=-` and stand-in lsregister, on macOS 27.0.1 with SDK 27.2 and
+  Bun 1.3.13: built in 2m17s, `trezi --version`, links and `codesign --verify --strict`
+  OK. Not run: a clean Mac, the tools window, a real Bun download, sign-in, launching the
+  installed app, the published URL.
+
 ## 2026-11-16 — LKM-709: Steer now for a queued owner message
 
 - Owner request: a queued message's More menu should give it to the running turn instead

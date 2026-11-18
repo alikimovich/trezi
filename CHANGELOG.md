@@ -22,6 +22,7 @@ Every change that alters user-visible behaviour adds one line under Unreleased.
 
 ### Changed
 
+- The README is now short: what Trezi is, a prompt to paste into a coding agent that installs Trezi for you, and first steps. The full setup guide is `docs/INSTALL.md`. The installer gains `--non-interactive` for agents and scripts, and keeps a copy of a changed `bun.lock` when an update discards it (LKM-721).
 - Escape leaves the current preview mode in one press: in Mark up it closes the annotation tools like the X, even with a mark or region selected (text being typed on the snapshot keeps the first Escape); in Select it leaves Selection mode, after an inline text edit has taken its own Escape. The chat, code editor and Styles fields keep their Escape (LKM-672).
 - The Mark up toolbar is back at the top of the preview, the current tool (including the shape in the shapes button) stays visibly selected with an accent fill, the Select tool's icon is now a viewfinder, and its buttons are rounded to match the island (LKM-671).
 - Links in chat to files on this Mac now go somewhere useful: project source (relative, absolute or `file:` paths) opens in Trezi's editor at its lines, project screenshots and PDFs open in Quick Look, and folders show in Finder; a link outside the project, missing or unsupported says where it points and offers Reveal in Finder or Copy Path instead of a generic editor error. Other link schemes stay blocked (LKM-657).
