@@ -5,7 +5,15 @@ Trezi runs its dev server in a live preview on the right. An AI chat on the left
 running app: the real code, not a sandbox. When you're done, Trezi hands the result off
 as a branch and a GitHub pull request.
 
-<!-- Demo video: the video work owns this spot. Put its supplied media here. -->
+## See it in action
+
+[![Selecting a headline in Trezi and changing its font size and colour in the Styles inspector](docs/media/visual-editing.gif)](docs/media/visual-editing.mp4)
+
+**Visual editing.** Select an element on the page and change its font size and colour.
+
+[![Dragging a card's padding handles on the page while the inspector updates](docs/media/spacing-handles.gif)](docs/media/spacing-handles.mp4)
+
+**Spacing handles.** Drag padding straight on the page; the inspector follows along.
 
 ## Install
 

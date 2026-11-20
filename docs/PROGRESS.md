@@ -1,5 +1,19 @@
 # PROGRESS LOG
 
+## 2026-11-20 — LKM-763: feature clips in the README
+
+- Owner request: show two short native recordings (visual editing, spacing handles) on
+  the GitHub page. They fill the spot LKM-721 reserved under the intro, one caption each.
+- GitHub strips `<video>` from rendered Markdown (checked with the markdown API using the
+  repo as context; a repo-relative `.mp4` and a `<video>` tag both come back empty). The
+  only inline video GitHub keeps is an upload made through its web editor, which an agent
+  can't do. So each clip is an animated GIF preview linking to its `.mp4` in `docs/media/`.
+- GIFs were cut from the owner's MP4s with ffmpeg (960 px wide, 15 fps, 128-colour
+  palette): 0.54 MB and 0.80 MB. The MP4s are copied unchanged (0.77 MB, 0.79 MB). No LFS.
+- Privacy check: a frame every 0.5 s of both clips shows only Trezi and the Sunday
+  Studio demo on 127.0.0.1. Metadata holds only creation time and encoder tags; no audio.
+  The earlier takes, the probe capture, timing JSON and stills were left out.
+
 ## 2026-11-17 — LKM-721: short README, copy-prompt install, non-interactive installer
 
 - Owner request: a radically shorter README and a prompt-led install like ui-sdk.dev's
