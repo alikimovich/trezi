@@ -52,9 +52,9 @@ Use **Bun**, not npm/yarn. Native builds need macOS 13.3+ and the macOS 26 SDK. 
   proportionate local feedback. Its receipt is partial evidence, never merge
   acceptance. Required CI, independent review and the exact-head gate still apply.
   Native acceptance and native-failure pre-merge verification remain required.
-  Agent OS schedules desktop checks under its shared lock and runs nightly native
-  checks. Full local commands remain available.
-- Keep `bun run lint` at exit 0; the feedback command runs it before tests.
+  Agent OS runs desktop checks under its shared lock, and nightly native checks.
+- Keep `bun run lint` at exit 0. Log each test failure you fix in
+  `docs/TEST-FAILURE-LOG.md`.
 - Real provider calls (`test:native-live`, `verify`) require authorization.
 - Tiers: `unit`, `native`, `live`, `all`. Native/live run serially. SKIP is not
   PASS. `--only=core,chat,…` limits smoke groups (`src/native/smoke-groups.ts`);

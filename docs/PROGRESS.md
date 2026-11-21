@@ -1,5 +1,32 @@
 # PROGRESS LOG
 
+## 2026-11-21 — LKM-776: CI speed audit; critical-path order for the unit queue
+
+- Owner request: make CI fast without letting it lie (no retries, wider timeouts,
+  skips or fewer checks). This change is the audit plus the biggest-bucket fix; the
+  full table, the ordered remaining changes and the owner list are in
+  `docs/CI-SPEED.md`.
+- Audit: last 150 CI runs split into waiting / setup / running. Running dominates
+  every job (unit PR shard p50 374 s of 423 s; main whole tier 980 s of 1046 s);
+  waiting is 2–3 s at p50, setup 34 s. The Forge check (p50 7.9 min over 68 rounds,
+  from Forge's event log) is the unit tier too: typecheck is 4.7 s.
+- Why the Forge check was slow: a fresh worktree has no `.local/test-times.json`, so
+  the queue ran in `tiers.mjs` order. The serial swift-preview chain (576 s on CI)
+  sat at positions 345–352 of 354 and started last; the `native-chat-send-follow`
+  barrier at 128 drained the queue mid-run.
+- Fix: `queueOrder` starts exclusive tests first, then the longest chain (a group
+  ranks by its total). `test/unit-times.json` holds CI durations from main run
+  44843218770 under the local times, so every worktree gets the order. Start order
+  only; selection, timeouts and coverage are unchanged.
+- Evidence: a model of `runQueue` reproduces the three real PR shard wall times to
+  the second; with CI durations at 8 workers it gives 959 s → 672 s (−30%). Main and
+  PR shards gain 16–23 s. Real after-numbers come from this branch's Forge check and
+  PR CI run.
+- Found, not fixed here (item 1 of the plan): no merge queue on a User-owned repo and
+  no branch protection; a docs/test-only PR merges after a selected unit plan, so the
+  full tier only runs after merge. Started `docs/TEST-FAILURE-LOG.md` (two weeks,
+  nothing deleted) and the AGENTS.md rule to fill it.
+
 ## 2026-11-20 — LKM-763: feature clips in the README
 
 - Owner request: show two short native recordings (visual editing, spacing handles) on

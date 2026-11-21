@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import {
   acquireRunLock,
   killTargetGone,
+  queueOrder,
   runCommand,
   runQueue,
   skipReason
@@ -153,6 +154,35 @@ try {
   assert(events.indexOf('end:p1') < events.indexOf('start:p2'))
   assert(events.indexOf('end:p2') < events.indexOf('start:p3'))
   assert(events.indexOf('start:x') < events.indexOf('end:p1'), 'x skips ahead of p2')
+  // LKM-776: exclusive first, then the longest chain; a group ranks by its whole time.
+  const order = (list, times) =>
+    queueOrder(
+      list.map(([name, flag]) => ({
+        name,
+        exclusive: flag === 'x',
+        group: flag === 'g' ? 'swift-preview' : undefined
+      })),
+      times
+    ).map((item) => item.name)
+  assert.deepEqual(
+    order([['a'], ['g1', 'g'], ['b'], ['ex', 'x'], ['g2', 'g'], ['new'], ['c']], {
+      a: 50,
+      b: 90,
+      c: 50,
+      ex: 10,
+      g1: 40,
+      g2: 60
+    }),
+    ['ex', 'g2', 'g1', 'b', 'a', 'c', 'new'],
+    'the exclusive test leads; the 100 ms group beats a 90 ms test; ties keep list order'
+  )
+  assert.deepEqual(order([['a'], ['b'], ['c']], {}), ['a', 'b', 'c'], 'no times: list order')
+  assert.deepEqual(order([['a'], ['b']], { a: 'slow', b: 5 }), ['b', 'a'], 'a bad time counts 0')
+  // The committed baseline (test/unit-times.json) holds only durations; order, never selection.
+  const baseline = JSON.parse(readFileSync(new URL('./unit-times.json', import.meta.url), 'utf8'))
+  assert(Object.keys(baseline.tests).length > 0)
+  for (const [name, ms] of Object.entries(baseline.tests))
+    assert(Number.isSafeInteger(ms) && ms >= 0, `unit-times.json ${name}: ${ms}`)
   // Only grouped tests left, more workers than one group can use: no deadlock.
   const onlyGroup = ['q1', 'q2', 'q3'].map((name) => ({ name, group: 'g' }))
   assert.deepEqual(

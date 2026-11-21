@@ -133,6 +133,29 @@ export async function runCommand({
   }
 }
 
+/** Start order for `runQueue` (LKM-776). Exclusive tests come first, so a barrier never
+ *  waits mid-run for the tests in flight to drain. Then the longest critical path first:
+ *  a grouped test ranks by its whole group's time (the group runs one at a time, so the
+ *  group is one serial chain), any other test by its own. Ties keep the input order.
+ *  `times` maps a name to milliseconds; an unknown test counts as 0. Same names out. */
+export function queueOrder(items, times) {
+  const time = (name) => (Number.isFinite(times[name]) ? times[name] : 0)
+  const chain = new Map()
+  for (const { name, group } of items)
+    if (group) chain.set(group, (chain.get(group) ?? 0) + time(name))
+  const rank = ({ name, group }) => (group ? chain.get(group) : time(name))
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort(
+      (a, b) =>
+        Number(!!b.item.exclusive) - Number(!!a.item.exclusive) ||
+        rank(b.item) - rank(a.item) ||
+        time(b.item.name) - time(a.item.name) ||
+        a.index - b.index
+    )
+    .map(({ item }) => item)
+}
+
 // Exclusive tests are barriers: neither their predecessors nor successors overlap.
 // Tests with the same `group` never overlap each other; a free worker takes the first
 // waiting test whose group is not running, so the rest of the queue fills it (LKM-345).

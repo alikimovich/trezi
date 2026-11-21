@@ -5,7 +5,7 @@ import { availableParallelism } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describePlan, planFromGit, shardTests, typecheckPlan } from './helpers/test-plan.mjs'
-import { acquireRunLock, runCommand, runQueue } from './helpers/test-runner.mjs'
+import { acquireRunLock, queueOrder, runCommand, runQueue } from './helpers/test-runner.mjs'
 import { TIERS, TYPECHECKS, UNIT_GROUPS, UNIT_TIMEOUT_MS } from './tiers.mjs'
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url))
@@ -14,6 +14,11 @@ const ROOT = dirname(TEST_DIR)
 // Tier membership, timeouts and typechecks live in test/tiers.mjs.
 // Durations from the last `--report` run; the slowest tests start first.
 const TIMES = join(ROOT, '.local/test-times.json')
+// LKM-776: committed durations from a full main CI run, under the local ones. A fresh
+// worktree (every Forge check) has no `.local/test-times.json`; without this it ran in
+// list order, which started the serial swift-preview chain last. Order only, never
+// selection: a missing, stale or unreadable file changes when a test starts, not whether.
+const BASELINE_TIMES = join(TEST_DIR, 'unit-times.json')
 const groupOf = new Map(
   Object.entries(UNIT_GROUPS).flatMap(([group, names]) => names.map((name) => [name, group]))
 )
@@ -159,10 +164,15 @@ function logTail(path, count, label) {
     `----- end ${label} -----`
   ].join('\n')
 }
-let previous = {}
-try {
-  previous = JSON.parse(readFileSync(TIMES, 'utf8')).tests ?? {}
-} catch {}
+const readTimes = (path) => {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')).tests ?? {}
+  } catch {
+    return {}
+  }
+}
+const previous = readTimes(TIMES)
+const ordering = { ...readTimes(BASELINE_TIMES), ...previous }
 console.log(`Test logs: ${logs}`)
 if (plan) writeFileSync(join(logs, 'plan.json'), `${JSON.stringify(plan, null, 2)}\n`)
 for (const { name, reason } of checks.notRun) console.log(`NOT RUN [typecheck] ${name} — ${reason}`)
@@ -191,15 +201,16 @@ for (const [tier, members] of Object.entries(TIERS)) {
   if (!tests.length) continue
   const jobs = serial || tier !== 'unit' ? 1 : options.jobs
   console.log(`\n${tier}: ${tests.length} tests, at most ${jobs} workers`)
-  // Longest first, so a slow test never starts last; unknown tests keep their order.
-  if (tier === 'unit') tests.sort((a, b) => (previous[b] ?? 0) - (previous[a] ?? 0))
   // LKM-371: this offscreen AppKit fixture drives several long main-run-loop
   // settles. Other unit workers can stall its observations on the 1-shard runner.
-  const items = tests.map((name) => ({
+  let items = tests.map((name) => ({
     name,
     exclusive: tier !== 'unit' || name === 'native-chat-send-follow',
     group: tier === 'unit' ? groupOf.get(name) : undefined
   }))
+  // Unit: exclusive tests first, then the longest chain first (queueOrder, LKM-776), so
+  // a slow test or group never starts last. Other tiers keep their list order.
+  if (tier === 'unit') items = queueOrder(items, ordering)
   const tierResults = await runQueue(
     items,
     jobs,

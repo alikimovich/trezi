@@ -3,6 +3,13 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-776 — CI speed audit and the biggest-bucket fix
+
+- [x] Audit: 150 runs, waiting/setup/running at p50/p95 per job and for the Forge check (`docs/CI-SPEED.md`).
+- [x] Biggest bucket (unit tier running): critical-path queue order + committed CI times (`queueOrder`, `test/unit-times.json`).
+- [x] Failure log started (`docs/TEST-FAILURE-LOG.md`, until 2026-12-05); AGENTS.md rule.
+- [ ] Manager: file each remaining item in `docs/CI-SPEED.md` as its own task; owner list needs Andrei.
+
 ## LKM-763 — Feature clips (visual editing, spacing handles) in the README
 
 - [x] `docs/media/visual-editing.{mp4,gif}` and `docs/media/spacing-handles.{mp4,gif}`; README "See it in action" block at the LKM-721 placeholder, GIF preview linking to each MP4, one caption per clip.

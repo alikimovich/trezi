@@ -263,8 +263,17 @@ fixtures and groups after checking every reader of it.
   failed or dead builder lets the next one build (LOCAL-TEST-CLEANUP-V2,
   `test/swift-build-lock.mjs`).
 - **Order.** `--report` prints the 20 slowest tests and merges each PASS duration into
-  `.local/test-times.json`. The next run starts the slowest tests first. Without the
-  file, tests run in list order.
+  `.local/test-times.json`. Under it the runner reads `test/unit-times.json`, committed
+  durations from a full main CI run, so a fresh worktree (every Forge check) has an
+  order too. `queueOrder` (`test/helpers/test-runner.mjs`, LKM-776) starts the
+  exclusive tests first, so a barrier never waits mid-run for the tests in flight to
+  drain, then the longest critical path first: a grouped test ranks by its whole
+  group's time, because the group runs as one serial chain. Unknown tests count 0 and
+  keep list order. The times change when a test starts, never whether it runs. Before
+  LKM-776 a fresh worktree ran in list order, which started the swift-preview chain
+  (about 576 s on CI) last of 354, and `native-chat-send-follow` drained the queue at
+  position 128. Refresh the baseline from a main run's `Unit tests` log when the slow
+  tests change.
 - **Groups (LKM-345).** Unit tests in one `UNIT_GROUPS` group (`test/tiers.mjs`) never
   run at the same time. A free worker takes the first waiting test whose group is not
   running, so the other workers keep running the rest of the tier. The `swift-preview`
