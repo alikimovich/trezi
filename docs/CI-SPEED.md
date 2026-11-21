@@ -70,6 +70,10 @@ start order changes. Modelled with real CI durations:
 | PR shard holding the barrier | 309 s (real) | 286 s |
 | PR slowest shard | 309 s | 306 s |
 
+Local spot check (this Mac, 2026-11-21, under heavy load from other jobs): the
+swift-preview chain took 155 s and `native-chat-send-follow` 115 s, run with the new
+order, so the local floor is about 4.5 min while the group stays serial.
+
 Real after-numbers: the Forge check and the PR's own CI run of this branch (both
 run the full tier because `test/` runner files changed). See `docs/PROGRESS.md`.
 
