@@ -1,5 +1,31 @@
 # PROGRESS LOG
 
+## 2026-11-21 — LKM-776 round 2: one Swift build cache for every worktree
+
+- Owner correction: the target is the Forge check on the Mac; no Blacksmith, no new
+  GitHub Actions infrastructure; touch the existing workflow only where Forge waits on
+  it. `docs/CI-SPEED.md` is reordered that way; Blacksmith is off the owner list
+  (GitHub waiting is 2–3 s at p50; the Forge check, ≈1.9 full runs per task, is the
+  larger bucket).
+- Round 1's real Forge check (full tier): 539 s, against 505 s and 556 s for the
+  previous full checks. The ordering fix did not move it. Its logs show a
+  throughput-bound run (3573 s of tests in 534 s on 8 workers) whose 2-slot swiftc
+  lane compiled ~80 fixtures for the whole run: a Forge worktree starts with an empty
+  `.local/test-cache`, which CI restores but Forge never had.
+- Fix: a linked worktree keeps `swiftBuild` binaries, slots and the Clang module cache
+  in `~/Library/Caches/trezi-unit-tests/swift` (`cacheBase`). Keys were already
+  content-complete. A build no longer deletes its name's other builds at once, only
+  those unused for a day, and hits refresh mtime, so concurrent checks never delete a
+  binary in use (`pruneBuilds`). swift-preview product caches stay per checkout. Main
+  checkout and CI unchanged. Ordering from round 1 is kept (free, helps CI shards).
+- Evidence: 8 Swift-heavy owner tests, cold vs warm, twice under load average 55–90:
+  151.6 / 142.8 s → 100.9 / 85.1 s. `swift-build-lock` gained the cache-location and
+  prune checks; `swift-preview`, `swift-preview-generate`, `test-selection`,
+  `docs-links`, lint and typecheck pass. The shared cache was seeded with this
+  worktree's round-1 binaries (main's sources). Copying the module cache too broke
+  compiles (a `.pcm` records its cache path), so it was rebuilt in place; never copy
+  it. The full-tier after-number is this round's Forge check.
+
 ## 2026-11-21 — LKM-776: CI speed audit; critical-path order for the unit queue
 
 - Owner request: make CI fast without letting it lie (no retries, wider timeouts,

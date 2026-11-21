@@ -8,6 +8,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Audit: 150 runs, waiting/setup/running at p50/p95 per job and for the Forge check (`docs/CI-SPEED.md`).
 - [x] Biggest bucket (unit tier running): critical-path queue order + committed CI times (`queueOrder`, `test/unit-times.json`).
 - [x] Failure log started (`docs/TEST-FAILURE-LOG.md`, until 2026-12-05); AGENTS.md rule.
+- [x] Round 2 (owner correction: Forge check first, no Blacksmith/new Actions infra): round 1's real check showed no gain from ordering; linked worktrees now share one Swift build cache (`cacheBase`, `pruneBuilds`).
 - [ ] Manager: file each remaining item in `docs/CI-SPEED.md` as its own task; owner list needs Andrei.
 
 ## LKM-763 — Feature clips (visual editing, spacing handles) in the README

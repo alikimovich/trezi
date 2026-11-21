@@ -248,15 +248,25 @@ fixtures and groups after checking every reader of it.
 
 - **Swift build cache.** Every unit test that compiles Swift calls
   `swiftBuild(name, args)` in `test/helpers/swift-build.mjs`. The binary is cached
-  under `.local/test-cache/swift/` (or `$TREZI_TEST_CACHE/swift`), keyed by
-  `swiftc --version`, the SDK path, the flags and every source file's bytes, so an
-  unchanged fixture is never rebuilt and a changed source always is. All compiles
-  share one Clang module cache: a cold module cache costs about 25 s per compile.
+  under `$TREZI_TEST_CACHE/swift/`, else, in a linked Git worktree (every Forge check
+  and agent worktree), one per-user `~/Library/Caches/trezi-unit-tests/swift/`, else
+  `.local/test-cache/swift/` (the main checkout and CI). Keys are
+  `swiftc --version`, the SDK path, the flags and every source file's repo path and
+  bytes, so an unchanged fixture is never rebuilt, a changed source always is, and
+  worktrees on different commits share only identical builds (LKM-776: a fresh
+  worktree used to compile ~80 fixtures in the two swiftc slots for its whole Forge
+  check). A new build of a name removes that name's builds unused for a day; every hit
+  refreshes the binary's mtime, so a concurrent check never loses a binary it is about
+  to run. The swift-preview tests' product caches (scanner tools, toolchain probe,
+  preview derived data) rebuild folders in place, so they stay in the checkout
+  (`LOCAL_SWIFT_CACHE`). All compiles share one Clang module cache: a cold module
+  cache costs about 25 s per compile.
   Tests that sign, bundle or replace a binary pass `{ out }` and get a private copy.
   `keychain-rebuild` must really rebuild, so it uses `swiftCompile` (uncached, shared
   module cache). Delete the folder any time.
-- **swiftc lane.** At most 2 compiles run at once across all test processes
-  (`.local/test-cache/swift/slots/`; a dead owner's slot is taken over). That is why
+- **swiftc lane.** At most 2 compiles run at once across all test processes that
+  share the cache, so across all worktrees on this Mac (`<cache>/swift/slots/`; a dead
+  owner's slot is taken over). That is why
   no unit test needs to be an exclusive barrier any more. Each cached binary also has
   a build lock (`<binary>.lock`): a process that needs a binary another process is
   building waits for that build instead of compiling it again in the second slot; a

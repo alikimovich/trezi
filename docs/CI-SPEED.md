@@ -1,9 +1,11 @@
 # CI speed: audit and plan (LKM-776)
 
-"CI" here is everything between a pushed change and its verdict: the GitHub Actions
-workflow `.github/workflows/ci.yml` and the Forge project check that runs after every
-engineer round (`bun run typecheck && node test/run.mjs unit --changed=origin/main`).
-Both count as required jobs.
+"CI" here is everything between a pushed change and its verdict. The main target is
+the **Forge check**, which runs on the local Mac after every engineer round
+(`bun run typecheck && node test/run.mjs unit --changed=origin/main`). GitHub Actions
+(`.github/workflows/ci.yml`) counts only where Forge waits on it before merging
+(`wait_ci` is on for trezi); it stays on its existing runners and gets no new
+infrastructure (owner correction, 2026-11-21).
 
 Rules that outrank speed: the full suite runs before anything reaches main; no
 retries, wider timeouts or skips; lint rules and required checks only stay or grow.
@@ -27,7 +29,7 @@ work step plus cache save, log upload and teardown. Seconds, p50/p95.
 | typecheck (ubuntu) | push | 44 | 2 / 3 | 8 / 12 | 17 / 23 | 31 / 39 |
 | dependency audit (ubuntu) | both | 93 | 2 / 3 | 8 / 10 | 1 / 1 | 13 / 16 |
 | typecheck + unit tests (gate) | both | 93 | 2 / 3 | 0 / 1 | 0 / 1 | 5 / 6 |
-| **Forge check** (local Mac, 12 cores, 8 workers) | round | 68 | ~0 | `bun install` (Forge setup step, before the clock) | 474 / 582 | 474 / 582 |
+| **Forge check** (local Mac, 12 cores, 8 workers) | round | 68 | ~0 | `bun install` before the clock; a cold Swift fixture cache (~80 compiles) hidden inside running | 474 / 582 | 474 / 582 |
 
 Wall time per run, all 133 completed runs: p50 10.9 min, p95 20.2 min (PR 8.7 / 16.6,
 push to main 17.7 / 20.7). Forge check: 68 runs on trezi tasks, 2026-11-07 to
@@ -40,42 +42,71 @@ one at a time (LKM-345) and form a 576 s serial chain. `native-chat-send-follow`
 (96 s) is an exclusive barrier. Setup's largest step is the 1.3 GB Swift test cache:
 restore 13 s and save 13 s per shard, saved on every run because its key holds the SHA.
 
-**Biggest bucket: running, in the unit tier.** It is 88% of a PR shard and 94% of a
-main run, and all of the Forge check. Waiting is 2–3 s at p50 (macOS queueing only
-shows at p95: 92–251 s). Setup is 34 s.
+**Biggest bucket: the Forge check's unit tier.** Forge ran 69 checks on 36 trezi
+tasks (about 1.9 per task, p50 7.9 min each: about 15 min per task), and it waits on
+one GitHub PR verdict per task (p50 8.7 min). Inside both, running is the bucket: 88%
+of a PR shard and 94% of a main run. Waiting is 2–3 s at p50 (macOS queueing only
+shows at p95: 92–251 s), so faster runners would not move the median: Blacksmith
+stays off the owner list.
 
-### Why the Forge check was slow
+### What the Forge check actually waits on
 
-A Forge worktree is fresh, so it has no `.local/test-times.json` and the runner kept
-`test/tiers.mjs` list order. That list puts the five `swift-preview` tests, the
-longest serial chain, at positions 345–352 of 354: the chain started after nearly
-everything else had finished. `native-chat-send-follow` sat at position 128, so the
-queue drained there and then ran it alone. A scheduler model that mirrors `runQueue`
-reproduces the real PR shards to the second (309 / 306 / 268 s, real and modelled).
-With CI test times and 8 workers it gives 959 s in list order and 672 s with the new
-order (chain + barrier, the floor while the group stays serial): **−30%**.
+Round 1 of this task assumed the local check behaved like a CI shard and fixed start
+order (`queueOrder`, below). Its real run said otherwise. Forge check of round 1
+(full tier, 354 tests, 8 workers on 12 cores): **539 s**, against 505 s and 556 s for
+the two previous full-tier trezi checks (LKM-763). No measurable gain. The run's own
+logs (`summary.json` durations and log mtimes) show why:
 
-## The fix in this change: critical-path ordering everywhere
+- It was throughput-bound: 3573 s of test time in 534 s, 6.7 of 8 workers busy on
+  average. Order cannot shorten that; only less work can.
+- The swiftc lane (2 slots) never idled. A Forge worktree starts with an empty
+  `.local/test-cache`, so about 80 fixture binaries (owners, XPC, chat and sidebar
+  fixtures; 826 MB with the Clang module cache) were compiled from scratch; the last
+  one finished one second before the run ended. On CI the same cache is restored, so
+  this cost exists only in the Forge check.
+- `native-chat-send-follow` is an exclusive barrier: 97 s with 7 workers idle,
+  wherever it sits in the queue.
+
+## The fix in this change: one Swift build cache for every worktree
+
+`cacheBase` (`test/helpers/swift-build.mjs`): a linked Git worktree (its `.git` is a
+file; every Forge check and agent worktree) keeps `swiftBuild` binaries, the swiftc
+slots and the Clang module cache in `~/Library/Caches/trezi-unit-tests/swift`. The
+key was already content-complete (toolchain, flags, every source's repo path and
+bytes; no fixture locates files through its own path or `#filePath`), so worktrees on
+different commits share only identical builds; a changed source still rebuilds. Two
+guards for concurrency: a new build no longer deletes its name's other builds at once,
+only those unused for a day, and every hit refreshes the binary's mtime, so one check
+never deletes a binary another check is about to run. Product caches the swift-preview
+tests hand to Trezi's own code (scanner tools, toolchain probe) rebuild folders in
+place and stay per checkout (`LOCAL_SWIFT_CACHE`). The main checkout and CI keep
+`.local/test-cache` (CI caches that path), and `TREZI_TEST_CACHE` still wins. The
+Forge `check:` command does not change.
+
+Measured on this Mac (2026-11-21, load average 55–90 from other jobs), eight
+Swift-heavy owner tests (`conversation-owner`, `editing-owner`, `platform-owner`,
+`workflow-owner`, `source-owner`, `provider-owner`, `memory-owner`,
+`runtime-owner`), `node test/run.mjs unit --filter=…`:
+
+| Cache | Run 1 | Run 2 |
+| --- | ---: | ---: |
+| cold (empty `TREZI_TEST_CACHE`, what every Forge worktree had) | 151.6 s | 142.8 s |
+| shared, warm | 100.9 s | 85.1 s |
+
+About −40% wall on those eight. The shared cache was seeded once with this
+worktree's binaries, which Forge's round-1 check had just built from main's sources;
+that is the steady state every later worktree sees. Only binaries can be copied: a
+Clang module cache records its own path, so a copied one fails every compile (seen
+here; the module cache was then rebuilt in place, which is all the code ever does). The full-tier after-number is this
+round's Forge check (full, because `test/helpers/` changed); see `docs/PROGRESS.md`.
+
+### Kept from round 1: critical-path start order
 
 `queueOrder` (`test/helpers/test-runner.mjs`) starts exclusive tests first, then the
-longest chain first (a grouped test ranks by its group's total). `test/run.mjs` reads
-committed CI durations (`test/unit-times.json`) under the local times file, so fresh
-worktrees get the same order as CI. Nothing is skipped, retried or re-timed; only
-start order changes. Modelled with real CI durations:
-
-| Run | Before | After (model) |
-| --- | ---: | ---: |
-| Forge check (8 workers, list order before) | 959 s CI-equivalent; real p50 7.9 min | 672 s CI-equivalent; expected ≈ 5.5 min |
-| main push, whole tier (3 workers) | 974 s (real 1062 s) | 958 s |
-| PR shard holding the barrier | 309 s (real) | 286 s |
-| PR slowest shard | 309 s | 306 s |
-
-Local spot check (this Mac, 2026-11-21, under heavy load from other jobs): the
-swift-preview chain took 155 s and `native-chat-send-follow` 115 s, run with the new
-order, so the local floor is about 4.5 min while the group stays serial.
-
-Real after-numbers: the Forge check and the PR's own CI run of this branch (both
-run the full tier because `test/` runner files changed). See `docs/PROGRESS.md`.
+longest chain first; `test/unit-times.json` gives fresh worktrees CI durations to
+order by. It does not change what runs. On CI the modelled gain is 16–23 s per main
+run or barrier shard; locally it was not measurable (above). It stays because it is
+free and stops the serial swift-preview chain from starting last.
 
 ## Full suite before main
 
@@ -88,63 +119,69 @@ item 1 below.
 
 ## Remaining changes, in order (one Forge task each)
 
+Forge check first; GitHub items only touch the existing workflow Forge waits on.
+
 1. **Full tier is the last gate before merge.** Make the PR run's unit jobs FULL when
-   it is the merge gate (e.g. Forge runs the full check or waits for a full CI job),
-   and keep selection for engineer-round feedback only. Correctness, not speed.
-2. **Shorten the swift-preview chain** (576 s serial on CI, the floor of every unit
-   run now). Split `swift-preview-target` (252 s: two cold builds of the same
-   fixture, 118 s and 88 s) and `swift-preview` (158 s) into files under 20 s of
-   work each, or give the group a width that scales with cores, measured on the
-   hosted runner first.
-3. **Group-aware, time-balanced shards.** `shardTests` weighs by timeout budgets and
-   ignores groups; balance from the durations main records, keep each group in one
-   shard, and assert the shards together ran every file.
-4. **Main records times on every full run** and refreshes `test/unit-times.json`
-   (or a published artifact) so ordering and shards never go stale.
-5. **Swift test cache: save only from main.** 1.3 GB saved per shard per run (13 s)
-   and evicts other entries; PRs restore main's cache read-only. Seed from main.
-6. **Blobless clone** (`filter: blob:none`) for the full-history checkouts (6–9 s).
-7. **Split slow non-group files** over 20 s: `resolved-lessons` 193 s,
-   `repository-owner` 152 s, `host-warnings` 124 s, `skills-projection` 106 s,
-   `peer-wait-deadline` 103 s, `conversation-owner` 97 s.
-8. **One small-checks job** (typecheck, version/changelog, dependency audit, lint,
-   docs links) that lists every failure; drop the gate job's dependency wait.
-9. **Lint, format and typecheck budgets:** run old and new side by side (Biome →
-   oxlint `bun lint` + `bun fmt`; tsc → TypeScript 7 `bun check`) and list what each
-   new tool misses before switching. Lint today: Biome over `src` + `test`.
-10. **hk hooks:** pre-commit formats and lints staged files, pre-push runs the CI check.
-11. **Budget enforcement:** fail any job over its budget (per-job step that reads its
-    own timing), after the budgets are reachable.
-12. **Selection red-team:** hide a real change from `test/select.mjs` on purpose and
-    confirm CI goes red; list every input that reruns everything.
-13. **Test runner move to `bun test`** (isolated modules, reset per file, random
-    order): a large migration; first measure on a slice, side by side.
-14. **Fewer tests, on evidence:** `docs/TEST-FAILURE-LOG.md` runs until 2026-12-05;
+   it is the merge gate (Forge waits on it) and keep selection for engineer-round
+   feedback only. Correctness, not speed; it unlocks item 2.
+2. **Engineer-round selection for product changes.** Any `src/` change runs the full
+   tier today (the selector narrows only docs, test scripts and audited UI), so almost
+   every Forge check is full. Select the unit tests a diff can reach (import graph for
+   TS, source lists of `swiftBuild` fixtures for Swift), list every input that reruns
+   everything, then hide a real change from it on purpose and confirm the check goes
+   red. Allowed only once item 1 holds.
+3. **Fix the `native-chat-send-follow` barrier** (97 s with 7 idle workers per run).
+   LKM-371 made it exclusive because other workers stalled its main-run-loop settles
+   on the 1-shard runner: a timing bug in the fixture to find, not a reason for a
+   barrier.
+4. **Split slow files** (local full run, seconds): `resolved-lessons` 247,
+   `conversation-owner` 199, `peer-coordination` 182, `repository-owner` 172,
+   `peer-wait-deadline` 169, `service-process` 126; budget 20 s of work per file.
+5. **Workers to cores on the Mac:** 8 workers on 12 cores; measure 10 and 12 on an
+   idle machine with the warm cache before changing the default.
+6. **Shorten the swift-preview chain** (576 s serial on CI, its floor): split
+   `swift-preview-target` (two cold builds of one fixture) and `swift-preview`.
+7. **CI (existing workflow): group-aware, time-balanced shards** from durations main
+   records, each group in one shard, and assert the shards together ran every file.
+8. **CI: main records times** on every full run and refreshes `test/unit-times.json`.
+9. **CI: Swift test cache saved only from main** (1.3 GB, 13 s per shard per run);
+   PRs restore main's read-only.
+10. **CI: blobless clone** (`filter: blob:none`) for the full-history checkouts.
+11. **CI: one small-checks job** (typecheck, version/changelog, dependency audit,
+    lint, docs links) that lists every failure; drop the gate job's dependency wait.
+12. **Lint, format and typecheck tools:** run old and new side by side (Biome →
+    oxlint `bun lint` + `bun fmt`; tsc → TypeScript 7 `bun check`) and list what each
+    new tool misses before switching.
+13. **hk hooks:** pre-commit formats and lints staged files, pre-push runs the check.
+14. **Budget enforcement:** fail a run over its budget, once budgets are reachable.
+15. **Test runner move to `bun test`** (isolated modules, reset per file, random
+    order): measure on a slice first, side by side.
+16. **Fewer tests, on evidence:** `docs/TEST-FAILURE-LOG.md` runs until 2026-12-05;
     then delete change-detector-only files (never authorization, privacy,
     migrations or concurrency) and ban their patterns in `AGENTS.md`.
 
-Native Swift stays on swift/xcodebuild; the same rules apply (measure, cache,
-parallelize, select on PRs with the full tier before main). Native desktop suites
+Native Swift stays on swift/xcodebuild; the same rules apply. Native desktop suites
 keep running on the local Mac under the shared desktop lock.
 
 ## Needs the owner (account, secret or bill)
 
 | Change | Why | Expected monthly cost |
 | --- | --- | --- |
-| Move the repo to a GitHub organization | Merge queue (full suite before main, run once per merge); Blacksmith installs on organizations | $0 (GitHub Free org); merge queue on a public org repo is free |
-| Blacksmith runners, macOS M4 6 vCPU for unit shards and app build, Linux for the rest | Waiting <5 s, twice the cores of `macos-26` (3 vCPU), warm machines | ≈ $275–320 at ~$0.08/min for ≈ 3,500–4,000 macOS minutes (today ≈ 6,850 hosted macOS minutes/month that would roughly halve), Linux ≈ $1; verify on blacksmith.sh/pricing |
-| Runner image with Xcode, Bun and deps baked in | Setup <15 s | Included with Blacksmith; none on GitHub-hosted |
+| Move the repo to a GitHub organization | Merge queue: the full suite runs once per merge, before main | $0 (GitHub Free org; merge queue is free on a public org repo) |
+
+Blacksmith and runner images are off the list: GitHub waiting is 2–3 s at p50, and
+the Forge check, the larger bucket, runs on the Mac.
 
 ## Total CI time and cost
 
-| | Before | After this change |
+| | Before | After |
 | --- | --- | --- |
-| PR verdict (GitHub, wall) | p50 8.7 min, p95 16.6 min | ≈ same (−3 to −23 s on the barrier shard) |
-| Main push (GitHub, wall) | p50 17.7 min, p95 20.7 min | ≈ −16 s (model) |
-| Forge check per round | p50 7.9 min, p95 9.7 min | expected ≈ 5.5 min |
-| Hosted runner minutes | ≈ 6,850 macOS + 200 Linux per month | ≈ same |
-| Cost | $0 (public repo; ≈ $425 at the $0.062/min list price) | $0 |
+| Forge check per round (full tier) | p50 7.9 min, p95 9.7 min; full runs 505–556 s | this round's check (warm shared cache); 8 owner tests −40% |
+| Forge check time per task (≈1.9 rounds) | ≈ 15 min | — |
+| PR verdict Forge waits on (GitHub, wall) | p50 8.7 min, p95 16.6 min | ≈ same (no workflow change) |
+| Main push (GitHub, wall) | p50 17.7 min, p95 20.7 min | ≈ same |
+| Cost | $0 (public repo, hosted runners; local Mac) | $0 |
 
-The 1-minute p50 / 2-minute p95 target is not reachable on 3-vCPU hosted macOS
-runners: 2682 s of unit test time over 9 vCPUs is about 5 min before any setup.
-It needs items 2, 3 and 7 plus more cores (the owner list).
+The 1-minute p50 / 2-minute p95 target is not reachable while every engineer round
+runs the full tier: 2682 s (CI) to 3573 s (Mac, under load) of unit test time. It
+needs items 2–5.

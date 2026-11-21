@@ -3,11 +3,65 @@
 // swiftc again; a dead or failed builder's lock does not block the next build.
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { skipUnlessSwift } from './helpers/darwin.mjs'
+
+// LKM-776: where the cache lives, and a prune that never removes a recently used build
+// (linked worktrees share one cache, so another check may be about to run it).
+{
+  const { cacheBase, pruneBuilds, STALE_MS } = await import('./helpers/swift-build.mjs')
+  const scratch = mkdtempSync(join(tmpdir(), 'trezi-swift-cache-'))
+  try {
+    const clone = join(scratch, 'clone')
+    const linked = join(scratch, 'linked')
+    mkdirSync(join(clone, '.git'), { recursive: true })
+    mkdirSync(linked)
+    writeFileSync(join(linked, '.git'), 'gitdir: /elsewhere/.git/worktrees/linked\n')
+    const home = join(scratch, 'home')
+    assert.equal(cacheBase({ env: {}, dir: clone, home }), join(clone, '.local/test-cache'))
+    const shared = cacheBase({ env: {}, dir: linked, home })
+    assert.ok(shared.startsWith(home) && shared.endsWith('trezi-unit-tests'), shared)
+    const bare = join(scratch, 'no-git')
+    assert.equal(cacheBase({ env: {}, dir: bare, home }), join(bare, '.local/test-cache'))
+    assert.equal(cacheBase({ env: { TREZI_TEST_CACHE: '/x' }, dir: linked, home }), '/x')
+
+    const dir = join(scratch, 'cache')
+    mkdirSync(dir)
+    const now = Date.now()
+    const build = (key, ageMs) => {
+      const path = join(dir, `fixture-${key.repeat(24)}`)
+      writeFileSync(path, key)
+      const at = new Date(now - ageMs)
+      utimesSync(path, at, at)
+      return path
+    }
+    const kept = build('a', 0)
+    const fresh = build('b', 60_000)
+    const stale = build('c', STALE_MS + 60_000)
+    const otherName = join(dir, `other-${'d'.repeat(24)}`)
+    writeFileSync(otherName, 'd')
+    utimesSync(otherName, new Date(0), new Date(0))
+    pruneBuilds(dir, 'fixture', `fixture-${'a'.repeat(24)}`, { now })
+    assert.ok(existsSync(kept), 'the new build stays')
+    assert.ok(existsSync(fresh), 'a build used within the day stays: another check may run it')
+    assert.ok(!existsSync(stale), 'a build unused for a day is removed')
+    assert.ok(existsSync(otherName), 'other names are untouched')
+    console.log('SWIFT-CACHE OK — linked worktrees share one cache; prune keeps recent builds')
+  } finally {
+    rmSync(scratch, { recursive: true, force: true })
+  }
+}
 
 skipUnlessSwift('the Swift build cache lock')
 const temp = mkdtempSync(join(tmpdir(), 'trezi-swift-lock-'))
