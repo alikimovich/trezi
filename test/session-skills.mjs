@@ -234,12 +234,21 @@ setSessionSkillsSource(() => fixtureSource)
   // and its request is dropped unsent, so no pins appear for it later.
   fx = service(library([pin('one')], 0, edit(null)))
   const stuck = fx.client.create([{ path: 'SKILL.md', text: 'x' }])
+  let stuckSettled = false
+  stuck.then(
+    () => (stuckSettled = true),
+    () => (stuckSettled = true)
+  )
   run = await timed('trezi-d6')
+  const settledFirst = stuckSettled
   assert.equal(
     run.result.note,
     'This chat started without Trezi Skills: Trezi Skills were busy with other requests'
   )
-  assert.ok(run.elapsed >= 1_400 && run.elapsed < 2_000, `admission budget (${run.elapsed} ms)`)
+  assert.ok(run.elapsed >= 1_400, `admission budget (${run.elapsed} ms)`)
+  // Ordered, not clocked: the start gave up while the edit still held the queue (a loaded
+  // machine fires both timers late, so a wall-clock ceiling under 2 s read 2053 ms).
+  assert.equal(settledFirst, false, 'the start gave up before the edit expired')
   await assert.rejects(stuck, { code: 'deadlineExceeded' })
   await sleep(20)
   assert.deepEqual(methods(fx.sent), ['list', 'create'], 'the busy start sent nothing')

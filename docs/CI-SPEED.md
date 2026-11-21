@@ -97,8 +97,9 @@ About −40% wall on those eight. The shared cache was seeded once with this
 worktree's binaries, which Forge's round-1 check had just built from main's sources;
 that is the steady state every later worktree sees. Only binaries can be copied: a
 Clang module cache records its own path, so a copied one fails every compile (seen
-here; the module cache was then rebuilt in place, which is all the code ever does). The full-tier after-number is this
-round's Forge check (full, because `test/helpers/` changed); see `docs/PROGRESS.md`.
+here; the module cache was then rebuilt in place, which is all the code ever does). The full-tier after-number is the
+round-2 Forge check (full, because `test/helpers/` changed): **428.5 s**, down from 539 s
+(round 1) and 505–556 s before; see `docs/PROGRESS.md`.
 
 ### Kept from round 1: critical-path start order
 
@@ -176,7 +177,7 @@ the Forge check, the larger bucket, runs on the Mac.
 
 | | Before | After |
 | --- | --- | --- |
-| Forge check per round (full tier) | p50 7.9 min, p95 9.7 min; full runs 505–556 s | this round's check (warm shared cache); 8 owner tests −40% |
+| Forge check per round (full tier) | p50 7.9 min, p95 9.7 min; full runs 505–556 s | 428.5 s on the round-2 check (warm shared cache, load ~190; 2 test bugs it exposed fixed in round 3); 8 owner tests −40% |
 | Forge check time per task (≈1.9 rounds) | ≈ 15 min | — |
 | PR verdict Forge waits on (GitHub, wall) | p50 8.7 min, p95 16.6 min | ≈ same (no workflow change) |
 | Main push (GitHub, wall) | p50 17.7 min, p95 20.7 min | ≈ same |

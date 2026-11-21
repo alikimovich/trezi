@@ -1,5 +1,20 @@
 # PROGRESS LOG
 
+## 2026-11-21 — LKM-776 round 3: two timing test bugs from the full-tier Forge check
+
+- Round 2's Forge check ran the full tier (runner files changed): 428.5 s wall, against
+  539 s for round 1 and 505 / 556 s before; 349 PASS, 2 FAIL. Both failures were test
+  bugs under load (load average ~190), both pass alone; nothing was retried or widened.
+- `sidebar-marquee` "widened at the end: text stops at 143.75 of 185": the fixture's
+  `resize()` returned before the title's next frame timer applied the shorter travel,
+  and a plan running late sampled at once (offset 155, travel 115). It now pumps until
+  `offset <= travel` (1 s cap), as `select()` already does (LKM-644). Red: sampling at
+  the resize instant without the wait reproduces the exact failure; green with it.
+- `session-skills` "admission budget (2053 ms)": the `< 2000` ceiling stood for "the
+  start gave up before the edit's 2 s wait"; it now asserts that order directly (the
+  stuck edit has not settled when the start returns), keeping the `>= 1400` floor.
+- Both logged in `docs/TEST-FAILURE-LOG.md` as test bugs.
+
 ## 2026-11-21 — LKM-776 round 2: one Swift build cache for every worktree
 
 - Owner correction: the target is the Forge check on the Mac; no Blacksmith, no new
