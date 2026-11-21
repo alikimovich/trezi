@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-763 — Feature clips (visual editing, spacing handles) in the README
+
+- [x] `docs/media/visual-editing.{mp4,gif}` and `docs/media/spacing-handles.{mp4,gif}`; README "See it in action" block at the LKM-721 placeholder, GIF preview linking to each MP4, one caption per clip.
+- [x] Frames checked for private content; GitHub markdown API render checked (GIF kept, `<video>` stripped).
+- [ ] Manager: confirm the README on the pushed branch/PR plays both GIFs and the MP4 links open; CI; merge.
+
 ## LKM-721 — Short README with a copy-prompt install, verified agent install path
 
 - [x] README cut to what Trezi is, a reserved spot for the supplied demo video (HTML comment, no media yet on main), the copyable agent prompt plus a four-step sequence, a manual one-liner, real requirements and first steps.
