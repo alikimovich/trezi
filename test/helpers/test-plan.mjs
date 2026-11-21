@@ -16,7 +16,10 @@ export const SELECTOR_FILES = [
   'test/tiers.mjs',
   'test/select.mjs',
   'test/helpers/test-plan.mjs',
-  'test/helpers/test-runner.mjs'
+  'test/helpers/test-runner.mjs',
+  // LKM-776: committed start-order times; it names every unit test, so it is runner data,
+  // not a fixture user, and a change to it runs everything.
+  'test/unit-times.json'
 ]
 
 const CODE = /\.(mjs|cjs|js|ts|tsx|swift|sh)$/

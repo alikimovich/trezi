@@ -230,7 +230,7 @@ tier membership only in `test/tiers.mjs`.
 | A registered unit test script, edited, that nothing else names | that test plus the scanners of `test/` (`lint`, `no-system-preferences`, `legacy-names-audit`) |
 | A file in an audited fixture folder (`FIXTURES`) | that fixture's tests plus scanners |
 | An audited Swift UI source (`UI_SOURCES`, now `src/native/SidebarIcon.swift`) | its unit Swift fixtures, every registered test naming its type, the scanners of `src/native`; the app build stays required, and the plan names the native smoke groups still owed (`--only=sidebar,settings`), which the unit tier never runs |
-| Anything else: other Swift or TypeScript source, helpers, unaudited fixtures, `package.json`, configs, new, deleted, renamed or unregistered tests, native/live tests, `test/run.mjs`, `test/tiers.mjs`, `test/select.mjs`, the selector, `.github/` | **everything** (with the paths that forced it) |
+| Anything else: other Swift or TypeScript source, helpers, unaudited fixtures, `package.json`, configs, new, deleted, renamed or unregistered tests, native/live tests, `test/run.mjs`, `test/tiers.mjs`, `test/select.mjs`, `test/unit-times.json`, the selector, `.github/` | **everything** (with the paths that forced it) |
 | No changed paths, more than 40 paths, an unknown Git status | **everything** |
 | A ref that is not a commit, no merge base, unexpected `git diff` output | exit 2; nothing runs |
 
