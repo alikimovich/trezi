@@ -13,6 +13,12 @@
 - Privacy check: a frame every 0.5 s of both clips shows only Trezi and the Sunday
   Studio demo on 127.0.0.1. Metadata holds only creation time and encoder tags; no audio.
   The earlier takes, the probe capture, timing JSON and stills were left out.
+- CI round 1 failed on three unrelated unit tests under load. Two were test races, now
+  fixed: `browser-tools-install` handled the cancelled install's rejection too late (Bun
+  flagged it unhandled), and `spawn-phases` started its 400 ms lease timer before Apply
+  reached the lane (held 1 s now). The third, the `repository-owner` stale-lock commit,
+  passes locally: its `gitRunning` scan treats any `git` whose cwd can't be read as
+  running, so a Git from a parallel test exiting mid-scan may keep the lock. Left as is.
 
 ## 2026-11-17 — LKM-721: short README, copy-prompt install, non-interactive installer
 

@@ -242,11 +242,12 @@ try {
   assert.ok(slow.toFirstEditMs + slow.modelMs >= 590, 'fixture model time lands in the model spans')
   assert.ok(slow.worktreeMs < slow.toFirstEditMs + slow.modelMs + warm.worktreeMs + 1000)
   modelDelay = 0
-  // Occupied: another repository operation holds the lease for 400 ms when Apply starts.
+  // Occupied: another repository operation holds the lease for 1 s when Apply starts.
+  // Apply reaches the lane a few hundred ms in on a loaded runner, so it still waits ≥ 350 ms.
   let release
   const held = enqueueRepoWrite(repo, () => new Promise((r) => (release = r)))
-  setTimeout(() => release(), 400)
-  const occupied = await apply('warm, repository lease held 400 ms')
+  setTimeout(() => release(), 1000)
+  const occupied = await apply('warm, repository lease held 1 s')
   await held
   assert.ok(occupied.laneWaitMs >= 350, 'a held lease is queue time, not worktree setup')
   assert.ok(occupied.worktreeMs < occupied.laneWaitMs + cold.worktreeMs, 'setup not inflated')

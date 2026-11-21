@@ -141,13 +141,18 @@ try {
 
   // Cancel: the running install refuses a second one, then its whole group is stopped.
   fx.mode('npx', 'slow')
-  const slow = owner.browserToolsInstall('shell')
+  // Handle the refusal now: the cancel reply can settle it before the next await resumes.
+  const slow = refusal(
+    owner.browserToolsInstall('shell'),
+    'cancelled',
+    /cancelled\. Nothing was marked ready/
+  )
   await until('the slow install', () => lines.some((l) => l.line.startsWith('Downloading')))
   const { pid } = installerRun(fx.dir, 'npx')
   assert.ok(alive(pid))
   await refusal(owner.browserToolsInstall('cli'), 'busy', /still running/)
   assert.equal(await owner.browserToolsCancel(), true)
-  await refusal(slow, 'cancelled', /cancelled\. Nothing was marked ready/)
+  await slow
   await until('the cancelled group to exit', () => !alive(pid))
   assert.equal(await owner.browserToolsCancel(), false, 'nothing left to cancel')
 
