@@ -1,5 +1,73 @@
 # PROGRESS LOG
 
+## 2026-11-21 — LKM-776 round 3: two timing test bugs from the full-tier Forge check
+
+- Round 2's Forge check ran the full tier (runner files changed): 428.5 s wall, against
+  539 s for round 1 and 505 / 556 s before; 349 PASS, 2 FAIL. Both failures were test
+  bugs under load (load average ~190), both pass alone; nothing was retried or widened.
+- `sidebar-marquee` "widened at the end: text stops at 143.75 of 185": the fixture's
+  `resize()` returned before the title's next frame timer applied the shorter travel,
+  and a plan running late sampled at once (offset 155, travel 115). It now pumps until
+  `offset <= travel` (1 s cap), as `select()` already does (LKM-644). Red: sampling at
+  the resize instant without the wait reproduces the exact failure; green with it.
+- `session-skills` "admission budget (2053 ms)": the `< 2000` ceiling stood for "the
+  start gave up before the edit's 2 s wait"; it now asserts that order directly (the
+  stuck edit has not settled when the start returns), keeping the `>= 1400` floor.
+- Both logged in `docs/TEST-FAILURE-LOG.md` as test bugs.
+
+## 2026-11-21 — LKM-776 round 2: one Swift build cache for every worktree
+
+- Owner correction: the target is the Forge check on the Mac; no Blacksmith, no new
+  GitHub Actions infrastructure; touch the existing workflow only where Forge waits on
+  it. `docs/CI-SPEED.md` is reordered that way; Blacksmith is off the owner list
+  (GitHub waiting is 2–3 s at p50; the Forge check, ≈1.9 full runs per task, is the
+  larger bucket).
+- Round 1's real Forge check (full tier): 539 s, against 505 s and 556 s for the
+  previous full checks. The ordering fix did not move it. Its logs show a
+  throughput-bound run (3573 s of tests in 534 s on 8 workers) whose 2-slot swiftc
+  lane compiled ~80 fixtures for the whole run: a Forge worktree starts with an empty
+  `.local/test-cache`, which CI restores but Forge never had.
+- Fix: a linked worktree keeps `swiftBuild` binaries, slots and the Clang module cache
+  in `~/Library/Caches/trezi-unit-tests/swift` (`cacheBase`). Keys were already
+  content-complete. A build no longer deletes its name's other builds at once, only
+  those unused for a day, and hits refresh mtime, so concurrent checks never delete a
+  binary in use (`pruneBuilds`). swift-preview product caches stay per checkout. Main
+  checkout and CI unchanged. Ordering from round 1 is kept (free, helps CI shards).
+- Evidence: 8 Swift-heavy owner tests, cold vs warm, twice under load average 55–90:
+  151.6 / 142.8 s → 100.9 / 85.1 s. `swift-build-lock` gained the cache-location and
+  prune checks; `swift-preview`, `swift-preview-generate`, `test-selection`,
+  `docs-links`, lint and typecheck pass. The shared cache was seeded with this
+  worktree's round-1 binaries (main's sources). Copying the module cache too broke
+  compiles (a `.pcm` records its cache path), so it was rebuilt in place; never copy
+  it. The full-tier after-number is this round's Forge check.
+
+## 2026-11-21 — LKM-776: CI speed audit; critical-path order for the unit queue
+
+- Owner request: make CI fast without letting it lie (no retries, wider timeouts,
+  skips or fewer checks). This change is the audit plus the biggest-bucket fix; the
+  full table, the ordered remaining changes and the owner list are in
+  `docs/CI-SPEED.md`.
+- Audit: last 150 CI runs split into waiting / setup / running. Running dominates
+  every job (unit PR shard p50 374 s of 423 s; main whole tier 980 s of 1046 s);
+  waiting is 2–3 s at p50, setup 34 s. The Forge check (p50 7.9 min over 68 rounds,
+  from Forge's event log) is the unit tier too: typecheck is 4.7 s.
+- Why the Forge check was slow: a fresh worktree has no `.local/test-times.json`, so
+  the queue ran in `tiers.mjs` order. The serial swift-preview chain (576 s on CI)
+  sat at positions 345–352 of 354 and started last; the `native-chat-send-follow`
+  barrier at 128 drained the queue mid-run.
+- Fix: `queueOrder` starts exclusive tests first, then the longest chain (a group
+  ranks by its total). `test/unit-times.json` holds CI durations from main run
+  44843218770 under the local times, so every worktree gets the order. Start order
+  only; selection, timeouts and coverage are unchanged.
+- Evidence: a model of `runQueue` reproduces the three real PR shard wall times to
+  the second; with CI durations at 8 workers it gives 959 s → 672 s (−30%). Main and
+  PR shards gain 16–23 s. Real after-numbers come from this branch's Forge check and
+  PR CI run.
+- Found, not fixed here (item 1 of the plan): no merge queue on a User-owned repo and
+  no branch protection; a docs/test-only PR merges after a selected unit plan, so the
+  full tier only runs after merge. Started `docs/TEST-FAILURE-LOG.md` (two weeks,
+  nothing deleted) and the AGENTS.md rule to fill it.
+
 ## 2026-11-20 — LKM-763: feature clips in the README
 
 - Owner request: show two short native recordings (visual editing, spacing handles) on

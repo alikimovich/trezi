@@ -230,7 +230,7 @@ tier membership only in `test/tiers.mjs`.
 | A registered unit test script, edited, that nothing else names | that test plus the scanners of `test/` (`lint`, `no-system-preferences`, `legacy-names-audit`) |
 | A file in an audited fixture folder (`FIXTURES`) | that fixture's tests plus scanners |
 | An audited Swift UI source (`UI_SOURCES`, now `src/native/SidebarIcon.swift`) | its unit Swift fixtures, every registered test naming its type, the scanners of `src/native`; the app build stays required, and the plan names the native smoke groups still owed (`--only=sidebar,settings`), which the unit tier never runs |
-| Anything else: other Swift or TypeScript source, helpers, unaudited fixtures, `package.json`, configs, new, deleted, renamed or unregistered tests, native/live tests, `test/run.mjs`, `test/tiers.mjs`, `test/select.mjs`, the selector, `.github/` | **everything** (with the paths that forced it) |
+| Anything else: other Swift or TypeScript source, helpers, unaudited fixtures, `package.json`, configs, new, deleted, renamed or unregistered tests, native/live tests, `test/run.mjs`, `test/tiers.mjs`, `test/select.mjs`, `test/unit-times.json`, the selector, `.github/` | **everything** (with the paths that forced it) |
 | No changed paths, more than 40 paths, an unknown Git status | **everything** |
 | A ref that is not a commit, no merge base, unexpected `git diff` output | exit 2; nothing runs |
 
@@ -248,23 +248,42 @@ fixtures and groups after checking every reader of it.
 
 - **Swift build cache.** Every unit test that compiles Swift calls
   `swiftBuild(name, args)` in `test/helpers/swift-build.mjs`. The binary is cached
-  under `.local/test-cache/swift/` (or `$TREZI_TEST_CACHE/swift`), keyed by
-  `swiftc --version`, the SDK path, the flags and every source file's bytes, so an
-  unchanged fixture is never rebuilt and a changed source always is. All compiles
-  share one Clang module cache: a cold module cache costs about 25 s per compile.
+  under `$TREZI_TEST_CACHE/swift/`, else, in a linked Git worktree (every Forge check
+  and agent worktree), one per-user `~/Library/Caches/trezi-unit-tests/swift/`, else
+  `.local/test-cache/swift/` (the main checkout and CI). Keys are
+  `swiftc --version`, the SDK path, the flags and every source file's repo path and
+  bytes, so an unchanged fixture is never rebuilt, a changed source always is, and
+  worktrees on different commits share only identical builds (LKM-776: a fresh
+  worktree used to compile ~80 fixtures in the two swiftc slots for its whole Forge
+  check). A new build of a name removes that name's builds unused for a day; every hit
+  refreshes the binary's mtime, so a concurrent check never loses a binary it is about
+  to run. The swift-preview tests' product caches (scanner tools, toolchain probe,
+  preview derived data) rebuild folders in place, so they stay in the checkout
+  (`LOCAL_SWIFT_CACHE`). All compiles share one Clang module cache: a cold module
+  cache costs about 25 s per compile.
   Tests that sign, bundle or replace a binary pass `{ out }` and get a private copy.
   `keychain-rebuild` must really rebuild, so it uses `swiftCompile` (uncached, shared
   module cache). Delete the folder any time.
-- **swiftc lane.** At most 2 compiles run at once across all test processes
-  (`.local/test-cache/swift/slots/`; a dead owner's slot is taken over). That is why
+- **swiftc lane.** At most 2 compiles run at once across all test processes that
+  share the cache, so across all worktrees on this Mac (`<cache>/swift/slots/`; a dead
+  owner's slot is taken over). That is why
   no unit test needs to be an exclusive barrier any more. Each cached binary also has
   a build lock (`<binary>.lock`): a process that needs a binary another process is
   building waits for that build instead of compiling it again in the second slot; a
   failed or dead builder lets the next one build (LOCAL-TEST-CLEANUP-V2,
   `test/swift-build-lock.mjs`).
 - **Order.** `--report` prints the 20 slowest tests and merges each PASS duration into
-  `.local/test-times.json`. The next run starts the slowest tests first. Without the
-  file, tests run in list order.
+  `.local/test-times.json`. Under it the runner reads `test/unit-times.json`, committed
+  durations from a full main CI run, so a fresh worktree (every Forge check) has an
+  order too. `queueOrder` (`test/helpers/test-runner.mjs`, LKM-776) starts the
+  exclusive tests first, so a barrier never waits mid-run for the tests in flight to
+  drain, then the longest critical path first: a grouped test ranks by its whole
+  group's time, because the group runs as one serial chain. Unknown tests count 0 and
+  keep list order. The times change when a test starts, never whether it runs. Before
+  LKM-776 a fresh worktree ran in list order, which started the swift-preview chain
+  (about 576 s on CI) last of 354, and `native-chat-send-follow` drained the queue at
+  position 128. Refresh the baseline from a main run's `Unit tests` log when the slow
+  tests change.
 - **Groups (LKM-345).** Unit tests in one `UNIT_GROUPS` group (`test/tiers.mjs`) never
   run at the same time. A free worker takes the first waiting test whose group is not
   running, so the other workers keep running the rest of the tier. The `swift-preview`

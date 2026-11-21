@@ -26,7 +26,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { MODULE_CACHE, SWIFT_CACHE } from './helpers/swift-build.mjs'
+import { LOCAL_SWIFT_CACHE, MODULE_CACHE } from './helpers/swift-build.mjs'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const MACROS = join(ROOT, 'test/fixtures/swift-preview-macros')
@@ -284,10 +284,10 @@ assert.deepEqual(readdirSync(repo), [], 'the choice is stored outside the repo')
 pass('selection')
 
 // --- Scanner, catalog and generated Swift on the macros fixture -------------------
-mkdirSync(SWIFT_CACHE, { recursive: true })
+mkdirSync(LOCAL_SWIFT_CACHE, { recursive: true })
 const toolchain = await selectToolchain({
-  cacheFile: join(SWIFT_CACHE, 'toolchains.json'),
-  workDir: join(SWIFT_CACHE, 'toolchain-probe')
+  cacheFile: join(LOCAL_SWIFT_CACHE, 'toolchains.json'),
+  workDir: join(LOCAL_SWIFT_CACHE, 'toolchain-probe')
 })
 const developerDir = toolchain.toolchain?.developerDir ?? ''
 if (!developerDir || !syntaxLibraries(developerDir)) {
@@ -295,7 +295,7 @@ if (!developerDir || !syntaxLibraries(developerDir)) {
 } else {
   const fixtureHash = treeHash(MACROS)
   const scanner = new PreviewScanner({
-    toolsDir: join(SWIFT_CACHE, 'tools'),
+    toolsDir: join(LOCAL_SWIFT_CACHE, 'tools'),
     moduleCache: join(MODULE_CACHE, 'scanner'),
     log: () => {}
   })

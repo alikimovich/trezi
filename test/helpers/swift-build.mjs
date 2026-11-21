@@ -3,8 +3,9 @@
 // module cache below it takes a few seconds, and an unchanged fixture is not rebuilt
 // at all: binaries are cached by toolchain, flags and source contents. At most
 // SWIFT_SLOTS compiles run at once across all test processes (the swiftc lane), so
-// parallel test workers never stack up compiles. Cache: `.local/test-cache/swift`
-// (or `$TREZI_TEST_CACHE/swift`); delete it any time.
+// parallel test workers never stack up compiles. Cache: `$TREZI_TEST_CACHE/swift`, else
+// one shared folder for every linked Git worktree (`cacheBase`), else
+// `.local/test-cache/swift`; delete it any time.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -19,16 +20,53 @@ import {
   renameSync,
   rmSync,
   statSync,
+  utimesSync,
   writeFileSync
 } from 'node:fs'
+import { homedir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('../..', import.meta.url))
-export const SWIFT_CACHE = join(
+
+/** The folder that holds `swift/`. `TREZI_TEST_CACHE` wins. A linked Git worktree (its
+ *  `.git` is a file: every Forge check, every agent worktree) uses one per-user folder,
+ *  so a fresh worktree starts warm (LKM-776: a cold worktree spent its whole Forge check
+ *  waiting on ~80 fixture compiles in the two swiftc slots). The key is the toolchain,
+ *  flags and every source's repo path and bytes, so worktrees on different commits
+ *  share only identical builds. A normal clone (the main checkout, CI) keeps
+ *  `.local/test-cache`, which CI caches. */
+export function cacheBase({ env = process.env, dir = root, home = homedir() } = {}) {
+  if (env.TREZI_TEST_CACHE) return env.TREZI_TEST_CACHE
+  if (statSync(join(dir, '.git'), { throwIfNoEntry: false })?.isFile())
+    return process.platform === 'darwin'
+      ? join(home, 'Library/Caches/trezi-unit-tests')
+      : join(home, '.cache/trezi-unit-tests')
+  return join(dir, '.local/test-cache')
+}
+export const SWIFT_CACHE = join(cacheBase(), 'swift')
+// Product caches the swift-preview tests hand to Trezi's own code (scanner tools, the
+// toolchain probe, preview derived data). Those rebuild a folder in place, so they stay
+// in this checkout and are never shared by two concurrent worktrees.
+export const LOCAL_SWIFT_CACHE = join(
   process.env.TREZI_TEST_CACHE || join(root, '.local/test-cache'),
   'swift'
 )
+// A new build of a name removes that name's other builds once unused this long. Every
+// hit refreshes the binary's mtime; with one cache shared by concurrent worktrees, an
+// immediate prune could delete a binary another check is about to run.
+export const STALE_MS = 24 * 60 * 60 * 1000
+
+/** Removes `name`'s cached builds in `dir` other than `keep` that were last used (mtime)
+ *  more than `maxAgeMs` before `now`. */
+export function pruneBuilds(dir, name, keep, { now = Date.now(), maxAgeMs = STALE_MS } = {}) {
+  const stem = new RegExp(`^${name}-[0-9a-f]{24}$`)
+  for (const entry of readdirSync(dir)) {
+    if (!stem.test(entry) || entry === keep) continue
+    const mtime = statSync(join(dir, entry), { throwIfNoEntry: false })?.mtimeMs
+    if (mtime !== undefined && now - mtime > maxAgeMs) rmSync(join(dir, entry), { force: true })
+  }
+}
 export const MODULE_CACHE = join(SWIFT_CACHE, 'module-cache')
 export const SWIFT_SLOTS = 2
 // Absolute: some suites put a scripted `xcrun` first on PATH.
@@ -173,7 +211,7 @@ export function swiftBinary(name, args, { cwd = root } = {}) {
  *  once per toolchain, flags and source contents and returns the cached binary. With
  *  `out`, copies it there and returns `out` (for a binary that is signed, bundled or
  *  must not be replaced while it runs). `name` must be unique per distinct build: a
- *  new build of a name prunes that name's older binaries. */
+ *  new build of a name prunes that name's builds unused for a day (pruneBuilds). */
 export function swiftBuild(name, args, { out, cwd = root, timeout = 400_000 } = {}) {
   const binary = swiftBinary(name, args, { cwd })
   mkdirSync(SWIFT_CACHE, { recursive: true })
@@ -206,16 +244,16 @@ export function swiftBuild(name, args, { out, cwd = root, timeout = 400_000 } = 
           `swiftc: ${result.error || result.signal || ''}\n${result.stdout}\n${result.stderr}`
         )
         renameSync(building, binary)
-        const stem = new RegExp(`^${name}-[0-9a-f]{24}$`)
-        for (const entry of readdirSync(SWIFT_CACHE))
-          if (stem.test(entry) && entry !== basename(binary))
-            rmSync(join(SWIFT_CACHE, entry), { force: true })
+        pruneBuilds(SWIFT_CACHE, name, basename(binary))
       }
     } finally {
       release()
       unlock()
     }
   }
+  // Mark it used, so a prune elsewhere keeps it (pruneBuilds).
+  const now = new Date()
+  utimesSync(binary, now, now)
   if (!out) return binary
   copyFileSync(binary, out)
   return out

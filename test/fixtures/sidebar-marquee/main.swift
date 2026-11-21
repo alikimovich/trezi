@@ -126,6 +126,11 @@ func resize(_ cell: SidebarChatCell, to width: CGFloat, at time: Double) {
     plan.append((time, "resize", {
         cell.setFrameSize(NSSize(width: width, height: cell.frame.height))
         cell.layoutSubtreeIfNeeded()
+        // A wider title brings its end in on its next frame timer, as `select` does. A loaded
+        // machine can be behind the plan, so the next sample would run with no run-loop turn
+        // and read the old offset past the new travel: wait for that frame.
+        let title = cell.title!, deadline = Date(timeIntervalSinceNow: 1)
+        while title.offset > title.travel, Date() < deadline { pump(1.0 / 60) }
     }))
 }
 /// Selection: the row's title gets wider with no change to the title's own frame.

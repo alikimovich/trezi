@@ -5,3 +5,4 @@
 docs/TASKS.md merge=union
 docs/PROGRESS.md merge=union
 CHANGELOG.md merge=union
+docs/TEST-FAILURE-LOG.md merge=union

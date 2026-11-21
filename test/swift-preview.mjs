@@ -21,7 +21,7 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { MODULE_CACHE, SWIFT_CACHE } from './helpers/swift-build.mjs'
+import { LOCAL_SWIFT_CACHE, MODULE_CACHE, SWIFT_CACHE } from './helpers/swift-build.mjs'
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const FIXTURE = join(ROOT, 'test/fixtures/swift-components')
@@ -376,7 +376,7 @@ const driver = spawn(process.execPath, [SWIFT_PREVIEW_DRIVER], {
     ...process.env,
     PORT: String(port),
     HOST: '127.0.0.1',
-    TREZI_SWIFT_PREVIEW_CACHE: join(SWIFT_CACHE, 'swift-preview')
+    TREZI_SWIFT_PREVIEW_CACHE: join(LOCAL_SWIFT_CACHE, 'swift-preview')
   },
   stdio: ['ignore', 'pipe', 'pipe']
 })
