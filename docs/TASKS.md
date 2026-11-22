@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-782 — Six more feature clips in the README
+
+- [x] `docs/media/{inline-text-editing,3d-inspection,visual-feedback,canvas-to-code,layer-selection,layout-and-mobile}.{mp4,gif}`; README "See it in action" is a two-column table of all eight clips, GIF preview linking to each MP4, one caption each.
+- [x] Every referenced path exists; GitHub markdown API render keeps the table, images and links; each GIF looked at once.
+- [ ] Manager: confirm the README renders on the PR (GIFs play, MP4 links open); CI; merge.
+
 ## LKM-776 — CI speed audit and the biggest-bucket fix
 
 - [x] Audit: 150 runs, waiting/setup/running at p50/p95 per job and for the Forge check (`docs/CI-SPEED.md`).

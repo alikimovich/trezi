@@ -1,5 +1,21 @@
 # PROGRESS LOG
 
+## 2026-11-21 — LKM-782: six more feature clips in the README
+
+- Owner request: add the newer native recordings to the GitHub page. Six clips join the
+  two from LKM-763: inline text editing, 3D inspection, markup to chat, canvas to code,
+  layers and layout grid plus phone preview. With eight clips the "See it in action"
+  block is an HTML two-column table (GitHub keeps `width`/`valign` on `td`, checked with
+  the markdown API using the repo as context). Order: visual editing and inline text
+  first, Layers and the layout grid last.
+- GIFs as in LKM-763 (960 px wide, 15 fps, 128-colour palette): 0.39 to 1.41 MB. Five
+  MP4s are copied unchanged (0.48 to 1.98 MB). `visual-feedback.mp4` was 3.4 MB for 8 s
+  of mostly static frames; re-encoded with x264 CRF 20 to 0.14 MB (SSIM 0.999 against the
+  original), same size and frame rate, no audio. No LFS.
+- Every frame sheet shows only Trezi and the Sunday Studio demo on 127.0.0.1. Names drop
+  the duration suffix; alternate takes and probe clips were not added. No changelog line:
+  the README is not app behaviour.
+
 ## 2026-11-21 — LKM-776 round 3: two timing test bugs from the full-tier Forge check
 
 - Round 2's Forge check ran the full tier (runner files changed): 428.5 s wall, against
