@@ -151,12 +151,13 @@ check retains changed-file selection for engineer-round feedback.
 
 | Measure | Before | After |
 | --- | --- | --- |
-| Local Forge check | Historical p50 474 s, p95 582 s over 68 rounds (above); `check:` is `bun run typecheck && node test/run.mjs unit --changed=origin/main` | Same command and selection policy. `--changed=origin/main --list` selects FULL (354 tests) for this round; actual wall time comes from Forge's check after the round. |
+| Local Forge check | Historical p50 474 s, p95 582 s over 68 rounds (above); `check:` is `bun run typecheck && node test/run.mjs unit --changed=origin/main` | Same command and selection policy. Forge selected FULL (354 tests): **463.8 s**, 350 PASS, 1 FAIL, 3 SKIP. The failure was `native-composer-layout`; it appears unrelated to the workflow change. |
 | GitHub green PR verdict, `gh run list --workflow CI --limit 100`, completed successful PRs | n=41, p50 491 s, p95 879 s (created to updated; 2026-11-25) | Pending first PR run of this workflow; no post-change run exists yet. |
 | Merge-gate unit coverage | A PR could run only its selected plan | Every PR runs all registered unit tests across three shards; main push remains a full one-shard run. |
 
-This is a correctness change. No speed gain is claimed until a post-change run
-can be measured; the PR can take longer for docs and test-only changes.
+This is a correctness change. The local after sample is one failed full-tier run,
+not evidence of a speed gain. GitHub's after timing awaits the first PR run of
+this workflow; the PR can take longer for docs and test-only changes.
 
 ## Item 4: split slow unit files (LKM-817, 2026-11-25)
 
