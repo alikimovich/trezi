@@ -131,10 +131,9 @@ Forge check first; GitHub items only touch the existing workflow Forge waits on.
    TS, source lists of `swiftBuild` fixtures for Swift), list every input that reruns
    everything, then hide a real change from it on purpose and confirm the check goes
    red. Allowed only once item 1 holds.
-3. **Fix the `native-chat-send-follow` barrier** (97 s with 7 idle workers per run).
-   LKM-371 made it exclusive because other workers stalled its main-run-loop settles
-   on the 1-shard runner: a timing bug in the fixture to find, not a reason for a
-   barrier.
+3. **Done in LKM-816: fix the `native-chat-send-follow` barrier** (97 s with 7 idle
+   workers per run). The fixture's progress and settle observations now survive
+   main-run-loop stalls; the barrier is removed. Measurements are below.
 4. **Split slow files** (local full run, seconds): `resolved-lessons` 247,
    `conversation-owner` 199, `peer-coordination` 182, `repository-owner` 172,
    `peer-wait-deadline` 169, `service-process` 126; budget 20 s of work per file.
@@ -172,6 +171,33 @@ keep running on the local Mac under the shared desktop lock.
 
 Blacksmith and runner images are off the list: GitHub waiting is 2–3 s at p50, and
 the Forge check, the larger bucket, runs on the Mac.
+
+## LKM-816: chat send/follow barrier removed (2026-11-25)
+
+The forced fixture's 90 s stop now measures time since the last app realize or
+settle completion. A loaded main run loop can make the bounded 240 realize steps
+take longer than 90 s while still progressing. The non-streaming post-bound check
+counts completed settles instead of frames sampled while settling; sampling rate
+changes under worker load. Visibility, no-upward-jump, settle-end, 240-realize,
+no-late-realize and second-Send checks remain. The unit queue no longer marks this
+test exclusive, so other tests can run during it.
+
+Focused local measurements on this Mac (three workers; seconds):
+
+| Selection | Before | After |
+| --- | ---: | ---: |
+| `native-chat-send-follow` + `test-runner` | 122.9 wall, sequential (117.0 + 5.8) | 115.3 wall with a third selected test also running, concurrent (115.3 + 7.2) |
+| `native-chat-send-follow` + `native-chat-latest-settle` + `test-runner` | — | 115.3 wall, concurrent (115.3, 21.1, 7.2); warm cache |
+| Same three, cold changed-fixture build | — | 138.3 wall, concurrent (138.2, 26.7, 5.8) |
+
+The warm run included one more test than the before run and still finished 7.6 s
+sooner; that small wall difference also includes ordinary runtime variance. It
+proves 28.3 worker-seconds of selected work can overlap the chat fixture. The
+former full-run barrier idled seven workers for 97 s. Forge's prior full check
+was 428.5 s (LKM-776); this round cannot run the full tier locally under the
+ticket's test limit, so the comparable Forge after-number is pending its check.
+No GitHub workflow changed, so a `gh run list` p50/p95 comparison is not relevant
+to this edit.
 
 ## Total CI time and cost
 

@@ -1,5 +1,11 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-816: remove the native chat send/follow barrier
+
+- The LKM-371 exclusive queue entry kept seven workers idle for roughly 97 s in a full run. The fixture still used a 90 s total deadline for its forced settle cases and counted frames sampled while settling after the bound. Those observations vary with main-run-loop scheduling. The deadline now resets only on app realize or settle progress; non-streaming cases count completed post-bound settles. The assertions for visibility, follow direction, settle completion, at most 240 realizes, no late realizes and a second Send remain.
+- `native-chat-send-follow` is no longer exclusive in the unit queue. Before the change, a focused selection with `test-runner` took 122.9 s wall, sequentially (117.0 + 5.8 s). After the change, it and `native-chat-latest-settle` began together with `test-runner`; all passed in 115.3 s wall on a warm cache (115.3, 21.1, 7.2 s). A cold changed-fixture build took 138.3 s wall and also passed. The warm run overlapped 28.3 worker-seconds of selected work, though the 7.6 s wall difference includes normal runtime variance. Timings are in `docs/CI-SPEED.md`.
+- Typecheck and lint pass. The first changed-fixture compile hit this runner's known Swift macro nested-sandbox denial. It passed with a temporary `-disable-sandbox` compiler argument and cache inside this worktree; that argument was removed before the warm pass. Forge's full check and final-head CI are still pending after this engineer round.
+
 ## 2026-11-25 — LKM-811: published install, live steer and README media acceptance
 
 - Fetched the published raw main installer and compared it with this checkout (same SHA-256). A first isolated install downloaded Bun, cloned main and reached Swift compilation. It stopped because this runner prevents Swift's macro helper from starting its nested sandbox: a standalone `@State` probe fails identically, and passes with `swiftc -disable-sandbox`. A second fresh throwaway HOME used an `xcrun` wrapper adding that flag. The published installer then installed 238 dependencies, built v0.15.0, linked `trezi` and `Trezi.app` under the scratch HOME, and passed the linked command's version check and strict code-sign verification. The scratch directories were kept; no existing Trezi install or profile was changed.
