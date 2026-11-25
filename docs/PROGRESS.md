@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-817: GitHub CI runner-capacity follow-up
+
+- PR #475's first GitHub run (45698158897, attempt 1) failed after 15 minutes because macOS hosted runners did not acquire unit shards 1 and 3 or the app build. The cancelled jobs have no test logs; GitHub's check annotations explicitly report failed runner acquisition and macOS arm64 capacity constraints. Shard 2, typecheck and dependency audit passed. The combined gate correctly failed because the unit matrix result was abandoned, not because a test assertion failed.
+- Reran the same commit (689c951f) as attempt 2. All three unit shards, app build, typecheck, dependency audit and the combined gate passed in 531 s from attempt start to gate completion (unit jobs 468 / 407 / 512 s from runner start to completion). No workflow, test limit or Forge configuration change was needed. Local typecheck and lint exited 0.
+
 ## 2026-11-25 — LKM-817: passing full Forge check recorded
 
 - The next full Forge check on this head passed in 469.2 s: 361 PASS, 0 FAIL, 3 SKIP. This closes the passing gate after four failed full checks; the three skips are still skips. `docs/CI-SPEED.md` compares it with LKM-776's 428.5 s warm-cache run (40.7 s slower) and LKM-817's first 511.5 s run (42.3 s faster). Different test counts, load and outcomes prevent attributing either difference to the split. No Forge `check:` or GitHub workflow change is needed.

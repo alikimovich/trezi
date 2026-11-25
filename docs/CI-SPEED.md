@@ -181,6 +181,18 @@ focused part timings below show the scheduling effect, not a full-run speed
 claim. No Forge `check:` change is needed; GitHub p50/p95 was not remeasured
 because the workflow did not change.
 
+PR #475's first GitHub run (45698158897, attempt 1) failed at 15 minutes:
+macOS unit shards 1 and 3 and the app build never acquired hosted runners. GitHub
+annotated the cancelled jobs with failed runner acquisition and macOS arm64
+capacity constraints; they produced no test logs. The combined gate read the unit
+matrix as `abandoned`, while shard 2, typecheck and dependency audit passed. A
+rerun of the **same commit** (689c951f, attempt 2) acquired all runners and
+passed all jobs, including the combined gate, in **531 s** from attempt start to
+gate completion. Its three unit jobs took **468 / 407 / 512 s** from runner start
+to completion. This is a single successful GitHub after-run, not a p50/p95
+estimate or evidence that the split changed total time. No workflow, timeout or
+Forge configuration change followed the infrastructure cancellation.
+
 | Former file | Before, full run | After, focused parts (seconds) | After, full Forge parts (seconds) |
 | --- | ---: | --- | --- |
 | `resolved-lessons` | 247 | 178.6 / 159.5 | 132.8 / 108.1 PASS |
