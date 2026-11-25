@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-817: passing full Forge check recorded
+
+- The next full Forge check on this head passed in 469.2 s: 361 PASS, 0 FAIL, 3 SKIP. This closes the passing gate after four failed full checks; the three skips are still skips. `docs/CI-SPEED.md` compares it with LKM-776's 428.5 s warm-cache run (40.7 s slower) and LKM-817's first 511.5 s run (42.3 s faster). Different test counts, load and outcomes prevent attributing either difference to the split. No Forge `check:` or GitHub workflow change is needed.
+
 ## 2026-11-25 — LKM-817: fourth full-check failure diagnosis
 
 - Forge's fourth full check took 481.2 s: 360 PASS, 1 FAIL, 3 SKIP. The previous `turn-tracker-prep-failure` failure passed. `branch-safety` failed in its second publish: scripted `gh pr create` reported that remote `trezi/main` had not been pushed. A focused rerun passed in 12.6 s, so the failure remains intermittent and its cause is unproved.

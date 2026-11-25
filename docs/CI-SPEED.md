@@ -150,9 +150,8 @@ the hung wrapper and its child are gone; a focused run passed in 20.6 s. The
 preview fixture now orders its window before loading the page so WebKit has a
 drawable surface for snapshots. A local focused run still stopped at page load
 amid sandbox-denied WebKit service extensions; it cannot validate that change.
-Typecheck and lint passed. **No passing full Forge check on this head is recorded
-yet.** The Forge after-check must establish that result; no `check:` change is
-proposed.
+Typecheck and lint passed. At that point, no passing full Forge check on this
+head had been recorded. No `check:` change was proposed.
 
 A third full Forge check took **458.9 s** (360 PASS, 1 FAIL, 3 SKIP).
 `browser-verify-bounds` passed; `turn-tracker-prep-failure` timed out waiting for
@@ -161,7 +160,7 @@ The failed log contains no owner phase or transition history, so it does not
 identify the stalled step. The test now records the owner's phase, its terminal
 and landed transitions, and recent turn events if this wait fails again. Its
 focused run passed in 12.8 s; typecheck and lint passed. The 20 s landing
-assertion remains. **A passing full Forge gate is still open.**
+assertion remains. The full Forge gate was still open after this run.
 
 A fourth full Forge check took **481.2 s** (360 PASS, 1 FAIL, 3 SKIP).
 `turn-tracker-prep-failure` passed; `branch-safety` failed when its second
@@ -171,6 +170,16 @@ scratch remote, so it cannot establish whether the push was absent or the ref
 was removed afterward. The assertion now reports both branch tips, remote
 heads and the scripted gh calls on failure. This is still a failed full gate,
 not a measured speed result or acceptance of the split.
+
+The next full Forge check on this head passed in **469.2 s**: **361 PASS, 0 FAIL,
+3 SKIP**. This closes the passing full-check gate for LKM-817; the three skips
+remain skips. It was 40.7 s slower than LKM-776's 428.5 s warm-cache run (9.5%)
+and 42.3 s faster than LKM-817's first 511.5 s run (8.3%). These single runs
+had different test counts, machine load and failure outcomes, so the difference
+does not establish a speed gain or regression from splitting the files. The
+focused part timings below show the scheduling effect, not a full-run speed
+claim. No Forge `check:` change is needed; GitHub p50/p95 was not remeasured
+because the workflow did not change.
 
 | Former file | Before, full run | After, focused parts (seconds) | After, full Forge parts (seconds) |
 | --- | ---: | --- | --- |
@@ -189,7 +198,7 @@ a focused rerun in 116.9 s. `preview-apply-layers` timed out waiting for a WebKi
 snapshot in Forge. A focused rerun in this sandbox timed out earlier at page load,
 with denied WebKit service extensions; it does not reproduce or explain Forge's
 snapshot timeout. Neither Forge failure is established as caused by the split, and
-the full run remains a failed gate. The other focused parts, `test-selection`,
+that first full run was a failed gate. The other focused parts, `test-selection`,
 typecheck and lint passed. The focused run wall clocks were 137.2 s for the five
 conversation parts plus selection and 116.9 s for the three repository parts plus
 selection; these are separate runs and not additive.
@@ -211,7 +220,7 @@ Forge check first; GitHub items only touch the existing workflow Forge waits on.
    LKM-371 made it exclusive because other workers stalled its main-run-loop settles
    on the 1-shard runner: a timing bug in the fixture to find, not a reason for a
    barrier.
-4. **Split slow files** (implemented in LKM-817; first full Forge check failed;
+4. **Split slow files** (implemented in LKM-817; later full Forge check passed;
    local full run, seconds): `resolved-lessons` 247,
    `conversation-owner` 199, `peer-coordination` 182, `repository-owner` 172,
    `peer-wait-deadline` 169, `service-process` 126; budget 20 s of work per file.

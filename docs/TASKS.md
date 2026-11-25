@@ -11,7 +11,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Triage the two failed tests: `repository-owner-part-2` passed its focused rerun; `preview-apply-layers` timed out on a WebKit snapshot in Forge and earlier at page load in this sandbox. Neither is established as split-caused.
 - [x] Triage the later `browser-verify-bounds` failure: its elapsed-time assertion omitted the separately bounded browser-session close; the focused rerun passes. The second full Forge check passed both prior failures and failed only this bound.
 - [x] Record the fourth Forge check: 481.2 s, 360 PASS / 1 FAIL / 3 SKIP. `branch-safety` failed in its second publish because scripted `gh pr create` saw no pushed `trezi/main`; a focused rerun passed in 12.6 s. Its assertion now reports local and remote refs and scripted gh calls if the intermittent failure recurs.
-- [ ] Obtain a passing full Forge gate before treating this split as accepted.
+- [x] Record the passing full Forge check on this head: 469.2 s, 361 PASS / 0 FAIL / 3 SKIP. The timing comparison and its limits are in `docs/CI-SPEED.md`.
 
 ## LKM-782 — Six more feature clips in the README
 
