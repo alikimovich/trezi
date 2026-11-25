@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-817: follow-up on the full-check failures
+
+- The later full Forge check took 432.5 s: 360 PASS, 1 FAIL, 3 SKIP. `repository-owner-part-2` and `preview-apply-layers` passed; `browser-verify-bounds` failed at 13.7 s because its wall-clock assertion omitted the mandatory, separately bounded browser-session close. The test now includes that documented close allowance and still asserts that the hung wrapper and child are gone. Its focused rerun passed in 20.6 s; typecheck and lint passed.
+- The WebKit fixture now orders its window before loading the page, so `takeSnapshot` has a drawable surface. The focused run in this sandbox still stops at page load because WebKit service extensions are denied, before reaching the changed snapshot path. Forge's unsandboxed check must validate it. The full passing gate remains open.
+
 ## 2026-11-25 — LKM-817: first full Forge check and failure triage
 
 - Forge's full after-check took 511.5 s: 359 PASS, 2 FAIL, 3 SKIP. The unsandboxed `service-process-xpc` part passed in 45.8 s. Compared with LKM-776's 428.5 s warm-cache full check, this one was 83.0 s slower; the prior 505–556 s range, changed test count, machine load and failures prevent attributing that difference to the split. `docs/CI-SPEED.md` now records the full and per-part results.

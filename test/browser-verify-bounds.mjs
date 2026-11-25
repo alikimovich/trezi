@@ -30,7 +30,7 @@ import {
   writeArtifact
 } from '../src/main/verification-receipts.ts'
 import { parseVerify } from '../src/main/verify-args.ts'
-import { runChromiumChecks } from '../src/main/verify-chromium.ts'
+import { CLOSE_MS, runChromiumChecks } from '../src/main/verify-chromium.ts'
 
 const work = mkdtempSync(join(tmpdir(), 'trezi-verify-bounds-'))
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -224,7 +224,12 @@ const run = (over = {}) => ({
     const started = Date.now()
     const outcome = await runChromiumChecks(run({ budgetMs }))
     const took = Date.now() - started
-    assert.ok(took < budgetMs + CLEANUP + 4000, `the run stayed inside its budget (${took} ms)`)
+    // The run's deadline covers its reads. Closing the private browser session is
+    // mandatory cleanup after that deadline and has a separate bounded allowance.
+    assert.ok(
+      took < budgetMs + CLEANUP + CLOSE_MS + 4000,
+      `the run and its session close stayed bounded (${took} ms)`
+    )
     assert.equal(outcome.checks[0].pass, false)
     assert.ok(outcome.stopped, 'a run that ran out of time is never verified')
     assert.equal(await allGone(), true, 'no child outlives the run')

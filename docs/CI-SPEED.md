@@ -141,6 +141,19 @@ timings nor the single full run establish a speed gain or regression caused by
 the split. The task barred running a full unit tier in this worktree. GitHub
 p50/p95 was not remeasured because the existing workflow was unchanged.
 
+A second full Forge check took **432.5 s** (360 PASS, 1 FAIL, 3 SKIP).
+`repository-owner-part-2` and `preview-apply-layers` passed there; the sole failure
+was `browser-verify-bounds`. Its 8 s run-budget attempt took 13.7 s because the
+test's wall-clock assertion forgot the required browser-session close, which has
+its own 15 s cap. The corrected assertion includes that cap and still checks that
+the hung wrapper and its child are gone; a focused run passed in 20.6 s. The
+preview fixture now orders its window before loading the page so WebKit has a
+drawable surface for snapshots. A local focused run still stopped at page load
+amid sandbox-denied WebKit service extensions; it cannot validate that change.
+Typecheck and lint passed. **No passing full Forge check on this head is recorded
+yet.** The Forge after-check must establish that result; no `check:` change is
+proposed.
+
 | Former file | Before, full run | After, focused parts (seconds) | After, full Forge parts (seconds) |
 | --- | ---: | --- | --- |
 | `resolved-lessons` | 247 | 178.6 / 159.5 | 132.8 / 108.1 PASS |
