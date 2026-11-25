@@ -45,8 +45,8 @@ jobs:
 
   unit:
     # A pull request splits the unit tier over 3 runners; a push to main runs it whole
-    # on one (docs/TESTING.md "GitHub CI"). Every shard computes the same split from the
-    # selection and test/tiers.mjs alone (shardTests in test/helpers/test-plan.mjs).
+    # on one (docs/TESTING.md "GitHub CI"). Both events run the full tier. Every shard
+    # computes the same split from test/tiers.mjs (shardTests in test/helpers/test-plan.mjs).
     name: unit tests (${{ matrix.shard }}/${{ strategy.job-total }})
     # The Swift service owners compile against the macOS 26 SDK (scripts/requirements.mjs
     # MIN_SDK). The macos-26 image's default Xcode 26 provides it; the toolchain step
@@ -58,8 +58,7 @@ jobs:
       matrix:
         shard: ${{ fromJSON(github.event_name == 'pull_request' && '[1, 2, 3]' || '[1]') }}
     steps:
-      # Full history: a pull request's selection diffs against the merge base with the
-      # event's base commit (docs/TESTING.md "Changed-file selection").
+      # Keep the existing checkout shape; clone optimization is a separate task.
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -107,17 +106,13 @@ jobs:
 
       # --report prints the 20 slowest. --log-tail prints the last 150 lines of every
       # failing test's log into the job output; the full logs are in the artifact below.
-      # A push to main runs every unit test. A pull request runs the plan for its diff
-      # against the event's base commit (--changed): docs, test-only and audited UI
-      # changes run their tests and readers, anything else runs everything, and a
-      # selection error fails the step. --shard then runs this runner's part of it.
+      # Both pull requests and pushes to main run every unit test. The pull request
+      # shards together cover the full tier before Forge can merge the PR.
       - name: Unit tests
         env:
-          TREZI_TEST_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
           TREZI_TEST_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
         run: |
-          if [ -n "$TREZI_TEST_BASE" ]; then set -- --changed="$TREZI_TEST_BASE"; fi
-          node test/run.mjs unit --report --timeout-ms=120000 --log-tail=150 --shard="$TREZI_TEST_SHARD" "$@"
+          node test/run.mjs unit --report --timeout-ms=120000 --log-tail=150 --shard="$TREZI_TEST_SHARD"
 
       # A failed run saves too (a cancelled one does not), so its compiled fixtures are
       # not built again on the next push.

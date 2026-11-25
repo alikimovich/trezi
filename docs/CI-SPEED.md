@@ -140,10 +140,23 @@ free and stops the serial swift-preview chain from starting last.
 
 GitHub merge queues need an organization-owned repository; `alikimovich/trezi` is
 owned by a User, and `main` has no branch protection or ruleset (checked with the
-API). So the full suite must stay a gate Forge waits for before merging. Today it
-is not always: a docs or test-only PR runs a **selected** unit plan, and Forge merges
-on that green run; the full tier only runs after merge, on the push to main. That is
-item 1 below.
+API). So the full suite must stay a gate Forge waits for before merging. Before
+LKM-815, a docs or test-only PR ran a **selected** unit plan, and Forge could
+merge on that green run; the full tier then ran only after merge on the push to
+main. The PR unit shards now run the full tier on every change, and the existing
+`typecheck + unit tests` gate requires all three shards to pass. The local Forge
+check retains changed-file selection for engineer-round feedback.
+
+### LKM-815 measurement (2026-11-25)
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Local Forge check | Historical p50 474 s, p95 582 s over 68 rounds (above); `check:` is `bun run typecheck && node test/run.mjs unit --changed=origin/main` | Same command and selection policy. `--changed=origin/main --list` selects FULL (354 tests) for this round; actual wall time comes from Forge's check after the round. |
+| GitHub green PR verdict, `gh run list --workflow CI --limit 100`, completed successful PRs | n=41, p50 491 s, p95 879 s (created to updated; 2026-11-25) | Pending first PR run of this workflow; no post-change run exists yet. |
+| Merge-gate unit coverage | A PR could run only its selected plan | Every PR runs all registered unit tests across three shards; main push remains a full one-shard run. |
+
+This is a correctness change. No speed gain is claimed until a post-change run
+can be measured; the PR can take longer for docs and test-only changes.
 
 ## Item 4: split slow unit files (LKM-817, 2026-11-25)
 
@@ -246,9 +259,9 @@ selection; these are separate runs and not additive.
 
 Forge check first; GitHub items only touch the existing workflow Forge waits on.
 
-1. **Full tier is the last gate before merge.** Make the PR run's unit jobs FULL when
-   it is the merge gate (Forge waits on it) and keep selection for engineer-round
-   feedback only. Correctness, not speed; it unlocks item 2.
+1. **Done in LKM-815: full tier is the last gate before merge.** PR unit jobs run
+   FULL; selection remains for engineer-round feedback. Correctness, not speed;
+   this unlocks item 2.
 2. **Engineer-round selection for product changes.** Any `src/` change runs the full
    tier today (the selector narrows only docs, test scripts and audited UI), so almost
    every Forge check is full. Select the unit tests a diff can reach (import graph for

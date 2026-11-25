@@ -111,6 +111,12 @@
 - Six unit scripts now have separately scheduled parts. Conversation owner has five parts, repository owner three, and the remaining four have two each. The original scripts keep their assertions; entrypoints select sections or scenarios. No Forge config or GitHub workflow changed.
 - Focused passes: resolved lessons 178.6/159.5 s, peer coordination 60.9/64.9 s, repository owner 92.9/116.9/94.0 s, conversation owner 2.2/132.6/132.3/69.2/4.9 s, peer wait bound/service 3.4/112.2 s, service supervision 9.7 s. The XPC phase reached service lookup, where this sandbox returned Cocoa 4099; Forge's unsandboxed check must establish its verdict. `test-selection`, typecheck and lint pass. These focused timings use different load and worker counts than the prior full-run timings; `docs/CI-SPEED.md` keeps that distinction and awaits Forge's full-check after-number.
 - Two split-harness mistakes were fixed during the round: a two-case peer loop made 16 scenarios, and the first conversation partition still contained two long waits. Both are recorded in `docs/TEST-FAILURE-LOG.md`.
+## 2026-11-25 — LKM-815: full unit tier before the merge gate
+
+- The existing three PR unit shards now run the unfiltered tier, just as the main-push unit job does. The `typecheck + unit tests` gate still requires every shard and the typecheck job to pass. This closes the gap where a docs or test-only PR could merge on a selected plan and only run the full tier after merge.
+- Forge's local `check:` stays `bun run typecheck && node test/run.mjs unit --changed=origin/main` for engineer-round feedback. `test/dependency-audit.mjs` guards the unfiltered PR command; `docs/TESTING.md` and `docs/CI-SPEED.md` explain the split.
+- Pre-change measurement: the earlier Forge sample was p50 474 s / p95 582 s over 68 rounds; the latest 100 GitHub CI entries contain 41 completed successful PR runs at p50 491 s / p95 879 s (created to updated). Post-change Forge and CI times are pending their runs; this round's workflow edit selects FULL locally. No speed gain is claimed.
+- Focused unit selection (`dependency-audit`, `test-selection`, `docs-links`) passed 3/3 in 6.5 s; `bun run typecheck`, `bun run lint` and `git diff --check` passed. A non-executing local plan lists all 354 unit tests for this diff.
 
 ## 2026-11-25 — LKM-811: published install, live steer and README media acceptance
 

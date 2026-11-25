@@ -916,8 +916,9 @@ Superseded runs for the same PR or branch are cancelled.
   the file name fails there.
 
   `node test/run.mjs unit --shard=<i>/<n>` runs shard `i` of `n` of the selected
-  unit tests (after `--changed` or `--filter`) and prints `Shard i/n: x of y
-  selected unit tests`; `summary.json` records the shard and its tests. It takes
+  unit tests and prints `Shard i/n: x of y selected unit tests`;
+  `summary.json` records the shard and its tests. The runner also accepts
+  `--changed` or `--filter` for local feedback, but CI passes neither. It takes
   only the unit tier and refuses `--typecheck`. The split (`shardTests` in
   `test/helpers/test-plan.mjs`) is greedy, heaviest test first onto the lightest
   shard. Its weights are committed data only: a test's `UNIT_TIMEOUT_MS` budget,
@@ -925,9 +926,9 @@ Superseded runs for the same PR or branch are cancelled.
   each shard restores its own cache and the shards must agree on one split, so
   every test runs in exactly one shard. `test/test-selection.mjs` checks that the
   shards are disjoint, cover the input and stay balanced. Inside a shard the times
-  file still starts the slowest tests first. A narrowed pull-request plan with
-  fewer tests than shards leaves a shard empty; that shard passes with nothing to
-  run. Measured locally (8 workers, 2026-10-23), the three PR shards hold 464 s,
+  file still starts the slowest tests first. A narrowed local plan with fewer
+  tests than shards leaves a shard empty. Measured
+  locally (8 workers, 2026-10-23), the three PR shards hold 464 s,
   433 s and 394 s of the tier's 1291 s of test time.
 
   Each shard keys its Swift cache as `unit-swift-<os>-<i>of<n>-<sha>` and restores
@@ -962,8 +963,8 @@ Superseded runs for the same PR or branch are cancelled.
   ```
 
   The unit step has no `--typecheck`, `--filter`, `--serial` or `--jobs`, so every
-  unit test (on a pull request, every planned one; see below) runs in exactly one
-  shard with the default worker count. Locally `bun run test:quick` keeps running
+  unit test runs in exactly one shard with the default worker count. Locally
+  `bun run test:quick` keeps running
   them together (`--typecheck`). On CI they used to start with the first three
   workers: typecheck took 85-93 s, and `swift-preview-target` hit its 300 s limit on
   merged-main run 39721071506 (attempts 1 and 2). That load is an inference, not a
@@ -977,12 +978,11 @@ Superseded runs for the same PR or branch are cancelled.
   The `Typecheck` step calls both scripts directly, so the `typecheckPlan` skip of
   an equivalent `typecheck-native` applies only to `--typecheck` runs, never to CI.
 
-  On a pull request the unit command adds `--changed=<event base SHA>`
-  (`github.event.pull_request.base.sha`, passed through the environment; the
-  checkout fetches full history for the merge base), so it runs the
-  [changed-file plan](#changed-file-selection-local-test-cleanup-v2). A push to
-  `main` always runs the whole tier, and both typechecks run on every event. There
-  is no `paths-ignore`: every job runs and reports its check on every pull request.
+  A pull request and a push to `main` both run the whole unit tier, and both
+  typechecks run on every event. The
+  [changed-file plan](#changed-file-selection-local-test-cleanup-v2) remains for
+  local engineer-round feedback. There is no `paths-ignore`: every job runs and
+  reports its check on every pull request.
   `actions/cache/restore` restores
   `.local/test-cache` and `.local/test-times.json` from the latest run (key per
   shard and commit, restored by prefix; see the split above), so unchanged Swift
