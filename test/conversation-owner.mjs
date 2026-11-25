@@ -1038,30 +1038,36 @@ try {
       // recover the holder long before the bound.
       await sendLive('writer orphaned late', key, 'live-late-writer')
       await until(() => replacement.sent.length === 2, 'late orphan writer send')
-      const afterLateOrphan = sendLive('after late orphan', second.sessionKey, 'live-late-peer')
-      await sleep(50)
-      assert.equal(p2.sent.length, 6)
-      setConversationOwner(
-        new Proxy(owners.conversation, {
-          get(target, property) {
-            if (property === 'terminal')
-              return async () => {
-                setConversationOwner(owners.conversation)
-                throw new Error('scripted owner failure')
-              }
-            const value = Reflect.get(target, property, target)
-            return typeof value === 'function' ? value.bind(target) : value
-          }
-        })
-      )
-      const lateStarted = Date.now()
-      replacement.done()
-      await within(afterLateOrphan, 'peer admission after late orphan')
-      const lateOrphanWaitMs = Date.now() - lateStarted
-      assert.ok(
-        lateOrphanWaitMs < 2000,
-        `late orphan recovered by wake, not bound (${lateOrphanWaitMs} ms)`
-      )
+      // A short fixture deadline makes a missed wake reject the queued send.
+      // Its admission is the assertion; wall time after the wake can include
+      // unrelated runner scheduling and is only reported for diagnostics.
+      const waitingBeforeLateOrphan = waiting()
+      process.env.TREZI_TEST_LIVE_WRITER_WAIT_MS = '5000'
+      let lateOrphanWaitMs
+      try {
+        const afterLateOrphan = sendLive('after late orphan', second.sessionKey, 'live-late-peer')
+        await until(() => waiting() > waitingBeforeLateOrphan, 'late orphan peer queued')
+        assert.equal(p2.sent.length, 6)
+        setConversationOwner(
+          new Proxy(owners.conversation, {
+            get(target, property) {
+              if (property === 'terminal')
+                return async () => {
+                  setConversationOwner(owners.conversation)
+                  throw new Error('scripted owner failure')
+                }
+              const value = Reflect.get(target, property, target)
+              return typeof value === 'function' ? value.bind(target) : value
+            }
+          })
+        )
+        const lateStarted = Date.now()
+        replacement.done()
+        await within(afterLateOrphan, 'peer admission after late orphan')
+        lateOrphanWaitMs = Date.now() - lateStarted
+      } finally {
+        delete process.env.TREZI_TEST_LIVE_WRITER_WAIT_MS
+      }
       await until(() => p2.sent.length === 7, 'provider after late orphan')
       p2.done()
       await liveIdle()

@@ -345,6 +345,18 @@ at first-build readiness (main and library) or AppKit host startup (Stop), so
 their passing verdict still depends on Forge and GitHub CI. Typecheck and lint
 passed.
 
+PR #476's next CI run on `ebc7c278` failed its combined gate: unit shard 3
+reported 123 PASS, 1 FAIL, 1 SKIP in 328.9 s. The sole failure was
+`conversation-owner-part-2`: the late-orphan peer was admitted after 2050 ms,
+just over a 2000 ms wall-clock assertion. `native-chat-send-follow` passed
+concurrently in 96.1 s. Unit shards 1 and 2, app build, typecheck and dependency
+audit passed. The late-orphan fixture now waits for the peer's queued status and
+uses a 5 s writer-wait deadline: if the wake is missed, admission rejects. It
+keeps the separate 150 ms bounded-wait rejection and provider-admission checks.
+The focused part-2 check passed locally before and after the edit, including a
+runner-selected pass in 133.2 s (1 PASS); the final-head Forge and GitHub gates
+remain pending.
+
 ## Total CI time and cost
 
 | | Before | After |

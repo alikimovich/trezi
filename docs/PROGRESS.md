@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-816: repair GitHub late-orphan timing assertion
+
+- PR #476's next GitHub run on `ebc7c278` failed only unit shard 3: 123 PASS, 1 FAIL, 1 SKIP in 328.9 s. `conversation-owner-part-2` admitted a queued late-orphan peer after 2050 ms, crossing a 2000 ms wall-clock assertion; `native-chat-send-follow` passed concurrently in 96.1 s. Shards 1 and 2, app build, typecheck and dependency audit passed; the combined gate failed.
+- The fixture now observes the peer's queued status, then requires admission under a shortened 5 s writer-wait deadline. The successful send proves the wake path resolved the waiter; the separate bounded-wait rejection and provider-send checks remain. Focused part 2 passed before and after the edit, including a 133.2 s runner-selected pass (1 PASS). Typecheck and lint exit 0. The final-head Forge and GitHub gates are pending.
+
 ## 2026-11-25 — LKM-816: repair GitHub swift-preview timeout
 
 - PR #476's unit shard 1/3 reached `swift-preview`'s library build at 234.7 s and hit its 240 s process limit (123 PASS, 1 TIMEOUT). The first, gated candidate and driver builds took 78.7, 47.4 and 90.9 s; the same test passed in 140.7 s on the preceding main CI run. This is an outer budget failure before the library assertion, with cold build load a plausible cause.
