@@ -1,5 +1,11 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-827: repository security and dead-code review
+
+- Reviewed the tracked tree, process and local HTTP boundaries, dependency references, committed secret patterns and Bun advisories. The repository is public; follow-up security details are reserved for the private task report.
+- Project icon lookup now resolves each HTML entry and icon candidate before reading, so a symlink cannot lead it outside the project. The existing project-icon unit fixture covers both routes. Direct dependencies all have source, test, build or script references; no removal met the proof requirement.
+- Focused project-icon unit, typecheck and lint passed after formatting; `git diff --check` is clean. Forge and GitHub CI remain the acceptance gates.
+
 ## 2026-11-25 — LKM-816: repair GitHub late-orphan timing assertion
 
 - PR #476's next GitHub run on `ebc7c278` failed only unit shard 3: 123 PASS, 1 FAIL, 1 SKIP in 328.9 s. `conversation-owner-part-2` admitted a queued late-orphan peer after 2050 ms, crossing a 2000 ms wall-clock assertion; `native-chat-send-follow` passed concurrently in 96.1 s. Shards 1 and 2, app build, typecheck and dependency audit passed; the combined gate failed.

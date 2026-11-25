@@ -1,4 +1,4 @@
-import { readFile, stat } from 'fs/promises'
+import { readFile, realpath, stat } from 'fs/promises'
 import { dirname, extname, join, posix, resolve, sep } from 'path'
 import type { ProjectIcon } from '../shared/api'
 
@@ -149,11 +149,31 @@ function withinRoot(root: string, rel: string): boolean {
   return abs === resolve(root) || abs.startsWith(resolve(root) + sep)
 }
 
+/** Refuse symlinks that resolve outside the project before reading their bytes. */
+async function containedFile(
+  root: string,
+  rel: string,
+  canonicalRoot: string
+): Promise<string | null> {
+  if (!withinRoot(root, rel)) return null
+  try {
+    const file = await realpath(join(root, rel))
+    return file.startsWith(canonicalRoot === sep ? sep : canonicalRoot + sep) ? file : null
+  } catch {
+    return null
+  }
+}
+
 /** Read one candidate if it exists, has an icon extension, is small enough and
  *  its bytes are an image. */
-async function readCandidate(root: string, rel: string): Promise<ProjectIconFile | null> {
-  if (!iconMediaType(rel) || !withinRoot(root, rel)) return null
-  const abs = join(root, rel)
+async function readCandidate(
+  root: string,
+  rel: string,
+  canonicalRoot: string
+): Promise<ProjectIconFile | null> {
+  if (!iconMediaType(rel)) return null
+  const abs = await containedFile(root, rel, canonicalRoot)
+  if (!abs) return null
   try {
     const info = await stat(abs)
     if (!info.isFile() || info.size === 0 || info.size > MAX_ICON_BYTES) return null
@@ -175,13 +195,21 @@ async function readCandidate(root: string, rel: string): Promise<ProjectIconFile
  * file locations. Null when the project has none.
  */
 export async function findProjectIconFile(root: string): Promise<ProjectIconFile | null> {
+  let canonicalRoot: string
+  try {
+    canonicalRoot = await realpath(root)
+  } catch {
+    return null
+  }
   for (const entry of HTML_ENTRIES) {
     let html: string
     try {
-      const info = await stat(join(root, entry))
+      const path = await containedFile(root, entry, canonicalRoot)
+      if (!path) continue
+      const info = await stat(path)
       // A multi-megabyte "index.html" is a build artifact, not an entry to lex.
       if (!info.isFile() || info.size > 2 * 1024 * 1024) continue
-      html = await readFile(join(root, entry), 'utf8')
+      html = await readFile(path, 'utf8')
     } catch {
       continue
     }
@@ -192,7 +220,7 @@ export async function findProjectIconFile(root: string): Promise<ProjectIconFile
           if (rel.length > MAX_ICON_BYTES) continue
           return { path: entry, dataUrl: rel }
         }
-        const found = await readCandidate(root, rel)
+        const found = await readCandidate(root, rel, canonicalRoot)
         if (found) return found
       }
     }
@@ -200,7 +228,7 @@ export async function findProjectIconFile(root: string): Promise<ProjectIconFile
     // fallbacks for projects that don't have this one, so keep looking.
   }
   for (const rel of iconCandidates()) {
-    const found = await readCandidate(root, rel)
+    const found = await readCandidate(root, rel, canonicalRoot)
     if (found) return found
   }
   return null
