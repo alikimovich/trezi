@@ -3,6 +3,12 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-817 — Split the six slowest unit test files
+
+- [x] Register independent parts for all six scripts; keep their existing assertions, Swift fixtures and timeouts.
+- [x] Run the affected parts and selection guard locally, plus typecheck and lint; record focused before/after evidence in `docs/CI-SPEED.md`.
+- [ ] Capture the full Forge check after-number and the XPC result from its unsandboxed run.
+
 ## LKM-782 — Six more feature clips in the README
 
 - [x] `docs/media/{inline-text-editing,3d-inspection,visual-feedback,canvas-to-code,layer-selection,layout-and-mobile}.{mp4,gif}`; README "See it in action" is a two-column table of all eight clips, GIF preview linking to each MP4, one caption each.

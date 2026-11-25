@@ -118,6 +118,43 @@ is not always: a docs or test-only PR runs a **selected** unit plan, and Forge m
 on that green run; the full tier only runs after merge, on the push to main. That is
 item 1 below.
 
+## Item 4: split slow unit files (LKM-817, 2026-11-25)
+
+The six slow scripts now have independently scheduled parts. Existing assertions and
+fixtures remain in their original scripts; small registered entrypoints select each
+part. `conversation-owner` separates parity, the two live-checkout waits, remaining
+agent checks and recovery. `repository-owner` divides its 14 Git suites into two
+groups and runs its other sections in a third. Scenario counters guard complete
+coverage in `resolved-lessons` (20) and `peer-coordination` (16). The real maximum
+`peer_wait` still takes about 100 s; splitting its bound checks cannot remove that
+floor. The Swift build cache remains in place. No workflow or Forge `check:`
+configuration changed.
+
+The before column is the local eight-worker full-run observation from this plan.
+After numbers are focused runs of just the affected tests: eight workers for the
+first pass, then four for narrower repair passes. They show each new critical
+path, but load and worker count differ, so they are **not** a full Forge check
+before/after comparison. Forge runs that check after this engineer round; its
+after-number has not yet been reported. The task explicitly barred running a full
+unit tier in this worktree. GitHub p50/p95 was not remeasured because the existing
+workflow was unchanged.
+
+| Former file | Before, full run | After, focused parts (seconds) |
+| --- | ---: | --- |
+| `resolved-lessons` | 247 | 178.6 / 159.5 |
+| `conversation-owner` | 199 | 2.2 / 132.6 / 132.3 / 69.2 / 4.9 |
+| `peer-coordination` | 182 | 60.9 / 64.9 |
+| `repository-owner` | 172 | 92.9 / 116.9 / 94.0 |
+| `peer-wait-deadline` | 169 | bound 3.4 / service 112.2 |
+| `service-process` | 126 | supervision 9.7 / XPC lookup blocked by this sandbox |
+
+The XPC part compiled and reached its peer-rejection assertion, then macOS denied
+XPC service lookup with Cocoa error 4099 (sandbox restriction). The unsandboxed
+Forge check must supply that result. The other focused parts, `test-selection`,
+typecheck and lint passed. The focused run wall clocks were 137.2 s for the five
+conversation parts plus selection and 116.9 s for the three repository parts plus
+selection; these are separate runs and not additive.
+
 ## Remaining changes, in order (one Forge task each)
 
 Forge check first; GitHub items only touch the existing workflow Forge waits on.
@@ -135,7 +172,8 @@ Forge check first; GitHub items only touch the existing workflow Forge waits on.
    LKM-371 made it exclusive because other workers stalled its main-run-loop settles
    on the 1-shard runner: a timing bug in the fixture to find, not a reason for a
    barrier.
-4. **Split slow files** (local full run, seconds): `resolved-lessons` 247,
+4. **Split slow files** (implemented in LKM-817; Forge full-check after-number pending;
+   local full run, seconds): `resolved-lessons` 247,
    `conversation-owner` 199, `peer-coordination` 182, `repository-owner` 172,
    `peer-wait-deadline` 169, `service-process` 126; budget 20 s of work per file.
 5. **Workers to cores on the Mac:** 8 workers on 12 cores; measure 10 and 12 on an

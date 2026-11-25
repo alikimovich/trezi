@@ -4,7 +4,8 @@
 // Backend logic checks run independently of the native desktop.
 export const UNIT = [
   'service-contract',
-  'service-process',
+  'service-process-supervision',
+  'service-process-xpc',
   'operation-ledger',
   'preferences-owner',
   'workspace-owner',
@@ -19,21 +20,30 @@ export const UNIT = [
   'skills-projection',
   'session-skills',
   'runtime-owner',
-  'repository-owner',
+  'repository-owner-part-1',
+  'repository-owner-part-2',
+  'repository-owner-part-3',
   'agent-git',
   'agent-merge-approval',
   'git-messages',
   'repository-recovery',
   'source-owner',
-  'conversation-owner',
+  'conversation-owner-part-1',
+  'conversation-owner-part-2',
+  'conversation-owner-part-3',
+  'conversation-owner-part-4',
+  'conversation-owner-part-5',
   'peer-work-feed',
   'peer-observed-reads',
-  'peer-coordination',
+  'peer-coordination-part-1',
+  'peer-coordination-part-2',
   'peer-feedback',
-  'peer-wait-deadline',
+  'peer-wait-deadline-bound',
+  'peer-wait-deadline-service',
   'chat-peer-card',
   'held-card',
-  'resolved-lessons',
+  'resolved-lessons-part-1',
+  'resolved-lessons-part-2',
   'provider-owner',
   'provider-data',
   'provider-login',
@@ -392,23 +402,32 @@ export const UNIT_GROUPS = {
 // lane in test/helpers/swift-build.mjs (LKM-167), so no unit test needs to run alone. These
 // still get a longer budget for a cold Swift cache.
 export const UNIT_TIMEOUT_MS = {
-  'service-process': 240_000,
+  'service-process-supervision': 240_000,
+  'service-process-xpc': 240_000,
   // Its Swift fixtures queue behind other tests' swiftc runs; it takes 110 s+ under load.
   // The sections themselves are ~25 s warm (LOCAL-WEBKIT-PUBLISH: a 3-worker CI run with a
   // cold Swift cache hit 240 s inside the sections after `crash`, with no hang).
   // LKM-314: its parity suites may now take 300 s under three parallel unit runs, then the
   // sections; passes already took up to 232 s.
-  'repository-owner': 600_000,
+  'repository-owner-part-1': 600_000,
+  'repository-owner-part-2': 600_000,
+  'repository-owner-part-3': 600_000,
   // LKM-354: every section passed and the summary line printed, but only after the 120 s limit
   // in two full unit runs of 8 workers (13.5 s alone): its Swift fixtures queue behind the
   // swiftc lane like repository-owner's, now with the chat fixtures' compiles ahead of it.
-  'conversation-owner': 240_000,
+  'conversation-owner-part-1': 240_000,
+  'conversation-owner-part-2': 240_000,
+  'conversation-owner-part-3': 240_000,
+  'conversation-owner-part-4': 240_000,
+  'conversation-owner-part-5': 240_000,
   // LKM-405: real Git, checks and service owners per scenario, no hang: 45 s alone, 59 to
   // 150 s in unit runs.
-  'peer-coordination': 240_000,
+  'peer-coordination-part-1': 240_000,
+  'peer-coordination-part-2': 240_000,
   // LKM-405: the same lifecycle: 73 s alone, 97 to 178 s in unit runs; a run stopped at 120 s
   // had finished ten of 20 scenarios and failed none.
-  'resolved-lessons': 300_000,
+  'resolved-lessons-part-1': 300_000,
+  'resolved-lessons-part-2': 300_000,
   // Same: 17 s warm, but over 120 s in a cold 8-worker run while the swiftc lane is saturated.
   'runtime-owner': 240_000,
   // Same (LKM-209): the checks take ~10 s, but the workflow fixture is a cold compile of
@@ -490,7 +509,8 @@ export const UNIT_TIMEOUT_MS = {
   // hit the 120 s limit there with every scenario passing).
   'peer-feedback': 300_000,
   // A real 100 s `peer_wait` at its longest bound, through the helper and the Swift owner.
-  'peer-wait-deadline': 300_000,
+  'peer-wait-deadline-bound': 300_000,
+  'peer-wait-deadline-service': 300_000,
   // LKM-582: the same service-owner fixture as peer-coordination (a cold Swift compile in a
   // loaded unit run); 18 s alone.
   'turn-tracker-prep-failure': 240_000,

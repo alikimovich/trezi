@@ -112,6 +112,8 @@ async function install(started, options) {
 }
 
 async function section(name, run) {
+  const part = Number(process.env.TREZI_REPOSITORY_OWNER_PART || 0)
+  if (part && (name === 'suites' ? ![1, 2].includes(part) : part !== 3)) return
   await run()
   console.log(`REPOSITORY-OWNER ${name} PASS`)
 }
@@ -141,6 +143,7 @@ try {
     // The Git suites' own assertions, through the Swift owner. (setup-next installs the
     // Swift owners itself: test/helpers/with-service-owners.mjs.)
     // Chat worktrees also need the editing owner, so these run on the editing fixture.
+    const part = Number(process.env.TREZI_REPOSITORY_OWNER_PART || 0)
     const suites = [
       'chat-worktrees',
       'resolve-conflicts',
@@ -156,7 +159,7 @@ try {
       'chat-landing-recovery',
       'chat-ghost-park',
       'setup-worktree'
-    ]
+    ].filter((_, index) => !part || (index < 7 ? 1 : 2) === part)
     // A hung suite is killed here. LKM-314: 14 suites start at once, and under three parallel
     // unit runs chat-worktrees and chat-landing were killed at 100 s with no output yet.
     const suiteLimitMs = 300_000

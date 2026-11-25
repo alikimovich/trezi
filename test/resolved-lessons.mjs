@@ -43,7 +43,11 @@ const measure = (name, value) => {
   measured[name] = Math.max(measured[name] ?? 0, value)
 }
 const failures = []
+let scenarioNumber = 0
 async function scenario(name, run) {
+  scenarioNumber++
+  const part = Number(process.env.TREZI_RESOLVED_LESSONS_PART || 0)
+  if (part && (scenarioNumber <= 10 ? 1 : 2) !== part) return
   const started = performance.now()
   try {
     await run(project())
@@ -520,6 +524,8 @@ try {
       .map(([name, value]) => `${name}=${value}`)
       .join(', ')}`
   )
+  if (scenarioNumber !== 20)
+    throw new Error(`Expected 20 lesson scenarios, found ${scenarioNumber}`)
   if (failures.length)
     throw new Error(`${failures.length} scenario(s) failed: ${failures.join('; ')}`)
   console.log('Resolved lessons: trigger, trust and bounds passed; no provider calls')

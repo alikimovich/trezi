@@ -1,5 +1,11 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-817: split the slowest unit test files
+
+- Six unit scripts now have separately scheduled parts. Conversation owner has five parts, repository owner three, and the remaining four have two each. The original scripts keep their assertions; entrypoints select sections or scenarios. No Forge config or GitHub workflow changed.
+- Focused passes: resolved lessons 178.6/159.5 s, peer coordination 60.9/64.9 s, repository owner 92.9/116.9/94.0 s, conversation owner 2.2/132.6/132.3/69.2/4.9 s, peer wait bound/service 3.4/112.2 s, service supervision 9.7 s. The XPC phase reached service lookup, where this sandbox returned Cocoa 4099; Forge's unsandboxed check must establish its verdict. `test-selection`, typecheck and lint pass. These focused timings use different load and worker counts than the prior full-run timings; `docs/CI-SPEED.md` keeps that distinction and awaits Forge's full-check after-number.
+- Two split-harness mistakes were fixed during the round: a two-case peer loop made 16 scenarios, and the first conversation partition still contained two long waits. Both are recorded in `docs/TEST-FAILURE-LOG.md`.
+
 ## 2026-11-25 — LKM-811: published install, live steer and README media acceptance
 
 - Fetched the published raw main installer and compared it with this checkout (same SHA-256). A first isolated install downloaded Bun, cloned main and reached Swift compilation. It stopped because this runner prevents Swift's macro helper from starting its nested sandbox: a standalone `@State` probe fails identically, and passes with `swiftc -disable-sandbox`. A second fresh throwaway HOME used an `xcrun` wrapper adding that flag. The published installer then installed 238 dependencies, built v0.15.0, linked `trezi` and `Trezi.app` under the scratch HOME, and passed the linked command's version check and strict code-sign verification. The scratch directories were kept; no existing Trezi install or profile was changed.
