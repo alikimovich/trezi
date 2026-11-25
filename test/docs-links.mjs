@@ -99,6 +99,18 @@ if (bytes('CLAUDE.md') > 1024) missing.push(`CLAUDE.md is ${bytes('CLAUDE.md')} 
 if (readFileSync(join(root, 'CLAUDE.md'), 'utf8').split('\n')[0].trim() !== '@AGENTS.md')
   missing.push('CLAUDE.md must start with the `@AGENTS.md` import')
 
+// GitHub's blob view for an MP4 offers "View raw" rather than a player. The README
+// promises a download, so every GIF must link straight to the published raw file.
+const readme = readFileSync(join(root, 'README.md'), 'utf8')
+const clips = [...readme.matchAll(/<a href="([^"]+)"><img src="docs\/media\/([^"/]+)\.gif"/g)]
+if (clips.length !== 8 || !readme.includes('Click a clip to download its full-size MP4.'))
+  missing.push('README.md must describe the eight downloadable feature clips')
+for (const [, href, name] of clips) {
+  const expected = `https://raw.githubusercontent.com/alikimovich/trezi/main/docs/media/${name}.mp4`
+  if (href !== expected || !valid.has(`docs/media/${name}.mp4`))
+    missing.push(`README.md → ${name} preview must download its published MP4`)
+}
+
 if (missing.length) {
   console.error('FAIL: docs reference paths that are neither tracked nor gitignored:')
   for (const m of missing) console.error(`  - ${m}`)
