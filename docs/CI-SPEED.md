@@ -151,13 +151,19 @@ check retains changed-file selection for engineer-round feedback.
 
 | Measure | Before | After |
 | --- | --- | --- |
-| Local Forge check | Historical p50 474 s, p95 582 s over 68 rounds (above); `check:` is `bun run typecheck && node test/run.mjs unit --changed=origin/main` | Same command and selection policy. Forge selected FULL (354 tests): **463.8 s**, 350 PASS, 1 FAIL, 3 SKIP. The failure was `native-composer-layout`; it appears unrelated to the workflow change. |
+| Local Forge check | Historical p50 474 s, p95 582 s over 68 rounds (above); `check:` is `bun run typecheck && node test/run.mjs unit --changed=origin/main` | Same command and selection policy. Forge selected FULL (354 tests) in both rounds: **463.8 s** (350 PASS, 1 FAIL, 3 SKIP), then **539.0 s** (343 PASS, 2 TIMEOUT, 6 FAIL, 3 SKIP). |
 | GitHub green PR verdict, `gh run list --workflow CI --limit 100`, completed successful PRs | n=41, p50 491 s, p95 879 s (created to updated; 2026-11-25) | Pending first PR run of this workflow; no post-change run exists yet. |
 | Merge-gate unit coverage | A PR could run only its selected plan | Every PR runs all registered unit tests across three shards; main push remains a full one-shard run. |
 
-This is a correctness change. The local after sample is one failed full-tier run,
-not evidence of a speed gain. GitHub's after timing awaits the first PR run of
-this workflow; the PR can take longer for docs and test-only changes.
+The first full-tier failure was `native-composer-layout`. The second timed out in
+`resolved-lessons` and `peer-coordination`; `repository-owner`,
+`skills-projection`, `peer-wait-deadline`, `conversation-owner`,
+`service-process` and `spawn-phases` failed. The second run's selection reason
+was the CI workflow and its dependency audit, so these test failures need their
+own diagnosis; the focused `dependency-audit`, `test-selection` and `docs-links`
+tests pass. Neither failed full-tier sample establishes a speed gain or merge
+acceptance. GitHub's after timing awaits the first PR run of this workflow;
+the PR can take longer for docs and test-only changes.
 
 ## Item 4: split slow unit files (LKM-817, 2026-11-25)
 

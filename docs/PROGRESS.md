@@ -111,6 +111,11 @@
 - Six unit scripts now have separately scheduled parts. Conversation owner has five parts, repository owner three, and the remaining four have two each. The original scripts keep their assertions; entrypoints select sections or scenarios. No Forge config or GitHub workflow changed.
 - Focused passes: resolved lessons 178.6/159.5 s, peer coordination 60.9/64.9 s, repository owner 92.9/116.9/94.0 s, conversation owner 2.2/132.6/132.3/69.2/4.9 s, peer wait bound/service 3.4/112.2 s, service supervision 9.7 s. The XPC phase reached service lookup, where this sandbox returned Cocoa 4099; Forge's unsandboxed check must establish its verdict. `test-selection`, typecheck and lint pass. These focused timings use different load and worker counts than the prior full-run timings; `docs/CI-SPEED.md` keeps that distinction and awaits Forge's full-check after-number.
 - Two split-harness mistakes were fixed during the round: a two-case peer loop made 16 scenarios, and the first conversation partition still contained two long waits. Both are recorded in `docs/TEST-FAILURE-LOG.md`.
+## 2026-11-25 — LKM-815 round 3: reconcile full-tier feedback
+
+- Forge's second post-change local check selected FULL and took 539.0 s: 343 PASS, 2 TIMEOUT, 6 FAIL, 3 SKIP. The timeouts were `resolved-lessons` and `peer-coordination`; failures were `repository-owner`, `skills-projection`, `peer-wait-deadline`, `conversation-owner`, `service-process` and `spawn-phases`. Their logs show fixture assertions, response deadlines or missing fixture output. The ticket changes only the CI workflow, its guard and documentation; this run does not establish a regression from those changes or a passing merge gate. The new measurement and limits are recorded in `docs/CI-SPEED.md`.
+- The focused workflow tests (`dependency-audit`, `test-selection`, `docs-links`) pass 3/3 in 6.0 s; typecheck and lint pass. No GitHub PR run of this branch exists yet, so post-change GitHub timing remains open.
+
 ## 2026-11-25 — LKM-815 round 2: record the Forge check
 
 - Forge's post-change local check selected FULL and took 463.8 s: 350 PASS, 1 FAIL, 3 SKIP. The failure was `native-composer-layout` and appears unrelated to the PR workflow change. The measured result is now in `docs/CI-SPEED.md`; GitHub timing remains pending the first PR run of the updated workflow.
