@@ -7,7 +7,9 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 - [x] `docs/media/{inline-text-editing,3d-inspection,visual-feedback,canvas-to-code,layer-selection,layout-and-mobile}.{mp4,gif}`; README "See it in action" is a two-column table of all eight clips, GIF preview linking to each MP4, one caption each.
 - [x] Every referenced path exists; GitHub markdown API render keeps the table, images and links; each GIF looked at once.
-- [ ] Manager: confirm the README renders on the PR (GIFs play, MP4 links open); CI; merge.
+- [x] 2026-11-25: the published main README renders all eight GIF previews in a two-column table in Safari; successive captures change as the GIFs animate. All 12 media URLs added by this ticket return HTTP 200, and each file decodes fully with ffmpeg.
+- [x] Safari exposed that a clicked MP4 opens GitHub's file view with only "View raw", not a player. LKM-811 links the previews directly to the raw MP4 downloads and says "download"; `docs-links` guards all eight links.
+- [ ] After LKM-811 merges, click a preview on the published README and confirm the direct MP4 download.
 
 ## LKM-776 — CI speed audit and the biggest-bucket fix
 
@@ -21,7 +23,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 - [x] `docs/media/visual-editing.{mp4,gif}` and `docs/media/spacing-handles.{mp4,gif}`; README "See it in action" block at the LKM-721 placeholder, GIF preview linking to each MP4, one caption per clip.
 - [x] Frames checked for private content; GitHub markdown API render checked (GIF kept, `<video>` stripped).
-- [ ] Manager: confirm the README on the pushed branch/PR plays both GIFs and the MP4 links open; CI; merge.
+- [x] 2026-11-25: the published main README renders both GIF previews in Safari. All four media URLs return HTTP 200, and each file decodes fully with ffmpeg. The MP4 blob-view limitation and raw-download fix are recorded under LKM-782.
+- [ ] After LKM-811 merges, confirm both preview clicks download the MP4s from the published README.
 
 ## LKM-721 — Short README with a copy-prompt install, verified agent install path
 
@@ -29,7 +32,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] `docs/INSTALL.md`: the agent procedure (inspect, install or update in place, exit codes, boundary-by-boundary verification, report) plus requirements, manual install/options, start, sign-in, update, agent-browser, code signing, troubleshooting, earlier versions, developing. Feature list moved to `docs/FEATURES.md`, architecture overview to `docs/NATIVE.md`, `bun run setup` row to the verification table.
 - [x] `install.sh --non-interactive` (`TREZI_NONINTERACTIVE=1`): no `/dev/tty`, missing command-line tools start Apple's installer and exit 3 with `Action needed:`, never runs `claude setup-token`. Lockfile drift is copied to `~/Library/Logs/Trezi/` before `install.sh` or `trezi --update` discards it.
 - [x] `test/install-update.mjs`: unanswered pseudo-terminal hang reproduced without the flag; non-interactive re-run keeps an uncommitted edit, untracked file and channel, asks nothing; missing tools exit 3 with nothing cloned or built; lockfile copies. Real `install.sh --non-interactive --no-open` in this checkout with a scratch HOME (ad hoc signing) built, linked, `trezi --version` and `codesign --verify --strict` passed.
-- [ ] Not run: a clean Mac, the command-line tools window, real Bun download, provider sign-in, app launch from the installed link (own profile), the published raw URL (live only after merge). Manager: independent review, CI, merge.
+- [x] 2026-11-25: downloaded the published raw `main/install.sh` (SHA-256 matched this checkout) and piped that URL into Bash with a fresh throwaway HOME, Bun destination and Applications link directory. It downloaded Bun from bun.sh, cloned main, installed 238 packages, built Trezi v0.15.0, and linked both launchers. The linked `trezi --version` and `codesign --verify --strict` passed. This sandbox blocks Swift's nested macro sandbox, so the successful run used an `xcrun swiftc -disable-sandbox` wrapper; an ordinary clean Mac still needs a stock build check.
+- [ ] Clean Mac acceptance remains: command-line tools installer window, owner-approved provider sign-in, stock build, and GUI launch from the installed link with its own profile. This machine already has the tools and Claude login; sandboxed AppKit registration aborts before the profile opens. The scratch HOME did not simulate a fresh macOS user or LaunchServices environment.
 
 ## LKM-709 — Steer a queued chat message into the current running agent turn
 
@@ -37,7 +41,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Path: queue row menu (`ComposerQueueMenu`) → `queue-steer` → `src/native/chat-steer.ts` → `agent:steer` (same chat, same running turn) → Swift owner `steer` (running helper turn only, one outcome relayed per forwarded steer) → helper → adapter. Outcome: one `steer` event before the turn's `done`.
 - [x] Queue: the item keeps its place until admitted; rejected/returned keeps it queued with the reason; uncertain pauses the queue; a turn end without an answer leaves it queued; late answers ignored; edit/remove refused while on its way. Transcript: steered user message where it landed, reply continues below; persisted as a `steer` status entry.
 - [x] Units `claude-steer` (stand-in SDK, turn held at a boundary), `chat-steer` (controller), `provider-owner` `steer` section and steer forgeries, `native-chat-controller` row shape; native smoke step `smoke-steer` (not run locally).
-- [ ] Live Claude acceptance (real CLI folding a steer mid-turn) not run: no provider calls here. Manager: native `chat` group, independent review, exact-head CI and merge.
+- [x] 2026-11-25 live Claude acceptance: one Agent SDK query, with a Bash tool boundary and a queued `priority: 'next'` user message, ended successfully; the real CLI echoed both the original and steered UUIDs in `user_message_uuids`.
+- [ ] Native `chat` smoke group and UI queue-to-transcript journey still need the project test runner; the live CLI check did not exercise Trezi's UI.
 
 ## LKM-672 — Escape exits the active preview selection or annotation mode
 

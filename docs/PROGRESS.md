@@ -1,5 +1,12 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-811: published install, live steer and README media acceptance
+
+- Fetched the published raw main installer and compared it with this checkout (same SHA-256). A first isolated install downloaded Bun, cloned main and reached Swift compilation. It stopped because this runner prevents Swift's macro helper from starting its nested sandbox: a standalone `@State` probe fails identically, and passes with `swiftc -disable-sandbox`. A second fresh throwaway HOME used an `xcrun` wrapper adding that flag. The published installer then installed 238 dependencies, built v0.15.0, linked `trezi` and `Trezi.app` under the scratch HOME, and passed the linked command's version check and strict code-sign verification. The scratch directories were kept; no existing Trezi install or profile was changed.
+- A linked app-host launch with an explicit scratch profile aborted in AppKit application registration before profile creation. The macOS GUI sandbox, the already installed command-line tools and the existing Claude login leave GUI launch, the tools window, provider sign-in and stock clean-Mac compilation for a person on a clean machine. The install used `--no-open` to keep LaunchServices away from the owner's profile.
+- One real Claude Agent SDK query used a Bash tool boundary and a second user message with `priority: 'next'`. The successful result echoed both message UUIDs in `user_message_uuids`, confirming CLI admission. This did not exercise Trezi's native queue UI; its `chat` smoke group remains open.
+- GitHub's main README renders the eight GIF previews in a two-column Safari table; successive screen captures changed as the animations ran. All 16 published media URLs return HTTP 200, and ffmpeg fully decoded them (GIFs have 105–166 frames; MP4s have 183–251). Clicking a preview exposed a real README defect: GitHub's MP4 file view offers only "View raw", not a player, so "open the full-size video" was false. The previews now link directly to GitHub's raw MP4 downloads and the caption says "download". `docs-links` guards every preview link; the published result needs a click after merge. No Trezi application-source defect was established. Typecheck, lint and the changed-path unit selection passed.
+
 ## 2026-11-21 — LKM-782: six more feature clips in the README
 
 - Owner request: add the newer native recordings to the GitHub page. Six clips join the
