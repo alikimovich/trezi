@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-827: repair GitHub CLI log fixture
+
+- PR #477's GitHub shard 3 failed `trezi-cli` at the large-output log assertion; app build, typecheck and dependency audit passed. The fixture wrote to a pipe then called `process.exit(7)`, which can discard buffered stdout under load. It now sets the same exit code and lets the stream drain before exit. The production logger is unchanged.
+- Focused `trezi-cli` unit passed (1 PASS); typecheck, lint and `git diff --check` exited 0. Final CI remains with Forge.
+
 ## 2026-11-25 — LKM-827: repository security and dead-code review
 
 - Reviewed the tracked tree, process and local HTTP boundaries, dependency references, committed secret patterns and Bun advisories. The repository is public; follow-up security details are reserved for the private task report.

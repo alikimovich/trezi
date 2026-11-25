@@ -103,7 +103,7 @@ try {
   // Large, mixed stdout/stderr output streams to the log, nothing is shown, the status is real.
   const script =
     "for (let i = 0; i < 200000; i++) process.stdout.write('stdout line ' + i + ' ' + 'x'.repeat(60) + '\\n');" +
-    "process.stderr.write('stderr: compiler warning\\n'); process.exit(7)"
+    "process.stderr.write('stderr: compiler warning\\n'); process.exitCode = 7"
   const big = await runStep(process.execPath, ['-e', script], { cwd: scratch, log, verbose: false })
   closeSync(log.fd)
   eq([big.code, big.signal], [7, null], 'runStep resolves with the real exit code')

@@ -8,6 +8,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Review the tracked tree for secrets, process and shell boundaries, routes, path handling, native permissions, dependency advisories, and dead-code references.
 - [x] Contain project favicon reads to the canonical project root; cover symlinked HTML and icon paths in the existing unit fixture.
 - [x] Run focused unit, typecheck, and lint; leave remaining security findings for the private task report because the repository is public.
+- [x] Repair PR #477's failed `trezi-cli` CI fixture and rerun its focused unit, typecheck, and lint.
 
 ## LKM-817 — Split the six slowest unit test files
 

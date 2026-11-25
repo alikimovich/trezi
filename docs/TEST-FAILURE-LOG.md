@@ -19,6 +19,7 @@ Kinds:
 
 | Date | Ticket | Test file | Kind | What failed, and why |
 | --- | --- | --- | --- | --- |
+| 2026-11-25 | LKM-827 | `test/trezi-cli.mjs` | test bug | GitHub shard 3 lost the end of a large piped stdout write when the fixture called `process.exit(7)` before its stream drained. Setting `process.exitCode` preserves the failure status and lets Node flush both streams. |
 | 2026-11-25 | LKM-816 | `test/conversation-owner.mjs` | test bug | GitHub shard 3 admitted the late-orphan peer after 2050 ms, crossing a 2000 ms wall-clock assertion that included runner scheduling. The fixture now observes the queued status and requires successful admission within a shortened writer-wait deadline, while retaining the separate bounded-wait rejection case. |
 | 2026-11-25 | LKM-816 | `test/swift-preview.mjs` | test bug | GitHub shard reached the library build at 234.7 s after two earlier cold builds took 78.7 s and 90.9 s, then hit the 240 s process limit. The independent stop and library scenarios now run as separate grouped tests with unchanged assertions and limits. |
 | 2026-11-25 | LKM-816 | `test/native-composer-layout.mjs` | test bug | Fixed-time scroll settle missed a delayed main-queue reattach callback under concurrent load; the fixture now waits for pinned state and checks the callback sequence. |
