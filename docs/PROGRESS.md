@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-827: correct public PR description
+
+- PR #477's description now summarizes completed fixes and verification without follow-up security details. The required GitHub jobs passed on published head `fe658c41` (run 45721337597, attempt 2).
+- This worktree includes a later documentation-only commit. Forge must publish its current head and obtain the exact-head CI result before review.
+
 ## 2026-11-25 — LKM-827: triage PR #477's next CI attempt
 
 - The new unit shard 2 failure occurred in `oven-sh/setup-bun@v2` with `TypeError: fetch failed`, before toolchain setup, dependency installation or any unit test. This was a runner download failure, not a failed assertion. After the workflow finished, its failed-jobs rerun passed shard 2 and the combined gate. All other jobs from the first attempt passed; PR #477's GitHub CI is green on attempt 2.

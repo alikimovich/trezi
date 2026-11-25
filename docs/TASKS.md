@@ -10,6 +10,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Run focused unit, typecheck, and lint; leave remaining security findings for the private task report because the repository is public.
 - [x] Repair PR #477's failed `trezi-cli` CI fixture and rerun its focused unit, typecheck, and lint.
 - [x] Triage PR #477's next CI attempt: shard 2 failed during Bun download, then passed on a failed-jobs rerun; all required GitHub jobs are green.
+- [x] Replace PR #477's public description with a neutral summary; keep follow-up security details in the private task report.
 
 ## LKM-817 — Split the six slowest unit test files
 
