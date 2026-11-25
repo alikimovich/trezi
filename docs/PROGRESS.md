@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-817: third full-check failure diagnosis
+
+- The third full Forge check took 458.9 s: 360 PASS, 1 FAIL, 3 SKIP. The earlier `browser-verify-bounds` failure passed. `turn-tracker-prep-failure` timed out waiting for turn-b landing in the rejected-peer-read case, but the log did not include the owner phase or terminal/landing transitions. A focused rerun passed in 11.9 s.
+- Added failure-only diagnostics for those transitions, owner phase and recent events while retaining the landing assertion and its 20 s deadline. The focused test passed in 12.8 s; typecheck and lint passed. The next Forge full check must either pass or supply the stalled phase before a targeted fix. No passing full gate is recorded yet.
+
 ## 2026-11-25 — LKM-817: follow-up on the full-check failures
 
 - The later full Forge check took 432.5 s: 360 PASS, 1 FAIL, 3 SKIP. `repository-owner-part-2` and `preview-apply-layers` passed; `browser-verify-bounds` failed at 13.7 s because its wall-clock assertion omitted the mandatory, separately bounded browser-session close. The test now includes that documented close allowance and still asserts that the hung wrapper and child are gone. Its focused rerun passed in 20.6 s; typecheck and lint passed.

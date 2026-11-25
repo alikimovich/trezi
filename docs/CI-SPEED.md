@@ -154,6 +154,15 @@ Typecheck and lint passed. **No passing full Forge check on this head is recorde
 yet.** The Forge after-check must establish that result; no `check:` change is
 proposed.
 
+A third full Forge check took **458.9 s** (360 PASS, 1 FAIL, 3 SKIP).
+`browser-verify-bounds` passed; `turn-tracker-prep-failure` timed out waiting for
+turn-b to land in its rejected-peer-read case. A focused rerun passed in 11.9 s.
+The failed log contains no owner phase or transition history, so it does not
+identify the stalled step. The test now records the owner's phase, its terminal
+and landed transitions, and recent turn events if this wait fails again. Its
+focused run passed in 12.8 s; typecheck and lint passed. The 20 s landing
+assertion remains. **A passing full Forge gate is still open.**
+
 | Former file | Before, full run | After, focused parts (seconds) | After, full Forge parts (seconds) |
 | --- | ---: | --- | --- |
 | `resolved-lessons` | 247 | 178.6 / 159.5 | 132.8 / 108.1 PASS |
