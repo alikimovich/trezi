@@ -76,6 +76,9 @@ const until = async (condition, what, ms = 10_000) => {
 }
 const failures = []
 const check = async (name, run) => {
+  const part = process.env.TREZI_PEER_WAIT_PART
+  if (part === 'bound' && name.startsWith('a wait at')) return
+  if (part === 'service' && !name.startsWith('a wait at')) return
   const started = performance.now()
   try {
     await run()

@@ -69,7 +69,7 @@ class Dependency extends Error {
 
 /** One run's budget for every CLI call together, and the close that always follows it. */
 export const RUN_BUDGET_MS = 150_000
-const CLOSE_MS = 15_000
+export const CLOSE_MS = 15_000
 
 const squash = (text: string) => text.replace(/\s+/g, ' ').trim()
 const firstLine = (text: string) =>

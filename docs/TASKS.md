@@ -3,6 +3,17 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-817 — Split the six slowest unit test files
+
+- [x] Register independent parts for all six scripts; keep their existing assertions, Swift fixtures and timeouts.
+- [x] Run the affected parts and selection guard locally, plus typecheck and lint; record focused before/after evidence in `docs/CI-SPEED.md`.
+- [x] Capture the full Forge check after-number and the XPC result: 511.5 s, 359 PASS / 2 FAIL / 3 SKIP; `service-process-xpc` PASS in 45.8 s. Compare with the 428.5 s prior warm-cache check in `docs/CI-SPEED.md`.
+- [x] Triage the two failed tests: `repository-owner-part-2` passed its focused rerun; `preview-apply-layers` timed out on a WebKit snapshot in Forge and earlier at page load in this sandbox. Neither is established as split-caused.
+- [x] Triage the later `browser-verify-bounds` failure: its elapsed-time assertion omitted the separately bounded browser-session close; the focused rerun passes. The second full Forge check passed both prior failures and failed only this bound.
+- [x] Record the fourth Forge check: 481.2 s, 360 PASS / 1 FAIL / 3 SKIP. `branch-safety` failed in its second publish because scripted `gh pr create` saw no pushed `trezi/main`; a focused rerun passed in 12.6 s. Its assertion now reports local and remote refs and scripted gh calls if the intermittent failure recurs.
+- [x] Record the passing full Forge check on this head: 469.2 s, 361 PASS / 0 FAIL / 3 SKIP. The timing comparison and its limits are in `docs/CI-SPEED.md`.
+- [x] Diagnose PR #475's first GitHub attempt: GitHub cancelled unacquired macOS jobs after 15 minutes with runner-capacity annotations. Rerun the same commit; attempt 2 passed every job and the combined gate in 531 s.
+
 ## LKM-782 — Six more feature clips in the README
 
 - [x] `docs/media/{inline-text-editing,3d-inspection,visual-feedback,canvas-to-code,layer-selection,layout-and-mobile}.{mp4,gif}`; README "See it in action" is a two-column table of all eight clips, GIF preview linking to each MP4, one caption each.

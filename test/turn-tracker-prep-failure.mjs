@@ -99,6 +99,22 @@ const until = async (condition, what, ms = 20_000) => {
 // it. A turn named in `hooks` gets its hook instead of the owner's answer there; every
 // other query (other turns, the background peer-feedback flush) goes to the real owner.
 const owner = swiftConversationOwner()
+const transitions = []
+for (const method of ['terminal', 'landed']) {
+  const original = owner[method].bind(owner)
+  owner[method] = async (...args) => {
+    const [, turn] = args
+    transitions.push({ method, turn, state: 'started' })
+    try {
+      const result = await original(...args)
+      transitions.push({ method, turn, state: 'finished', result })
+      return result
+    } catch (error) {
+      transitions.push({ method, turn, state: 'failed', error: String(error) })
+      throw error
+    }
+  }
+}
 const realPeers = owner.peers.bind(owner)
 const hooks = new Map()
 owner.peers = (project, self) => {
@@ -142,7 +158,21 @@ async function realTurnAfter(worker, failed, turn) {
   const done = events.findLast((e) => e.type === 'done')
   assert.equal(done?.turn, turn, 'the real turn’s terminal is credited to it')
   assert.notEqual(done?.stale, true, 'the real terminal is not late')
-  await until(() => landed(turn), 'the real turn to land')
+  await until(() => landed(turn), 'the real turn to land').catch(async (error) => {
+    const chat = await Promise.race([
+      owner.snapshot().then((state) => state.chats.find((item) => item.chat === worker.key)),
+      new Promise((resolve) => setTimeout(() => resolve('snapshot timed out'), 2_000))
+    ]).catch((cause) => `snapshot failed: ${cause}`)
+    const recent = events
+      .filter((event) => event.turn === turn || event.turn === failed)
+      .slice(-12)
+      .map((event) => ({ type: event.type, turn: event.turn, stale: event.stale }))
+    throw new Error(
+      `${error.message}; owner=${JSON.stringify(chat && { phase: chat.phase, turn: chat.turn, run: chat.run })}; ` +
+        `tracker=${currentTurn(worker.key)}; sent=${worker.sent.length}; events=${JSON.stringify(recent)}; ` +
+        `transitions=${JSON.stringify(transitions.filter((entry) => entry.turn === turn).slice(-8))}`
+    )
+  })
   assert.equal(currentTurn(worker.key), null, 'nothing left at the tracker’s head')
   assert.equal(of(failed).length, failedEvents, 'no later event names the unsent turn')
   // A late `done` with no send outstanding is still stale and completes nothing.
@@ -159,7 +189,7 @@ const check = async (name, run) => {
     console.log(`  ok: ${name}`)
   } catch (error) {
     failures.push(name)
-    console.log(`  FAILED: ${name}: ${String(error?.stack ?? error).slice(0, 600)}`)
+    console.log(`  FAILED: ${name}: ${String(error?.stack ?? error).slice(0, 3_000)}`)
   }
 }
 

@@ -198,6 +198,12 @@ async function stop(started) {
 const only = process.env.CONVERSATION_ONLY?.split(',')
 async function section(name, run) {
   if (only && !only.includes(name)) return
+  const part = Number(process.env.TREZI_CONVERSATION_OWNER_PART || 0)
+  if (
+    part &&
+    (name === 'parity' ? part !== 1 : name === 'agent' ? ![2, 3, 4].includes(part) : part !== 5)
+  )
+    return
   await run()
   console.log(`CONVERSATION-OWNER ${name} PASS`)
 }
@@ -809,6 +815,7 @@ try {
   }
 
   await section('agent', async () => {
+    const part = Number(process.env.TREZI_CONVERSATION_OWNER_PART || 0)
     // The editing fixture: the same conversation owner plus the editing owner a chat
     // worktree's setup helpers go through.
     const started = await startEditingFixture(compileEditingFixture(), agentProfile)
@@ -825,14 +832,14 @@ try {
     setSourceOwner(owners.source)
     setEditingOwner(owners.editing)
     const repo = repository('repo-swift')
-    const swift = await agentScenario(repo)
+    const swift = !part || part === 4 ? await agentScenario(repo) : null
     const liveEvents = []
     window = (event) => liveEvents.push(event)
     // LKM-404: two chats in a live checkout must not enter provider turns together.
     for (const liveRoot of [
       join(repository('nested-parent'), 'child'),
       join(scratch, 'plain-project')
-    ]) {
+    ].filter((_, index) => !part || part === index + 2)) {
       mkdirSync(liveRoot, { recursive: true })
       const first = providers.length
       const key = projectKey(liveRoot)
@@ -1061,6 +1068,15 @@ try {
       console.log(
         `LKM-404 ${liveRoot.endsWith('/child') ? 'nested' : 'non-Git'} waits: orphan ${orphanWaitMs} ms, late orphan ${lateOrphanWaitMs} ms, bound ${timeoutWaitMs} ms, hard Stop ${hardStopWaitMs} ms, provider error ${crashWaitMs} ms`
       )
+    }
+    if (part === 2 || part === 3) {
+      await started.settled()
+      setConversationOwner(null)
+      setRepositoryOwner(null)
+      setSourceOwner(null)
+      setEditingOwner(null)
+      await stop(started)
+      return
     }
     // A delayed owner cancel belongs to the turn captured when Stop was pressed.
     // Its response must never interrupt or cancel a replacement turn.
