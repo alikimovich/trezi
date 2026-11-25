@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-816: passing full Forge gate on the reconciled tree
+
+- Forge's check on tree `04fc4602a3d1` passed. Its changed-input selector expanded to the full unit tier: 361 PASS, 0 FAIL, 0 TIMEOUT, 3 SKIP, 0 not run in 371.1 s. `native-chat-send-follow` passed concurrently in 96.7 s; `native-composer-layout`, `spawn-phases` and `chat-new-instant` also passed. The check event reported exit 0, including typecheck. The run artifact is `test/artifacts/runs/run-4Tlsm9/summary.json`. The next reviewer missed the artifact's `selection.mode: full`; this entry records the passing gate explicitly. GitHub CI timing awaits Forge's PR.
+
 ## 2026-11-25 — LKM-816: reconcile main and prepare a quiescent gate
 
 - Reconciled origin/main (LKM-817's test splits and fixture repairs) with the send/follow barrier change. The only textual conflict was the two tasks' CI speed status lines; both intents are retained. The sandbox blocked `git merge` at the shared worktree metadata, so the resolved file tree was produced in a writable scratch clone and copied here for Forge to commit.

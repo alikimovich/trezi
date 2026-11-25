@@ -316,8 +316,15 @@ and UI tests, including `spawn-phases` and `sidebar-marquee`. The shared Mac's
 load average exceeded 550; contention is a hypothesis, not proof of each cause.
 After 19 leaked idle simulators were shut down, the manager authorized one
 quiescent full check on the reconciled head. Before that gate, typecheck, lint
-and a focused four-test run passed (105.7 s wall; send/follow 105.7 s). Its
-full-check result is pending Forge's gate.
+and a focused four-test run passed (105.7 s wall; send/follow 105.7 s). Forge's
+next check passed on tree `04fc4602a3d1`: the changed-input selector reported
+`selection.mode: full`, ran all 364 unit files in **371.1 s** (361 PASS,
+0 FAIL, 0 TIMEOUT, 3 SKIP; 0 not run), and typecheck exited 0. In that concurrent
+run `native-chat-send-follow` passed in 96.7 s, `native-composer-layout` in
+37.6 s, `spawn-phases` in 26.5 s and `chat-new-instant` in 38.4 s. Evidence:
+`test/artifacts/runs/run-4Tlsm9/summary.json` (2026-11-25 13:45 PST) and
+Forge's passing check event for the same tree. This is the required passing
+full local gate; final-head GitHub CI is still pending.
 No GitHub workflow changed, so a `gh run list` p50/p95 comparison is not relevant
 to this edit.
 
