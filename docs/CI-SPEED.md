@@ -131,26 +131,34 @@ floor. The Swift build cache remains in place. No workflow or Forge `check:`
 configuration changed.
 
 The before column is the local eight-worker full-run observation from this plan.
-After numbers are focused runs of just the affected tests: eight workers for the
-first pass, then four for narrower repair passes. They show each new critical
-path, but load and worker count differ, so they are **not** a full Forge check
-before/after comparison. Forge runs that check after this engineer round; its
-after-number has not yet been reported. The task explicitly barred running a full
-unit tier in this worktree. GitHub p50/p95 was not remeasured because the existing
-workflow was unchanged.
+The focused after numbers came from eight workers for the first pass, then four
+for narrower repair passes; load and worker count differ. The subsequent full
+Forge check took **511.5 s** (359 PASS, 2 FAIL, 3 SKIP), compared with **428.5 s**
+for LKM-776's warm-cache full check: 83.0 s slower (19%). It sits inside the
+older 505–556 s full-check range. This is one run, with different test counts and
+machine load; two failures make it an invalid passing gate. Neither the focused
+timings nor the single full run establish a speed gain or regression caused by
+the split. The task barred running a full unit tier in this worktree. GitHub
+p50/p95 was not remeasured because the existing workflow was unchanged.
 
-| Former file | Before, full run | After, focused parts (seconds) |
-| --- | ---: | --- |
-| `resolved-lessons` | 247 | 178.6 / 159.5 |
-| `conversation-owner` | 199 | 2.2 / 132.6 / 132.3 / 69.2 / 4.9 |
-| `peer-coordination` | 182 | 60.9 / 64.9 |
-| `repository-owner` | 172 | 92.9 / 116.9 / 94.0 |
-| `peer-wait-deadline` | 169 | bound 3.4 / service 112.2 |
-| `service-process` | 126 | supervision 9.7 / XPC lookup blocked by this sandbox |
+| Former file | Before, full run | After, focused parts (seconds) | After, full Forge parts (seconds) |
+| --- | ---: | --- | --- |
+| `resolved-lessons` | 247 | 178.6 / 159.5 | 132.8 / 108.1 PASS |
+| `conversation-owner` | 199 | 2.2 / 132.6 / 132.3 / 69.2 / 4.9 | 1.5 / 133.8 / 133.4 / 68.7 / 5.7 PASS |
+| `peer-coordination` | 182 | 60.9 / 64.9 | 40.1 / 46.7 PASS |
+| `repository-owner` | 172 | 92.9 / 116.9 / 94.0 | 39.7 PASS / 77.5 FAIL / 61.5 PASS |
+| `peer-wait-deadline` | 169 | bound 3.4 / service 112.2 | bound 0.7 / service 102.8 PASS |
+| `service-process` | 126 | supervision 9.7 / XPC lookup blocked by this sandbox | supervision 4.1 / XPC 45.8 PASS |
 
-The XPC part compiled and reached its peer-rejection assertion, then macOS denied
-XPC service lookup with Cocoa error 4099 (sandbox restriction). The unsandboxed
-Forge check must supply that result. The other focused parts, `test-selection`,
+The local XPC part reached its peer-rejection assertion, then this sandbox denied
+service lookup with Cocoa error 4099. The unsandboxed Forge XPC part passed in
+45.8 s. The Forge run's `repository-owner-part-2` failure was in its `chat-landing`
+suite: landing reported that no check passed on the exact source. That part passed
+a focused rerun in 116.9 s. `preview-apply-layers` timed out waiting for a WebKit
+snapshot in Forge. A focused rerun in this sandbox timed out earlier at page load,
+with denied WebKit service extensions; it does not reproduce or explain Forge's
+snapshot timeout. Neither Forge failure is established as caused by the split, and
+the full run remains a failed gate. The other focused parts, `test-selection`,
 typecheck and lint passed. The focused run wall clocks were 137.2 s for the five
 conversation parts plus selection and 116.9 s for the three repository parts plus
 selection; these are separate runs and not additive.
@@ -172,7 +180,7 @@ Forge check first; GitHub items only touch the existing workflow Forge waits on.
    LKM-371 made it exclusive because other workers stalled its main-run-loop settles
    on the 1-shard runner: a timing bug in the fixture to find, not a reason for a
    barrier.
-4. **Split slow files** (implemented in LKM-817; Forge full-check after-number pending;
+4. **Split slow files** (implemented in LKM-817; first full Forge check failed;
    local full run, seconds): `resolved-lessons` 247,
    `conversation-owner` 199, `peer-coordination` 182, `repository-owner` 172,
    `peer-wait-deadline` 169, `service-process` 126; budget 20 s of work per file.

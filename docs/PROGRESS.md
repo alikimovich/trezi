@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-817: first full Forge check and failure triage
+
+- Forge's full after-check took 511.5 s: 359 PASS, 2 FAIL, 3 SKIP. The unsandboxed `service-process-xpc` part passed in 45.8 s. Compared with LKM-776's 428.5 s warm-cache full check, this one was 83.0 s slower; the prior 505–556 s range, changed test count, machine load and failures prevent attributing that difference to the split. `docs/CI-SPEED.md` now records the full and per-part results.
+- `repository-owner-part-2` failed in the `chat-landing` exact-source check during the full run, then passed a focused rerun. `preview-apply-layers` timed out waiting for a WebKit snapshot in Forge; a focused rerun here timed out earlier at page load amid sandbox-denied WebKit extensions. Neither failure is established as caused by the split. The full run is a failed gate; a passing Forge check remains open.
+
 ## 2026-11-25 — LKM-817: split the slowest unit test files
 
 - Six unit scripts now have separately scheduled parts. Conversation owner has five parts, repository owner three, and the remaining four have two each. The original scripts keep their assertions; entrypoints select sections or scenarios. No Forge config or GitHub workflow changed.

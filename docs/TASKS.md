@@ -7,7 +7,9 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
 - [x] Register independent parts for all six scripts; keep their existing assertions, Swift fixtures and timeouts.
 - [x] Run the affected parts and selection guard locally, plus typecheck and lint; record focused before/after evidence in `docs/CI-SPEED.md`.
-- [ ] Capture the full Forge check after-number and the XPC result from its unsandboxed run.
+- [x] Capture the full Forge check after-number and the XPC result: 511.5 s, 359 PASS / 2 FAIL / 3 SKIP; `service-process-xpc` PASS in 45.8 s. Compare with the 428.5 s prior warm-cache check in `docs/CI-SPEED.md`.
+- [x] Triage the two failed tests: `repository-owner-part-2` passed its focused rerun; `preview-apply-layers` timed out on a WebKit snapshot in Forge and earlier at page load in this sandbox. Neither is established as split-caused.
+- [ ] Obtain a passing full Forge gate before treating this split as accepted.
 
 ## LKM-782 — Six more feature clips in the README
 
