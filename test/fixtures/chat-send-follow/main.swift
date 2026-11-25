@@ -211,6 +211,16 @@ func blankFrames(_ name: String, cap: Double = 90, after: Double = 1.5, lateMin:
         next = t + 0.03
         late += 1
     }
+    // A post-bound settle may be between its last step and completion when the
+    // observation window ends. Give it run-loop turns to finish before checking
+    // the active flag; a settle stuck active must still fail.
+    if !stream {
+        let settleDeadline = Date(timeIntervalSinceNow: 90)
+        while chat.model.latestSettling && Date() < settleDeadline {
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.004))
+        }
+    }
+    let settlingLate = chat.model.latestSettling
     let realizesLate = chat.model.latestRealizes - realizes
     let settlesLate = chat.model.latestSettles - settlesBefore - settlesRun
     // Send again while the frames are still dropped and the bound is spent: a new message is not a
@@ -234,7 +244,7 @@ func blankFrames(_ name: String, cap: Double = 90, after: Double = 1.5, lateMin:
     let metrics = chat.conversationScroll.map(ChatScrollStyleProbe.metrics) ?? [:]
     let offsetNow = metrics["offset"] as? CGFloat ?? 0, maxOffset = metrics["maxOffset"] as? CGFloat ?? 0
     running = false; push(); spin(0.5)
-    forcedResults.append(["case": name, "lateSamples": late, "settlesLate": settlesLate, "upJump": upJump, "upJumpDuringSettles": upJumpAll, "endedAfter": endedAt ?? -1, "streamed": stream,
+    forcedResults.append(["case": name, "lateSamples": late, "settlesLate": settlesLate, "settlingLate": settlingLate, "upJump": upJump, "upJumpDuringSettles": upJumpAll, "endedAfter": endedAt ?? -1, "streamed": stream,
                           "realizes": realizes - realizesBefore, "settles": settlesRun, "realizesLate": realizesLate, "realizedOnSend": realizedOnSend,
                           "shownAfterRelease": shown, "offsetFromEnd": maxOffset - offsetNow, "quietAt": quietAt ?? -1,
                           "timeline": ["settleEnds": settleEnds, "realizeTimes": realizeTimes, "lateRealizes": lateRealizes, "lateMoves": lateMoves]])

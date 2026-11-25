@@ -1,5 +1,11 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-816 review repair: prove the forced settle stops
+
+- Review found that completed post-bound settle counts alone could miss a settle still active when the observation ended. The non-streaming forced cases now pump the main run loop for up to 90 s while an active settle finishes, then assert `latestSettling` is false as well as at most one completed post-bound settle. This preserves the no-restart check while tolerating a delayed final settle completion.
+- Forge's first full unit check ran 413.2 s (350 PASS, 1 FAIL, 3 SKIP). `native-chat-send-follow` passed under concurrency in 179.1 s; `chat-new-instant` timed out waiting for its fourth send after 50.0 s. The latter passed alone in 33.1 s and alongside the native fixture in 32.8 s, so the focused runs did not reproduce its failure. The two-test concurrent run finished in 132.2 s with both passing. This sandbox denies the Swift macro helper on a changed fixture; the concurrent run used a temporary `swiftc -disable-sandbox` flag which was removed afterward. Forge's next full check must confirm whether the fourth-send failure recurs at eight-worker load.
+- Typecheck and lint pass. The local focused run is evidence for these two tests, not a replacement for Forge's full check or final-head CI.
+
 ## 2026-11-25 — LKM-816: remove the native chat send/follow barrier
 
 - The LKM-371 exclusive queue entry kept seven workers idle for roughly 97 s in a full run. The fixture still used a 90 s total deadline for its forced settle cases and counted frames sampled while settling after the bound. Those observations vary with main-run-loop scheduling. The deadline now resets only on app realize or settle progress; non-streaming cases count completed post-bound settles. The assertions for visibility, follow direction, settle completion, at most 240 realizes, no late realizes and a second Send remain.

@@ -79,7 +79,7 @@ if (process.platform !== 'darwin') {
     const describeForced = forced
       .map(
         (entry) =>
-          `${entry.case}${entry.streamed ? ' (streaming)' : ''}: settles ended after ${entry.endedAfter.toFixed(1)} s (${entry.realizes} realize scrolls, ${entry.settles} settles), then ${entry.settlesLate} settles and ${entry.realizesLate} realize scrolls in ${entry.lateSamples} observations, a second Send realized after ${entry.realizedOnSend.toFixed(2)} s, up jump ${entry.upJump.toFixed(0)} pt (${entry.upJumpDuringSettles.toFixed(0)} pt during the settles), rows ${entry.shownAfterRelease ? 'back' : 'NOT back'}, ${entry.offsetFromEnd.toFixed(0)} pt from the end`
+          `${entry.case}${entry.streamed ? ' (streaming)' : ''}: settles ended after ${entry.endedAfter.toFixed(1)} s (${entry.realizes} realize scrolls, ${entry.settles} settles), then ${entry.settlesLate} settles and ${entry.realizesLate} realize scrolls in ${entry.lateSamples} observations, settle active ${entry.settlingLate}, a second Send realized after ${entry.realizedOnSend.toFixed(2)} s, up jump ${entry.upJump.toFixed(0)} pt (${entry.upJumpDuringSettles.toFixed(0)} pt during the settles), rows ${entry.shownAfterRelease ? 'back' : 'NOT back'}, ${entry.offsetFromEnd.toFixed(0)} pt from the end`
       )
       .join('; ')
     // LKM-365: the failing case's own timeline, in seconds after its Send, so a CI failure can be
@@ -161,6 +161,13 @@ if (process.platform !== 'darwin') {
           (entry.streamed || entry.settlesLate <= 1),
         forcedFailure(entry, 'the settle restarted after it ended')
       )
+      if (!entry.streamed) {
+        assert.equal(
+          entry.settlingLate,
+          false,
+          forcedFailure(entry, 'the settle stayed active after the bound')
+        )
+      }
       // No realize scroll once ended: a settled reading after realize steps must not restart them.
       assert.equal(
         entry.realizesLate,

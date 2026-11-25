@@ -178,9 +178,12 @@ The forced fixture's 90 s stop now measures time since the last app realize or
 settle completion. A loaded main run loop can make the bounded 240 realize steps
 take longer than 90 s while still progressing. The non-streaming post-bound check
 counts completed settles instead of frames sampled while settling; sampling rate
-changes under worker load. Visibility, no-upward-jump, settle-end, 240-realize,
-no-late-realize and second-Send checks remain. The unit queue no longer marks this
-test exclusive, so other tests can run during it.
+changes under worker load. Review caught a gap: zero completed settles could also
+mean one remained active. The fixture now waits for a late active settle to finish
+(up to 90 s) and asserts it is inactive, alongside the completed-settle bound.
+Visibility, no-upward-jump, settle-end, 240-realize, no-late-realize and second-Send
+checks remain. The unit queue no longer marks this test exclusive, so other tests
+can run during it.
 
 Focused local measurements on this Mac (three workers; seconds):
 
@@ -194,8 +197,14 @@ The warm run included one more test than the before run and still finished 7.6 s
 sooner; that small wall difference also includes ordinary runtime variance. It
 proves 28.3 worker-seconds of selected work can overlap the chat fixture. The
 former full-run barrier idled seven workers for 97 s. Forge's prior full check
-was 428.5 s (LKM-776); this round cannot run the full tier locally under the
-ticket's test limit, so the comparable Forge after-number is pending its check.
+was 428.5 s (LKM-776). The first LKM-816 full check took 413.2 s: 350 PASS,
+1 FAIL (`chat-new-instant` fourth-send wait), 3 SKIP. The chat fixture passed in
+179.1 s under concurrency. After the review repair, a focused concurrent run of
+`native-chat-send-follow` and `chat-new-instant` passed in 132.2 s wall (132.2 s
+and 32.8 s respectively); `chat-new-instant` alone passed in 33.1 s. The first
+focused compile hit this sandbox's Swift macro denial; the passing concurrent
+run used a temporary `-disable-sandbox` compiler flag that was then removed.
+The focused run does not establish a green full check; Forge must rerun it.
 No GitHub workflow changed, so a `gh run list` p50/p95 comparison is not relevant
 to this edit.
 
