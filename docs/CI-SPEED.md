@@ -205,6 +205,13 @@ and 32.8 s respectively); `chat-new-instant` alone passed in 33.1 s. The first
 focused compile hit this sandbox's Swift macro denial; the passing concurrent
 run used a temporary `-disable-sandbox` compiler flag that was then removed.
 The focused run does not establish a green full check; Forge must rerun it.
+Forge's second full check took 427.8 s: 349 PASS, 2 FAIL, 3 SKIP.
+`native-chat-send-follow` passed concurrently in 141.3 s. The failures were
+`native-composer-layout` (its fixed scroll-settle window missed a delayed
+main-queue callback) and `spawn-phases` (a setup-time comparison against a
+different run became false under load: 1807 ms setup, 1154 ms lease wait).
+Both fixtures now assert state or phase ordering directly; together they pass
+in a focused 37.8 s local run. The post-repair full-check time and verdict await Forge.
 No GitHub workflow changed, so a `gh run list` p50/p95 comparison is not relevant
 to this edit.
 

@@ -19,6 +19,8 @@ Kinds:
 
 | Date | Ticket | Test file | Kind | What failed, and why |
 | --- | --- | --- | --- | --- |
+| 2026-11-25 | LKM-816 | `test/native-composer-layout.mjs` | test bug | Fixed-time scroll settle missed a delayed main-queue reattach callback under concurrent load; the fixture now waits for pinned state and checks the callback sequence. |
+| 2026-11-25 | LKM-816 | `test/spawn-phases.mjs` | test bug | Cross-run setup-time bound failed at 1807 ms under load; lease and setup attribution now use chronological phase marks. |
 | 2026-11-21 | LKM-776 | `test/sidebar-marquee.mjs` | test bug | Fixture `resize()` let a late plan sample before the title's next frame applied the new travel (offset 155 > travel 115); it now waits for that frame, as `select()` does. |
 | 2026-11-21 | LKM-776 | `test/session-skills.mjs` | test bug | A `< 2000 ms` wall-clock ceiling read 2053 ms at load ~190; replaced by the ordering it stood for (the start gives up before the stuck edit settles). |
 | 2026-11-20 | LKM-763 | `test/browser-tools-install.mjs` | test bug | Cancelled install's rejection was handled too late; Bun flagged it unhandled. |

@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-816 review repair: two load-sensitive fixture assertions
+
+- Forge's second full unit check took 427.8 s: 349 PASS, 2 FAIL, 3 SKIP. `native-chat-send-follow` passed concurrently in 141.3 s. `native-composer-layout` sampled a timed scroll settle before its main-queue callback ran; its return-to-end checks now wait for the pinned state and still assert the callback sequence. `spawn-phases` compared occupied worktree setup against a different run's wall time; setup took 1.8 s under load, so the fixture now checks that lease wait ends before setup begins using the recorded marks. Its span partition and held-lease assertion remain.
+- Focused `spawn-phases` and `native-composer-layout` pass together in 37.8 s with the normal compiler helper restored. The changed Swift fixture first required a temporary `-disable-sandbox` compiler flag because this sandbox denies the macro helper; the flag was removed. Typecheck and lint pass. The next Forge full check must confirm both repairs under eight-worker load.
+
 ## 2026-11-25 — LKM-816 review repair: prove the forced settle stops
 
 - Review found that completed post-bound settle counts alone could miss a settle still active when the observation ended. The non-streaming forced cases now pump the main run loop for up to 90 s while an active settle finishes, then assert `latestSettling` is false as well as at most one completed post-bound settle. This preserves the no-restart check while tolerating a delayed final settle completion.
