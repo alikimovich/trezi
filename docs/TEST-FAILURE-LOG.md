@@ -19,6 +19,7 @@ Kinds:
 
 | Date | Ticket | Test file | Kind | What failed, and why |
 | --- | --- | --- | --- | --- |
+| 2026-11-25 | LKM-816 | `test/swift-preview.mjs` | test bug | GitHub shard reached the library build at 234.7 s after two earlier cold builds took 78.7 s and 90.9 s, then hit the 240 s process limit. The independent stop and library scenarios now run as separate grouped tests with unchanged assertions and limits. |
 | 2026-11-25 | LKM-816 | `test/native-composer-layout.mjs` | test bug | Fixed-time scroll settle missed a delayed main-queue reattach callback under concurrent load; the fixture now waits for pinned state and checks the callback sequence. |
 | 2026-11-25 | LKM-816 | `test/spawn-phases.mjs` | test bug | Cross-run setup-time bound failed at 1807 ms under load; lease and setup attribution now use chronological phase marks. |
 | 2026-11-25 | LKM-817 | `test/browser-verify-bounds.mjs` | test bug | The 8 s run-budget attempt took 13.7 s under load. The wall-clock assertion omitted the mandatory browser-session close, which has its own bounded 15 s allowance; the corrected bound includes it and still verifies the hung wrapper and child exit. |

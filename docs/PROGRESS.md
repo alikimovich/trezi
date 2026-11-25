@@ -1,5 +1,11 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-816: repair GitHub swift-preview timeout
+
+- PR #476's unit shard 1/3 reached `swift-preview`'s library build at 234.7 s and hit its 240 s process limit (123 PASS, 1 TIMEOUT). The first, gated candidate and driver builds took 78.7, 47.4 and 90.9 s; the same test passed in 140.7 s on the preceding main CI run. This is an outer budget failure before the library assertion, with cold build load a plausible cause.
+- Extracted the independent gated Stop and library scenarios into their own unit entries in the same serial preview group. Their real-host assertions and individual 240 s limits remain; no workflow or product code changed. The deterministic PR plan assigns the three scenarios to shards 1, 3 and 2 respectively.
+- Local focused `test-runner` and `test-selection` passed. The real-host tests could not establish a verdict here: `swift-preview` and the library case each waited 180 s for their first build without a ready host; the Stop case built its candidate, but the host exited with SIGABRT before readiness. This sandbox has blocked native GUI and Swift macro helpers in earlier rounds. These local failures are not recorded as passes; Forge's unsandboxed full check and final GitHub CI must verify the split. Typecheck and lint exited 0.
+
 ## 2026-11-25 — LKM-816: retain the main CI speed task wording
 
 - Item 3 in `docs/CI-SPEED.md` again matches origin/main exactly; the LKM-816 outcome and measurements remain in its dedicated section. The branch's file tree already contains the LKM-817 changes from main. This sandbox denied both `git merge-tree --write-tree` and `git merge origin/main` when they tried to write shared Git metadata, so Forge must record the merge.

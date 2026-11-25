@@ -359,6 +359,8 @@ export const UNIT = [
   'docs-merge-union',
   'versioning',
   'swift-preview',
+  'swift-preview-stop',
+  'swift-preview-library',
   'swift-preview-graph',
   'swift-preview-target',
   'swift-preview-toolchain',
@@ -392,6 +394,8 @@ export const TIERS = { unit: UNIT, native: NATIVE, live: LIVE }
 export const UNIT_GROUPS = {
   'swift-preview': [
     'swift-preview',
+    'swift-preview-stop',
+    'swift-preview-library',
     'swift-preview-target',
     'swift-preview-toolchain',
     'swift-preview-build',
@@ -491,6 +495,9 @@ export const UNIT_TIMEOUT_MS = {
   'keychain-rebuild': 300_000,
   // LKM-271: four compiles of the preview host and a fixture (6 s warm) outside the lane.
   'swift-preview': 240_000,
+  // LKM-816: independent stop and library scenarios extracted from the 240 s test.
+  'swift-preview-stop': 240_000,
+  'swift-preview-library': 240_000,
   // LKM-273: three module compiles per build, six builds, then the driver's own build.
   'swift-preview-target': 300_000,
   // LKM-274: scripted toolchains are instant; the real check probes Xcode and then the

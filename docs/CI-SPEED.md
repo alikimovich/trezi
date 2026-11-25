@@ -329,6 +329,22 @@ full local gate; final-head GitHub CI is still pending.
 No GitHub workflow changed, so a `gh run list` p50/p95 comparison is not relevant
 to this edit.
 
+PR #476's GitHub CI on head `b7854351` failed in unit shard 1/3: 123 PASS and
+`swift-preview` TIMEOUT at 240.0 s; shards 2/3 and 3/3, typecheck, app build and
+dependency audit passed. Its stage log reached the library build at 234.7 s:
+first build 78.7 s, gated candidate build 47.4 s and driver build 90.9 s. The
+same test passed in 140.7 s on the preceding main run, so the overrun is
+consistent with cold toolchain work under this shard's load; it does not show a
+failed preview assertion. The independent gated Stop and library scenarios now
+have separate grouped test entries. Each keeps the 240 s limit and all its
+assertions. The deterministic PR shard plan puts `swift-preview` on shard 1,
+the library case on shard 2 and the Stop case on shard 3; within a shard the
+preview group remains serial. Final-head Forge and GitHub results are pending.
+The local focused runner and selection tests passed; real-host runs here stopped
+at first-build readiness (main and library) or AppKit host startup (Stop), so
+their passing verdict still depends on Forge and GitHub CI. Typecheck and lint
+passed.
+
 ## Total CI time and cost
 
 | | Before | After |
