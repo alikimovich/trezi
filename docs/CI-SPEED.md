@@ -228,9 +228,10 @@ Forge check first; GitHub items only touch the existing workflow Forge waits on.
    TS, source lists of `swiftBuild` fixtures for Swift), list every input that reruns
    everything, then hide a real change from it on purpose and confirm the check goes
    red. Allowed only once item 1 holds.
-3. **Done in LKM-816: fix the `native-chat-send-follow` barrier** (97 s with 7 idle
-   workers per run). The fixture's progress and settle observations now survive
-   main-run-loop stalls; the barrier is removed. Measurements are below.
+3. **Fix the `native-chat-send-follow` barrier** (97 s with 7 idle workers per run).
+   LKM-371 made it exclusive because other workers stalled its main-run-loop settles
+   on the 1-shard runner: a timing bug in the fixture to find, not a reason for a
+   barrier.
 4. **Split slow files** (implemented in LKM-817; later full Forge check passed;
    local full run, seconds): `resolved-lessons` 247,
    `conversation-owner` 199, `peer-coordination` 182, `repository-owner` 172,

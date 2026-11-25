@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-816: retain the main CI speed task wording
+
+- Item 3 in `docs/CI-SPEED.md` again matches origin/main exactly; the LKM-816 outcome and measurements remain in its dedicated section. The branch's file tree already contains the LKM-817 changes from main. This sandbox denied both `git merge-tree --write-tree` and `git merge origin/main` when they tried to write shared Git metadata, so Forge must record the merge.
+- The focused `docs-links` and `test-selection` unit tests passed (2 PASS, 4.6 s); typecheck and lint exited 0. The previously recorded full Forge gate passed on tree `04fc4602a3d1`; the final-head publication gates remain for Forge.
+
 ## 2026-11-25 — LKM-816: passing full Forge gate on the reconciled tree
 
 - Forge's check on tree `04fc4602a3d1` passed. Its changed-input selector expanded to the full unit tier: 361 PASS, 0 FAIL, 0 TIMEOUT, 3 SKIP, 0 not run in 371.1 s. `native-chat-send-follow` passed concurrently in 96.7 s; `native-composer-layout`, `spawn-phases` and `chat-new-instant` also passed. The check event reported exit 0, including typecheck. The run artifact is `test/artifacts/runs/run-4Tlsm9/summary.json`. The next reviewer missed the artifact's `selection.mode: full`; this entry records the passing gate explicitly. GitHub CI timing awaits Forge's PR.
