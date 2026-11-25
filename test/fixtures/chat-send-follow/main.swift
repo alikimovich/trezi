@@ -159,9 +159,10 @@ func blankFrames(_ name: String, cap: Double = 90, after: Double = 1.5, lateMin:
     messages += [message(prompt, "user", "Please review the text on the home page"), message(reply, "assistant", "")]
     running = true; push()
     let start = Date(), realizesBefore = chat.model.latestRealizes, settlesBefore = chat.model.latestSettles
-    var late = 0, settlingLate = 0, highest = -CGFloat.infinity, upJump: CGFloat = 0, upJumpAll: CGFloat = 0, highestAll = -CGFloat.infinity, next = 0.0
+    var late = 0, highest = -CGFloat.infinity, upJump: CGFloat = 0, upJumpAll: CGFloat = 0, highestAll = -CGFloat.infinity, next = 0.0
     var endedAt: Double?, chunk = 0, realizes = realizesBefore, realizedAt = 0.0, quietTurns = 0, settlesRun = 0, quietAt: Double?
     var seenRealizes = realizesBefore, seenSettles = settlesBefore, lastOffset: CGFloat?
+    var lastProgress = Date(), progressRealizes = realizesBefore, progressSettles = settlesBefore
     var settleEnds: [[Double]] = [], realizeTimes: [Double] = [], lateRealizes: [[Double]] = [], lateMoves: [[Double]] = []
     let spent = { chat.model.latestUnresolved > ChatLatestSettle.unresolvedRestarts }
     func round(_ value: Double) -> Double { (value * 1000).rounded() / 1000 }
@@ -175,8 +176,13 @@ func blankFrames(_ name: String, cap: Double = 90, after: Double = 1.5, lateMin:
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.004))
         let t = Date().timeIntervalSince(start)
         streamChunk(t)
+        if chat.model.latestRealizes != progressRealizes || chat.model.latestSettles != progressSettles {
+            progressRealizes = chat.model.latestRealizes; progressSettles = chat.model.latestSettles; lastProgress = Date()
+        }
         if let endedAt, t >= endedAt + after && late >= lateMin { break }
-        if endedAt == nil && t >= cap { break }
+        // A loaded main run loop can take more than `cap` to complete the bounded
+        // steps. Stop only if the app makes no realize or settle progress for that long.
+        if endedAt == nil && Date().timeIntervalSince(lastProgress) >= cap { break }
         let now = offset()
         // Timeline: each settle's end with the realize scrolls so far and the unresolved count, each
         // realize scroll, and after the end every move back up.
@@ -204,9 +210,19 @@ func blankFrames(_ name: String, cap: Double = 90, after: Double = 1.5, lateMin:
         guard endedAt != nil, t >= next else { continue }
         next = t + 0.03
         late += 1
-        if chat.model.latestSettling && !stream { settlingLate += 1 }
     }
+    // A post-bound settle may be between its last step and completion when the
+    // observation window ends. Give it run-loop turns to finish before checking
+    // the active flag; a settle stuck active must still fail.
+    if !stream {
+        let settleDeadline = Date(timeIntervalSinceNow: 90)
+        while chat.model.latestSettling && Date() < settleDeadline {
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.004))
+        }
+    }
+    let settlingLate = chat.model.latestSettling
     let realizesLate = chat.model.latestRealizes - realizes
+    let settlesLate = chat.model.latestSettles - settlesBefore - settlesRun
     // Send again while the frames are still dropped and the bound is spent: a new message is not a
     // streamed chunk, so the follow must be allowed to realize again (the count starts over). Until
     // a realize scroll, or the Send's own settles spent the bound again without one.
@@ -228,7 +244,7 @@ func blankFrames(_ name: String, cap: Double = 90, after: Double = 1.5, lateMin:
     let metrics = chat.conversationScroll.map(ChatScrollStyleProbe.metrics) ?? [:]
     let offsetNow = metrics["offset"] as? CGFloat ?? 0, maxOffset = metrics["maxOffset"] as? CGFloat ?? 0
     running = false; push(); spin(0.5)
-    forcedResults.append(["case": name, "lateSamples": late, "settlingLate": settlingLate, "upJump": upJump, "upJumpDuringSettles": upJumpAll, "endedAfter": endedAt ?? -1, "streamed": stream,
+    forcedResults.append(["case": name, "lateSamples": late, "settlesLate": settlesLate, "settlingLate": settlingLate, "upJump": upJump, "upJumpDuringSettles": upJumpAll, "endedAfter": endedAt ?? -1, "streamed": stream,
                           "realizes": realizes - realizesBefore, "settles": settlesRun, "realizesLate": realizesLate, "realizedOnSend": realizedOnSend,
                           "shownAfterRelease": shown, "offsetFromEnd": maxOffset - offsetNow, "quietAt": quietAt ?? -1,
                           "timeline": ["settleEnds": settleEnds, "realizeTimes": realizeTimes, "lateRealizes": lateRealizes, "lateMoves": lateMoves]])

@@ -458,7 +458,11 @@ print("Chat follow resize: 440pt capped draft with grow->resize and resize->grow
 // User input detaches at once and drops pending pins; settles, composer growth
 // and resizes then leave the reader alone until they return to the end or
 // click latest. Programmatic pins never count as user scrolling.
-func drainSettle() { RunLoop.main.run(until: Date(timeIntervalSinceNow: ChatScrollStyleProbe.settleDelay + 0.25)) }
+func drainSettle(until done: () -> Bool = { true }) {
+    RunLoop.main.run(until: Date(timeIntervalSinceNow: ChatScrollStyleProbe.settleDelay + 0.25))
+    let deadline = Date(timeIntervalSinceNow: 5)
+    while !done() && Date() < deadline { RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01)) }
+}
 func scrollHistory(_ replay: ChatReplay, by delta: CGFloat) {
     let clip = replay.scroll.contentView
     clip.scroll(to: NSPoint(x: 0, y: clip.bounds.minY - delta))
@@ -504,7 +508,7 @@ for path in ["wheel", "live scroll"] {
     // Returning to the end by user input re-attaches after the input rests.
     liveScroll(replay) { ChatScrollStyleProbe.pinToEnd(replay.scroll) }
     require(!replay.probe.isPinned, "\(path): mid-gesture stays detached")
-    drainSettle()
+    drainSettle(until: { replay.probe.isPinned })
     require(replay.probe.isPinned && reported == [false, true], "\(path): user return to end re-attaches (\(reported))")
     replay.grow(longDraft); drainLayout(); replay.check("\(path) follows again after return")
     // Latest button: explicit attach from history.
@@ -620,7 +624,7 @@ for path in ["wheel", "live scroll"] {
     if path == "wheel" { replay.probe.userScrolled(); back() } else { liveScroll(replay, back) }
     drainLayout()
     require(!replay.probe.showsLatestButton && shown == [true, false], "\(path): back at the bottom hides latest (\(shown))")
-    drainSettle()
+    drainSettle(until: { replay.probe.isPinned })
     require(replay.probe.isPinned && !replay.probe.showsLatestButton && shown == [true, false], "\(path): re-pinned stays hidden")
     // Latest button click: attach pins to the end and hides it.
     replay.probe.userScrolled(); scrollHistory(replay, by: 900); drainLayout()

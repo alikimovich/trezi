@@ -79,7 +79,7 @@ if (process.platform !== 'darwin') {
     const describeForced = forced
       .map(
         (entry) =>
-          `${entry.case}${entry.streamed ? ' (streaming)' : ''}: settles ended after ${entry.endedAfter.toFixed(1)} s (${entry.realizes} realize scrolls, ${entry.settles} settles), then settling ${entry.settlingLate}/${entry.lateSamples}, ${entry.realizesLate} realize scrolls, a second Send realized after ${entry.realizedOnSend.toFixed(2)} s, up jump ${entry.upJump.toFixed(0)} pt (${entry.upJumpDuringSettles.toFixed(0)} pt during the settles), rows ${entry.shownAfterRelease ? 'back' : 'NOT back'}, ${entry.offsetFromEnd.toFixed(0)} pt from the end`
+          `${entry.case}${entry.streamed ? ' (streaming)' : ''}: settles ended after ${entry.endedAfter.toFixed(1)} s (${entry.realizes} realize scrolls, ${entry.settles} settles), then ${entry.settlesLate} settles and ${entry.realizesLate} realize scrolls in ${entry.lateSamples} observations, settle active ${entry.settlingLate}, a second Send realized after ${entry.realizedOnSend.toFixed(2)} s, up jump ${entry.upJump.toFixed(0)} pt (${entry.upJumpDuringSettles.toFixed(0)} pt during the settles), rows ${entry.shownAfterRelease ? 'back' : 'NOT back'}, ${entry.offsetFromEnd.toFixed(0)} pt from the end`
       )
       .join('; ')
     // LKM-365: the failing case's own timeline, in seconds after its Send, so a CI failure can be
@@ -148,18 +148,26 @@ if (process.platform !== 'darwin') {
       // than ChatLatestSettle.unresolvedRestarts), not a quiet time: on the loaded 1-shard main CI
       // a 1.5 s pause mid-bound read as ended. Unended (LKM-359) means more than 240 realize
       // scrolls ran; the bound is in steps, which a loaded runner only makes slower, and the
-      // fixture's 90 s cap only stops a hung run.
+      // fixture's 90 s no-progress cap only stops a hung run.
       assert.ok(entry.endedAfter >= 0, forcedFailure(entry, 'the settle never ended'))
       // Three unresolved settles realize, each at most 4 runs of 20 steps (ChatLatestSettle).
       assert.ok(entry.realizes <= 240, forcedFailure(entry, 'the realize scrolls are not bounded'))
       // Streaming: every chunk is a content request, which keeps the unresolved count. Past the
       // limit it only scrolls to the latest, so the jumps through the first row stop while the
       // chunks keep arriving; a count reset by each chunk jumps for the whole turn. The fixture
-      // samples at least 30 (20 streaming) times and 1.5 s (3 s) after the end.
+      // observes at least 30 (20 streaming) turns and 1.5 s (3 s) after the end.
       assert.ok(
-        entry.lateSamples >= (entry.streamed ? 20 : 30) && entry.settlingLate <= 3,
+        entry.lateSamples >= (entry.streamed ? 20 : 30) &&
+          (entry.streamed || entry.settlesLate <= 1),
         forcedFailure(entry, 'the settle restarted after it ended')
       )
+      if (!entry.streamed) {
+        assert.equal(
+          entry.settlingLate,
+          false,
+          forcedFailure(entry, 'the settle stayed active after the bound')
+        )
+      }
       // No realize scroll once ended: a settled reading after realize steps must not restart them.
       assert.equal(
         entry.realizesLate,

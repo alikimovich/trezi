@@ -271,6 +271,92 @@ keep running on the local Mac under the shared desktop lock.
 Blacksmith and runner images are off the list: GitHub waiting is 2–3 s at p50, and
 the Forge check, the larger bucket, runs on the Mac.
 
+## LKM-816: chat send/follow barrier removed (2026-11-25)
+
+The forced fixture's 90 s stop now measures time since the last app realize or
+settle completion. A loaded main run loop can make the bounded 240 realize steps
+take longer than 90 s while still progressing. The non-streaming post-bound check
+counts completed settles instead of frames sampled while settling; sampling rate
+changes under worker load. Review caught a gap: zero completed settles could also
+mean one remained active. The fixture now waits for a late active settle to finish
+(up to 90 s) and asserts it is inactive, alongside the completed-settle bound.
+Visibility, no-upward-jump, settle-end, 240-realize, no-late-realize and second-Send
+checks remain. The unit queue no longer marks this test exclusive, so other tests
+can run during it.
+
+Focused local measurements on this Mac (three workers; seconds):
+
+| Selection | Before | After |
+| --- | ---: | ---: |
+| `native-chat-send-follow` + `test-runner` | 122.9 wall, sequential (117.0 + 5.8) | 115.3 wall with a third selected test also running, concurrent (115.3 + 7.2) |
+| `native-chat-send-follow` + `native-chat-latest-settle` + `test-runner` | — | 115.3 wall, concurrent (115.3, 21.1, 7.2); warm cache |
+| Same three, cold changed-fixture build | — | 138.3 wall, concurrent (138.2, 26.7, 5.8) |
+
+The warm run included one more test than the before run and still finished 7.6 s
+sooner; that small wall difference also includes ordinary runtime variance. It
+proves 28.3 worker-seconds of selected work can overlap the chat fixture. The
+former full-run barrier idled seven workers for 97 s. Forge's prior full check
+was 428.5 s (LKM-776). The first LKM-816 full check took 413.2 s: 350 PASS,
+1 FAIL (`chat-new-instant` fourth-send wait), 3 SKIP. The chat fixture passed in
+179.1 s under concurrency. After the review repair, a focused concurrent run of
+`native-chat-send-follow` and `chat-new-instant` passed in 132.2 s wall (132.2 s
+and 32.8 s respectively); `chat-new-instant` alone passed in 33.1 s. The first
+focused compile hit this sandbox's Swift macro denial; the passing concurrent
+run used a temporary `-disable-sandbox` compiler flag that was then removed.
+The focused run does not establish a green full check; Forge must rerun it.
+Forge's second full check took 427.8 s: 349 PASS, 2 FAIL, 3 SKIP.
+`native-chat-send-follow` passed concurrently in 141.3 s. The failures were
+`native-composer-layout` (its fixed scroll-settle window missed a delayed
+main-queue callback) and `spawn-phases` (a setup-time comparison against a
+different run became false under load: 1807 ms setup, 1154 ms lease wait).
+Both fixtures now assert state or phase ordering directly; together they pass
+in a focused 37.8 s local run. A third full Forge check took **645.2 s**:
+**335 PASS, 10 FAIL, 6 TIMEOUT, 3 SKIP**. `native-chat-send-follow` passed
+concurrently in 115.0 s. Failures and timeouts spanned Swift, service, provider
+and UI tests, including `spawn-phases` and `sidebar-marquee`. The shared Mac's
+load average exceeded 550; contention is a hypothesis, not proof of each cause.
+After 19 leaked idle simulators were shut down, the manager authorized one
+quiescent full check on the reconciled head. Before that gate, typecheck, lint
+and a focused four-test run passed (105.7 s wall; send/follow 105.7 s). Forge's
+next check passed on tree `04fc4602a3d1`: the changed-input selector reported
+`selection.mode: full`, ran all 364 unit files in **371.1 s** (361 PASS,
+0 FAIL, 0 TIMEOUT, 3 SKIP; 0 not run), and typecheck exited 0. In that concurrent
+run `native-chat-send-follow` passed in 96.7 s, `native-composer-layout` in
+37.6 s, `spawn-phases` in 26.5 s and `chat-new-instant` in 38.4 s. Evidence:
+`test/artifacts/runs/run-4Tlsm9/summary.json` (2026-11-25 13:45 PST) and
+Forge's passing check event for the same tree. This is the required passing
+full local gate; final-head GitHub CI is still pending.
+No GitHub workflow changed, so a `gh run list` p50/p95 comparison is not relevant
+to this edit.
+
+PR #476's GitHub CI on head `b7854351` failed in unit shard 1/3: 123 PASS and
+`swift-preview` TIMEOUT at 240.0 s; shards 2/3 and 3/3, typecheck, app build and
+dependency audit passed. Its stage log reached the library build at 234.7 s:
+first build 78.7 s, gated candidate build 47.4 s and driver build 90.9 s. The
+same test passed in 140.7 s on the preceding main run, so the overrun is
+consistent with cold toolchain work under this shard's load; it does not show a
+failed preview assertion. The independent gated Stop and library scenarios now
+have separate grouped test entries. Each keeps the 240 s limit and all its
+assertions. The deterministic PR shard plan puts `swift-preview` on shard 1,
+the library case on shard 2 and the Stop case on shard 3; within a shard the
+preview group remains serial. Final-head Forge and GitHub results are pending.
+The local focused runner and selection tests passed; real-host runs here stopped
+at first-build readiness (main and library) or AppKit host startup (Stop), so
+their passing verdict still depends on Forge and GitHub CI. Typecheck and lint
+passed.
+
+PR #476's next CI run on `ebc7c278` failed its combined gate: unit shard 3
+reported 123 PASS, 1 FAIL, 1 SKIP in 328.9 s. The sole failure was
+`conversation-owner-part-2`: the late-orphan peer was admitted after 2050 ms,
+just over a 2000 ms wall-clock assertion. `native-chat-send-follow` passed
+concurrently in 96.1 s. Unit shards 1 and 2, app build, typecheck and dependency
+audit passed. The late-orphan fixture now waits for the peer's queued status and
+uses a 5 s writer-wait deadline: if the wake is missed, admission rejects. It
+keeps the separate 150 ms bounded-wait rejection and provider-admission checks.
+The focused part-2 check passed locally before and after the edit, including a
+runner-selected pass in 133.2 s (1 PASS); the final-head Forge and GitHub gates
+remain pending.
+
 ## Total CI time and cost
 
 | | Before | After |

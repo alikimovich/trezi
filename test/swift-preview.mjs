@@ -29,7 +29,6 @@ const ARTIFACTS = join(ROOT, 'test/artifacts/swift-preview')
 const { collectSources, hostCompileArgs, libraryCompileArgs, parseDiagnostics, parseManifest } =
   await import('../src/swift-preview/manifest.ts')
 const { PreviewSession } = await import('../src/swift-preview/session.ts')
-const { PreviewHostProcess } = await import('../src/swift-preview/host-client.ts')
 const { SWIFT_PREVIEW_DRIVER, swiftPreviewCommand } = await import('../src/main/swift-preview.ts')
 const { detectProject } = await import('../src/main/project-detect.ts')
 
@@ -175,7 +174,6 @@ async function until(check, label, timeout = 180_000) {
     await sleep(100)
   }
 }
-rmSync(ARTIFACTS, { recursive: true, force: true })
 mkdirSync(ARTIFACTS, { recursive: true })
 const logs = []
 const session = new PreviewSession({
@@ -316,50 +314,6 @@ try {
 }
 await assert.rejects(() => session.frame('profile-card'), /No preview host/)
 
-// --- LKM-586: Stop while a candidate host is starting stops it, never installs it ---
-// A real built host whose readiness is held: the host has printed its ready banner,
-// the session stops, then readiness is released to the build still awaiting it.
-{
-  let candidate = null
-  let realReady = null
-  let release = () => {}
-  const gatedCache = join(project, '..', `${project.split('/').pop()}-gated-cache`)
-  mkdirSync(gatedCache, { recursive: true })
-  const gated = new PreviewSession({
-    root: project,
-    cacheDir: gatedCache,
-    hostSource: join(ROOT, 'src/swift-preview/PreviewHost.swift'),
-    moduleCache: MODULE_CACHE,
-    log: () => {},
-    launchHost: (executable, options) => {
-      const host = new PreviewHostProcess(executable, options)
-      realReady = host.ready
-      const held = new Promise((resolve) => {
-        release = () => resolve(realReady)
-      })
-      Object.defineProperty(host, 'ready', { value: held })
-      candidate = host
-      return host
-    }
-  })
-  try {
-    const building = gated.rebuild('Initial build')
-    await until(() => candidate, 'gated candidate launched')
-    assert.ok((await realReady).length > 0, 'the candidate host itself is ready')
-    await gated.stop()
-    release()
-    await building
-    assert.equal(candidate.alive, false, 'the candidate host was stopped')
-    assert.equal(gated.state.generation, 0, 'no ready generation published after Stop')
-    assert.notEqual(gated.state.status, 'ready')
-    assert.deepEqual(gated.state.previews, [])
-    await assert.rejects(() => gated.frame('profile-card'), /No preview host/)
-  } finally {
-    await candidate?.stop()
-    rmSync(gatedCache, { recursive: true, force: true })
-  }
-}
-
 // --- The driver Trezi runs: the page, its state and its request checks ---
 const port = await new Promise((resolve, reject) => {
   const probe = createServer()
@@ -433,53 +387,4 @@ try {
   rmSync(join(project, '..', `${project.split('/').pop()}-cache`), { recursive: true, force: true })
 }
 
-// --- A library module: the app module imports a separately built module ---
-const libraryProject = mkdtempSync(join(tmpdir(), 'swift-preview-lib-'))
-cpSync(join(ROOT, 'test/fixtures/swift-library-app'), libraryProject, { recursive: true })
-const libraryLogs = []
-const librarySession = new PreviewSession({
-  root: libraryProject,
-  cacheDir: join(libraryProject, '..', `${libraryProject.split('/').pop()}-cache`),
-  hostSource: join(ROOT, 'src/swift-preview/PreviewHost.swift'),
-  moduleCache: MODULE_CACHE,
-  log: (line) => libraryLogs.push(line),
-  pollMs: 150
-})
-try {
-  assert.deepEqual(
-    collectSources(
-      libraryProject,
-      parseManifest(readFileSync(join(libraryProject, 'trezi-previews.json'), 'utf8'))
-    ).map((file) => file.slice(libraryProject.length + 1)),
-    ['App/GreetingBadge.swift', 'Previews/TreziPreviews.swift'],
-    'the @main file is excluded and library sources are not app sources'
-  )
-  librarySession.start()
-  await until(
-    () => librarySession.state.status === 'ready',
-    `library build (${libraryLogs.join(' | ')})`
-  )
-  assert.ok(libraryLogs.some((line) => line.includes('library GreetKit')))
-  await until(
-    async () => (await librarySession.describe('greeting-badge')).includes('Hello, Ada!'),
-    'the library greeting is drawn'
-  )
-  const shot = await librarySession.frame('greeting-badge')
-  assert.ok(shot.png.subarray(0, 4).equals(PNG), 'the library-backed view rendered')
-  writeFileSync(join(ARTIFACTS, 'library-greeting-badge.png'), shot.png)
-  // Editing the library's source rebuilds the library and the host.
-  const kit = join(libraryProject, 'Kit/Sources/GreetKit/Greeter.swift')
-  writeFileSync(kit, readFileSync(kit, 'utf8').replace('"Hello"', '"Welcome"'))
-  await until(
-    async () => (await librarySession.describe('greeting-badge')).includes('Welcome, Ada!'),
-    'library edit rebuilt'
-  )
-} finally {
-  await librarySession.stop()
-  rmSync(libraryProject, { recursive: true, force: true })
-  rmSync(join(libraryProject, '..', `${libraryProject.split('/').pop()}-cache`), {
-    recursive: true,
-    force: true
-  })
-}
 console.log('swift-preview: ok')

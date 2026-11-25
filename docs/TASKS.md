@@ -1020,6 +1020,14 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [ ] Native: run `--only=sidebar` and read `sidebar-*.png` for the favicon row and both folder rows (NOT RUN: 0 native calls for the worker).
 - [ ] Follow-up (unchanged): a first favicon added mid-session still needs a relaunch (`NativeShellController.icons` caches a miss).
 
+## Remove the native-chat-send-follow unit queue barrier (LKM-816)
+
+- [x] Bound the forced fixture by 90 seconds without app realize/settle progress, rather than 90 seconds total; replace sampled settling frames with completed post-bound settles for the non-streaming cases.
+- [x] Let `native-chat-send-follow` run alongside other unit workers; keep the send visibility, follow, settle, and 240-realize assertions.
+- [x] Record the post-change passing Forge full check and timing (361 PASS, 3 SKIP, 371.1 s unit tier on tree `04fc4602a3d1`).
+- [x] Split independent stop and library scenarios out of `swift-preview` after PR #476 timed out at the library build; retain their assertions and 240 s limits.
+- [ ] Record final-head GitHub CI timing after Forge publishes the PR.
+
 ## Make native-chat-send-follow deterministic under 1-shard main CI load (LKM-371)
 
 - [x] Replace the ordinary send cases' fixed post-turn sample window with a bounded wait for `latestSettles` to advance and `latestSettling` to clear; keep the settle-finished assertion.

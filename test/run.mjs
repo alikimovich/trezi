@@ -201,11 +201,9 @@ for (const [tier, members] of Object.entries(TIERS)) {
   if (!tests.length) continue
   const jobs = serial || tier !== 'unit' ? 1 : options.jobs
   console.log(`\n${tier}: ${tests.length} tests, at most ${jobs} workers`)
-  // LKM-371: this offscreen AppKit fixture drives several long main-run-loop
-  // settles. Other unit workers can stall its observations on the 1-shard runner.
   let items = tests.map((name) => ({
     name,
-    exclusive: tier !== 'unit' || name === 'native-chat-send-follow',
+    exclusive: tier !== 'unit',
     group: tier === 'unit' ? groupOf.get(name) : undefined
   }))
   // Unit: exclusive tests first, then the longest chain first (queueOrder, LKM-776), so

@@ -230,7 +230,7 @@ async function apply(label) {
     `${label}: wall=${wall}ms ${JSON.stringify(spans)} checkMs=${timeline.checkMs} landing=${JSON.stringify(steps)}`
   )
   reset()
-  return { ...spans, steps }
+  return { ...spans, steps, marks: timeline.marks }
 }
 
 try {
@@ -250,7 +250,11 @@ try {
   const occupied = await apply('warm, repository lease held 1 s')
   await held
   assert.ok(occupied.laneWaitMs >= 350, 'a held lease is queue time, not worktree setup')
-  assert.ok(occupied.worktreeMs < occupied.laneWaitMs + cold.worktreeMs, 'setup not inflated')
+  // A loaded worker can stall the Swift worktree owner after the lease is granted.
+  // The marks, rather than another run's wall time, prove the held lease was
+  // attributed before setup and did not overlap it.
+  assert.ok(occupied.marks.admitted <= occupied.marks.lane, 'lease wait ends at lane entry')
+  assert.ok(occupied.marks.lane <= occupied.marks.worktree, 'setup begins after lane entry')
   console.log('cold vs warm worktree ms:', cold.worktreeMs, warm.worktreeMs)
   // Web project, the agent's check needs a cold private server (2 s), model 2 × 1.5 s.
   web = true

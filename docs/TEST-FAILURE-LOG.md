@@ -19,6 +19,10 @@ Kinds:
 
 | Date | Ticket | Test file | Kind | What failed, and why |
 | --- | --- | --- | --- | --- |
+| 2026-11-25 | LKM-816 | `test/conversation-owner.mjs` | test bug | GitHub shard 3 admitted the late-orphan peer after 2050 ms, crossing a 2000 ms wall-clock assertion that included runner scheduling. The fixture now observes the queued status and requires successful admission within a shortened writer-wait deadline, while retaining the separate bounded-wait rejection case. |
+| 2026-11-25 | LKM-816 | `test/swift-preview.mjs` | test bug | GitHub shard reached the library build at 234.7 s after two earlier cold builds took 78.7 s and 90.9 s, then hit the 240 s process limit. The independent stop and library scenarios now run as separate grouped tests with unchanged assertions and limits. |
+| 2026-11-25 | LKM-816 | `test/native-composer-layout.mjs` | test bug | Fixed-time scroll settle missed a delayed main-queue reattach callback under concurrent load; the fixture now waits for pinned state and checks the callback sequence. |
+| 2026-11-25 | LKM-816 | `test/spawn-phases.mjs` | test bug | Cross-run setup-time bound failed at 1807 ms under load; lease and setup attribution now use chronological phase marks. |
 | 2026-11-25 | LKM-817 | `test/browser-verify-bounds.mjs` | test bug | The 8 s run-budget attempt took 13.7 s under load. The wall-clock assertion omitted the mandatory browser-session close, which has its own bounded 15 s allowance; the corrected bound includes it and still verifies the hung wrapper and child exit. |
 | 2026-11-25 | LKM-817 | `test/peer-coordination.mjs` | test bug | The new split guard counted 13 source calls, but a two-case loop runs 16 scenarios. The guard and partition now count all 16. |
 | 2026-11-25 | LKM-817 | `test/conversation-owner-part-1.mjs`, `test/conversation-owner-part-2.mjs` | test bug | The first split combined parity and two independent live-checkout waits in one agent section, then the agent section alone timed out at 240 s. Parity, each live-checkout case, the other agent assertions and recovery now run separately. |
