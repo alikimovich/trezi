@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-827: triage PR #477's next CI attempt
+
+- The new unit shard 2 failure occurred in `oven-sh/setup-bun@v2` with `TypeError: fetch failed`, before toolchain setup, dependency installation or any unit test. This was a runner download failure, not a failed assertion. After the workflow finished, its failed-jobs rerun passed shard 2 and the combined gate. All other jobs from the first attempt passed; PR #477's GitHub CI is green on attempt 2.
+- The focused `project-icon` and `trezi-cli` units each pass locally. `bun run typecheck`, `bun run lint` and `git diff --check` exit 0.
+
 ## 2026-11-25 — LKM-827: repair GitHub CLI log fixture
 
 - PR #477's GitHub shard 3 failed `trezi-cli` at the large-output log assertion; app build, typecheck and dependency audit passed. The fixture wrote to a pipe then called `process.exit(7)`, which can discard buffered stdout under load. It now sets the same exit code and lets the stream drain before exit. The production logger is unchanged.
