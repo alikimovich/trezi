@@ -163,6 +163,15 @@ and landed transitions, and recent turn events if this wait fails again. Its
 focused run passed in 12.8 s; typecheck and lint passed. The 20 s landing
 assertion remains. **A passing full Forge gate is still open.**
 
+A fourth full Forge check took **481.2 s** (360 PASS, 1 FAIL, 3 SKIP).
+`turn-tracker-prep-failure` passed; `branch-safety` failed when its second
+publish reached scripted `gh pr create` without a pushed `trezi/main` at that
+instant. A focused rerun passed in 12.6 s. The failed run did not retain its
+scratch remote, so it cannot establish whether the push was absent or the ref
+was removed afterward. The assertion now reports both branch tips, remote
+heads and the scripted gh calls on failure. This is still a failed full gate,
+not a measured speed result or acceptance of the split.
+
 | Former file | Before, full run | After, focused parts (seconds) | After, full Forge parts (seconds) |
 | --- | ---: | --- | --- |
 | `resolved-lessons` | 247 | 178.6 / 159.5 | 132.8 / 108.1 PASS |

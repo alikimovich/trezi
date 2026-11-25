@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-817: fourth full-check failure diagnosis
+
+- Forge's fourth full check took 481.2 s: 360 PASS, 1 FAIL, 3 SKIP. The previous `turn-tracker-prep-failure` failure passed. `branch-safety` failed in its second publish: scripted `gh pr create` reported that remote `trezi/main` had not been pushed. A focused rerun passed in 12.6 s, so the failure remains intermittent and its cause is unproved.
+- The failing assertion now includes the remote and local branch tips, remote heads and scripted gh calls, so another failure will show whether the push was absent or deleted after it. `docs/SWIFT-BACKEND-SERVICE.md` now names the split supervision entrypoint. The focused `branch-safety`, `test-selection` and `docs-links` tests passed together (10.9 s); typecheck and lint passed. A passing full Forge gate remains open.
+
 ## 2026-11-25 — LKM-817: third full-check failure diagnosis
 
 - The third full Forge check took 458.9 s: 360 PASS, 1 FAIL, 3 SKIP. The earlier `browser-verify-bounds` failure passed. `turn-tracker-prep-failure` timed out waiting for turn-b landing in the rejected-peer-read case, but the log did not include the owner phase or terminal/landing transitions. A focused rerun passed in 11.9 s.

@@ -198,6 +198,6 @@ missing. Each case checks the product-log cause lines.
 
 The XPC half requires launchd service lookup; a Seatbelt-sandboxed runner gets
 `Connection init failed at lookup … Sandbox restriction` and cannot pass it.
-`--supervision-only` runs the rest. `bun run test:native` launches the real app
+`test/service-process-supervision.mjs` runs the rest. `bun run test:native` launches the real app
 through the service path. Ad-hoc signatures pin the peer by cdhash, so host and
 service must come from the same build (the build always produces both).

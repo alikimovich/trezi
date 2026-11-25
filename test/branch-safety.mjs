@@ -159,7 +159,22 @@ try {
     assert.ok(w.recovery().some((ref) => ref.startsWith('refs/trezi/recovery/trezi/main/')))
     // The next publish carries only the late landing; a synced branch alone is nothing.
     const again = await w.workflows.publish(w.local, 'merge', describe)
-    assert.equal(again.ok, true, JSON.stringify(again))
+    assert.equal(
+      again.ok,
+      true,
+      JSON.stringify({
+        result: again,
+        remoteHead: git(
+          w.origin,
+          'for-each-ref',
+          '--format=%(objectname)',
+          'refs/heads/trezi/main'
+        ),
+        localHead: git(w.local, 'rev-parse', 'refs/heads/trezi/main'),
+        remoteRefs: git(w.origin, 'for-each-ref', '--format=%(refname:short)', 'refs/heads'),
+        ghCalls: w.ghState().calls
+      })
+    )
     kept(w)
     assert.equal(git(w.origin, 'show', 'main:late.txt'), 'late landing')
     const nothing = await w.workflows.publish(w.local, 'merge', describe)
