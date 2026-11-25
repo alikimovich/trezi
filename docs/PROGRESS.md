@@ -1,5 +1,40 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-817: GitHub CI runner-capacity follow-up
+
+- PR #475's first GitHub run (45698158897, attempt 1) failed after 15 minutes because macOS hosted runners did not acquire unit shards 1 and 3 or the app build. The cancelled jobs have no test logs; GitHub's check annotations explicitly report failed runner acquisition and macOS arm64 capacity constraints. Shard 2, typecheck and dependency audit passed. The combined gate correctly failed because the unit matrix result was abandoned, not because a test assertion failed.
+- Reran the same commit (689c951f) as attempt 2. All three unit shards, app build, typecheck, dependency audit and the combined gate passed in 531 s from attempt start to gate completion (unit jobs 468 / 407 / 512 s from runner start to completion). No workflow, test limit or Forge configuration change was needed. Local typecheck and lint exited 0.
+
+## 2026-11-25 — LKM-817: passing full Forge check recorded
+
+- The next full Forge check on this head passed in 469.2 s: 361 PASS, 0 FAIL, 3 SKIP. This closes the passing gate after four failed full checks; the three skips are still skips. `docs/CI-SPEED.md` compares it with LKM-776's 428.5 s warm-cache run (40.7 s slower) and LKM-817's first 511.5 s run (42.3 s faster). Different test counts, load and outcomes prevent attributing either difference to the split. No Forge `check:` or GitHub workflow change is needed.
+
+## 2026-11-25 — LKM-817: fourth full-check failure diagnosis
+
+- Forge's fourth full check took 481.2 s: 360 PASS, 1 FAIL, 3 SKIP. The previous `turn-tracker-prep-failure` failure passed. `branch-safety` failed in its second publish: scripted `gh pr create` reported that remote `trezi/main` had not been pushed. A focused rerun passed in 12.6 s, so the failure remains intermittent and its cause is unproved.
+- The failing assertion now includes the remote and local branch tips, remote heads and scripted gh calls, so another failure will show whether the push was absent or deleted after it. `docs/SWIFT-BACKEND-SERVICE.md` now names the split supervision entrypoint. The focused `branch-safety`, `test-selection` and `docs-links` tests passed together (10.9 s); typecheck and lint passed. A passing full Forge gate remains open.
+
+## 2026-11-25 — LKM-817: third full-check failure diagnosis
+
+- The third full Forge check took 458.9 s: 360 PASS, 1 FAIL, 3 SKIP. The earlier `browser-verify-bounds` failure passed. `turn-tracker-prep-failure` timed out waiting for turn-b landing in the rejected-peer-read case, but the log did not include the owner phase or terminal/landing transitions. A focused rerun passed in 11.9 s.
+- Added failure-only diagnostics for those transitions, owner phase and recent events while retaining the landing assertion and its 20 s deadline. The focused test passed in 12.8 s; typecheck and lint passed. The next Forge full check must either pass or supply the stalled phase before a targeted fix. No passing full gate is recorded yet.
+
+## 2026-11-25 — LKM-817: follow-up on the full-check failures
+
+- The later full Forge check took 432.5 s: 360 PASS, 1 FAIL, 3 SKIP. `repository-owner-part-2` and `preview-apply-layers` passed; `browser-verify-bounds` failed at 13.7 s because its wall-clock assertion omitted the mandatory, separately bounded browser-session close. The test now includes that documented close allowance and still asserts that the hung wrapper and child are gone. Its focused rerun passed in 20.6 s; typecheck and lint passed.
+- The WebKit fixture now orders its window before loading the page, so `takeSnapshot` has a drawable surface. The focused run in this sandbox still stops at page load because WebKit service extensions are denied, before reaching the changed snapshot path. Forge's unsandboxed check must validate it. The full passing gate remains open.
+
+## 2026-11-25 — LKM-817: first full Forge check and failure triage
+
+- Forge's full after-check took 511.5 s: 359 PASS, 2 FAIL, 3 SKIP. The unsandboxed `service-process-xpc` part passed in 45.8 s. Compared with LKM-776's 428.5 s warm-cache full check, this one was 83.0 s slower; the prior 505–556 s range, changed test count, machine load and failures prevent attributing that difference to the split. `docs/CI-SPEED.md` now records the full and per-part results.
+- `repository-owner-part-2` failed in the `chat-landing` exact-source check during the full run, then passed a focused rerun. `preview-apply-layers` timed out waiting for a WebKit snapshot in Forge; a focused rerun here timed out earlier at page load amid sandbox-denied WebKit extensions. Neither failure is established as caused by the split. The full run is a failed gate; a passing Forge check remains open.
+
+## 2026-11-25 — LKM-817: split the slowest unit test files
+
+- Six unit scripts now have separately scheduled parts. Conversation owner has five parts, repository owner three, and the remaining four have two each. The original scripts keep their assertions; entrypoints select sections or scenarios. No Forge config or GitHub workflow changed.
+- Focused passes: resolved lessons 178.6/159.5 s, peer coordination 60.9/64.9 s, repository owner 92.9/116.9/94.0 s, conversation owner 2.2/132.6/132.3/69.2/4.9 s, peer wait bound/service 3.4/112.2 s, service supervision 9.7 s. The XPC phase reached service lookup, where this sandbox returned Cocoa 4099; Forge's unsandboxed check must establish its verdict. `test-selection`, typecheck and lint pass. These focused timings use different load and worker counts than the prior full-run timings; `docs/CI-SPEED.md` keeps that distinction and awaits Forge's full-check after-number.
+- Two split-harness mistakes were fixed during the round: a two-case peer loop made 16 scenarios, and the first conversation partition still contained two long waits. Both are recorded in `docs/TEST-FAILURE-LOG.md`.
+
 ## 2026-11-25 — LKM-811: published install, live steer and README media acceptance
 
 - Fetched the published raw main installer and compared it with this checkout (same SHA-256). A first isolated install downloaded Bun, cloned main and reached Swift compilation. It stopped because this runner prevents Swift's macro helper from starting its nested sandbox: a standalone `@State` probe fails identically, and passes with `swiftc -disable-sandbox`. A second fresh throwaway HOME used an `xcrun` wrapper adding that flag. The published installer then installed 238 dependencies, built v0.15.0, linked `trezi` and `Trezi.app` under the scratch HOME, and passed the linked command's version check and strict code-sign verification. The scratch directories were kept; no existing Trezi install or profile was changed.

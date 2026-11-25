@@ -43,6 +43,9 @@ let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 360), 
 let view = WKWebView(frame: NSRect(x: 0, y: 0, width: 480, height: 360), configuration: config)
 view.navigationDelegate = inbox
 window.contentView = view
+// A WKWebView without an ordered window can load and run scripts while WebKit has
+// no drawable surface for takeSnapshot, especially under a loaded desktop runner.
+window.orderFront(nil)
 
 func spin(_ seconds: Double) {
     let end = Date(timeIntervalSinceNow: seconds)

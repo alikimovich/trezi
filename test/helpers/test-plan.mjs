@@ -56,7 +56,11 @@ export const READERS = {
   'native-slider-ticks': (path) => /^src\/native\/[^/]+\.swift$/.test(path),
   // No Swift source but Edit → Find… may bind the F key next to ⌥⌘F (LKM-430).
   'menu-first-shortcuts': (path) => /^src\/native\/[^/]+\.swift$/.test(path),
-  'conversation-owner': (path) => path.startsWith('src/main/backends/')
+  'conversation-owner-part-1': (path) => path.startsWith('src/main/backends/'),
+  'conversation-owner-part-2': (path) => path.startsWith('src/main/backends/'),
+  'conversation-owner-part-3': (path) => path.startsWith('src/main/backends/'),
+  'conversation-owner-part-4': (path) => path.startsWith('src/main/backends/'),
+  'conversation-owner-part-5': (path) => path.startsWith('src/main/backends/')
 }
 
 // Audited product UI sources: the unit Swift fixtures that compile or measure them, and

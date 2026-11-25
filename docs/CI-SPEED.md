@@ -118,6 +118,103 @@ is not always: a docs or test-only PR runs a **selected** unit plan, and Forge m
 on that green run; the full tier only runs after merge, on the push to main. That is
 item 1 below.
 
+## Item 4: split slow unit files (LKM-817, 2026-11-25)
+
+The six slow scripts now have independently scheduled parts. Existing assertions and
+fixtures remain in their original scripts; small registered entrypoints select each
+part. `conversation-owner` separates parity, the two live-checkout waits, remaining
+agent checks and recovery. `repository-owner` divides its 14 Git suites into two
+groups and runs its other sections in a third. Scenario counters guard complete
+coverage in `resolved-lessons` (20) and `peer-coordination` (16). The real maximum
+`peer_wait` still takes about 100 s; splitting its bound checks cannot remove that
+floor. The Swift build cache remains in place. No workflow or Forge `check:`
+configuration changed.
+
+The before column is the local eight-worker full-run observation from this plan.
+The focused after numbers came from eight workers for the first pass, then four
+for narrower repair passes; load and worker count differ. The subsequent full
+Forge check took **511.5 s** (359 PASS, 2 FAIL, 3 SKIP), compared with **428.5 s**
+for LKM-776's warm-cache full check: 83.0 s slower (19%). It sits inside the
+older 505–556 s full-check range. This is one run, with different test counts and
+machine load; two failures make it an invalid passing gate. Neither the focused
+timings nor the single full run establish a speed gain or regression caused by
+the split. The task barred running a full unit tier in this worktree. GitHub
+p50/p95 was not remeasured because the existing workflow was unchanged.
+
+A second full Forge check took **432.5 s** (360 PASS, 1 FAIL, 3 SKIP).
+`repository-owner-part-2` and `preview-apply-layers` passed there; the sole failure
+was `browser-verify-bounds`. Its 8 s run-budget attempt took 13.7 s because the
+test's wall-clock assertion forgot the required browser-session close, which has
+its own 15 s cap. The corrected assertion includes that cap and still checks that
+the hung wrapper and its child are gone; a focused run passed in 20.6 s. The
+preview fixture now orders its window before loading the page so WebKit has a
+drawable surface for snapshots. A local focused run still stopped at page load
+amid sandbox-denied WebKit service extensions; it cannot validate that change.
+Typecheck and lint passed. At that point, no passing full Forge check on this
+head had been recorded. No `check:` change was proposed.
+
+A third full Forge check took **458.9 s** (360 PASS, 1 FAIL, 3 SKIP).
+`browser-verify-bounds` passed; `turn-tracker-prep-failure` timed out waiting for
+turn-b to land in its rejected-peer-read case. A focused rerun passed in 11.9 s.
+The failed log contains no owner phase or transition history, so it does not
+identify the stalled step. The test now records the owner's phase, its terminal
+and landed transitions, and recent turn events if this wait fails again. Its
+focused run passed in 12.8 s; typecheck and lint passed. The 20 s landing
+assertion remains. The full Forge gate was still open after this run.
+
+A fourth full Forge check took **481.2 s** (360 PASS, 1 FAIL, 3 SKIP).
+`turn-tracker-prep-failure` passed; `branch-safety` failed when its second
+publish reached scripted `gh pr create` without a pushed `trezi/main` at that
+instant. A focused rerun passed in 12.6 s. The failed run did not retain its
+scratch remote, so it cannot establish whether the push was absent or the ref
+was removed afterward. The assertion now reports both branch tips, remote
+heads and the scripted gh calls on failure. This is still a failed full gate,
+not a measured speed result or acceptance of the split.
+
+The next full Forge check on this head passed in **469.2 s**: **361 PASS, 0 FAIL,
+3 SKIP**. This closes the passing full-check gate for LKM-817; the three skips
+remain skips. It was 40.7 s slower than LKM-776's 428.5 s warm-cache run (9.5%)
+and 42.3 s faster than LKM-817's first 511.5 s run (8.3%). These single runs
+had different test counts, machine load and failure outcomes, so the difference
+does not establish a speed gain or regression from splitting the files. The
+focused part timings below show the scheduling effect, not a full-run speed
+claim. No Forge `check:` change is needed; GitHub p50/p95 was not remeasured
+because the workflow did not change.
+
+PR #475's first GitHub run (45698158897, attempt 1) failed at 15 minutes:
+macOS unit shards 1 and 3 and the app build never acquired hosted runners. GitHub
+annotated the cancelled jobs with failed runner acquisition and macOS arm64
+capacity constraints; they produced no test logs. The combined gate read the unit
+matrix as `abandoned`, while shard 2, typecheck and dependency audit passed. A
+rerun of the **same commit** (689c951f, attempt 2) acquired all runners and
+passed all jobs, including the combined gate, in **531 s** from attempt start to
+gate completion. Its three unit jobs took **468 / 407 / 512 s** from runner start
+to completion. This is a single successful GitHub after-run, not a p50/p95
+estimate or evidence that the split changed total time. No workflow, timeout or
+Forge configuration change followed the infrastructure cancellation.
+
+| Former file | Before, full run | After, focused parts (seconds) | After, full Forge parts (seconds) |
+| --- | ---: | --- | --- |
+| `resolved-lessons` | 247 | 178.6 / 159.5 | 132.8 / 108.1 PASS |
+| `conversation-owner` | 199 | 2.2 / 132.6 / 132.3 / 69.2 / 4.9 | 1.5 / 133.8 / 133.4 / 68.7 / 5.7 PASS |
+| `peer-coordination` | 182 | 60.9 / 64.9 | 40.1 / 46.7 PASS |
+| `repository-owner` | 172 | 92.9 / 116.9 / 94.0 | 39.7 PASS / 77.5 FAIL / 61.5 PASS |
+| `peer-wait-deadline` | 169 | bound 3.4 / service 112.2 | bound 0.7 / service 102.8 PASS |
+| `service-process` | 126 | supervision 9.7 / XPC lookup blocked by this sandbox | supervision 4.1 / XPC 45.8 PASS |
+
+The local XPC part reached its peer-rejection assertion, then this sandbox denied
+service lookup with Cocoa error 4099. The unsandboxed Forge XPC part passed in
+45.8 s. The Forge run's `repository-owner-part-2` failure was in its `chat-landing`
+suite: landing reported that no check passed on the exact source. That part passed
+a focused rerun in 116.9 s. `preview-apply-layers` timed out waiting for a WebKit
+snapshot in Forge. A focused rerun in this sandbox timed out earlier at page load,
+with denied WebKit service extensions; it does not reproduce or explain Forge's
+snapshot timeout. Neither Forge failure is established as caused by the split, and
+that first full run was a failed gate. The other focused parts, `test-selection`,
+typecheck and lint passed. The focused run wall clocks were 137.2 s for the five
+conversation parts plus selection and 116.9 s for the three repository parts plus
+selection; these are separate runs and not additive.
+
 ## Remaining changes, in order (one Forge task each)
 
 Forge check first; GitHub items only touch the existing workflow Forge waits on.
@@ -135,7 +232,8 @@ Forge check first; GitHub items only touch the existing workflow Forge waits on.
    LKM-371 made it exclusive because other workers stalled its main-run-loop settles
    on the 1-shard runner: a timing bug in the fixture to find, not a reason for a
    barrier.
-4. **Split slow files** (local full run, seconds): `resolved-lessons` 247,
+4. **Split slow files** (implemented in LKM-817; later full Forge check passed;
+   local full run, seconds): `resolved-lessons` 247,
    `conversation-owner` 199, `peer-coordination` 182, `repository-owner` 172,
    `peer-wait-deadline` 169, `service-process` 126; budget 20 s of work per file.
 5. **Workers to cores on the Mac:** 8 workers on 12 cores; measure 10 and 12 on an

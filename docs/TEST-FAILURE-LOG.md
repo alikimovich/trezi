@@ -19,6 +19,9 @@ Kinds:
 
 | Date | Ticket | Test file | Kind | What failed, and why |
 | --- | --- | --- | --- | --- |
+| 2026-11-25 | LKM-817 | `test/browser-verify-bounds.mjs` | test bug | The 8 s run-budget attempt took 13.7 s under load. The wall-clock assertion omitted the mandatory browser-session close, which has its own bounded 15 s allowance; the corrected bound includes it and still verifies the hung wrapper and child exit. |
+| 2026-11-25 | LKM-817 | `test/peer-coordination.mjs` | test bug | The new split guard counted 13 source calls, but a two-case loop runs 16 scenarios. The guard and partition now count all 16. |
+| 2026-11-25 | LKM-817 | `test/conversation-owner-part-1.mjs`, `test/conversation-owner-part-2.mjs` | test bug | The first split combined parity and two independent live-checkout waits in one agent section, then the agent section alone timed out at 240 s. Parity, each live-checkout case, the other agent assertions and recovery now run separately. |
 | 2026-11-21 | LKM-776 | `test/sidebar-marquee.mjs` | test bug | Fixture `resize()` let a late plan sample before the title's next frame applied the new travel (offset 155 > travel 115); it now waits for that frame, as `select()` does. |
 | 2026-11-21 | LKM-776 | `test/session-skills.mjs` | test bug | A `< 2000 ms` wall-clock ceiling read 2053 ms at load ~190; replaced by the ordering it stood for (the start gives up before the stuck edit settles). |
 | 2026-11-20 | LKM-763 | `test/browser-tools-install.mjs` | test bug | Cancelled install's rejection was handled too late; Bun flagged it unhandled. |
