@@ -140,6 +140,11 @@ try {
 process.once('exit', releaseLock)
 const logs = mkdtempSync(join(artifacts, 'run-'))
 const controller = new AbortController()
+// Once three tests time out in a changed-file run, it is already red and further
+// starts only amplify a saturated host. A passing run still executes every
+// selected test; unfiltered full-tier runs keep collecting every result.
+const timeoutLimit = options.changed ? 3 : Infinity
+let timeouts = 0
 let interrupted
 for (const signal of ['SIGINT', 'SIGTERM'])
   process.on(signal, () => {
@@ -228,6 +233,12 @@ for (const [tier, members] of Object.entries(TIERS)) {
       console.log(
         `${result.outcome} [${tier}] ${name} ${fmt(result.duration)}${result.note ? ` — ${result.note}` : ''}`
       )
+      if (result.outcome === 'TIMEOUT' && ++timeouts === timeoutLimit) {
+        console.log(
+          `STOP [${tier}] ${timeoutLimit} timeouts; cancelling remaining changed-file feedback`
+        )
+        controller.abort()
+      }
       if (!['PASS', 'SKIP'].includes(result.outcome)) {
         console.log(`  Log: ${result.log}`)
         // CI keeps only the job output; one write keeps parallel workers from interleaving the tail.

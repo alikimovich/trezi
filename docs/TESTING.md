@@ -224,6 +224,10 @@ prints the same plan; `--path=<path>` plans a hypothetical edit; `--json` and
 `--github-output` are for tools and CI. Rules live in `test/helpers/test-plan.mjs`,
 tier membership only in `test/tiers.mjs`.
 
+If three selected tests time out, the runner cancels work still active and reports
+the remaining tests as `CANCELLED`. The run exits nonzero; a passing changed-file
+run still finishes every selected test. Full-tier runs have no timeout-count stop.
+
 | Change | Plan |
 | --- | --- |
 | Markdown at the top level or under `docs/` (added, edited, deleted or renamed) | the readers of that doc, no typecheck, no app build |

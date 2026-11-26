@@ -1,5 +1,32 @@
 # CI speed: audit and plan (LKM-776)
 
+## LKM-830: failed fast-check bound (2026-11-25)
+
+Forge receipt `LKM-815` round 3 recorded a **2337.6 s fast check** after an
+extension of its 1800 s limit: 62 TIMEOUT, 5 FAIL. Rounds 1 and 2 were 479.0
+and 544.5 s; LKM-827's later real checks took 291–372 s. Because three timeouts already
+make the changed-file feedback run fail, it now cancels active tests and reports
+pending ones as `CANCELLED`. A green run still runs its entire selection; the
+unfiltered full tier has no timeout-count stop. The four-test CLI fixture passes
+for both a green run and three-timeout run. **After fast-stage wall time: pending
+Forge's check on this tree.** The worker is barred from running the full tier, so
+there is no honest full-stage local after measurement.
+
+PR #478's first GitHub run took 404.5 s in unit shard 2 and failed one visual
+fixture (`preview-measure-stacking`); shards 1 and 3 passed in 6m49s and 7m37s.
+The visual fixture now synchronizes paint before sampling. Its after time and
+verdict require the next unsandboxed GitHub run. The focused local fixture took
+20.4 s before and 21.8 s after but stopped at page load in this sandbox both
+times, so those durations are not visual test measurements.
+
+Forge's next fast check completed in **302.3 s**, below its 1800 s limit, but the
+new two-frame wait timed out in the offscreen fixture before its pixel assertions.
+The replacement waits for the badge's rendered pixels in WebKit snapshots. Its
+focused local run compiled and stopped at page load in 21.0 s because this sandbox
+denied WebKit extensions. A passing after-stage time and visual verdict remain
+pending Forge's unsandboxed check; no Forge selection change is proposed for this
+single exceptional overrun.
+
 "CI" here is everything between a pushed change and its verdict. The main target is
 the **Forge check**, which runs on the local Mac after every engineer round
 (`bun run typecheck && node test/run.mjs unit --changed=origin/main`). GitHub Actions

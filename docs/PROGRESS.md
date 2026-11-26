@@ -20,6 +20,21 @@
 - Reviewed the tracked tree, process and local HTTP boundaries, dependency references, committed secret patterns and Bun advisories. The repository is public; follow-up security details are reserved for the private task report.
 - Project icon lookup now resolves each HTML entry and icon candidate before reading, so a symlink cannot lead it outside the project. The existing project-icon unit fixture covers both routes. Direct dependencies all have source, test, build or script references; no removal met the proof requirement.
 - Focused project-icon unit, typecheck and lint passed after formatting; `git diff --check` is clean. Forge and GitHub CI remain the acceptance gates.
+## 2026-11-25 — LKM-830: replace offscreen animation-frame wait
+
+- Forge's next fast check completed in 302.3 s but failed `preview-measure-stacking`: the fixture's two-frame JavaScript wait timed out in its offscreen WKWebView. The test did not reach its pixel assertions.
+- The fixture now takes WebKit snapshots until the existing badge-crossing pixel conditions are visible, with a 20 s deadline. It keeps the original red, glyph, colour, pointer, geometry, scroll and resize assertions. The focused fixture compiled but stopped at page load in this sandbox because WebKit sandbox extensions were denied (21.0 s), before reaching the changed capture. Typecheck and lint exited 0. The after time and pixel verdict require Forge's unsandboxed check.
+
+## 2026-11-25 — LKM-830: repair PR #478 pixel capture
+
+- PR #478's app build, typecheck, dependency audit and unit shards 1 and 3 passed. Unit shard 2 had 118 PASS and one FAIL in 404.5 s: `preview-measure-stacking` sampled blue hover-chip pixels under a badge whose DOM box was already positioned. The combined gate therefore failed. The runner change's own `test-runner` test passed in CI.
+- The fixture now crosses two animation frames before `takeSnapshot`, allowing WebKit to commit the measured DOM frame to pixels. It keeps the same crossing, colour, glyph and pointer assertions. The focused local fixture compiled but WebKit could not load its page because of sandbox extension denials, both before and after the edit; this is not a visual pass. Typecheck and lint exit 0. The next unsandboxed CI run must confirm the pixel result.
+
+## 2026-11-25 — LKM-830: bound failed changed-file verification
+
+- Forge's LKM-815 round 3 fast check took 2337.6 s (30-minute limit extended once), ending with 62 TIMEOUT, 5 FAIL and several `kill EPERM` notes. Its first two rounds took 479.0 and 544.5 s; LKM-827's later real checks took 291–372 s. The many simultaneous timeouts suggest exceptional host contention rather than one normally slow test file. No test was removed or moved.
+- Changed-file runs now cancel active work after their third TIMEOUT and mark remaining tests `CANCELLED`; they exit nonzero. The stop has no effect on a passing run or an unfiltered full-tier run. A four-test CLI fixture checks both outcomes. The next Forge fast check supplies the after wall time; this worker does not run a full unit tier.
+
 
 ## 2026-11-25 — LKM-816: repair GitHub late-orphan timing assertion
 
