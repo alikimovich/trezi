@@ -1,5 +1,9 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-815 resumes on main after LKM-830
+
+The branch already includes current main at `3d4bb495` and the LKM-830 fix at `2cbcbe98`. The changed-file plan selects FULL for the workflow and its audit. Typecheck, lint and the focused dependency-audit and test-selection tests passed. The measurement section now distinguishes the third unit run (2326.5 s) from the end-to-end Forge check (2337.6 s). Forge runs the next gate after this round. GitHub has no PR run for this branch yet.
+
 ## 2026-11-25 — LKM-827: correct public PR description
 
 - PR #477's description now summarizes completed fixes and verification without follow-up security details. The required GitHub jobs passed on published head `fe658c41` (run 45721337597, attempt 2).

@@ -151,7 +151,7 @@ check retains changed-file selection for engineer-round feedback.
 
 | Measure | Before | After |
 | --- | --- | --- |
-| Local Forge check | Historical p50 474 s, p95 582 s over 68 rounds (above); `check:` is `bun run typecheck && node test/run.mjs unit --changed=origin/main` | Same command and selection policy. Forge selected FULL (354 tests) in both rounds: **463.8 s** (350 PASS, 1 FAIL, 3 SKIP), then **539.0 s** (343 PASS, 2 TIMEOUT, 6 FAIL, 3 SKIP). |
+| Local Forge check | Historical p50 474 s, p95 582 s over 68 rounds (above); `check:` is `bun run typecheck && node test/run.mjs unit --changed=origin/main` | Unit-runner wall time within the same Forge command, FULL selection (354 tests): **463.8 s** (350 PASS, 1 FAIL, 3 SKIP), **539.0 s** (343 PASS, 2 TIMEOUT, 6 FAIL, 3 SKIP), and **2326.5 s** (285 PASS, 62 TIMEOUT, 5 FAIL, 2 SKIP). |
 | GitHub green PR verdict, `gh run list --workflow CI --limit 100`, completed successful PRs | n=41, p50 491 s, p95 879 s (created to updated; 2026-11-25) | Pending first PR run of this workflow; no post-change run exists yet. |
 | Merge-gate unit coverage | A PR could run only its selected plan | Every PR runs all registered unit tests across three shards; main push remains a full one-shard run. |
 
@@ -161,9 +161,11 @@ The first full-tier failure was `native-composer-layout`. The second timed out i
 `service-process` and `spawn-phases` failed. The second run's selection reason
 was the CI workflow and its dependency audit, so these test failures need their
 own diagnosis; the focused `dependency-audit`, `test-selection` and `docs-links`
-tests pass. Neither failed full-tier sample establishes a speed gain or merge
-acceptance. GitHub's after timing awaits the first PR run of this workflow;
-the PR can take longer for docs and test-only changes.
+tests pass. The corresponding end-to-end Forge checks took 479.0 s, 544.5 s
+and 2337.6 s. The third exceeded the 30-minute budget. LKM-830 subsequently
+passed its own check in 313.6 s and merged in PR #478. The resumed LKM-815
+branch includes that fix through main at `3d4bb495`. Its selector still reports
+FULL, and its next Forge result and first GitHub PR timing are pending.
 
 ## Item 4: split slow unit files (LKM-817, 2026-11-25)
 
