@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-830: replace offscreen animation-frame wait
+
+- Forge's next fast check completed in 302.3 s but failed `preview-measure-stacking`: the fixture's two-frame JavaScript wait timed out in its offscreen WKWebView. The test did not reach its pixel assertions.
+- The fixture now takes WebKit snapshots until the existing badge-crossing pixel conditions are visible, with a 20 s deadline. It keeps the original red, glyph, colour, pointer, geometry, scroll and resize assertions. The focused fixture compiled but stopped at page load in this sandbox because WebKit sandbox extensions were denied (21.0 s), before reaching the changed capture. Typecheck and lint exited 0. The after time and pixel verdict require Forge's unsandboxed check.
+
 ## 2026-11-25 — LKM-830: repair PR #478 pixel capture
 
 - PR #478's app build, typecheck, dependency audit and unit shards 1 and 3 passed. Unit shard 2 had 118 PASS and one FAIL in 404.5 s: `preview-measure-stacking` sampled blue hover-chip pixels under a badge whose DOM box was already positioned. The combined gate therefore failed. The runner change's own `test-runner` test passed in CI.

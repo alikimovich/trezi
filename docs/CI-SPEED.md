@@ -19,6 +19,14 @@ verdict require the next unsandboxed GitHub run. The focused local fixture took
 20.4 s before and 21.8 s after but stopped at page load in this sandbox both
 times, so those durations are not visual test measurements.
 
+Forge's next fast check completed in **302.3 s**, below its 1800 s limit, but the
+new two-frame wait timed out in the offscreen fixture before its pixel assertions.
+The replacement waits for the badge's rendered pixels in WebKit snapshots. Its
+focused local run compiled and stopped at page load in 21.0 s because this sandbox
+denied WebKit extensions. A passing after-stage time and visual verdict remain
+pending Forge's unsandboxed check; no Forge selection change is proposed for this
+single exceptional overrun.
+
 "CI" here is everything between a pushed change and its verdict. The main target is
 the **Forge check**, which runs on the local Mac after every engineer round
 (`bun run typecheck && node test/run.mjs unit --changed=origin/main`). GitHub Actions
