@@ -1,5 +1,12 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-815 first full-tier PR verdict
+
+The resumed Forge check passed in 310.2 s. PR #479 then blocked merge after
+416 s when the workflow-owner fixture read an empty commit count from a
+successful Git command. The fixture now reads Git stdout from its own scratch
+file after exit and keeps the exact count and HEAD assertions.
+
 ## 2026-11-25 — LKM-815 resumes on main after LKM-830
 
 The branch already includes current main at `3d4bb495` and the LKM-830 fix at `2cbcbe98`. The changed-file plan selects FULL for the workflow and its audit. Typecheck, lint and the focused dependency-audit and test-selection tests passed. The measurement section now distinguishes the third unit run (2326.5 s) from the end-to-end Forge check (2337.6 s). Forge runs the next gate after this round. GitHub has no PR run for this branch yet.

@@ -36,7 +36,7 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] The existing CI unit shards run the full tier on every PR; the `typecheck + unit tests` gate still requires every shard and typecheck to pass. Local Forge feedback keeps changed-file selection.
 - [x] Workflow guard, CI documentation and pre-change timing recorded in `docs/CI-SPEED.md`; post-change Forge checks measured at 463.8 s (350 PASS, 1 FAIL, 3 SKIP) and 539.0 s (343 PASS, 2 TIMEOUT, 6 FAIL, 3 SKIP).
 - [x] Record the third unit run (2326.5 s) and confirm the resumed branch includes LKM-830 from main.
-- [ ] Obtain a passing full Forge check on the resumed branch and record the first GitHub PR timing.
+- [x] The resumed full Forge check passed in 310.2 s. The first GitHub PR verdict took 416 s and blocked merge on a workflow-owner fixture failure.
 
 ## LKM-782 — Six more feature clips in the README
 

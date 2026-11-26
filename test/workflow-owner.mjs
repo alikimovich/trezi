@@ -14,9 +14,11 @@ import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import {
   chmodSync,
+  closeSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
   realpathSync,
@@ -76,13 +78,22 @@ const env = {
   GIT_COMMITTER_NAME: 'Tester',
   GIT_COMMITTER_EMAIL: 't@example.com'
 }
-const git = (cwd, ...args) =>
-  execFileSync('git', args, {
-    cwd,
-    encoding: 'utf8',
-    env: { ...process.env, ...env },
-    stdio: ['ignore', 'pipe', 'pipe']
-  }).trim()
+// These synchronous probes share a scratch file so assertions read Git's complete
+// output after it exits, including very short replies such as rev-list --count.
+const gitOutput = join(scratch, 'git-stdout')
+const git = (cwd, ...args) => {
+  const fd = openSync(gitOutput, 'w')
+  try {
+    execFileSync('git', args, {
+      cwd,
+      env: { ...process.env, ...env },
+      stdio: ['ignore', fd, 'pipe']
+    })
+    return readFileSync(gitOutput, 'utf8').trim()
+  } finally {
+    closeSync(fd)
+  }
+}
 const gitAs = (cwd, identity, ...args) =>
   execFileSync('git', args, {
     cwd,

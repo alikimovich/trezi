@@ -152,7 +152,7 @@ check retains changed-file selection for engineer-round feedback.
 | Measure | Before | After |
 | --- | --- | --- |
 | Local Forge check | Historical p50 474 s, p95 582 s over 68 rounds (above); `check:` is `bun run typecheck && node test/run.mjs unit --changed=origin/main` | Unit-runner wall time within the same Forge command, FULL selection (354 tests): **463.8 s** (350 PASS, 1 FAIL, 3 SKIP), **539.0 s** (343 PASS, 2 TIMEOUT, 6 FAIL, 3 SKIP), and **2326.5 s** (285 PASS, 62 TIMEOUT, 5 FAIL, 2 SKIP). |
-| GitHub green PR verdict, `gh run list --workflow CI --limit 100`, completed successful PRs | n=41, p50 491 s, p95 879 s (created to updated; 2026-11-25) | Pending first PR run of this workflow; no post-change run exists yet. |
+| GitHub green PR verdict, `gh run list --workflow CI --limit 100`, completed successful PRs | n=41, p50 491 s, p95 879 s (created to updated; 2026-11-25) | First PR run finished in **416 s** (failed). Successful post-change sample size is zero, so green p50/p95 are pending. |
 | Merge-gate unit coverage | A PR could run only its selected plan | Every PR runs all registered unit tests across three shards; main push remains a full one-shard run. |
 
 The first full-tier failure was `native-composer-layout`. The second timed out in
@@ -164,8 +164,14 @@ own diagnosis; the focused `dependency-audit`, `test-selection` and `docs-links`
 tests pass. The corresponding end-to-end Forge checks took 479.0 s, 544.5 s
 and 2337.6 s. The third exceeded the 30-minute budget. LKM-830 subsequently
 passed its own check in 313.6 s and merged in PR #478. The resumed LKM-815
-branch includes that fix through main at `3d4bb495`. Its selector still reports
-FULL, and its next Forge result and first GitHub PR timing are pending.
+branch includes that fix through main at `3d4bb495`. The resumed Forge check passed in
+**310.2 s**, including **306.2 s** for the full unit tier (363 PASS, 3 SKIP).
+
+The first GitHub PR run took **416 s** from creation to completion. Unit shards
+1, 2 and 3 took 407, 394 and 324 s respectively. Shard 1 reported 120 PASS,
+1 FAIL and 1 SKIP. Its sole failure was a missing Git commit count in the
+`workflow-owner` fixture. Typecheck passed and the combined gate blocked merge.
+[PR #479 run](https://github.com/alikimovich/trezi/actions/runs/45757750502)
 
 ## Item 4: split slow unit files (LKM-817, 2026-11-25)
 
