@@ -8,6 +8,8 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Trace the 30-minute breach to LKM-815 round 3: 2337.6 s, 62 TIMEOUT, 5 FAIL, and repeated process-group `kill EPERM` notes; LKM-827's later real checks took 291–372 s.
 - [x] Stop a changed-file run after three TIMEOUT results, cancel active work, and report pending tests as `CANCELLED` with a failing exit. A green run still executes all selected tests; unfiltered full-tier runs retain complete reporting.
 - [x] Exercise green and red changed-file runs with a four-test CLI fixture, plus focused `test-runner`, typecheck and lint.
+- [x] Diagnose PR #478: only unit shard 2 failed, at `preview-measure-stacking`'s selected-panel hover-chip capture; synchronize the fixture's WebKit paint before sampling without changing assertions.
+- [ ] Forge/GitHub: confirm the pixel fixture and every required CI job pass on the updated head.
 - [ ] Forge: record the next fast-stage wall time on this tree; the 2337.6 s breach cannot be reproduced locally without running the prohibited full tier.
 
 ## LKM-817 — Split the six slowest unit test files

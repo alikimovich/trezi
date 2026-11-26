@@ -12,6 +12,13 @@ for both a green run and three-timeout run. **After fast-stage wall time: pendin
 Forge's check on this tree.** The worker is barred from running the full tier, so
 there is no honest full-stage local after measurement.
 
+PR #478's first GitHub run took 404.5 s in unit shard 2 and failed one visual
+fixture (`preview-measure-stacking`); shards 1 and 3 passed in 6m49s and 7m37s.
+The visual fixture now synchronizes paint before sampling. Its after time and
+verdict require the next unsandboxed GitHub run. The focused local fixture took
+20.4 s before and 21.8 s after but stopped at page load in this sandbox both
+times, so those durations are not visual test measurements.
+
 "CI" here is everything between a pushed change and its verdict. The main target is
 the **Forge check**, which runs on the local Mac after every engineer round
 (`bun run typecheck && node test/run.mjs unit --changed=origin/main`). GitHub Actions

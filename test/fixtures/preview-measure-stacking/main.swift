@@ -130,6 +130,11 @@ struct Shot {
     }
 }
 func snapshot(_ name: String) -> Shot {
+    // DOM geometry can advance before WebKit commits the corresponding paint. A loaded
+    // CI runner exposed that gap when the panel hover chip was still in the snapshot
+    // under an already-positioned badge. Cross two animation frames before capturing
+    // so the pixel assertion samples the badge's rendered frame.
+    _ = js("await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); return true")
     var image: NSImage?
     view.takeSnapshot(with: nil) { img, _ in image = img ?? NSImage() }
     until("snapshot") { image != nil }

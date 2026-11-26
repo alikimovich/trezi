@@ -1,5 +1,10 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-830: repair PR #478 pixel capture
+
+- PR #478's app build, typecheck, dependency audit and unit shards 1 and 3 passed. Unit shard 2 had 118 PASS and one FAIL in 404.5 s: `preview-measure-stacking` sampled blue hover-chip pixels under a badge whose DOM box was already positioned. The combined gate therefore failed. The runner change's own `test-runner` test passed in CI.
+- The fixture now crosses two animation frames before `takeSnapshot`, allowing WebKit to commit the measured DOM frame to pixels. It keeps the same crossing, colour, glyph and pointer assertions. The focused local fixture compiled but WebKit could not load its page because of sandbox extension denials, both before and after the edit; this is not a visual pass. Typecheck and lint exit 0. The next unsandboxed CI run must confirm the pixel result.
+
 ## 2026-11-25 — LKM-830: bound failed changed-file verification
 
 - Forge's LKM-815 round 3 fast check took 2337.6 s (30-minute limit extended once), ending with 62 TIMEOUT, 5 FAIL and several `kill EPERM` notes. Its first two rounds took 479.0 and 544.5 s; LKM-827's later real checks took 291–372 s. The many simultaneous timeouts suggest exceptional host contention rather than one normally slow test file. No test was removed or moved.

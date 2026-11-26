@@ -19,6 +19,7 @@ Kinds:
 
 | Date | Ticket | Test file | Kind | What failed, and why |
 | --- | --- | --- | --- | --- |
+| 2026-11-25 | LKM-830 | `test/preview-measure-stacking.mjs` | test bug | PR #478 unit shard 2 sampled the selected-panel hover chip's blue pixels while the badge's DOM geometry was already present. The fixture now waits for two animation frames before its WebKit snapshot so layout and paint belong to the same frame; all pixel assertions remain. The visual verdict awaits unsandboxed CI because local WebKit cannot load its page. |
 | 2026-11-25 | LKM-830 | `test/test-runner.mjs` | test bug | The new green CLI fixture gave Bun only 100 ms to start and finish under parallel lint, so it timed out before its pass assertion. Its green process budget now allows startup; the red fixture keeps its 100 ms timeout to exercise cancellation. |
 | 2026-11-25 | LKM-816 | `test/conversation-owner.mjs` | test bug | GitHub shard 3 admitted the late-orphan peer after 2050 ms, crossing a 2000 ms wall-clock assertion that included runner scheduling. The fixture now observes the queued status and requires successful admission within a shortened writer-wait deadline, while retaining the separate bounded-wait rejection case. |
 | 2026-11-25 | LKM-816 | `test/swift-preview.mjs` | test bug | GitHub shard reached the library build at 234.7 s after two earlier cold builds took 78.7 s and 90.9 s, then hit the 240 s process limit. The independent stop and library scenarios now run as separate grouped tests with unchanged assertions and limits. |
