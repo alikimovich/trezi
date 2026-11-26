@@ -31,6 +31,12 @@ Full narrative for shipped work lives in `docs/PROGRESS.md`.
 - [x] Record the fourth Forge check: 481.2 s, 360 PASS / 1 FAIL / 3 SKIP. `branch-safety` failed in its second publish because scripted `gh pr create` saw no pushed `trezi/main`; a focused rerun passed in 12.6 s. Its assertion now reports local and remote refs and scripted gh calls if the intermittent failure recurs.
 - [x] Record the passing full Forge check on this head: 469.2 s, 361 PASS / 0 FAIL / 3 SKIP. The timing comparison and its limits are in `docs/CI-SPEED.md`.
 - [x] Diagnose PR #475's first GitHub attempt: GitHub cancelled unacquired macOS jobs after 15 minutes with runner-capacity annotations. Rerun the same commit; attempt 2 passed every job and the combined gate in 531 s.
+## LKM-815 — Full unit tier gates each PR before merge
+
+- [x] The existing CI unit shards run the full tier on every PR; the `typecheck + unit tests` gate still requires every shard and typecheck to pass. Local Forge feedback keeps changed-file selection.
+- [x] Workflow guard, CI documentation and pre-change timing recorded in `docs/CI-SPEED.md`; post-change Forge checks measured at 463.8 s (350 PASS, 1 FAIL, 3 SKIP) and 539.0 s (343 PASS, 2 TIMEOUT, 6 FAIL, 3 SKIP).
+- [x] Record the third unit run (2326.5 s) and confirm the resumed branch includes LKM-830 from main.
+- [x] The resumed full Forge check passed in 310.2 s. The first GitHub PR verdict took 416 s and blocked merge on a workflow-owner fixture failure.
 
 ## LKM-782 — Six more feature clips in the README
 

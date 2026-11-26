@@ -25,8 +25,8 @@ assert.doesNotMatch(workflow, /candidate/)
 
 // LKM-327: both typechecks run once in their own Linux job; the unit tier runs in macOS
 // shards (3 on a pull request, 1 whole run on a push to main) with no --typecheck; one
-// `typecheck + unit tests` gate needs both. The unit tier is unfiltered on a push to
-// main; a pull request adds only --changed=<base SHA>.
+// `typecheck + unit tests` gate needs both. The full tier runs on both PRs and pushes
+// to main, so Forge cannot merge a green selected-only PR run.
 const job = (id) => {
   const start = workflow.indexOf(`\n  ${id}:\n`)
   assert.ok(start >= 0, `job ${id}`)
@@ -61,22 +61,15 @@ assert.ok(!unitSteps.has('Typecheck'), 'the shards do not typecheck')
 const unitStep = unitSteps.get('Unit tests')
 assert.match(
   unitStep,
-  /^ {10}node test\/run\.mjs unit --report --timeout-ms=120000 --log-tail=150 --shard="\$TREZI_TEST_SHARD" "\$@"\n/m
+  /^ {10}node test\/run\.mjs unit --report --timeout-ms=120000 --log-tail=150 --shard="\$TREZI_TEST_SHARD"\n/m
 )
 assert.match(
   unitStep,
   /TREZI_TEST_SHARD: \$\{\{ matrix\.shard \}\}\/\$\{\{ strategy\.job-total \}\}/
 )
-// The only extra argument is the PR's own base SHA, and it is empty off pull requests.
-assert.match(
-  unitStep,
-  /TREZI_TEST_BASE: \$\{\{ github\.event_name == 'pull_request' && github\.event\.pull_request\.base\.sha \|\| '' \}\}/
-)
-assert.deepEqual(unitStep.match(/set -- .*/g), ['set -- --changed="$TREZI_TEST_BASE"; fi'])
-assert.match(unitStep, /if \[ -n "\$TREZI_TEST_BASE" \]; then set -- /)
 assert.doesNotMatch(
   unitStep,
-  /--(typecheck|filter|serial|jobs)/,
+  /--(changed|typecheck|filter|serial|jobs)|TREZI_TEST_BASE|\$@|set --/,
   'every unit test, default workers'
 )
 assert.equal(

@@ -140,10 +140,38 @@ free and stops the serial swift-preview chain from starting last.
 
 GitHub merge queues need an organization-owned repository; `alikimovich/trezi` is
 owned by a User, and `main` has no branch protection or ruleset (checked with the
-API). So the full suite must stay a gate Forge waits for before merging. Today it
-is not always: a docs or test-only PR runs a **selected** unit plan, and Forge merges
-on that green run; the full tier only runs after merge, on the push to main. That is
-item 1 below.
+API). So the full suite must stay a gate Forge waits for before merging. Before
+LKM-815, a docs or test-only PR ran a **selected** unit plan, and Forge could
+merge on that green run; the full tier then ran only after merge on the push to
+main. The PR unit shards now run the full tier on every change, and the existing
+`typecheck + unit tests` gate requires all three shards to pass. The local Forge
+check retains changed-file selection for engineer-round feedback.
+
+### LKM-815 measurement (2026-11-25)
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Local Forge check | Historical p50 474 s, p95 582 s over 68 rounds (above); `check:` is `bun run typecheck && node test/run.mjs unit --changed=origin/main` | Unit-runner wall time within the same Forge command, FULL selection (354 tests): **463.8 s** (350 PASS, 1 FAIL, 3 SKIP), **539.0 s** (343 PASS, 2 TIMEOUT, 6 FAIL, 3 SKIP), and **2326.5 s** (285 PASS, 62 TIMEOUT, 5 FAIL, 2 SKIP). |
+| GitHub green PR verdict, `gh run list --workflow CI --limit 100`, completed successful PRs | n=41, p50 491 s, p95 879 s (created to updated; 2026-11-25) | First PR run finished in **416 s** (failed). Successful post-change sample size is zero, so green p50/p95 are pending. |
+| Merge-gate unit coverage | A PR could run only its selected plan | Every PR runs all registered unit tests across three shards; main push remains a full one-shard run. |
+
+The first full-tier failure was `native-composer-layout`. The second timed out in
+`resolved-lessons` and `peer-coordination`; `repository-owner`,
+`skills-projection`, `peer-wait-deadline`, `conversation-owner`,
+`service-process` and `spawn-phases` failed. The second run's selection reason
+was the CI workflow and its dependency audit, so these test failures need their
+own diagnosis; the focused `dependency-audit`, `test-selection` and `docs-links`
+tests pass. The corresponding end-to-end Forge checks took 479.0 s, 544.5 s
+and 2337.6 s. The third exceeded the 30-minute budget. LKM-830 subsequently
+passed its own check in 313.6 s and merged in PR #478. The resumed LKM-815
+branch includes that fix through main at `3d4bb495`. The resumed Forge check passed in
+**310.2 s**, including **306.2 s** for the full unit tier (363 PASS, 3 SKIP).
+
+The first GitHub PR run took **416 s** from creation to completion. Unit shards
+1, 2 and 3 took 407, 394 and 324 s respectively. Shard 1 reported 120 PASS,
+1 FAIL and 1 SKIP. Its sole failure was a missing Git commit count in the
+`workflow-owner` fixture. Typecheck passed and the combined gate blocked merge.
+[PR #479 run](https://github.com/alikimovich/trezi/actions/runs/45757750502)
 
 ## Item 4: split slow unit files (LKM-817, 2026-11-25)
 
@@ -246,9 +274,9 @@ selection; these are separate runs and not additive.
 
 Forge check first; GitHub items only touch the existing workflow Forge waits on.
 
-1. **Full tier is the last gate before merge.** Make the PR run's unit jobs FULL when
-   it is the merge gate (Forge waits on it) and keep selection for engineer-round
-   feedback only. Correctness, not speed; it unlocks item 2.
+1. **Done in LKM-815: full tier is the last gate before merge.** PR unit jobs run
+   FULL; selection remains for engineer-round feedback. Correctness, not speed;
+   this unlocks item 2.
 2. **Engineer-round selection for product changes.** Any `src/` change runs the full
    tier today (the selector narrows only docs, test scripts and audited UI), so almost
    every Forge check is full. Select the unit tests a diff can reach (import graph for

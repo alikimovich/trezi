@@ -19,6 +19,7 @@ Kinds:
 
 | Date | Ticket | Test file | Kind | What failed, and why |
 | --- | --- | --- | --- | --- |
+| 2026-11-25 | LKM-815 | `test/workflow-owner.mjs` | test bug | On PR #479, a successful Git count returned empty piped stdout after the fixture had verified the same HEAD and count. The fixture now captures stdout in its scratch directory and reads it after Git exits. Both commit-count assertions still run. |
 | 2026-11-25 | LKM-827 | `test/trezi-cli.mjs` | test bug | GitHub shard 3 lost the end of a large piped stdout write when the fixture called `process.exit(7)` before its stream drained. Setting `process.exitCode` preserves the failure status and lets Node flush both streams. |
 | 2026-11-25 | LKM-830 | `test/preview-measure-stacking.mjs` | test bug | Forge's 302.3 s fast check timed out waiting for two `requestAnimationFrame` callbacks in an offscreen WKWebView. The fixture now waits for its badge pixels in WebKit snapshots with a deadline, then applies the same pixel assertions. Local WebKit still cannot load its page in the sandbox; the unsandboxed verdict is pending. |
 | 2026-11-25 | LKM-830 | `test/preview-measure-stacking.mjs` | test bug | PR #478 unit shard 2 sampled the selected-panel hover chip's blue pixels while the badge's DOM geometry was already present. The fixture now waits for two animation frames before its WebKit snapshot so layout and paint belong to the same frame; all pixel assertions remain. The visual verdict awaits unsandboxed CI because local WebKit cannot load its page. |
