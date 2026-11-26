@@ -3,6 +3,14 @@
 Roadmap / next steps. Tick items as you finish them and log in PROGRESS.md.
 Full narrative for shipped work lives in `docs/PROGRESS.md`.
 
+## LKM-827 — Security and dead-code review (2026-11-25)
+
+- [x] Review the tracked tree for secrets, process and shell boundaries, routes, path handling, native permissions, dependency advisories, and dead-code references.
+- [x] Contain project favicon reads to the canonical project root; cover symlinked HTML and icon paths in the existing unit fixture.
+- [x] Run focused unit, typecheck, and lint; leave remaining security findings for the private task report because the repository is public.
+- [x] Repair PR #477's failed `trezi-cli` CI fixture and rerun its focused unit, typecheck, and lint.
+- [x] Triage PR #477's next CI attempt: shard 2 failed during Bun download, then passed on a failed-jobs rerun; all required GitHub jobs are green.
+- [x] Replace PR #477's public description with a neutral summary; keep follow-up security details in the private task report.
 ## LKM-830 — Bound failed changed-file verification
 
 - [x] Trace the 30-minute breach to LKM-815 round 3: 2337.6 s, 62 TIMEOUT, 5 FAIL, and repeated process-group `kill EPERM` notes; LKM-827's later real checks took 291–372 s.

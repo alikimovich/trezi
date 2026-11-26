@@ -1,5 +1,25 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-827: correct public PR description
+
+- PR #477's description now summarizes completed fixes and verification without follow-up security details. The required GitHub jobs passed on published head `fe658c41` (run 45721337597, attempt 2).
+- This worktree includes a later documentation-only commit. Forge must publish its current head and obtain the exact-head CI result before review.
+
+## 2026-11-25 — LKM-827: triage PR #477's next CI attempt
+
+- The new unit shard 2 failure occurred in `oven-sh/setup-bun@v2` with `TypeError: fetch failed`, before toolchain setup, dependency installation or any unit test. This was a runner download failure, not a failed assertion. After the workflow finished, its failed-jobs rerun passed shard 2 and the combined gate. All other jobs from the first attempt passed; PR #477's GitHub CI is green on attempt 2.
+- The focused `project-icon` and `trezi-cli` units each pass locally. `bun run typecheck`, `bun run lint` and `git diff --check` exit 0.
+
+## 2026-11-25 — LKM-827: repair GitHub CLI log fixture
+
+- PR #477's GitHub shard 3 failed `trezi-cli` at the large-output log assertion; app build, typecheck and dependency audit passed. The fixture wrote to a pipe then called `process.exit(7)`, which can discard buffered stdout under load. It now sets the same exit code and lets the stream drain before exit. The production logger is unchanged.
+- Focused `trezi-cli` unit passed (1 PASS); typecheck, lint and `git diff --check` exited 0. Final CI remains with Forge.
+
+## 2026-11-25 — LKM-827: repository security and dead-code review
+
+- Reviewed the tracked tree, process and local HTTP boundaries, dependency references, committed secret patterns and Bun advisories. The repository is public; follow-up security details are reserved for the private task report.
+- Project icon lookup now resolves each HTML entry and icon candidate before reading, so a symlink cannot lead it outside the project. The existing project-icon unit fixture covers both routes. Direct dependencies all have source, test, build or script references; no removal met the proof requirement.
+- Focused project-icon unit, typecheck and lint passed after formatting; `git diff --check` is clean. Forge and GitHub CI remain the acceptance gates.
 ## 2026-11-25 — LKM-830: replace offscreen animation-frame wait
 
 - Forge's next fast check completed in 302.3 s but failed `preview-measure-stacking`: the fixture's two-frame JavaScript wait timed out in its offscreen WKWebView. The test did not reach its pixel assertions.

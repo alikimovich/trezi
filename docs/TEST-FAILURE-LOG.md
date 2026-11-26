@@ -19,6 +19,7 @@ Kinds:
 
 | Date | Ticket | Test file | Kind | What failed, and why |
 | --- | --- | --- | --- | --- |
+| 2026-11-25 | LKM-827 | `test/trezi-cli.mjs` | test bug | GitHub shard 3 lost the end of a large piped stdout write when the fixture called `process.exit(7)` before its stream drained. Setting `process.exitCode` preserves the failure status and lets Node flush both streams. |
 | 2026-11-25 | LKM-830 | `test/preview-measure-stacking.mjs` | test bug | Forge's 302.3 s fast check timed out waiting for two `requestAnimationFrame` callbacks in an offscreen WKWebView. The fixture now waits for its badge pixels in WebKit snapshots with a deadline, then applies the same pixel assertions. Local WebKit still cannot load its page in the sandbox; the unsandboxed verdict is pending. |
 | 2026-11-25 | LKM-830 | `test/preview-measure-stacking.mjs` | test bug | PR #478 unit shard 2 sampled the selected-panel hover chip's blue pixels while the badge's DOM geometry was already present. The fixture now waits for two animation frames before its WebKit snapshot so layout and paint belong to the same frame; all pixel assertions remain. The visual verdict awaits unsandboxed CI because local WebKit cannot load its page. |
 | 2026-11-25 | LKM-830 | `test/test-runner.mjs` | test bug | The new green CLI fixture gave Bun only 100 ms to start and finish under parallel lint, so it timed out before its pass assertion. Its green process budget now allows startup; the red fixture keeps its 100 ms timeout to exercise cancellation. |

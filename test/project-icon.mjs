@@ -5,7 +5,7 @@
  * convention, conventional order, escapes refused, size cap, non-images
  * skipped by their bytes, mtime revalidation). Run with: bun run test:project-icon
  */
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import {
@@ -213,6 +213,17 @@ put(enclosing, 'secret.png', PNG)
 const escaping = join(enclosing, 'app')
 put(escaping, 'index.html', '<link rel="icon" href="../secret.png">')
 eq(await findProjectIconFile(escaping), null, 'an href escaping the project root is refused')
+
+// A path inside the project can still escape through a symlink. Neither a
+// declared HTML entry nor an icon candidate may read a file outside the root.
+const linked = makeRoot()
+const outside = makeRoot()
+put(outside, 'favicon.png', PNG)
+put(outside, 'index.html', '<link rel="icon" href="data:image/png;base64,AAAA">')
+symlinkSync(join(outside, 'favicon.png'), join(linked, 'favicon.png'))
+symlinkSync(join(outside, 'index.html'), join(linked, 'index.html'))
+put(linked, 'favicon.ico', ICO)
+eq((await findProjectIconFile(linked)).path, 'favicon.ico', 'outside symlinks are skipped')
 
 // Size cap: an oversized "favicon" is skipped, not inlined.
 const huge = makeRoot()
