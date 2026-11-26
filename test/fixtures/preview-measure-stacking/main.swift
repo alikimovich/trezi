@@ -171,10 +171,30 @@ func checkPaint(_ name: String, needToolbar: Bool, needChip: String?) -> [String
     require(!badges.isEmpty, "\(name): badges drawn")
     require(badges.allSatisfy { $0["inTop"] as? Bool == true && $0["pointer"] as? String == "none" }, "\(name): every badge in the pass-through top layer")
     require((s["order"] as? [String])?.last(where: { $0 != "STYLE" }) == "badges", "\(name): badge layer is painted last \(s["order"] ?? "")")
-    let shot = snapshot(name)
-    var crossings: [[String: Any]] = []
     let toolbar = s["toolbar"].map(rect)
     let chips = (s["chips"] as? [[String: Any]] ?? []).map { ("\($0["kind"] ?? "")-chip", rect($0)) }
+    // DOM geometry can lead WebKit's committed pixels. Offscreen views may suspend
+    // requestAnimationFrame entirely, so use the snapshot's actual badge pixels as
+    // the paint condition and retain the same assertions below for a persistent failure.
+    func painted(_ shot: Shot) -> Bool {
+        for b in badges {
+            let r = rect(b)
+            let unders: [(String, CGRect)] = (toolbar.map { [("toolbar", $0)] } ?? []) + chips
+            for (_, u) in unders where r.insetBy(dx: 2, dy: 2).intersects(u) {
+                let c = sample(shot, badge: r, under: u)
+                if c["total"]! == 0 || c["dark"]! != 0 || c["blue"]! != 0 ||
+                    Double(c["red"]!) < Double(c["total"]!) * 0.5 || ink(shot, badge: r) <= 4 { return false }
+            }
+        }
+        return true
+    }
+    var shot = snapshot(name)
+    let paintDeadline = Date(timeIntervalSinceNow: 20)
+    while !painted(shot) && Date() < paintDeadline {
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+        shot = snapshot(name)
+    }
+    var crossings: [[String: Any]] = []
     for b in badges {
         let r = rect(b)
         let unders: [(String, CGRect)] = (toolbar.map { [("toolbar", $0)] } ?? []) + chips
