@@ -1,5 +1,11 @@
 # PROGRESS LOG
 
+## 2026-11-25 — LKM-830: bound failed changed-file verification
+
+- Forge's LKM-815 round 3 fast check took 2337.6 s (30-minute limit extended once), ending with 62 TIMEOUT, 5 FAIL and several `kill EPERM` notes. Its first two rounds took 479.0 and 544.5 s; LKM-827's later real checks took 291–372 s. The many simultaneous timeouts suggest exceptional host contention rather than one normally slow test file. No test was removed or moved.
+- Changed-file runs now cancel active work after their third TIMEOUT and mark remaining tests `CANCELLED`; they exit nonzero. The stop has no effect on a passing run or an unfiltered full-tier run. A four-test CLI fixture checks both outcomes. The next Forge fast check supplies the after wall time; this worker does not run a full unit tier.
+
+
 ## 2026-11-25 — LKM-816: repair GitHub late-orphan timing assertion
 
 - PR #476's next GitHub run on `ebc7c278` failed only unit shard 3: 123 PASS, 1 FAIL, 1 SKIP in 328.9 s. `conversation-owner-part-2` admitted a queued late-orphan peer after 2050 ms, crossing a 2000 ms wall-clock assertion; `native-chat-send-follow` passed concurrently in 96.1 s. Shards 1 and 2, app build, typecheck and dependency audit passed; the combined gate failed.

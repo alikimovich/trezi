@@ -293,6 +293,50 @@ try {
   )
   assert.doesNotMatch(tailed.stdout, /line 3/)
   assert.doesNotMatch(tailed.stdout, /native-source-window: last/, 'passing tests print no tail')
+  // Exercise the changed-file timeout stop through the real CLI with tiny stand-ins.
+  // A green selected run must still cover every member; a red one must report all
+  // remaining members as cancelled rather than quietly claiming a smaller pass.
+  const feedback = join(root, 'feedback')
+  mkdirSync(join(feedback, 'test/helpers'), { recursive: true })
+  for (const path of ['run.mjs', 'helpers/test-runner.mjs'])
+    writeFileSync(join(feedback, 'test', path), readFileSync(new URL(`./${path}`, import.meta.url)))
+  writeFileSync(
+    join(feedback, 'test/tiers.mjs'),
+    "export const UNIT = ['one', 'two', 'three', 'four']; export const TIERS = { unit: UNIT }; export const TYPECHECKS = {}; export const UNIT_GROUPS = {}; export const UNIT_TIMEOUT_MS = {};\n"
+  )
+  writeFileSync(
+    join(feedback, 'test/helpers/test-plan.mjs'),
+    "export const planFromGit = () => ({ mode: 'selected', unit: ['one', 'two', 'three', 'four'], reasons: [] }); export const describePlan = () => 'selected'; export const shardTests = () => []; export const typecheckPlan = () => ({ run: [], notRun: [] });\n"
+  )
+  for (const name of ['one', 'two', 'three', 'four'])
+    writeFileSync(
+      join(feedback, `test/${name}.mjs`),
+      "if (process.env.SLOW_FEEDBACK) setInterval(() => {}, 1000); else console.log('PASS')\n"
+    )
+  const feedbackRun = (slow) =>
+    spawnSync(
+      'node',
+      ['test/run.mjs', 'unit', '--changed=main', '--jobs=1', `--timeout-ms=${slow ? 100 : 5000}`],
+      {
+        cwd: feedback,
+        encoding: 'utf8',
+        timeout: 10000,
+        env: { ...process.env, SLOW_FEEDBACK: slow ? '1' : '' }
+      }
+    )
+  const greenFeedback = feedbackRun(false)
+  assert.equal(greenFeedback.status, 0, greenFeedback.stdout + greenFeedback.stderr)
+  assert.deepEqual(
+    JSON.parse(readFileSync(/^Report: (.+)$/m.exec(greenFeedback.stdout)[1])).counts,
+    { PASS: 4 }
+  )
+  const redFeedback = feedbackRun(true)
+  assert.equal(redFeedback.status, 1, redFeedback.stdout + redFeedback.stderr)
+  assert.match(redFeedback.stdout, /STOP \[unit\] 3 timeouts/)
+  assert.deepEqual(JSON.parse(readFileSync(/^Report: (.+)$/m.exec(redFeedback.stdout)[1])).counts, {
+    TIMEOUT: 3,
+    CANCELLED: 1
+  })
   for (const args of [
     ['unit', '--jobs=0'],
     ['unit', '--log-tail=0'],
